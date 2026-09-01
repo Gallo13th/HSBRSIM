@@ -8,6 +8,9 @@
     "text": "Give your minions +{0}/+{1}.",
     "tech_level": 3,
     "cost": 2,
+    "script_data_num_1": 1,
+    "script_data_num_2": 1,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -19,6 +22,9 @@
     "text": "Give your minions +{0}/+{1} twice.",
     "tech_level": 6,
     "cost": 4,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -30,6 +36,7 @@
     "text": "Set your Armor to 5.",
     "tech_level": 5,
     "cost": 3,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -41,6 +48,8 @@
     "text": "Give a minion\n+{1} Health and <b>Taunt</b>.@[x]Give a minion\n+{0}/+{1} and <b>Taunt</b>.",
     "tech_level": 1,
     "cost": 1,
+    "script_data_num_2": 3,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -52,6 +61,7 @@
     "text": "[x]Get a random\nTier 1 minion.",
     "tech_level": 1,
     "cost": 2,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -62,7 +72,7 @@
     "card_type": 42,
     "text": "Give a minion\n<b>Divine Shield</b>.",
     "tech_level": 7,
-    "cost": 4,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -74,6 +84,7 @@
     "text": "Steal a random minion from the Tavern.",
     "tech_level": 1,
     "cost": 2,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -85,18 +96,7 @@
     "text": "Choose a minion.\nGet a different minion of the same type.",
     "tech_level": 2,
     "cost": 2,
-    "is_pool_spell": true
-  },
-  {
-    "id": "BG28_519",
-    "dbf_id": 105665,
-    "name": "Fleeting Vigor",
-    "card_set": 1453,
-    "card_type": 42,
-    "text": "<b>Start of Combat:</b> Give your minions +{0}/+{1}.",
-    "tech_level": 3,
-    "cost": 1,
-    "start_of_combat": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -108,6 +108,9 @@
     "text": "Give a minion +{0}/+{1} and <b>Taunt</b>. If it already has <b>Taunt</b>, remove it.",
     "tech_level": 3,
     "cost": 1,
+    "script_data_num_1": 1,
+    "script_data_num_2": 2,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -119,6 +122,7 @@
     "text": "[x]<b>Discover</b> a minion of\nyour most common type.",
     "tech_level": 3,
     "cost": 4,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -131,6 +135,7 @@
     "tech_level": 2,
     "cost": 3,
     "health_cost": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -142,6 +147,7 @@
     "text": "<b>Start of Combat:</b> Set\na random enemy minion's Health to 1.",
     "tech_level": 5,
     "cost": 3,
+    "spell_school": 9,
     "start_of_combat": true,
     "is_pool_spell": true
   },
@@ -154,6 +160,8 @@
     "text": "Get a random Murloc and a copy of it.",
     "tech_level": 4,
     "cost": 4,
+    "subset_murloc": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -165,6 +173,11 @@
     "text": "[x]When you have space\nin combat, summon two\n{0}/{1} Beetles and give\nthem <b>Taunt</b>. <i>({2} left!)</i>",
     "tech_level": 4,
     "cost": 1,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "script_data_num_3": 2,
+    "subset_beast": true,
+    "spell_school": 9,
     "start_of_combat": true,
     "is_pool_spell": true
   },
@@ -177,6 +190,9 @@
     "text": "Destroy a friendly Undead. Your Undead have +{0} Attack this game <i>(wherever they are).</i>@Destroy a friendly Undead. Your Undead have +{0}/+{1} this game <i>(wherever they are).</i>",
     "tech_level": 5,
     "cost": 2,
+    "script_data_num_1": 5,
+    "subset_undead": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -188,6 +204,8 @@
     "text": "Get 3 random <b>Spellcraft</b> spells.",
     "tech_level": 4,
     "cost": 2,
+    "subset_naga": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -199,6 +217,8 @@
     "text": "Choose a friendly Demon. It consumes 3 random minions in the Tavern to gain their stats.",
     "tech_level": 5,
     "cost": 4,
+    "subset_demon": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -210,6 +230,8 @@
     "text": "[x]This plays 2 <b>Blood\nGems</b> on a minion.\nIt steals all <b>Blood Gems</b>\nfrom its neighbors.",
     "tech_level": 4,
     "cost": 1,
+    "subset_quilboar": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -221,6 +243,7 @@
     "text": "Gain 2 Gold next turn.",
     "tech_level": 3,
     "cost": 1,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -232,6 +255,7 @@
     "text": "Increase your maximum Gold by 1.",
     "tech_level": 2,
     "cost": 3,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -243,6 +267,7 @@
     "text": "Gain 1 Gold.",
     "tech_level": 1,
     "cost": 1,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -251,9 +276,12 @@
     "name": "Defender's Rites",
     "card_set": 1453,
     "card_type": 42,
-    "text": "Give a friendly minion +{0}/+{1} and <b>Taunt</b>.",
+    "text": "Give a minion +{0}/+{1} and <b>Taunt</b>.",
     "tech_level": 4,
     "cost": 2,
+    "script_data_num_1": 7,
+    "script_data_num_2": 7,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -265,6 +293,7 @@
     "text": "Gain 2 free <b>Refreshes</b>.",
     "tech_level": 2,
     "cost": 1,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -276,6 +305,7 @@
     "text": "Make a random minion in the Tavern Golden.",
     "tech_level": 5,
     "cost": 5,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -287,6 +317,9 @@
     "text": "Set a minion's stats to {0}/{1}.",
     "tech_level": 6,
     "cost": 2,
+    "script_data_num_1": 20,
+    "script_data_num_2": 20,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -298,6 +331,9 @@
     "text": "Choose a minion. Give all minions that share a type with it +{0}/+{1}.",
     "tech_level": 4,
     "cost": 4,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -309,6 +345,7 @@
     "text": "<b>Refresh</b> the Tavern\nwith Tavern spells.",
     "tech_level": 5,
     "cost": 2,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -320,6 +357,7 @@
     "text": "<b>Discover</b> a\n<b>Deathrattle</b> minion.",
     "tech_level": 5,
     "cost": 3,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -331,6 +369,7 @@
     "text": "If you win your next combat, gain 3 Gold.\nIf you tie, gain 1.",
     "tech_level": 3,
     "cost": 1,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -342,6 +381,9 @@
     "text": "Give minions in the Tavern +{0}/+{1}\nthis game.",
     "tech_level": 3,
     "cost": 2,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -352,7 +394,10 @@
     "card_type": 42,
     "text": "Give a friendly minion of each type +{0}/+{1}.",
     "tech_level": 4,
-    "cost": 2,
+    "cost": 3,
+    "script_data_num_1": 4,
+    "script_data_num_2": 4,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -364,6 +409,9 @@
     "text": "Give a minion +{0}/+{1}.",
     "tech_level": 1,
     "cost": 1,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -375,6 +423,9 @@
     "text": "Give minions in the Tavern +{0}/+{1}.",
     "tech_level": 1,
     "cost": 1,
+    "script_data_num_1": 1,
+    "script_data_num_2": 2,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -386,17 +437,7 @@
     "text": "<b>Discover</b> a\n<b>Battlecry</b> minion.",
     "tech_level": 5,
     "cost": 3,
-    "is_pool_spell": true
-  },
-  {
-    "id": "BG30_802",
-    "dbf_id": 113902,
-    "name": "Knockoff Wisdomball",
-    "card_set": 1453,
-    "card_type": 42,
-    "text": "Your next 2 <b>Refreshes</b> are helpful! <i>(@ left!)</i>",
-    "tech_level": 6,
-    "cost": 4,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -408,6 +449,7 @@
     "text": "Choose a minion. Transform it into a random minion of a higher Tier. It keeps its stats.",
     "tech_level": 3,
     "cost": 1,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -419,6 +461,7 @@
     "text": "<b>Discover</b> a minion.\nYour teammate gets the other options.",
     "tech_level": 5,
     "cost": 5,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -430,6 +473,7 @@
     "text": "<b>Pass</b> a minion in the Tavern.",
     "tech_level": 3,
     "cost": 3,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -441,6 +485,7 @@
     "text": "<b>Pass</b> a friendly\nnon-Golden minion.",
     "tech_level": 5,
     "cost": 2,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -452,6 +497,26 @@
     "text": "Get a Fire Baller and a Snow Baller.",
     "tech_level": 4,
     "cost": 4,
+    "evolution_card_id": 116736,
+    "subset_elemental": true,
+    "spell_school": 9,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG31_880",
+    "dbf_id": 117567,
+    "name": "Alliance Flag",
+    "card_set": 1453,
+    "card_type": 42,
+    "text": "<b>Choose One - </b>Give a minion +{0}/+{1}; or\n+{2}/+{3}.",
+    "tech_level": 1,
+    "cost": 1,
+    "script_data_num_1": 3,
+    "script_data_num_2": 1,
+    "script_data_num_3": 1,
+    "script_data_num_4": 3,
+    "spell_school": 9,
+    "choose_one": true,
     "is_pool_spell": true
   },
   {
@@ -463,6 +528,27 @@
     "text": "[x]<b>Choose One -</b> Give your\nminions +{0}/+{1}; or At the\nstart of your next turn, give\nyour minions +{0}/+{1} twice.",
     "tech_level": 3,
     "cost": 4,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "spell_school": 9,
+    "choose_one": true,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG31_886",
+    "dbf_id": 117584,
+    "name": "Forest's Bounty",
+    "card_set": 1453,
+    "card_type": 42,
+    "text": "<b>Choose One</b> - Give a\nminion +{0}/+{1} twice; or Give your minions +{2}/+{3}.",
+    "tech_level": 5,
+    "cost": 2,
+    "script_data_num_1": 6,
+    "script_data_num_2": 6,
+    "script_data_num_3": 2,
+    "script_data_num_4": 2,
+    "spell_school": 9,
+    "choose_one": true,
     "is_pool_spell": true
   },
   {
@@ -474,7 +560,34 @@
     "text": "<b>Start of Combat:</b> Your left-most minion gains stats equal to the nearest enemy minion's.",
     "tech_level": 7,
     "cost": 2,
-    "start_of_combat": true,
+    "spell_school": 9,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG31_890",
+    "dbf_id": 115910,
+    "name": "Boundless Potential",
+    "card_set": 1453,
+    "card_type": 42,
+    "text": "[x]<b><b>Choose One - </b>Discover</b> a\nminion of your Tier; or a\nTavern spell of your Tier.",
+    "tech_level": 4,
+    "cost": 3,
+    "spell_school": 9,
+    "choose_one": true,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG31_892",
+    "dbf_id": 116221,
+    "name": "Fandral's Fortune",
+    "card_set": 1453,
+    "card_type": 42,
+    "text": "<b>Discover</b> a <b>Choose One</b> card. It has both effects combined.",
+    "tech_level": 6,
+    "cost": 3,
+    "subset_quilboar": true,
+    "spell_school": 9,
+    "choose_one": true,
     "is_pool_spell": true
   },
   {
@@ -486,6 +599,7 @@
     "text": "<b>Discover</b> a Tier 7 minion.",
     "tech_level": 7,
     "cost": 5,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -497,6 +611,10 @@
     "text": "[x]Give a minion +{0}/+{1}\ntwice. If it's a Naga,\nrepeat this.",
     "tech_level": 4,
     "cost": 1,
+    "script_data_num_1": 1,
+    "script_data_num_2": 1,
+    "subset_naga": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -508,6 +626,7 @@
     "text": "<b>Discover</b> a Tier 1 minion.",
     "tech_level": 1,
     "cost": 3,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -519,6 +638,9 @@
     "text": "Give four friendly minions +{1} Health.@Give four friendly minions +{0}/+{1}.",
     "tech_level": 3,
     "cost": 2,
+    "script_data_num_2": 4,
+    "subset_pirate": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -530,6 +652,9 @@
     "text": "Give four friendly minions +{0} Attack.@Give four friendly minions +{0}/+{1}.",
     "tech_level": 3,
     "cost": 2,
+    "script_data_num_1": 4,
+    "subset_pirate": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -541,6 +666,10 @@
     "text": "Give your left-most minion +{0}/+{1}.",
     "tech_level": 3,
     "cost": 2,
+    "script_data_num_1": 6,
+    "script_data_num_2": 6,
+    "subset_pirate": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -552,6 +681,8 @@
     "text": "Get a random minion of your most common type.",
     "tech_level": 3,
     "cost": 2,
+    "subset_pirate": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -563,6 +694,8 @@
     "text": "Gain 2 Gold.",
     "tech_level": 3,
     "cost": 2,
+    "subset_pirate": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -574,6 +707,9 @@
     "text": "[x]Give your minions\nwith <b>Divine Shield</b>\n+{0} Attack.@[x]Give your minions\nwith <b>Divine Shield</b>\n+{0}/+{1}.",
     "tech_level": 5,
     "cost": 1,
+    "script_data_num_1": 6,
+    "subset_mech": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -585,6 +721,8 @@
     "text": "[x]Sell a friendly minion.\n Give its stats to your\nleft-most Elemental.",
     "tech_level": 3,
     "cost": 2,
+    "subset_elemental": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -596,6 +734,9 @@
     "text": "Give your minions +{0}/+{1}. Repeat for each different friendly minion type.",
     "tech_level": 7,
     "cost": 4,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -607,6 +748,7 @@
     "text": "<b>Discover</b> a minion of your Tier. Lock it in your hand for 1 turn.",
     "tech_level": 2,
     "cost": 2,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -618,6 +760,10 @@
     "text": "[x]After the Tavern\nis <b>Refreshed</b> this game,\ngive a random minion\nin it +{0}/+{1}.",
     "tech_level": 4,
     "cost": 1,
+    "script_data_num_1": 8,
+    "script_data_num_2": 8,
+    "subset_elemental": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -629,6 +775,10 @@
     "text": "After the Tavern is\n <b>Refreshed</b> this game, give its minions +{0}/+{1} worth of <b>Blood Gems</b>.",
     "tech_level": 3,
     "cost": 1,
+    "script_data_num_1": 1,
+    "script_data_num_2": 1,
+    "subset_quilboar": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -640,6 +790,8 @@
     "text": "[x]<b>Discover</b> an Undead.\nIt dies if you play it\nthis turn.",
     "tech_level": 4,
     "cost": 2,
+    "subset_undead": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -651,6 +803,8 @@
     "text": "<b>Start of Combat:</b> Double your left-most minion's Attack.",
     "tech_level": 5,
     "cost": 2,
+    "subset_dragon": true,
+    "spell_school": 9,
     "start_of_combat": true,
     "is_pool_spell": true
   },
@@ -663,6 +817,10 @@
     "text": "Give your minions +{0}/+{1}. Give Golden ones another +{0}/+{1}.",
     "tech_level": 5,
     "cost": 2,
+    "script_data_num_1": 3,
+    "script_data_num_2": 2,
+    "subset_pirate": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -674,28 +832,10 @@
     "text": "Give a minion +{0}/+{1}. Give your Murlocs +{0}/+{1}.",
     "tech_level": 4,
     "cost": 2,
-    "is_pool_spell": true
-  },
-  {
-    "id": "BG35_910",
-    "dbf_id": 130310,
-    "name": "Conflagration",
-    "card_set": 1453,
-    "card_type": 42,
-    "text": "Give a minion +{0}/+{1}. <i>(Improved by each Elemental you played this turn!)</i>",
-    "tech_level": 4,
-    "cost": 2,
-    "is_pool_spell": true
-  },
-  {
-    "id": "BG35_911",
-    "dbf_id": 130311,
-    "name": "Arcane Absorption",
-    "card_set": 1453,
-    "card_type": 42,
-    "text": "Give a friendly Elemental half the stats of the highest-Health minion in the Tavern.",
-    "tech_level": 4,
-    "cost": 1,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "subset_murloc": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -707,6 +847,9 @@
     "text": "Choose a minion. Give minions of its type in the Tavern +{0}/+{1} this game.",
     "tech_level": 4,
     "cost": 2,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -718,6 +861,10 @@
     "text": "Give your minions +{0}/+{1}. Give all your Naga another +{0}/+{1}.",
     "tech_level": 5,
     "cost": 2,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "subset_naga": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -729,28 +876,81 @@
     "text": "Give four random friendly minions +{0}/+{1}.",
     "tech_level": 2,
     "cost": 2,
+    "script_data_num_1": 1,
+    "script_data_num_2": 2,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
-    "id": "BG35_952",
-    "dbf_id": 131153,
-    "name": "Back to Back",
+    "id": "BG36_246",
+    "dbf_id": 132995,
+    "name": "Mighty Dragonbreath",
     "card_set": 1453,
     "card_type": 42,
-    "text": "[x]Give a minion +{0}/+{1}.\nYour future Back to Backs\ngive an extra +{2}/+{3}.",
+    "text": "[x]Give your minions +{0}/+{1}.\nRepeat for your Dragons.\nRepeat for your minions\nwith <b>Divine Shield</b>.",
     "tech_level": 4,
-    "cost": 1,
+    "cost": 2,
+    "script_data_num_1": 2,
+    "script_data_num_2": 1,
+    "subset_dragon": true,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
-    "id": "EBG_Spell_014",
-    "dbf_id": 100596,
-    "name": "Pointy Arrow",
+    "id": "BG36_624",
+    "dbf_id": 133711,
+    "name": "Repair Job",
     "card_set": 1453,
     "card_type": 42,
-    "text": "[x]Give a minion\n+{0} Attack.@[x]Give a minion\n+{0}/+{1}.",
-    "tech_level": 1,
-    "cost": 1,
+    "text": "Give a minion +{0}/+{1}.",
+    "tech_level": 3,
+    "cost": 2,
+    "script_data_num_1": 4,
+    "script_data_num_2": 8,
+    "spell_school": 9,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG36_880",
+    "dbf_id": 132903,
+    "name": "Methodical Madness",
+    "card_set": 1453,
+    "card_type": 42,
+    "text": "[x]Choose a friendly Demon.\nIt consumes 2 random\nTavern minions to gain their\nstats and <b><b>Bonus Keyword</b>s</b>.",
+    "tech_level": 4,
+    "cost": 3,
+    "subset_demon": true,
+    "spell_school": 9,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG36_883",
+    "dbf_id": 133369,
+    "name": "Winner's Bread",
+    "card_set": 1453,
+    "card_type": 42,
+    "text": "[x]Give a minion +{0}/+{1}.\nIf you win your next combat,\ngive it another +{2}/+{3} at\nthe start of your next turn.",
+    "tech_level": 2,
+    "cost": 2,
+    "script_data_num_1": 2,
+    "script_data_num_2": 3,
+    "script_data_num_3": 4,
+    "script_data_num_4": 6,
+    "spell_school": 9,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG36_884",
+    "dbf_id": 133371,
+    "name": "Weapons Forge",
+    "card_set": 1453,
+    "card_type": 42,
+    "text": "Get 3 Pointy Arrows.",
+    "tech_level": 4,
+    "cost": 2,
+    "script_data_num_1": 3,
+    "evolution_card_id": 100596,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -762,6 +962,7 @@
     "text": "Choose a friendly minion from Tier 4 or below. Make it Golden.",
     "tech_level": 6,
     "cost": 4,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -773,6 +974,7 @@
     "text": "Sell a friendly minion.\nGive its stats to a random friendly minion.",
     "tech_level": 5,
     "cost": 4,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -784,6 +986,7 @@
     "text": "<b>Discover</b> a new\nHero Power.",
     "tech_level": 5,
     "cost": 3,
+    "spell_school": 9,
     "is_pool_spell": true
   },
   {
@@ -795,6 +998,7 @@
     "text": "[x]Choose a minion.\n<b>Refresh</b> the Tavern\nwith minions of its type.",
     "tech_level": 6,
     "cost": 2,
+    "spell_school": 9,
     "is_pool_spell": true
   }
 ]

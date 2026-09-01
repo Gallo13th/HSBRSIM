@@ -29,7 +29,8 @@
     "name": "Mimiron's Clockwork Stadium",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]You cannot upgrade the\nTavern with Gold.\nIt upgrades itself every\n2 turns. <i>({0} |4(turn, turns) left!)</i>@[x]You cannot upgrade the\nTavern with Gold.\nIt upgrades itself every\n2 turns. <i>(Done!)</i>"
+    "text": "[x]You cannot upgrade the\nTavern with Gold.\nIt upgrades itself every\n2 turns. <i>({0} |4(turn, turns) left!)</i>@[x]You cannot upgrade the\nTavern with Gold.\nIt upgrades itself every\n2 turns. <i>(Done!)</i>",
+    "script_data_num_1": 2
   },
   {
     "id": "BG27_Anomaly_006",
@@ -37,7 +38,8 @@
     "name": "Curse of Aggramar",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]Start at 5 Health and 5\nGold. Your hero can only\ntake 1 damage at a time."
+    "text": "[x]Start at 5 Health and 5\nGold. Your hero can only\ntake 1 damage at a time.",
+    "script_data_num_1": 3
   },
   {
     "id": "BG27_Anomaly_100",
@@ -157,7 +159,7 @@
     "name": "False Idols",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]You only need 2 copies to\nmake minions Golden.\nThey give Tavern Coins\ninstead of Triple Rewards."
+    "text": "[x]You only need 2 copies to\nmake minions Golden.\n They give Tavern Coins\ninstead of Triple Rewards."
   },
   {
     "id": "BG27_Anomaly_302",
@@ -181,7 +183,8 @@
     "name": "Oops, All EVIL!",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Only evil {0} are in the Tavern."
+    "text": "Only evil {0} are in the Tavern.",
+    "script_data_num_1": 92
   },
   {
     "id": "BG27_Anomaly_501",
@@ -253,7 +256,8 @@
     "name": "Treasure Hoard",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]On Turn 6, <b>Discover</b> a\nGolden Tier 4 minion.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 6, <b>Discover</b> a\nGolden Tier 4 minion.\n<i>(Done!)</i>"
+    "text": "[x]On Turn 6, <b>Discover</b> a\nGolden Tier 4 minion.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 6, <b>Discover</b> a\nGolden Tier 4 minion.\n<i>(Done!)</i>",
+    "script_data_num_1": 5
   },
   {
     "id": "BG27_Anomaly_560",
@@ -285,7 +289,8 @@
     "name": "Treasure Hoard",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]On Turn 7, <b>Discover</b> a\nGolden Tier 5 minion.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 7, <b>Discover</b> a\nGolden Tier 5 minion.\n<i>(Done!)</i>"
+    "text": "[x]On Turn 7, <b>Discover</b> a\nGolden Tier 5 minion.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 7, <b>Discover</b> a\nGolden Tier 5 minion.\n<i>(Done!)</i>",
+    "script_data_num_1": 6
   },
   {
     "id": "BG27_Anomaly_571",
@@ -293,7 +298,8 @@
     "name": "Treasure Hoard",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]On Turn 8, <b>Discover</b> a\nGolden Tier 6 minion.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 8, <b>Discover</b> a\nGolden Tier 6 minion.\n<i>(Done!)</i>"
+    "text": "[x]On Turn 8, <b>Discover</b> a\nGolden Tier 6 minion.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 8, <b>Discover</b> a\nGolden Tier 6 minion.\n<i>(Done!)</i>",
+    "script_data_num_1": 7
   },
   {
     "id": "BG27_Anomaly_572",
@@ -301,7 +307,8 @@
     "name": "Treasure Hoard",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]On Turn 5, <b>Discover</b> a\nGolden Tier 3 minion.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 5, <b>Discover</b> a\nGolden Tier 3 minion.\n<i>(Done!)</i>"
+    "text": "[x]On Turn 5, <b>Discover</b> a\nGolden Tier 3 minion.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 5, <b>Discover</b> a\nGolden Tier 3 minion.\n<i>(Done!)</i>",
+    "script_data_num_1": 4
   },
   {
     "id": "BG27_Anomaly_573",
@@ -309,7 +316,8 @@
     "name": "Treasure Hoard",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]On Turn 9, <b>Discover</b> a\nGolden Tier 7 minion.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 9, <b>Discover</b> a\nGolden Tier 7 minion.\n<i>(Done!)</i>"
+    "text": "[x]On Turn 9, <b>Discover</b> a\nGolden Tier 7 minion.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 9, <b>Discover</b> a\nGolden Tier 7 minion.\n<i>(Done!)</i>",
+    "script_data_num_1": 8
   },
   {
     "id": "BG27_Anomaly_575",
@@ -325,7 +333,9 @@
     "name": "No Face, No Case",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]Every 4 turns, get a\nFaceless Manipulator.\n<i>({0} |4(turn, turns) left!)</i>@[x]Every 4 turns, get a\nFaceless Manipulator.\n<i>(Next turn!)</i>"
+    "text": "[x]Every 4 turns, get a\nFaceless Manipulator.\n<i>({0} |4(turn, turns) left!)</i>@[x]Every 4 turns, get a\nFaceless Manipulator.\n<i>(Next turn!)</i>",
+    "script_data_num_1": 4,
+    "evolution_card_id": 103396
   },
   {
     "id": "BG27_Anomaly_580",
@@ -333,7 +343,9 @@
     "name": "Audience's Choice",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]At the start of each turn,\none player chooses a\ncard for ALL players to\nget at end of turn."
+    "text": "[x]At the start of each turn,\none player chooses a\ncard for ALL players to\nget at end of turn.",
+    "script_data_num_1": 1,
+    "script_data_num_2": 3
   },
   {
     "id": "BG27_Anomaly_711",
@@ -365,7 +377,9 @@
     "name": "Up-Prizing",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]After you upgrade the\nTavern, <b>Discover</b> a <b>Tier {1}</b>\nDarkmoon Prize.\n<i>(Improves in {0} |4(turn, turns)!)</i>@[x]After you upgrade the\nTavern, <b>Discover</b> a <b>Tier {1}</b>\nDarkmoon Prize."
+    "text": "[x]After you upgrade the\nTavern, <b>Discover</b> a <b>Tier {1}</b>\nDarkmoon Prize.\n<i>(Improves in {0} |4(turn, turns)!)</i>@[x]After you upgrade the\nTavern, <b>Discover</b> a <b>Tier {1}</b>\nDarkmoon Prize.",
+    "script_data_num_1": 3,
+    "script_data_num_2": 1
   },
   {
     "id": "BG27_Anomaly_718",
@@ -421,7 +435,8 @@
     "name": "Perfected Alchemy",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Start with a Goldenizer."
+    "text": "Start with a Goldenizer.",
+    "evolution_card_id": 98914
   },
   {
     "id": "BG27_Anomaly_754",
@@ -429,7 +444,9 @@
     "name": "Path of the Treasure-Seeker",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Whenever you <b>Refresh</b> 5 times, find the <b>Golden</b> Monkey! <i>(@ left!)</i>"
+    "text": "Whenever you <b>Refresh</b> 5 times, find the <b>Golden</b> Monkey! <i>(@ left!)</i>",
+    "script_data_num_1": 5,
+    "script_data_num_2": 5
   },
   {
     "id": "BG27_Anomaly_755",
@@ -437,7 +454,9 @@
     "name": "A Faire Reward",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Instead of a minion, Triple Rewards <b>Discover</b> a <b>Tier {1}</b> Darkmoon Prize.\n<i>(Improves in {0} |4(turn, turns)!)</i>@Instead of a minion, Triple Rewards <b>Discover</b> a <b>Tier {1}</b> Darkmoon Prize."
+    "text": "Instead of a minion, Triple Rewards <b>Discover</b> a <b>Tier {1}</b> Darkmoon Prize.\n<i>(Improves in {0} |4(turn, turns)!)</i>@Instead of a minion, Triple Rewards <b>Discover</b> a <b>Tier {1}</b> Darkmoon Prize.",
+    "script_data_num_1": 4,
+    "script_data_num_2": 1
   },
   {
     "id": "BG27_Anomaly_800",
@@ -493,7 +512,8 @@
     "name": "Deep Blue Sooner",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]At the start of your turn,\nget 2 temporary Deep\nBlues. They give a minion\nmore stats each time!"
+    "text": "[x]At the start of your turn,\nget 2 temporary Deep\nBlues. They give a minion\nmore stats each time!",
+    "evolution_card_id": 98916
   },
   {
     "id": "BG27_Anomaly_822",
@@ -501,7 +521,8 @@
     "name": "Denathrius' Anima Reserves",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Start with 'Whodunit?' as your second Hero Power."
+    "text": "Start with 'Whodunit?' as your second Hero Power.",
+    "evolution_card_id": 92961
   },
   {
     "id": "BG27_Anomaly_900",
@@ -525,7 +546,8 @@
     "name": "Darkmoon Faire Prizes",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Every 4 turns, <b>Discover</b> a Darkmoon Faire Prize. <i>({0} |4(turn, turns) left!)</i>"
+    "text": "Every 4 turns, <b>Discover</b> a Darkmoon Faire Prize. <i>({0} |4(turn, turns) left!)</i>",
+    "script_data_num_1": 3
   },
   {
     "id": "BG27_Anomaly_Quests",
@@ -549,7 +571,8 @@
     "name": "Continuing Education",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]At the start of each turn, get\nan Evolving Scroll. Each turn,\nit transforms into a Tavern\nspell from a Tier higher."
+    "text": "[x]At the start of each turn, get\nan Evolving Scroll. Each turn,\nit transforms into a Tavern\nspell from a Tier higher.",
+    "evolution_card_id": 118698
   },
   {
     "id": "BG31_Anomaly_104",
@@ -557,7 +580,9 @@
     "name": "Rising Current",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]After you upgrade the\nTavern, <b>Discover</b> a <b>Tier {1}</b>\nTavern spell.\n<i>(Improves in {0} |4(turn, turns)!)</i>@[x]After you upgrade the\nTavern, <b>Discover</b> a <b>Tier {1}</b>\nTavern Spell."
+    "text": "[x]After you upgrade the\nTavern, <b>Discover</b> a <b>Tier {1}</b>\nTavern spell.\n<i>(Improves in {0} |4(turn, turns)!)</i>@[x]After you upgrade the\nTavern, <b>Discover</b> a <b>Tier {1}</b>\nTavern Spell.",
+    "script_data_num_1": 2,
+    "script_data_num_2": 1
   },
   {
     "id": "BG31_Anomaly_105",
@@ -573,7 +598,8 @@
     "name": "Marin's Treasure Box",
     "card_set": 1453,
     "card_type": 43,
-    "text": "All heroes are Marin the Manager. Make 'Growing Collection' your second Hero Power."
+    "text": "All heroes are Marin the Manager. Make 'Growing Collection' your second Hero Power.",
+    "evolution_card_id": 120650
   },
   {
     "id": "BG31_Anomaly_109",
@@ -597,7 +623,8 @@
     "name": "Incubation Mutation",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Minions with no type have all minion types."
+    "text": "Minions with no type have all minion types.",
+    "script_data_num_1": 1
   },
   {
     "id": "BG31_Anomaly_114",
@@ -605,7 +632,8 @@
     "name": "Factory Line",
     "card_set": 1453,
     "card_type": 43,
-    "text": "At the end of every 2 turns, get a plain copy of your left-most minion. <i>({0} |4(turn, turns) left!)</i>@At the end of every 2 turns, get a plain copy of your left-most minion. <i>(End of this turn!)</i>"
+    "text": "At the end of every 2 turns, get a plain copy of your left-most minion. <i>({0} |4(turn, turns) left!)</i>@At the end of every 2 turns, get a plain copy of your left-most minion. <i>(End of this turn!)</i>",
+    "script_data_num_1": 2
   },
   {
     "id": "BG31_Anomaly_115",
@@ -613,7 +641,8 @@
     "name": "Magic Shop",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Spell Tickets are in the Tavern! Get 3 to <b>Discover</b> a Tavern spell\nof your Tier. <i>(@ left!)</i>"
+    "text": "Spell Tickets are in the Tavern! Get 3 to <b>Discover</b> a Tavern spell\nof your Tier. <i>(@ left!)</i>",
+    "script_data_num_1": 3
   },
   {
     "id": "BG31_Anomaly_116",
@@ -621,7 +650,8 @@
     "name": "Light the Way",
     "card_set": 1453,
     "card_type": 43,
-    "text": "After you <b>Refresh</b> two times, gain 1 Gold next turn. <i>(@ left!)</i>"
+    "text": "After you <b>Refresh</b> two times, gain 1 Gold next turn. <i>(@ left!)</i>",
+    "script_data_num_1": 2
   },
   {
     "id": "BG31_Anomaly_117",
@@ -637,7 +667,8 @@
     "name": "Scout's Honor",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Start with a Golden Patient Scout in play."
+    "text": "Start with a Golden Patient Scout in play.",
+    "evolution_card_id": 97605
   },
   {
     "id": "BG31_Anomaly_123",
@@ -653,7 +684,9 @@
     "name": "Golden Arrow",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]Every 3 turns, get a\nGolden Arrow.\n<i>({0} turns left!)</i>@[x]Every 3 turns, get a\nGolden Arrow.\n<i>(Next turn!)</i>"
+    "text": "[x]Every 3 turns, get a\nGolden Arrow.\n<i>({0} turns left!)</i>@[x]Every 3 turns, get a\nGolden Arrow.\n<i>(Next turn!)</i>",
+    "script_data_num_1": 3,
+    "evolution_card_id": 119776
   },
   {
     "id": "BG31_Anomaly_126",
@@ -677,7 +710,8 @@
     "name": "Greater Pouches",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Start with 'Growing Collection' as your second Hero Power."
+    "text": "Start with 'Growing Collection' as your second Hero Power.",
+    "evolution_card_id": 120650
   },
   {
     "id": "BG32_Anomaly_002",
@@ -685,7 +719,8 @@
     "name": "Lesser Pouches",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Start with 'Fantastic Treasure' as your second Hero Power."
+    "text": "Start with 'Fantastic Treasure' as your second Hero Power.",
+    "evolution_card_id": 113311
   },
   {
     "id": "BG32_Anomaly_003",
@@ -733,7 +768,8 @@
     "name": "Partner in Crime",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]You have no <b>Buddy\nButton</b>. On turn 4,\nchoose a <b>Quest</b> to get\nyour Golden <b>Buddy</b>."
+    "text": "[x]You have no <b>Buddy\nButton</b>. On turn 4,\nchoose a <b>Quest</b> to get\nyour Golden <b>Buddy</b>.",
+    "script_data_num_1": 3
   },
   {
     "id": "BG33_Anomaly_009",
@@ -749,7 +785,8 @@
     "name": "Major Goldthorn Potion",
     "card_set": 1453,
     "card_type": 43,
-    "text": "The Major <b>Timewarp</b> offers {0} Golden minions this game. They do not give Triple Rewards."
+    "text": "The Major <b>Timewarp</b> offers {0} Golden minions this game. They do not give Triple Rewards.",
+    "script_data_num_1": 5
   },
   {
     "id": "BG34_Anomaly_800t",
@@ -757,7 +794,8 @@
     "name": "Minor Goldthorn Potion",
     "card_set": 1453,
     "card_type": 43,
-    "text": "The Minor <b>Timewarp</b> offers {0} Golden minions this game. They do not give Triple Rewards."
+    "text": "The Minor <b>Timewarp</b> offers {0} Golden minions this game. They do not give Triple Rewards.",
+    "script_data_num_1": 5
   },
   {
     "id": "BG34_Anomaly_801",
@@ -805,7 +843,10 @@
     "name": "Fly the Flag",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]Every {1} turns, get a spell\nthat adds plain copies of a\nminion to YOUR minion pool.\n<i>({0} |4(turn, turns) left!)</i>@[x]Every {1} turns, get a spell\nthat adds plain copies of a\nminion to YOUR minion pool.\n<i>(Next turn!)</i>"
+    "text": "[x]Every {1} turns, get a spell\nthat adds plain copies of a\nminion to YOUR minion pool.\n<i>({0} |4(turn, turns) left!)</i>@[x]Every {1} turns, get a spell\nthat adds plain copies of a\nminion to YOUR minion pool.\n<i>(Next turn!)</i>",
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "evolution_card_id": 131415
   },
   {
     "id": "BG35_Anomaly_002",
@@ -813,7 +854,9 @@
     "name": "Anomalous Cube",
     "card_set": 1453,
     "card_type": 43,
-    "text": "[x]Start with 'Mystery Cube'\nas your second Hero Power.\nIt unlocks on Turn 5.\n<i>({0} |4(turn, turns) left!)</i>@[x]Start with 'Mystery Cube'\nas your second Hero Power.\nIt unlocks on Turn 5.\n<i>(Done!)</i>"
+    "text": "[x]Start with 'Mystery Cube'\nas your second Hero Power.\nIt unlocks on Turn 5.\n<i>({0} |4(turn, turns) left!)</i>@[x]Start with 'Mystery Cube'\nas your second Hero Power.\nIt unlocks on Turn 5.\n<i>(Done!)</i>",
+    "script_data_num_1": 4,
+    "evolution_card_id": 132432
   },
   {
     "id": "BG35_Anomaly_004",
@@ -821,7 +864,9 @@
     "name": "Anomalous Conflux",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Start with 'Warped Conflux' as your second Hero Power."
+    "text": "Start with 'Warped Conflux' as your second Hero Power.",
+    "script_data_num_1": 4,
+    "evolution_card_id": 129174
   },
   {
     "id": "BG35_Anomaly_005",
@@ -829,7 +874,9 @@
     "name": "Anomalous Timeline",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Start with 'Alternate Timeline' as your second Hero Power."
+    "text": "Start with 'Alternate Timeline' as your second Hero Power.",
+    "script_data_num_1": 7,
+    "evolution_card_id": 127697
   },
   {
     "id": "BG35_Anomaly_006",
@@ -845,7 +892,8 @@
     "name": "Lesser Fortune",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Start with 'Lesser Crystal Ball' as your second Hero Power."
+    "text": "Start with 'Lesser Crystal Ball' as your second Hero Power.",
+    "evolution_card_id": 131645
   },
   {
     "id": "BG35_Anomaly_008",
@@ -853,6 +901,16 @@
     "name": "Greater Fortune",
     "card_set": 1453,
     "card_type": 43,
-    "text": "Start with 'Greater Crystal Ball' as your second Hero Power."
+    "text": "Start with 'Greater Crystal Ball' as your second Hero Power.",
+    "evolution_card_id": 131647
+  },
+  {
+    "id": "BG36_Anomaly_002",
+    "dbf_id": 132530,
+    "name": "Dark Gifts!",
+    "card_set": 1453,
+    "card_type": 43,
+    "text": "[x]Starting Turn 3, you may\nspend 3 Gold to <b>Discover</b>\na minion with a <b>Dark Gift</b>.\n<i>(3 times per game!)</i>",
+    "evolution_card_id": 132531
   }
 ]

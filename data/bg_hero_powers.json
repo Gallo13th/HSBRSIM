@@ -5,7 +5,8 @@
     "name": "Glory of Combat",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After a friendly minion\nkills an enemy, give it\n+1 Attack permanently."
+    "text": "[x]After a friendly minion\nkills an enemy, give it\n+1 Attack permanently.",
+    "cost": 0
   },
   {
     "id": "BG20_HERO_101p",
@@ -22,7 +23,10 @@
     "name": "For the Horde!",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Minions in the Tavern have\n+{1}/+{1}. Improves after\nyou buy 4 minions.\n<i>({0} left!)</i>"
+    "text": "[x]Minions in the Tavern have\n+{1}/+{1}. Improves after\nyou buy 3 minions.\n<i>({0} left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 3,
+    "script_data_num_2": 1
   },
   {
     "id": "BG20_HERO_103p",
@@ -39,7 +43,8 @@
     "name": "Spirit Swap",
     "card_set": 1453,
     "card_type": 10,
-    "text": "Choose 2 minions. They gain each other's Attack until next turn."
+    "text": "Choose 2 minions. They gain each other's Attack until next turn.",
+    "cost": 0
   },
   {
     "id": "BG20_HERO_201p2",
@@ -47,7 +52,8 @@
     "name": "Spirit Swap",
     "card_set": 1453,
     "card_type": 10,
-    "text": "Choose a minion. Gain Attack with {0}."
+    "text": "Choose a minion. Gain Attack with {0}.",
+    "cost": 0
   },
   {
     "id": "BG20_HERO_202p",
@@ -55,7 +61,8 @@
     "name": "Power of the Storm",
     "card_set": 1453,
     "card_type": 10,
-    "text": "At the start of every turn, choose from 2 new Hero Powers."
+    "text": "At the start of every turn, choose from 2 new Hero Powers.",
+    "cost": 0
   },
   {
     "id": "BG20_HERO_242p",
@@ -63,7 +70,9 @@
     "name": "Natural Balance",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After you buy 20 Tiers'\nworth of cards, get a\nTriple Reward. <i>(@ left!)</i>"
+    "text": "[x]After you buy 20 Tiers'\nworth of cards, get a\nTriple Reward. <i>(@ left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 20
   },
   {
     "id": "BG20_HERO_280p5",
@@ -71,7 +80,10 @@
     "name": "Glaive Ricochet",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Once per turn, after you\nbuy 3 minions, get a plain\ncopy of one of them.\n<i>({0} left!)</i>@[x]Once per turn, after you\nbuy 3 minions, get a plain\ncopy of one of them.\n<i>(Done!)</i>"
+    "text": "[x]Once per turn, after you\nbuy 3 minions, get a plain\ncopy of one of them.\n<i>({0} left!)</i>@[x]Once per turn, after you\nbuy 3 minions, get a plain\ncopy of one of them.\n<i>(Done!)</i>",
+    "cost": 0,
+    "script_data_num_1": 3,
+    "script_data_num_2": 1
   },
   {
     "id": "BG20_HERO_282p",
@@ -79,7 +91,8 @@
     "name": "Fragrant Phylactery",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]<b>Start of Combat:</b> Give your\nlowest-Attack minion\n\"<b>Deathrattle:</b> Give your other\nminions this minion's stats.\""
+    "text": "[x]<b>Start of Combat:</b> Give your\nlowest-Attack minion\n\"<b>Deathrattle:</b> Give your other\nminions this minion's stats.\"",
+    "cost": 0
   },
   {
     "id": "BG20_HERO_283p",
@@ -87,7 +100,8 @@
     "name": "Dungar's Gryphon",
     "card_set": 1453,
     "card_type": 10,
-    "text": "Choose a new flightpath. Complete it to get a bonus!"
+    "text": "Choose a new flightpath. Complete it to get a bonus!",
+    "cost": 0
   },
   {
     "id": "BG20_HERO_283p_t1",
@@ -95,7 +109,9 @@
     "name": "Westfall",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]In 1 turn, get a random\n1-Cost Tavern spell.\n<i>(@ |4(turn, turns) left!)</i>"
+    "text": "[x]In 1 turn, get a random\n1-Cost Tavern spell.\n<i>(@ |4(turn, turns) left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 1
   },
   {
     "id": "BG20_HERO_283p_t2",
@@ -103,7 +119,9 @@
     "name": "Ironforge",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]In 2 turns, gain 2 Gold.\n<i>(@ |4(turn, turns) left!)</i>"
+    "text": "[x]In 2 turns, gain 2 Gold.\n<i>(@ |4(turn, turns) left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 2
   },
   {
     "id": "BG20_HERO_283p_t3",
@@ -111,7 +129,9 @@
     "name": "Eastern Plaguelands",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]In 3 turns, <b>Discover</b> a\nminion of your Tier.\n<i>(@ |4(turn, turns) left!)</i>"
+    "text": "[x]In 3 turns, <b>Discover</b> a\nminion of your Tier.\n<i>(@ |4(turn, turns) left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 3
   },
   {
     "id": "BG20_HERO_301p",
@@ -119,7 +139,8 @@
     "name": "Devour",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Sell a friendly minion.\nSpit its stats onto\nanother."
+    "text": "[x]Sell a friendly minion.\nSpit its stats onto\nanother.",
+    "cost": 0
   },
   {
     "id": "BG21_HERO_000p",
@@ -128,7 +149,10 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "[x]Give {2} random friendly\n|4(minion, minions) +{0}/+{1}.\n<b><b>Passive</b>:</b> After each combat,\nchoose an improvement.@[x]Give {2} random friendly\nminions +{0}/+{1}.\n<b><b>Passive</b>:</b> After each combat,\nchoose an improvement.",
-    "cost": 1
+    "cost": 0,
+    "script_data_num_1": 1,
+    "script_data_num_2": 1,
+    "script_data_num_3": 1
   },
   {
     "id": "BG21_HERO_010p",
@@ -145,7 +169,9 @@
     "name": "Stir the Pot",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Throw a minion in your pot.\nWhen you've gathered 3,\n<b>Discover</b> from their types.\n<i>(@ left!)</i>"
+    "text": "[x]Throw a minion in your pot.\nWhen you've gathered 3,\n<b>Discover</b> from their types.\n<i>(@ left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 3
   },
   {
     "id": "BG21_HERO_030p",
@@ -153,7 +179,8 @@
     "name": "Pilot the Shredder",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Start the game with a 2/1\nShredder that summons a\nminion from your hand and\ngives it <b>Divine Shield</b>."
+    "text": "[x]Start the game with a 2/1\nShredder that summons a\nminion from your hand and\ngives it <b>Divine Shield</b>.",
+    "cost": 0
   },
   {
     "id": "BG22_HERO_000p",
@@ -161,7 +188,10 @@
     "name": "Deadeye",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Take aim!\n<b>Start of Combat:</b> Deal {1}\ndamage to your target."
+    "text": "[x]Take aim!\n<b>Start of Combat:</b> Deal {1}\ndamage to your target.",
+    "cost": 0,
+    "script_data_num_1": 3,
+    "script_data_num_2": 99
   },
   {
     "id": "BG22_HERO_000p_Alt",
@@ -169,7 +199,8 @@
     "name": "Lock and Load",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Remove a minion in the\nTavern. When you have\nspace next combat, fire it at\na random enemy minion."
+    "text": "[x]Remove a minion in the\nTavern. When you have\nspace next combat, fire it at\na random enemy minion.",
+    "cost": 0
   },
   {
     "id": "BG22_HERO_000p_t1",
@@ -177,7 +208,10 @@
     "name": "Aim Left!",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]<b><b>Passive</b>. Start of Combat</b>:\nDeal {1} damage to the\nleft-most enemy minion."
+    "text": "[x]<b><b>Passive</b>. Start of Combat</b>:\nDeal {1} damage to the\nleft-most enemy minion.",
+    "cost": 0,
+    "script_data_num_1": 3,
+    "script_data_num_2": 99
   },
   {
     "id": "BG22_HERO_000p_t2",
@@ -185,7 +219,10 @@
     "name": "Aim Low!",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]<b>Passive. Start of Combat</b>:\n Deal {1} damage to the lowest-\nHealth enemy minion."
+    "text": "[x]<b>Passive. Start of Combat</b>:\n Deal {1} damage to the lowest-\nHealth enemy minion.",
+    "cost": 0,
+    "script_data_num_1": 3,
+    "script_data_num_2": 99
   },
   {
     "id": "BG22_HERO_000p_t3",
@@ -193,7 +230,10 @@
     "name": "Aim High!",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]<b>Passive. Start of Combat</b>:\n Deal {1} damage to the highest-\nHealth enemy minion."
+    "text": "[x]<b>Passive. Start of Combat</b>:\n Deal {1} damage to the highest-\nHealth enemy minion.",
+    "cost": 0,
+    "script_data_num_1": 3,
+    "script_data_num_2": 99
   },
   {
     "id": "BG22_HERO_000p_t4",
@@ -201,7 +241,10 @@
     "name": "Aim Right!",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]<b>Passive. Start of Combat</b>:\nDeal {1} damage to the\nright-most enemy minion."
+    "text": "[x]<b>Passive. Start of Combat</b>:\nDeal {1} damage to the\nright-most enemy minion.",
+    "cost": 0,
+    "script_data_num_1": 3,
+    "script_data_num_2": 99
   },
   {
     "id": "BG22_HERO_001p",
@@ -209,7 +252,8 @@
     "name": "Embrace the Elements",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Choose an Element.\n<b>Start of Combat:</b> Call\nupon that Element."
+    "text": "[x]Choose an Element.\n<b>Start of Combat:</b> Call\nupon that Element.",
+    "cost": 0
   },
   {
     "id": "BG22_HERO_001p_t1",
@@ -217,7 +261,8 @@
     "name": "Earth Invocation",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]<b>Start of Combat:</b> Give 4\nrandom friendly minions\n\"<b>Deathrattle:</b> Summon\na 1/1 Elemental.\""
+    "text": "[x]<b>Start of Combat:</b> Give 4\nrandom friendly minions\n\"<b>Deathrattle:</b> Summon\na 1/1 Elemental.\"",
+    "cost": 0
   },
   {
     "id": "BG22_HERO_001p_t2",
@@ -225,7 +270,8 @@
     "name": "Fire Invocation",
     "card_set": 1453,
     "card_type": 10,
-    "text": "<b>Start of Combat:</b> Double your left-most minion's Attack."
+    "text": "<b>Start of Combat:</b> Double your left-most minion's Attack.",
+    "cost": 0
   },
   {
     "id": "BG22_HERO_001p_t3",
@@ -233,7 +279,8 @@
     "name": "Water Invocation",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]<b>Start of Combat:</b> Give\nyour right-most minion\n<b>Divine Shield</b> and <b>Taunt</b>."
+    "text": "[x]<b>Start of Combat:</b> Give\nyour right-most minion\n<b>Divine Shield</b> and <b>Taunt</b>.",
+    "cost": 0
   },
   {
     "id": "BG22_HERO_001p_t4",
@@ -241,7 +288,8 @@
     "name": "Lightning Invocation",
     "card_set": 1453,
     "card_type": 10,
-    "text": "<b>Start of Combat:</b> Deal 1 damage to 5 random enemy minions."
+    "text": "<b>Start of Combat:</b> Deal 1 damage to 5 random enemy minions.",
+    "cost": 0
   },
   {
     "id": "BG22_HERO_002p",
@@ -249,7 +297,9 @@
     "name": "Frostwolf Fervor",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]When you have space in\ncombat, summon a copy of\nyour highest-Attack minion.\n<i>(Unlocks on Turn 7.)</i>"
+    "text": "[x]When you have space in\ncombat, summon a copy of\nyour highest-Attack minion.\n<i>(Unlocks on Turn 7.)</i>",
+    "cost": 0,
+    "script_data_num_1": 1
   },
   {
     "id": "BG22_HERO_003p",
@@ -257,7 +307,9 @@
     "name": "Stormpike Strength",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]When you have space in\ncombat, summon a copy of\nyour highest-Health minion.\n<i>(Unlocks on Turn 7.)</i>"
+    "text": "[x]When you have space in\ncombat, summon a copy of\nyour highest-Health minion.\n<i>(Unlocks on Turn 7.)</i>",
+    "cost": 0,
+    "script_data_num_1": 1
   },
   {
     "id": "BG22_HERO_004p",
@@ -265,7 +317,8 @@
     "name": "Twice as Nice",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After the Tavern is\n<b>Refreshed</b>, copy its\nhighest-Tier minion and\n<b>Freeze</b> them both."
+    "text": "[x]After the Tavern is\n<b>Refreshed</b>, copy its\nhighest-Tier minion and\n<b>Freeze</b> them both.",
+    "cost": 0
   },
   {
     "id": "BG22_HERO_007p",
@@ -273,7 +326,10 @@
     "name": "Azshara's Ambition",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]When your warband\nreaches 30 total Attack,\nbegin your Naga Conquest.@[x]When your warband\nreaches 30 total Attack,\nbegin your Naga Conquest.\n<i>({0} left!)</i>"
+    "text": "[x]When your warband\nreaches 30 total Attack,\nbegin your Naga Conquest.@[x]When your warband\nreaches 30 total Attack,\nbegin your Naga Conquest.\n<i>({0} left!)</i>",
+    "cost": 0,
+    "script_data_num_2": 30,
+    "evolution_card_id": 80007
   },
   {
     "id": "BG22_HERO_007p2",
@@ -290,7 +346,9 @@
     "name": "MechGyver",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After 9 friendly minions\ndie, get a random Mech.@After 9 friendly minions\ndie, get a random Mech.\n<i>({0} left!)</i>"
+    "text": "[x]After 9 friendly minions\ndie, get a random Mech.@After 9 friendly minions\ndie, get a random Mech.\n<i>({0} left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 9
   },
   {
     "id": "BG22_HERO_201p",
@@ -298,7 +356,8 @@
     "name": "Expedition Plans",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Skip your first turn.\n<b>Discover</b> minions from\nTiers 6, 4, and 2 to get\nat those Tiers."
+    "text": "[x]Skip your first turn.\n<b>Discover</b> minions from\nTiers 6, 4, and 2 to get\nat those Tiers.",
+    "cost": 0
   },
   {
     "id": "BG22_HERO_305p",
@@ -307,8 +366,9 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "[x]<b>Avenge (4):</b> Summon a\n{0}/{0} Whelp that attacks\nimmediately. Improve this\nby +1/+1.",
-    "avenge": true,
-    "avenge_target": 1
+    "cost": 0,
+    "script_data_num_1": 1,
+    "avenge": true
   },
   {
     "id": "BG23_HERO_201p",
@@ -316,7 +376,10 @@
     "name": "Tentacular",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]When you have space in\ncombat, summon a @/@\nTentacle with <b>Taunt</b>. <i>(Gains\n+1/+1 after you sell a minion!)</i>"
+    "text": "[x]When you have space in\ncombat, summon a @/@\nTentacle with <b>Taunt</b>. <i>(Gains\n+1/+1 after you sell a minion!)</i>",
+    "cost": 0,
+    "script_data_num_1": 2,
+    "script_data_num_2": 1
   },
   {
     "id": "BG23_HERO_303p2",
@@ -324,7 +387,8 @@
     "name": "Detective for Hire",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Look at 2 minions.\nGuess which one your next\nopponent had last combat\nfor a Tavern Coin."
+    "text": "[x]Look at 2 minions.\nGuess which one your next\nopponent had last combat\nfor a Tavern Coin.",
+    "cost": 0
   },
   {
     "id": "BG23_HERO_304p",
@@ -332,7 +396,8 @@
     "name": "Relics of the Deep",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]At the start of each turn,\nget a random <b>Spellcraft</b>\nspell."
+    "text": "[x]At the start of each turn,\nget a random <b>Spellcraft</b>\nspell.",
+    "cost": 0
   },
   {
     "id": "BG23_HERO_305p",
@@ -358,7 +423,8 @@
     "name": "Whodunit?",
     "card_set": 1453,
     "card_type": 10,
-    "text": "At the start of the game, choose one of two <b>Quests</b>."
+    "text": "At the start of the game, choose one of two <b>Quests</b>.",
+    "cost": 0
   },
   {
     "id": "BG24_HERO_204p",
@@ -366,7 +432,8 @@
     "name": "Enhancification",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After the Tavern is\n<b>Refreshed</b>, give a random\nminion in it a random\n<b>Bonus Keyword</b>."
+    "text": "[x]After the Tavern is\n<b>Refreshed</b>, give a random\nminion in it a random\n<b>Bonus Keyword</b>, twice.",
+    "cost": 0
   },
   {
     "id": "BG25_HERO_100p",
@@ -375,7 +442,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "[x]Craft a custom Undead.\n<i>({0} |4(Creation, Creations) left!)</i>",
-    "cost": 3
+    "cost": 3,
+    "script_data_num_1": 3
   },
   {
     "id": "BG25_HERO_103p",
@@ -383,7 +451,8 @@
     "name": "Rapid Reanimation",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Choose a friendly minion.\n<b>Start of Combat:</b> Destroy it.\nWhen you have space,\n___resummon an exact copy."
+    "text": "[x]Choose a friendly minion.\n<b>Start of Combat:</b> Destroy it.\nWhen you have space,\n___resummon an exact copy.",
+    "cost": 0
   },
   {
     "id": "BG25_HERO_105p",
@@ -400,7 +469,8 @@
     "name": "I'm the Cap'n Now",
     "card_set": 1453,
     "card_type": 10,
-    "text": "After you buy a Pirate, gain 1 Gold."
+    "text": "After you buy a Pirate, gain 1 Gold.",
+    "cost": 0
   },
   {
     "id": "BG26_HERO_102p",
@@ -408,7 +478,8 @@
     "name": "Major Hymn",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Give a minion Attack\nequal to your Tier. <i>(Swaps\nto Health next turn!)</i>"
+    "text": "[x]Twice per turn, give a\nminion Attack equal to\nyour Tier. <i>(Swaps to\nHealth next turn!)</i>",
+    "cost": 0
   },
   {
     "id": "BG26_HERO_102p2",
@@ -416,7 +487,8 @@
     "name": "Minor Hymn",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Give a minion Health\nequal to your Tier. <i>(Swaps\nto Attack next turn!)</i>"
+    "text": "[x]Twice per turn, give a\nminion Health equal to\nyour Tier. <i>(Swaps to\nAttack next turn!)</i>",
+    "cost": 0
   },
   {
     "id": "BG26_HERO_104p",
@@ -424,7 +496,9 @@
     "name": "Upbeat Harmony",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]At the end of every 3 turns,\nget a plain copy of the left-\nmost card in your hand.\n<i>({0} |4(turn, turns) left!)</i>@[x]At the end of every 3 turns,\nget a plain copy of the left-\nmost card in your hand.\n<i>(End of this turn!)</i>"
+    "text": "[x]At the end of every 3 turns,\nget a plain copy of the left-\nmost card in your hand.\n<i>({0} |4(turn, turns) left!)</i>@[x]At the end of every 3 turns,\nget a plain copy of the left-\nmost card in your hand.\n<i>(End of this turn!)</i>",
+    "cost": 0,
+    "script_data_num_1": 3
   },
   {
     "id": "BG27_Anomaly_805t",
@@ -432,7 +506,8 @@
     "name": "Match Fixing",
     "card_set": 1453,
     "card_type": 10,
-    "text": "Guess which player will win your next combat."
+    "text": "Guess which player will win your next combat.",
+    "cost": 0
   },
   {
     "id": "BG27_HERO_801p2",
@@ -440,7 +515,9 @@
     "name": "Choose Your Champion",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]<b><b>Passive</b>.</b> At the start of the\ngame, <b>Discover</b> a Tier 7\nminion to get after you\n__spend 60 Gold. <i>({0} left!)</i>@[x]<b><b>Passive</b>.</b> At the start of the\ngame, <b>Discover</b> a Tier 7\nminion to get after you\n__spend 60 Gold. <i>(Done!)</i>"
+    "text": "[x]<b><b>Passive</b>.</b> At the start of the\ngame, <b>Discover</b> a Tier 7\nminion to get after you\n__spend 60 Gold. <i>({0} left!)</i>@[x]<b><b>Passive</b>.</b> At the start of the\ngame, <b>Discover</b> a Tier 7\nminion to get after you\n__spend 60 Gold. <i>(Done!)</i>",
+    "cost": 0,
+    "script_data_num_1": 60
   },
   {
     "id": "BG28_HERO_400p",
@@ -457,7 +534,8 @@
     "name": "Lucky Roll",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Roll a 6-sided die.\nGain that much Gold.\n<i>(Can be used again in\n@ |4(turn, turns)!)</i>"
+    "text": "[x]Roll a 6-sided die.\nGain that much Gold.\n<i>(Can be used again in\n@ |4(turn, turns)!)</i>",
+    "cost": 0
   },
   {
     "id": "BG28_HERO_800p",
@@ -465,7 +543,9 @@
     "name": "Reliquary Research",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Every fourth Tavern spell\nyou buy costs (0)."
+    "text": "[x]Every third Tavern spell\nyou buy costs (0).\n<i>({0} left!)</i>@[x]Every third Tavern spell\nyou buy costs (0).\n<i>(Active!)</i>",
+    "cost": 0,
+    "script_data_num_1": 2
   },
   {
     "id": "BG28_HERO_801p",
@@ -482,7 +562,9 @@
     "name": "Fantastic Treasure",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]On Turn 5, choose a\nLesser <b>Trinket</b> to buy.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 5, choose a\nLesser <b>Trinket</b> to buy.\n<i>(Done!)</i>"
+    "text": "[x]On Turn 5, choose a\nLesser <b>Trinket</b> to buy.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 5, choose a\nLesser <b>Trinket</b> to buy.\n<i>(Done!)</i>",
+    "cost": 0,
+    "script_data_num_1": 4
   },
   {
     "id": "BG31_Anomaly_117t",
@@ -490,7 +572,8 @@
     "name": "Eject!",
     "card_set": 1453,
     "card_type": 10,
-    "text": "Choose a minion. Permanently remove all copies of it from your pool. <i>(Twice per turn.)</i>"
+    "text": "Choose a minion. Permanently remove all copies of it from your pool. <i>(Twice per turn.)</i>",
+    "cost": 0
   },
   {
     "id": "BG31_HERO_003p",
@@ -507,7 +590,8 @@
     "name": "Cloning Gallery",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Once per game, summon\nan exact copy of a friendly\nminion.@[x]Once per game, summon\nan exact copy of a friendly\nminion. <i>(Except\n<b>Timewarped</b> minions.)</i>"
+    "text": "[x]Once per game, summon\nan exact copy of a friendly\nminion.@[x]Once per game, summon\nan exact copy of a friendly\nminion. <i>(Except\n<b>Timewarped</b> minions.)</i>",
+    "cost": 0
   },
   {
     "id": "BG31_HERO_006p",
@@ -515,7 +599,8 @@
     "name": "Arcane Knowledge",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]The next Tavern spell\nyou buy costs (1) less.\n<i>(Unlocks on Turn 3.)</i>"
+    "text": "[x]The next Tavern spell\nyou buy costs (1) less.\n<i>(Unlocks on Turn 3.)</i>",
+    "cost": 0
   },
   {
     "id": "BG31_HERO_801p",
@@ -523,7 +608,8 @@
     "name": "Lift Off",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Start the game with a 2/2\n_Battlecruiser. Whenever the\nTavern is <b>Refreshed</b>, add a\n__Battlecruiser Upgrade to it."
+    "text": "[x]Start the game with a 2/2\n_Battlecruiser. Whenever the\nTavern is <b>Refreshed</b>, add a\n__Battlecruiser Upgrade to it.",
+    "cost": 0
   },
   {
     "id": "BG31_HERO_802p",
@@ -531,7 +617,9 @@
     "name": "Warp Gate",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]At the start of the game,\nchoose from 2 Protoss\nminions to get after you\nbuy 14 cards. <i>({0} left!)</i>@[x]At the start of the game,\nchoose from 2 Protoss\nminions to get after you\nbuy 14 cards. <i>(Done!)</i>"
+    "text": "[x]At the start of the game,\nchoose from 2 Protoss\nminions to get after you\nbuy 14 cards. <i>({0} left!)</i>@[x]At the start of the game,\nchoose from 2 Protoss\nminions to get after you\nbuy 14 cards. <i>(Done!)</i>",
+    "cost": 0,
+    "script_data_num_1": 14
   },
   {
     "id": "BG31_HERO_811p",
@@ -557,7 +645,8 @@
     "name": "Ultralisk Cavern",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Your Zerg can morph\ninto Tier 3 Zerg."
+    "text": "[x]Your Zerg can morph\ninto Tier 3 Zerg.",
+    "cost": 0
   },
   {
     "id": "BG32_HERO_001p",
@@ -574,7 +663,9 @@
     "name": "Growing Collection",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]On Turn 8, choose a\nGreater <b>Trinket</b> to buy.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 8, choose a\nGreater <b>Trinket</b> to buy.\n<i>(Done!)</i>"
+    "text": "[x]On Turn 8, choose a\nGreater <b>Trinket</b> to buy.\n<i>({0} |4(turn, turns) left!)</i>@[x]On Turn 8, choose a\nGreater <b>Trinket</b> to buy.\n<i>(Done!)</i>",
+    "cost": 0,
+    "script_data_num_1": 7
   },
   {
     "id": "BG33_HERO_001p_ALT",
@@ -582,7 +673,10 @@
     "name": "Heroic Inspiration",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After {1} friendly minions\nattack, get a Triple\nReward. <i>({0} left!)</i>"
+    "text": "[x]After {1} friendly minions\nattack, get a Triple\nReward. <i>({0} left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 15,
+    "script_data_num_2": 15
   },
   {
     "id": "BG34_HERO_000p",
@@ -590,7 +684,10 @@
     "name": "Alternate Timeline",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]On Turn 8, visit the Major\n<b>Timewarp</b>. <i>({0} |4(turn, turns) left!)</i>@[x]On Turn 8, visit the Major\n<b>Timewarp</b>. <i>(Done!)</i>"
+    "text": "[x]On Turn 8, visit the Major\n<b>Timewarp</b>. <i>({0} |4(turn, turns) left!)</i>@[x]On Turn 8, visit the Major\n<b>Timewarp</b>. <i>(Done!)</i>",
+    "cost": 0,
+    "script_data_num_1": 7,
+    "script_data_num_2": 2
   },
   {
     "id": "BG34_HERO_001p",
@@ -598,7 +695,8 @@
     "name": "Mana Per Minute",
     "card_set": 1453,
     "card_type": 10,
-    "text": "<b>Refresh</b> the Tavern\nwith Tavern spells."
+    "text": "<b>Refresh</b> the Tavern\nwith Tavern spells.",
+    "cost": 0
   },
   {
     "id": "BG34_HERO_002p",
@@ -606,7 +704,8 @@
     "name": "Double Time",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]You only need 2 copies of a\nminion to make it Golden.\nGolden minions give Tavern\nCoins instead of Triple Rewards."
+    "text": "[x]You only need 2 copies to\nmake minions Golden.\n They give Tavern Coins\ninstead of Triple Rewards.",
+    "cost": 0
   },
   {
     "id": "BG34_HERO_004p",
@@ -614,7 +713,10 @@
     "name": "Warped Conflux",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]On Turn 5, visit the Minor\n<b>Timewarp</b>. <i>({0} |4(turn, turns) left!)</i>@[x]On Turn 5, visit the Minor\n<b>Timewarp</b>. <i>(Done!)</i>"
+    "text": "[x]On Turn 5, visit the Minor\n<b>Timewarp</b>. <i>({0} |4(turn, turns) left!)</i>@[x]On Turn 5, visit the Minor\n<b>Timewarp</b>. <i>(Done!)</i>",
+    "cost": 0,
+    "script_data_num_1": 4,
+    "script_data_num_2": 2
   },
   {
     "id": "BG35_Anomaly_002t",
@@ -622,7 +724,8 @@
     "name": "Mystery Cube",
     "card_set": 1453,
     "card_type": 10,
-    "text": "Each turn, choose from 2 new Lesser <b><b>Trinket</b>s</b> to replace this for free. <i>(Unlocks on Turn 5.)</i>"
+    "text": "Each turn, choose from 2 new Lesser <b><b>Trinket</b>s</b> to replace this for free. <i>(Unlocks on Turn 5.)</i>",
+    "cost": 0
   },
   {
     "id": "BG35_Anomaly_007t",
@@ -630,7 +733,10 @@
     "name": "Lesser Crystal Ball",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]When you buy a Lesser\n<b>Trinket</b>, this transforms\ninto a copy of it."
+    "text": "[x]When you buy a Lesser\n<b>Trinket</b>, this transforms\ninto a copy of it.",
+    "cost": 0,
+    "script_data_num_1": 6,
+    "spell_school": 11
   },
   {
     "id": "BG35_Anomaly_008t",
@@ -638,7 +744,10 @@
     "name": "Greater Crystal Ball",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]When you buy a Greater\n<b>Trinket</b>, this transforms\ninto a copy of it."
+    "text": "[x]When you buy a Greater\n<b>Trinket</b>, this transforms\ninto a copy of it.",
+    "cost": 0,
+    "script_data_num_1": 9,
+    "spell_school": 11
   },
   {
     "id": "BG35_HERO_001p",
@@ -646,7 +755,29 @@
     "name": "King of Duality",
     "card_set": 1453,
     "card_type": 10,
-    "text": "On Turn 4, <b>Discover</b> two Hero Powers to replace this. <i>({0} |4(turn, turns) left!)</i>@On Turn 4, <b>Discover</b> two Hero Powers to replace this. <i>(Done!)</i>"
+    "text": "On Turn 4, <b>Discover</b> two Hero Powers to replace this. <i>({0} |4(turn, turns) left!)</i>@On Turn 4, <b>Discover</b> two Hero Powers to replace this. <i>(Done!)</i>",
+    "cost": 0,
+    "script_data_num_1": 3
+  },
+  {
+    "id": "BG36_HERO_101p",
+    "dbf_id": 132581,
+    "name": "Void Power",
+    "card_set": 1453,
+    "card_type": 10,
+    "text": "[x]At the start of the game,\n<b>Discover</b> a Tier 5 minion\nwith a <b>Dark Gift</b>. It unlocks\non Turn 7. <i>({0} |4(turn, turns) left!)</i>@[x]At the start of the game,\n<b>Discover</b> a Tier 5 minion\nwith a <b>Dark Gift</b>. It unlocks\non Turn 7. <i>(Done!)</i>",
+    "cost": 0,
+    "script_data_num_1": 6
+  },
+  {
+    "id": "BG36_HERO_105p",
+    "dbf_id": 134010,
+    "name": "Feel Devastation",
+    "card_set": 1453,
+    "card_type": 10,
+    "text": "[x]Every 4 turns, <b>Discover</b> a\nminion with a <b>Dark Gift</b>.\n<i>({0} |4(turn, turns) left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 3
   },
   {
     "id": "TB_BaconShop_HP_001",
@@ -654,8 +785,10 @@
     "name": "Sharpen Blades",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Give a minion +{1}/+{1}.\nImproves after you\nbuy 5 cards. <i>({0} left!)</i>",
-    "cost": 1
+    "text": "[x]Give a minion +{1}/+{1}.\nImproves after you\nbuy 4 cards. <i>({0} left!)</i>",
+    "cost": 1,
+    "script_data_num_1": 4,
+    "script_data_num_2": 2
   },
   {
     "id": "TB_BaconShop_HP_008",
@@ -672,7 +805,8 @@
     "name": "Skilled Bartender",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Reduce the Cost of\nupgrading the\nTavern by (1)."
+    "text": "[x]Reduce the Cost of\nupgrading the\nTavern by (1).",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_010",
@@ -698,7 +832,8 @@
     "name": "Stay Frosty",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x] Minions cost (2).\nThe Tavern offers one\nfewer minion and <b><b>Freeze</b>s</b>\nat the end of each turn."
+    "text": "[x] Minions cost (2).\nThe Tavern offers one\nfewer minion and <b><b>Freeze</b>s</b>\nat the end of each turn.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_015",
@@ -742,7 +877,8 @@
     "name": "Prestidigitation",
     "card_set": 1453,
     "card_type": 10,
-    "text": "Choose a <b>Secret</b>.\nPut it into the battlefield."
+    "text": "Choose a <b>Secret</b>.\nPut it into the battlefield.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_022",
@@ -750,7 +886,9 @@
     "name": "Snicker-snack",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Trigger a friendly\nminion's <b>Battlecry</b>.\n<i>(Unlocks on Turn 3.)</i>"
+    "text": "[x]Trigger a friendly\nminion's <b>Battlecry</b>.\n<i>(Unlocks on Turn 3.)</i>",
+    "cost": 0,
+    "script_data_num_1": 2
   },
   {
     "id": "TB_BaconShop_HP_024",
@@ -758,7 +896,8 @@
     "name": "Reborn Rites",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Give a minion <b>Reborn</b>\nuntil next turn."
+    "text": "[x]Give a minion <b>Reborn</b>\nuntil next turn.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_027",
@@ -784,7 +923,8 @@
     "name": "Menagerist",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Start the game with a\n2/2 Amalgam with\n<b>Venomous</b> and all\nminion types."
+    "text": "[x]Start the game with a\n2/2 Amalgam with\n<b>Venomous</b> and all\nminion types.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_035",
@@ -792,7 +932,8 @@
     "name": "All Patched Up",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Start the game with\n30 extra Health."
+    "text": "[x]Start the game with\n30 extra Health.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_036",
@@ -800,7 +941,10 @@
     "name": "Bloodfury",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After friendly minions\ndeal 150 damage, open\na portal to the Twisting\nNether! <i>(@ left!)</i>"
+    "text": "[x]After friendly minions\ndeal 150 damage, open\na portal to the Twisting\nNether! <i>(@ left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 150,
+    "evolution_card_id": 123087
   },
   {
     "id": "TB_BaconShop_HP_036t",
@@ -808,7 +952,11 @@
     "name": "Nether Portal",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]At the start of each turn,\nget 2 random Demons."
+    "text": "[x]At the start of each turn,\nget 2 random Demons.",
+    "cost": 0,
+    "script_data_num_1": 3,
+    "script_data_num_2": 30,
+    "script_data_num_3": 10
   },
   {
     "id": "TB_BaconShop_HP_037a",
@@ -816,7 +964,10 @@
     "name": "Wax Warband",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]<b>Start of Combat:</b> Give a\nfriendly minion of each\ntype +{2}/+{2}. <i>(Improves\nafter you spend 10 Gold!)</i>@[x]<b>Start of Combat:</b> Give a\nfriendly minion of each\ntype +{2}/+{2}. <i>(Spend\n{0} Gold to improve!)</i>"
+    "text": "[x]<b>Start of Combat:</b> Give a\nfriendly minion of each\ntype +{2}/+{2}. <i>(Improves\nafter you spend 10 Gold!)</i>@[x]<b>Start of Combat:</b> Give a\nfriendly minion of each\ntype +{2}/+{2}. <i>(Spend\n{0} Gold to improve!)</i>",
+    "cost": 0,
+    "script_data_num_1": 10,
+    "script_data_num_3": 1
   },
   {
     "id": "TB_BaconShop_HP_038",
@@ -824,7 +975,8 @@
     "name": "Bananarama",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]At the start of your turn,\nget 2 Bananas and give\neveryone else one."
+    "text": "[x]At the start of your turn,\nget 2 Bananas and give\neveryone else one.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_039t",
@@ -832,7 +984,8 @@
     "name": "Puzzle Box",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]At the start of your turn,\ncast a random Tavern\nspell. <i>(Unlocks on Turn 3.)</i>"
+    "text": "[x]At the start of your turn,\ncast a random Tavern\nspell. <i>(Unlocks on Turn 3.)</i>",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_040",
@@ -859,7 +1012,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "<b>Discover</b> a Beast.\nSwaps type each turn.",
-    "cost": 2
+    "cost": 2,
+    "subset_beast": true
   },
   {
     "id": "TB_BaconShop_HP_041b",
@@ -868,7 +1022,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "<b>Discover</b> a Mech.\nSwaps type each turn.",
-    "cost": 2
+    "cost": 2,
+    "subset_mech": true
   },
   {
     "id": "TB_BaconShop_HP_041c",
@@ -877,7 +1032,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "<b>Discover</b> a Murloc.\nSwaps type each turn.",
-    "cost": 2
+    "cost": 2,
+    "subset_murloc": true
   },
   {
     "id": "TB_BaconShop_HP_041d",
@@ -886,7 +1042,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "<b>Discover</b> a Demon.\nSwaps type each turn.",
-    "cost": 2
+    "cost": 2,
+    "subset_demon": true
   },
   {
     "id": "TB_BaconShop_HP_041f",
@@ -895,7 +1052,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "<b>Discover</b> a Dragon.\nSwaps type each turn.",
-    "cost": 2
+    "cost": 2,
+    "subset_dragon": true
   },
   {
     "id": "TB_BaconShop_HP_041g",
@@ -904,7 +1062,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "<b>Discover</b> a Pirate.\nSwaps type each turn.",
-    "cost": 2
+    "cost": 2,
+    "subset_pirate": true
   },
   {
     "id": "TB_BaconShop_HP_041h",
@@ -913,7 +1072,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "<b>Discover</b> an Elemental.\nSwaps type each turn.",
-    "cost": 2
+    "cost": 2,
+    "subset_elemental": true
   },
   {
     "id": "TB_BaconShop_HP_041i",
@@ -922,7 +1082,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "<b>Discover</b> a Quilboar.\nSwaps type each turn.",
-    "cost": 2
+    "cost": 2,
+    "subset_quilboar": true
   },
   {
     "id": "TB_BaconShop_HP_041j",
@@ -931,7 +1092,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "<b>Discover</b> a Naga.\nSwaps type each turn.",
-    "cost": 2
+    "cost": 2,
+    "subset_naga": true
   },
   {
     "id": "TB_BaconShop_HP_041k",
@@ -940,7 +1102,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "<b>Discover</b> an Undead.\nSwaps type each turn.",
-    "cost": 2
+    "cost": 2,
+    "subset_undead": true
   },
   {
     "id": "TB_BaconShop_HP_042",
@@ -948,7 +1111,10 @@
     "name": "Hat Trick",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]When you play a minion,\ngive it a +1/+1 hat\n that passes to a friendly\nminion when sold."
+    "text": "[x]When you play a minion,\ngive it a +1/+1 hat\n that passes to a friendly\nminion when sold.",
+    "cost": 0,
+    "script_data_num_1": 1,
+    "script_data_num_2": 1
   },
   {
     "id": "TB_BaconShop_HP_043",
@@ -965,7 +1131,8 @@
     "name": "Procrastinate",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Skip your first two turns,\nthen <b>Discover</b> a minion\nfrom Tier 3 and Tier 4."
+    "text": "[x]Skip your first two turns,\nthen <b>Discover</b> a minion\nfrom Tier 3 and Tier 4.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_046",
@@ -973,7 +1140,8 @@
     "name": "Gonna Be Rich!",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Once per game, make a\nfriendly minion Golden.@[x]Once per game, make a\nfriendly minion Golden.\n<i>(Except <b>Timewarped</b>\nminions.)</i>"
+    "text": "[x]Once per game, make a\nfriendly minion Golden.@[x]Once per game, make a\nfriendly minion Golden.\n<i>(Except <b>Timewarped</b>\nminions.)</i>",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_047",
@@ -990,7 +1158,9 @@
     "name": "Battle Brand",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After you buy 4 <b>Battlecry</b>\nminions, get a Brann\nBronzebeard.\n<i>(Once per game.)</i>@[x]After you buy 4 <b>Battlecry</b>\nminions, get a Brann\nBronzebeard. <i>({0} left!)</i>"
+    "text": "[x]After you buy 4 <b>Battlecry</b>\nminions, get a Brann\nBronzebeard.\n<i>(Once per game.)</i>@[x]After you buy 4 <b>Battlecry</b>\nminions, get a Brann\nBronzebeard. <i>({0} left!)</i>",
+    "cost": 0,
+    "evolution_card_id": 96786
   },
   {
     "id": "TB_BaconShop_HP_049",
@@ -1007,7 +1177,8 @@
     "name": "Banshee's Blessing",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Remove a friendly minion.\nGive adjacent minions\n+1/+1."
+    "text": "[x]Remove a friendly minion.\nGive adjacent minions\n+1/+1.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_051",
@@ -1024,7 +1195,8 @@
     "name": "Arcane Alteration",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Replace a card with a\n random one of the same\nTier. <i>(Twice per turn.)</i>"
+    "text": "[x]Replace a card with a\n random one of the same\nTier. <i>(Twice per turn.)</i>",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_053",
@@ -1041,7 +1213,8 @@
     "name": "Manastorm",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Minions and <b>Refreshes</b>\ncost 2 Gold. Upgrading\nthe Tavern costs (1) more."
+    "text": "[x]Minions and <b>Refreshes</b>\ncost 2 Gold. Upgrading\nthe Tavern costs (1) more.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_056",
@@ -1049,7 +1222,10 @@
     "name": "Gone Fishing",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After you sell 5 minions,\nget a random Murloc.\n<i>(@ left!)</i>"
+    "text": "[x]After you sell 5 minions,\nget a random Murloc.\n<i>(@ left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 5,
+    "script_data_num_2": 5
   },
   {
     "id": "TB_BaconShop_HP_057",
@@ -1057,7 +1233,8 @@
     "name": "Adventure!",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]At the start of the game,\n<b>Discover</b> a Hero Power."
+    "text": "[x]At the start of the game,\n<b>Discover</b> a Hero Power.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_061",
@@ -1065,7 +1242,8 @@
     "name": "ALL Will Burn!",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]<b>Start of Combat:</b> Give\nALL minions +2 Attack\npermanently."
+    "text": "[x]<b>Start of Combat:</b> Give\nALL minions +2 Attack\npermanently.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_062",
@@ -1073,7 +1251,8 @@
     "name": "Dream Portal",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]The Tavern offers an\nextra Dragon whenever\nit is <b>Refreshed</b>."
+    "text": "[x]The Tavern offers an\nextra Dragon whenever\nit is <b>Refreshed</b>.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_063",
@@ -1081,7 +1260,8 @@
     "name": "Clairvoyance",
     "card_set": 1453,
     "card_type": 10,
-    "text": "At the start of your turn, gain a free <b>Refresh</b>."
+    "text": "At the start of your turn, gain a free <b>Refresh</b>.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_064",
@@ -1098,7 +1278,10 @@
     "name": "Demon Hunter Training",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After 14 friendly minions\nattack, the first minion\nyou buy each turn is free.\n<i>(@ left!)</i>"
+    "text": "[x]After 14 friendly minions\nattack, the first minion\nyou buy each turn is free.\n<i>(@ left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 14,
+    "evolution_card_id": 62035
   },
   {
     "id": "TB_BaconShop_HP_065t2",
@@ -1106,7 +1289,8 @@
     "name": "Spectral Sight",
     "card_set": 1453,
     "card_type": 10,
-    "text": "The first minion you buy each turn is free."
+    "text": "The first minion you buy each turn is free.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_066",
@@ -1114,7 +1298,8 @@
     "name": "Verdant Spheres",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After you buy 3 minions,\nget a Tavern Coin."
+    "text": "[x]After you buy 3 minions,\nget a Tavern Coin.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_068",
@@ -1131,7 +1316,8 @@
     "name": "Wingmen",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]<b>Start of Combat:</b> Your left-\nand right-most minions\ngain +2/+1 and attack\nimmediately."
+    "text": "[x]<b>Start of Combat:</b> Your left-\nand right-most minions\ngain +2/+1 and attack\nimmediately.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_072",
@@ -1149,7 +1335,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "[x]_Dig for a Golden minion!\n<i>(@ |4(Dig, Digs) left.)</i>",
-    "cost": 1
+    "cost": 1,
+    "script_data_num_1": 4
   },
   {
     "id": "TB_BaconShop_HP_075",
@@ -1157,7 +1344,8 @@
     "name": "Trash for Treasure",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Remove a friendly\nminion. <b>Discover</b> one\nfrom a Tier lower to get."
+    "text": "[x]Remove a friendly\nminion. <b>Discover</b> one\nfrom a Tier lower to get.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_076",
@@ -1165,7 +1353,9 @@
     "name": "Piggy Bank",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Gain @ Gold.\nIncreases by 1 each turn.\n<i>(Once per game.)</i>"
+    "text": "[x]Gain @ Gold.\nIncreases by 1 each turn.\n<i>(Once per game.)</i>",
+    "cost": 0,
+    "script_data_num_1": 2
   },
   {
     "id": "TB_BaconShop_HP_077",
@@ -1174,7 +1364,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "[x]<b>Refresh</b> the Tavern with\nplain copies of your last\n opponent's warband.",
-    "cost": 1
+    "cost": 1,
+    "hero_power_dbf": 63162
   },
   {
     "id": "TB_BaconShop_HP_080",
@@ -1182,7 +1373,8 @@
     "name": "Kel'Thuzad's Kitty",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After another hero dies,\n<b>Discover</b> a minion from\ntheir warband. It keeps\nenchantments."
+    "text": "[x]After another hero dies,\n<b>Discover</b> a minion from\ntheir warband. It keeps\nenchantments.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_081",
@@ -1199,7 +1391,8 @@
     "name": "Everbloom",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After you upgrade the\nTavern, gain 2 Gold."
+    "text": "[x]After you upgrade the\nTavern, gain 2 Gold.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_084",
@@ -1207,7 +1400,8 @@
     "name": "Swap, Lock, & Shop It",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Swap a friendly\nnon-Golden minion with a\nrandom one in the Tavern."
+    "text": "[x]Swap a friendly\nnon-Golden minion with a\nrandom one in the Tavern.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_085",
@@ -1216,7 +1410,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "Get a Lantern Light that gives a minion stats equal to your Tier.",
-    "cost": 1
+    "cost": 1,
+    "evolution_card_id": 105269
   },
   {
     "id": "TB_BaconShop_HP_085t",
@@ -1224,7 +1419,10 @@
     "name": "Tavern Lighting",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Your Tavern spells give an\nextra +{1}/+{1}. At the start\nof every 4 turns, improve\nthis. <i>({0} |4(turn, turns) left!)</i>"
+    "text": "[x]Your Tavern spells give an\nextra +{1}/+{1}. At the start\nof every 3 turns, improve\nthis. <i>({0} |4(turn, turns) left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 3,
+    "script_data_num_2": 1
   },
   {
     "id": "TB_BaconShop_HP_086",
@@ -1232,7 +1430,8 @@
     "name": "Swatting Insects",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]<b>Start of Combat:</b> Give\nyour left-most minion\n<b>Windfury</b>, <b>Divine Shield</b>,\nand <b>Taunt</b>."
+    "text": "[x]<b>Start of Combat:</b> Give\nyour left-most minion\n<b>Windfury</b>, <b>Divine Shield</b>,\nand <b>Taunt</b>.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_087",
@@ -1240,7 +1439,10 @@
     "name": "BUY, INSECT!",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After you buy 16 cards,\nget Sulfuras. <i>(@ left!)</i>"
+    "text": "[x]After you buy 12 cards,\nget Sulfuras. <i>(@ left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 12,
+    "evolution_card_id": 64426
   },
   {
     "id": "TB_BaconShop_HP_087t",
@@ -1248,7 +1450,8 @@
     "name": "Sulfuras",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]At the end of your turn,\ngive your left- and right-\nmost minions +8/+8."
+    "text": "[x]At the end of your turn,\ngive your left and right-\nmost minions +8/+8.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_088",
@@ -1256,7 +1459,8 @@
     "name": "Avalanche",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]After you play 3\nElementals, reduce the\nCost of upgrading the\nTavern by (3)."
+    "text": "[x]After you play 3\nElementals, reduce the\nCost of upgrading the\nTavern by (3).",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_101",
@@ -1264,7 +1468,8 @@
     "name": "Come One, Come All!",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Darkmoon Tickets are in\nthe Tavern! Get 3 to\n<b>Discover</b> a minion of\nyour Tier."
+    "text": "[x]Darkmoon Tickets are in\nthe Tavern! Get 3 to\n<b>Discover</b> a minion of\nyour Tier.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_102",
@@ -1273,7 +1478,8 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "[x]If you have two copies of\na minion, find the third.\n<i>(@ |4(Wish, Wishes) left!)</i>",
-    "cost": 3
+    "cost": 3,
+    "script_data_num_1": 3
   },
   {
     "id": "TB_BaconShop_HP_103",
@@ -1299,7 +1505,8 @@
     "name": "Avatar of N'Zoth",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Start the game with a 2/2\nFish that gains all your\n<b>Deathrattles</b> in combat."
+    "text": "[x]Start the game with a 2/2\nFish that gains all your\n<b>Deathrattles</b> in combat.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_106",
@@ -1307,7 +1514,9 @@
     "name": "Prize Wall",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Every 4 turns, <b>Discover</b>\na Darkmoon Prize.\n<i>(@ |4(turn, turns) left!)</i>"
+    "text": "[x]Every 4 turns, <b>Discover</b>\na Darkmoon Prize.\n<i>(@ |4(turn, turns) left!)</i>",
+    "cost": 0,
+    "script_data_num_1": 3
   },
   {
     "id": "TB_BaconShop_HP_107",
@@ -1315,7 +1524,8 @@
     "name": "Sprout It Out!",
     "card_set": 1453,
     "card_type": 10,
-    "text": "[x]Give +1/+2 and <b>Taunt</b>\nto minions you summon\nduring combat."
+    "text": "[x]Give +1/+2 and <b>Taunt</b>\nto minions you summon\nduring combat.",
+    "cost": 0
   },
   {
     "id": "TB_BaconShop_HP_702",
@@ -1324,7 +1534,9 @@
     "card_set": 1453,
     "card_type": 10,
     "text": "[x]Give a minion +{1}/+{1}.\nImproves after five\n friendly minions die.\n <i>({0} left!)</i>@[x]Give a minion +{1}/+{1}.\nImproves after five\n friendly minions die.\n <i>({0} left!)</i>",
-    "cost": 1
+    "cost": 1,
+    "script_data_num_1": 5,
+    "script_data_num_2": 1
   },
   {
     "id": "TB_BaconShop_HP_702t",

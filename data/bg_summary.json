@@ -1,50 +1,52 @@
 {
-  "patch": "35.6.0.243002",
-  "total_bg_cards": 3158,
+  "patch": "36.2.2.249896",
+  "total_bg_cards": 3405,
   "pool_minions": {
-    "count": 250,
+    "count": 247,
     "by_tier": {
       "1": 22,
-      "2": 32,
-      "3": 41,
-      "4": 53,
-      "5": 55,
+      "2": 34,
+      "3": 43,
+      "4": 55,
+      "5": 46,
       "6": 35,
       "7": 12
     },
     "by_race": {
-      "ALL": 2,
+      "ALL": 4,
       "BEAST": 21,
-      "DEMON": 18,
-      "DRAGON": 23,
-      "ELEMENTAL": 20,
-      "MECHANICAL": 23,
-      "MURLOC": 22,
-      "NAGA": 23,
-      "NONE": 29,
-      "PIRATE": 22,
+      "DEMON": 20,
+      "DRAGON": 22,
+      "ELEMENTAL": 23,
+      "MECHANICAL": 21,
+      "MURLOC": 24,
+      "NAGA": 21,
+      "NONE": 24,
+      "PIRATE": 23,
       "QUILBOAR": 23,
-      "UNDEAD": 24
-    }
+      "UNDEAD": 21
+    },
+    "with_activate": 17
   },
   "pool_spells": {
-    "count": 72,
+    "count": 75,
     "by_tier": {
       "1": 8,
-      "2": 6,
+      "2": 7,
       "3": 17,
-      "4": 16,
-      "5": 16,
+      "4": 17,
+      "5": 17,
       "6": 5,
       "7": 4
     }
   },
+  "dark_gifts": 43,
   "heroes": {
-    "count": 114
+    "count": 116
   },
-  "hero_powers": 160,
-  "tavern_spells": 197,
+  "hero_powers": 162,
+  "tavern_spells": 203,
   "quest_rewards": 73,
-  "anomalies": 107,
-  "trinkets": 332
+  "anomalies": 108,
+  "trinkets": 379
 }

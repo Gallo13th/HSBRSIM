@@ -93,7 +93,8 @@
     "name": "The Friends Along the Way",
     "card_set": 1453,
     "card_type": 40,
-    "text": "At the start of each turn, get 2 random {0}."
+    "text": "At the start of each turn, get 2 random {0}.",
+    "script_data_num_1": 92
   },
   {
     "id": "BG24_Reward_135",
@@ -133,7 +134,9 @@
     "name": "Cooked Book",
     "card_set": 1453,
     "card_type": 40,
-    "text": "After you buy a minion, give it +{0}/+{1} and improve this."
+    "text": "After you buy a minion, give it +{0}/+{1} and improve this.",
+    "script_data_num_1": 2,
+    "script_data_num_2": 2
   },
   {
     "id": "BG24_Reward_308",
@@ -165,7 +168,8 @@
     "name": "Another Hidden Body",
     "card_set": 1453,
     "card_type": 40,
-    "text": "[x]<b>Discover</b> a minion\nof your Tier. <i>(Can be\nearned endlessly!)</i>"
+    "text": "[x]<b>Discover</b> a minion\nof your Tier. <i>(Can be\nearned endlessly!)</i>",
+    "script_data_num_1": 1
   },
   {
     "id": "BG24_Reward_312",
@@ -221,7 +225,8 @@
     "name": "Hidden Treasure Vault",
     "card_set": 1453,
     "card_type": 40,
-    "text": "At the start of each turn, gain @ Gold. <i>(Improves each turn!)</i>"
+    "text": "At the start of each turn, gain @ Gold. <i>(Improves each turn!)</i>",
+    "script_data_num_1": 1
   },
   {
     "id": "BG24_Reward_362",
@@ -304,7 +309,9 @@
     "card_set": 1453,
     "card_type": 40,
     "text": "<b>Avenge (3):</b> Deal 10 damage to the highest-Health enemy minion.",
-    "avenge": true
+    "avenge": true,
+    "subset_beast": true,
+    "subset_undead": true
   },
   {
     "id": "BG27_Reward_503",
@@ -376,7 +383,8 @@
     "name": "Scepter of Guidance",
     "card_set": 1453,
     "card_type": 40,
-    "text": "The Tavern always offers 2 {0} whenever it is <b>Refreshed</b>."
+    "text": "The Tavern always offers 2 {0} whenever it is <b>Refreshed</b>.",
+    "script_data_num_1": 92
   },
   {
     "id": "BG27_Reward_815",
@@ -384,7 +392,8 @@
     "name": "Endless Blood Moon",
     "card_set": 1453,
     "card_type": 40,
-    "text": "Your <b>Blood Gems</b> give an extra +1/+1.\nAt the start of each turn, get two <b>Blood Gems</b>."
+    "text": "Your <b>Blood Gems</b> give an extra +1/+1.\nAt the start of each turn, get two <b>Blood Gems</b>.",
+    "subset_quilboar": true
   },
   {
     "id": "BG28_Reward_500",
@@ -426,8 +435,10 @@
     "card_set": 1453,
     "card_type": 40,
     "text": "[x]Whenever you summon a\nminion in combat, give it\n+@/+@. <b>Avenge (4):</b>\nImprove this permanently.",
+    "script_data_num_1": 1,
     "avenge": true,
-    "avenge_target": 1
+    "subset_beast": true,
+    "subset_undead": true
   },
   {
     "id": "BG28_Reward_506",
@@ -443,7 +454,8 @@
     "name": "Gift of the Golden Kobold",
     "card_set": 1453,
     "card_type": 40,
-    "text": "After you <b>Refresh</b> 5 times, make the highest-Tier minion in the Tavern Golden. <i>(@ left!)</i>"
+    "text": "After you <b>Refresh</b> 5 times, make the highest-Tier minion in the Tavern Golden. <i>(@ left!)</i>",
+    "script_data_num_1": 5
   },
   {
     "id": "BG28_Reward_509",
@@ -451,7 +463,8 @@
     "name": "Smelting Chamber",
     "card_set": 1453,
     "card_type": 40,
-    "text": "[x]At the start of each turn,\nmake a friendly Tier @\nminion Golden and\nimprove this."
+    "text": "[x]At the start of each turn,\nmake a friendly Tier @\nminion Golden and\nimprove this.",
+    "script_data_num_1": 1
   },
   {
     "id": "BG28_Reward_510",
@@ -509,7 +522,10 @@
     "card_set": 1453,
     "card_type": 40,
     "text": "<b>Avenge (2):</b> Gain a free <b>Refresh</b>.",
-    "avenge": true
+    "avenge": true,
+    "subset_beast": true,
+    "subset_mech": true,
+    "subset_undead": true
   },
   {
     "id": "BG33_Reward_006",
@@ -534,7 +550,8 @@
     "name": "Magicfin Relic",
     "card_set": 1453,
     "card_type": 40,
-    "text": "At the start of each turn, get a 1/1 Murloc. <b>Discover</b> a Tavern spell to teach it."
+    "text": "At the start of each turn, get a 1/1 Murloc. <b>Discover</b> a Tavern spell to teach it.",
+    "subset_murloc": true
   },
   {
     "id": "BG33_Reward_012",
@@ -582,7 +599,10 @@
     "name": "Perpetual Incantation",
     "card_set": 1453,
     "card_type": 40,
-    "text": "Your Tavern spells give an extra +{3}/+{1}. <i>(+2/+1 can be earned endlessly!)</i>"
+    "text": "Your Tavern spells give an extra +{3}/+{1}. <i>(+2/+1 can be earned endlessly!)</i>",
+    "script_data_num_1": 1,
+    "script_data_num_2": 1,
+    "script_data_num_4": 2
   },
   {
     "id": "BG33_Reward_021",

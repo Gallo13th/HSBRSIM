@@ -7,6 +7,9 @@
     "card_type": 44,
     "text": "[x]Get an Eternal Knight.\n<b>Start of Combat:</b> Give your\nEternal Knights <b>Taunt</b>\nand <b>Reborn</b>.",
     "cost": 6,
+    "evolution_card_id": 95261,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -16,7 +19,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "<b>Start of Combat:</b> When you have space, summon an Ancestral Automaton.",
-    "cost": 2,
+    "cost": 1,
+    "evolution_card_id": 108432,
+    "subset_mech": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -27,6 +33,9 @@
     "card_type": 44,
     "text": "[x]Get a Titus Rivendare.\n<b>Start of Combat:</b> Double\nthe Health of your\nTitus Rivendares.",
     "cost": 3,
+    "evolution_card_id": 97408,
+    "subset_beast": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -37,6 +46,9 @@
     "card_type": 44,
     "text": "[x]Get a Snarling Conductor.\nWhenever you discard a\ncard, this plays a <b>Blood Gem</b>\non all your minions.",
     "cost": 2,
+    "evolution_card_id": 104770,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -47,6 +59,7 @@
     "card_type": 44,
     "text": "<b>Start of Combat:</b> Triple the stats of your minions with no type.",
     "cost": 4,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -57,6 +70,9 @@
     "card_type": 44,
     "text": "[x]Get a Butchering.\nAt the start of each turn,\nget another.",
     "cost": 3,
+    "evolution_card_id": 110412,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -66,6 +82,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Summon\nand get a random Pirate.\nIt attacks immediately.",
+    "subset_pirate": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -75,8 +93,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Avenge ({0}):</b> Your <b>Blood\nGems</b> give an extra\n+1 Health this game.",
+    "script_data_num_1": 3,
     "avenge": true,
-    "avenge_target": 4,
+    "subset_quilboar": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -86,9 +106,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "<b>Avenge ({0}):</b> Your <b>Blood Gems</b> give an extra +1/+1 this game.",
-    "cost": 6,
+    "cost": 2,
+    "script_data_num_1": 4,
     "avenge": true,
-    "avenge_target": 4,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -98,6 +120,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b>\nGive your Quilboar\n\"<b>Deathrattle:</b> Get 2\n<b>Blood Gems</b>.\"",
+    "subset_quilboar": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -108,6 +132,8 @@
     "card_type": 44,
     "text": "[x]After you buy a card,\ngive two random\nfriendly minions +2/+1.",
     "cost": 3,
+    "subset_pirate": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -118,6 +144,8 @@
     "card_type": 44,
     "text": "[x]After you buy a card,\ngive two random\nfriendly minions +4/+4.",
     "cost": 4,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -129,6 +157,7 @@
     "text": "[x]<b>Spellcraft:</b> Choose a\nminion. Then choose a\nminion from a Tier higher\nto transform it into.",
     "cost": 2,
     "spellcraft_id": 112813,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -138,7 +167,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Brann Bronzebeard and\na random <b>Battlecry</b> minion.\nYour Brann Bronzebeards are\nboth Murlocs and Dragons.",
-    "cost": 2,
+    "cost": 3,
+    "evolution_card_id": 96786,
+    "subset_dragon": true,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -149,6 +182,7 @@
     "card_type": 44,
     "text": "[x]At the end of each turn,\nget a random minion of\neach different type\nyou control.",
     "cost": 3,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -159,6 +193,7 @@
     "card_type": 44,
     "text": "<b>Discover</b> a Tavern spell. At the start of each turn, <b>Discover</b> another.",
     "cost": 1,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -168,7 +203,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "<b>Discover</b> 2 Tavern spells. At the start of each turn, <b>Discover</b> 2 more.",
-    "cost": 4,
+    "cost": 2,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -178,6 +214,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Whenever you cast a\nspell on a minion,\ngive it +{0}/+{1}.",
+    "cost": 2,
+    "script_data_num_1": 4,
+    "script_data_num_2": 4,
+    "subset_naga": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -187,7 +228,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Whenever you cast a\nspell on a minion,\ngive it +{0}/+{1}.",
-    "cost": 1,
+    "cost": 2,
+    "script_data_num_1": 10,
+    "script_data_num_2": 10,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -197,7 +242,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]The Tavern offers an extra\nminion of a higher Tier\nwhenever it is <b>Refreshed</b>.",
-    "cost": 2,
+    "cost": 1,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -207,6 +253,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]At the start of every two\nturns, gain {1} Gold and\n<b>Discover</b> a Tier 6 minion.\n<i>({0} |4(turn, turns) left!)</i>",
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -217,6 +266,8 @@
     "card_type": 44,
     "text": "[x]Get a random {0}.\nAt the start of each turn,\nget another.",
     "cost": 2,
+    "script_data_num_1": 92,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -227,6 +278,8 @@
     "card_type": 44,
     "text": "[x]Get 2 random {0}.\nAt the start of each turn,\nget 2 more.",
     "cost": 2,
+    "script_data_num_1": 92,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -235,8 +288,12 @@
     "name": "Tiger Carving",
     "card_set": 1453,
     "card_type": 44,
-    "text": "[x]Whenever a friendly minion\ntakes damage, give a\nrandom friendly minion\n+{0} Attack permanently.",
+    "text": "[x]Whenever a friendly minion\ntakes damage, give\nanother friendly minion\n+{0}/+{1} permanently.",
     "cost": 1,
+    "script_data_num_1": 3,
+    "script_data_num_2": 1,
+    "subset_beast": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -245,8 +302,12 @@
     "name": "Tiger Carving",
     "card_set": 1453,
     "card_type": 44,
-    "text": "[x]Whenever a friendly minion\ntakes damage, give a\nrandom friendly minion\n+{0} Attack permanently.",
+    "text": "[x]Whenever a friendly minion\ntakes damage, give\nanother friendly minion\n+{0}/+{1} permanently.",
     "cost": 2,
+    "script_data_num_1": 6,
+    "script_data_num_2": 2,
+    "subset_beast": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -257,6 +318,9 @@
     "card_type": 44,
     "text": "[x]<b>Spellcraft:</b> Choose a\nfriendly minion. It consumes\na random minion in the\nTavern to gain its stats.",
     "spellcraft_id": 112401,
+    "subset_demon": true,
+    "subset_elemental": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -266,7 +330,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a random <b>Battlecry</b>\nminion. At the start of\neach turn, get another.",
-    "cost": 2,
+    "cost": 1,
+    "script_data_num_1": 1,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -277,6 +343,9 @@
     "card_type": 44,
     "text": "[x]Get a Living Azerite.\nYour Living Azerites\nalso give stats to\nfriendly Elementals.",
     "cost": 5,
+    "evolution_card_id": 107939,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -287,6 +356,9 @@
     "card_type": 44,
     "text": "[x]Get an Operatic Belcher.\nWhenever a friendly minion\nloses <b>Venomous</b>, it gains\n+4/+4 permanently.",
     "cost": 3,
+    "evolution_card_id": 101316,
+    "subset_murloc": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -297,6 +369,9 @@
     "card_type": 44,
     "text": "[x]Get an Operatic Belcher.\nWhenever a friendly minion\nloses <b>Venomous</b>, it gains\n+14/+14 permanently.",
     "cost": 1,
+    "evolution_card_id": 101316,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -306,6 +381,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]The first time a friendly\nminion dies each combat,\ngive its maximum stats to\na random friendly minion.",
+    "subset_dragon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -316,6 +393,8 @@
     "card_type": 44,
     "text": "[x]The first time a friendly\nminion dies each combat,\ngive its maximum stats to\n2 random friendly minions.",
     "cost": 6,
+    "subset_dragon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -326,6 +405,8 @@
     "card_type": 44,
     "text": "Your first spell each turn casts an extra time.",
     "cost": 3,
+    "script_data_num_1": 1,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -335,6 +416,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "At the end of every {1} turns, get a Goldenizer. <i>({0} |4(turn, turns) left!)</i>@At the end of every {1} turns, get a Goldenizer. <i>(End of this turn!)</i>",
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "evolution_card_id": 98914,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -346,6 +431,8 @@
     "text": "<b>Avenge (5):</b> Give a random friendly Undead <b>Reborn</b>.",
     "cost": 5,
     "avenge": true,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -356,6 +443,8 @@
     "card_type": 44,
     "text": "[x]Whenever you would\nsummon a minion that\ndoesn't fit in your warband,\ngive your minions +5 Attack.",
     "cost": 2,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -366,6 +455,8 @@
     "card_type": 44,
     "text": "You only need 2 copies of a Pirate to make it Golden.",
     "cost": 7,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -376,6 +467,9 @@
     "card_type": 44,
     "text": "[x]When you have space,\nsummon an exact copy\nof your first Mech that\ndied each combat.",
     "cost": 7,
+    "script_data_num_2": 99,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -385,6 +479,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Your\nleft-most minion gains the\nstats of the highest-Health\nminion in your hand.",
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -395,6 +491,8 @@
     "card_type": 44,
     "text": "[x]Whenever a friendly Quilboar\ndies, summon a Golem with\nstats equal to its <b>Blood Gems</b>.",
     "cost": 5,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -404,7 +502,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After you summon a\nBeast in combat,\ndouble its Attack.",
-    "cost": 5,
+    "cost": 3,
+    "subset_beast": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -415,6 +515,10 @@
     "card_type": 44,
     "text": "[x]Minions in the Tavern have\n+{1}/+{1}. Improves every 3\ntimes your hero takes damage\n__outside combat. <i>({0} left!)</i>",
     "cost": 5,
+    "script_data_num_1": 3,
+    "script_data_num_2": 2,
+    "subset_demon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -425,6 +529,8 @@
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Set your\nDragons' Attack to the\nhighest in your warband.",
     "cost": 7,
+    "subset_dragon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -434,6 +540,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Channel the\nDevourer. At the start of\neach turn, get another.",
+    "script_data_num_1": 1,
+    "evolution_card_id": 100899,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -443,7 +552,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After you play an Elemental,\ngive Elementals in the\nTavern +{0}/+{1} this game.",
-    "cost": 3,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "subset_elemental": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -454,6 +566,10 @@
     "card_type": 44,
     "text": "[x]After you play an Elemental,\ngive Elementals in the\nTavern +{0}/+{1} this game.",
     "cost": 4,
+    "script_data_num_1": 5,
+    "script_data_num_2": 5,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -463,9 +579,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Avenge ({0}):</b> Get a random\n<b>Magnetic</b> minion.",
-    "cost": 3,
+    "cost": 4,
+    "script_data_num_1": 3,
     "avenge": true,
-    "avenge_target": 3,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -475,6 +593,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After 2 friendly minions\nattack each combat, this\nplays a <b>Blood Gem</b> on all\n____your Quilboar. <i>({0} left!)</i>",
+    "script_data_num_1": 2,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -483,8 +604,10 @@
     "name": "Comfy Coffin",
     "card_set": 1453,
     "card_type": 44,
-    "text": "[x]After you cast a Tavern\nspell, your Undead have\n+1 Attack this game\n<i>(wherever they are)</i>.",
-    "cost": 5,
+    "text": "[x]Whenever you cast a Tavern\nspell, your Undead have\n+1 Attack this game\n<i>(wherever they are)</i>.",
+    "cost": 3,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -493,8 +616,10 @@
     "name": "Comfy Coffin",
     "card_set": 1453,
     "card_type": 44,
-    "text": "[x]After you cast a Tavern\nspell, your Undead have\n+2 Attack this game\n<i>(wherever they are)</i>.",
-    "cost": 6,
+    "text": "[x]Whenever you cast a Tavern\nspell, your Undead have\n+2 Attack this game\n<i>(wherever they are)</i>.",
+    "cost": 4,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -505,6 +630,11 @@
     "card_type": 44,
     "text": "Get a Timewarped Glowscale.\nAfter you cast a <b>Spellcraft</b> spell, give your minions with <b>Divine Shield</b> +{0}/+{1}.",
     "cost": 3,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "evolution_card_id": 126517,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -515,6 +645,12 @@
     "card_type": 44,
     "text": "[x]Get an Elemental of\nSurprise. <i>(More appear\nwhen you least expect\nthem...)</i>",
     "cost": 5,
+    "script_data_num_1": 3,
+    "script_data_num_2": 15,
+    "script_data_num_3": 10,
+    "evolution_card_id": 101280,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -524,7 +660,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Discover</b> a <b>Deathrattle</b>\nminion. Your first\n<b>Deathrattle</b> each combat\ntriggers an extra time.",
-    "cost": 1,
+    "subset_beast": true,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -535,6 +673,9 @@
     "card_type": 44,
     "text": "[x]Every fourth card you\nbuy costs Health instead\nof Gold. <i>({0} left!)</i>@[x]Every fourth card you\nbuy costs Health instead\nof Gold. <i>(Ready!)</i>",
     "cost": 5,
+    "script_data_num_1": 3,
+    "subset_demon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -545,6 +686,9 @@
     "card_type": 44,
     "text": "[x]Get a Primalfin Lookout.\nAfter you <b>Discover</b> a\nminion, get a random\nTavern spell.",
     "cost": 8,
+    "evolution_card_id": 60028,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -555,6 +699,7 @@
     "card_type": 44,
     "text": "[x]Choose from 2 new Lesser\n<b><b>Trinket</b>s</b> to replace this\nfor free. At the start of\neach turn, repeat this.",
     "cost": 5,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -565,6 +710,7 @@
     "card_type": 44,
     "text": "[x]Reduce the Cost of\nupgrading the Tavern by\n(3). At the start of each\nturn, repeat this.",
     "cost": 2,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -575,6 +721,7 @@
     "card_type": 44,
     "text": "[x]Get a plain copy of a\nrandom friendly minion.\nAt the start of each turn,\nrepeat this.",
     "cost": 6,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -585,6 +732,8 @@
     "card_type": 44,
     "text": "[x]<b>Discover</b> a Tier 3 Darkmoon\nPrize. At the start of every\nthree turns, repeat this.\n<i>({0} |4(turn, turns) left!)</i>",
     "cost": 3,
+    "script_data_num_1": 3,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -595,6 +744,8 @@
     "card_type": 44,
     "text": "[x]<b>Discover</b> a <b>Magnetic</b>\nMech. Whenever a friendly\nminion is <b>Magnetized</b>,\ngive it +3/+3.",
     "cost": 2,
+    "subset_mech": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -605,6 +756,8 @@
     "card_type": 44,
     "text": "[x]<b>Discover</b> 2 <b>Magnetic</b>\nMechs. Whenever a friendly\nminion is <b>Magnetized</b>,\ngive it +4/+4.",
     "cost": 5,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -615,6 +768,9 @@
     "card_type": 44,
     "text": "[x]After you sell 5 minions,\nget a random Murloc.\n<i>({0} left!)</i>",
     "cost": 3,
+    "script_data_num_1": 5,
+    "subset_murloc": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -625,6 +781,10 @@
     "card_type": 44,
     "text": "[x]After you play 4 minions,\nget a random Tier {1}\nTavern spell and improve\nthis. <i>({0} left!)</i>@[x]After you play 4 minions,\nget a random Tier {1}\nTavern spell.",
     "cost": 1,
+    "script_data_num_1": 4,
+    "script_data_num_2": 1,
+    "subset_naga": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -634,7 +794,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "After {1} friendly minions die, get a random Undead. <i>({0} left!)</i>",
-    "cost": 1,
+    "cost": 3,
+    "script_data_num_1": 8,
+    "script_data_num_2": 8,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -645,6 +809,8 @@
     "card_type": 44,
     "text": "<b>Spellcraft:</b> Give a minion +30/+30 until next turn.",
     "spellcraft_id": 117945,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -655,6 +821,10 @@
     "card_type": 44,
     "text": "[x]Get a Silver Goose.\nAfter you summon\n3 Silver Fledglings, get\na Lucky Egg. <i>({0} left!)</i>",
     "cost": 1,
+    "script_data_num_1": 3,
+    "evolution_card_id": 107865,
+    "subset_beast": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -665,6 +835,9 @@
     "card_type": 44,
     "text": "[x]The first {1} times you\n<b>Discover</b> a card each turn,\nget an extra copy of it.\n<i>({0} left!)</i>",
     "cost": 3,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -674,6 +847,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Kaboom Bot.\nYour Kaboom Bots'\n<b>Deathrattles</b> deal\n10 extra damage.",
+    "evolution_card_id": 96766,
+    "subset_mech": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -684,6 +860,7 @@
     "card_type": 44,
     "text": "Your Hero Power triggers twice.",
     "cost": 2,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -693,6 +870,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Get a Fish of N'Zoth.",
+    "cost": 2,
+    "evolution_card_id": 67213,
+    "subset_beast": true,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -703,6 +885,11 @@
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Summon\na Golden Fish of N'Zoth\nthat copies <b>Deathrattles</b>.",
     "cost": 4,
+    "evolution_card_id": 67216,
+    "subset_beast": true,
+    "subset_mech": true,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -713,6 +900,10 @@
     "card_type": 44,
     "text": "[x]When you have space,\nsummon a copy of the\nfirst minion you summon\neach combat.",
     "cost": 1,
+    "script_data_num_2": 1,
+    "subset_murloc": true,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -723,6 +914,10 @@
     "card_type": 44,
     "text": "[x]When you have space,\nsummon 2 copies of the\nfirst minion you summon\neach combat.",
     "cost": 6,
+    "script_data_num_2": 2,
+    "subset_murloc": true,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -732,6 +927,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Whelp Smuggler.\nSet its stats to 12/12.\nYour Whelp Smugglers\nare Dragons.",
+    "evolution_card_id": 72072,
+    "subset_dragon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -741,7 +939,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Zesty Shaker. Your\nZesty Shakers give an\nextra copy of the spell.",
-    "cost": 4,
+    "cost": 5,
+    "evolution_card_id": 99054,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -751,7 +952,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Minions in the Tavern\nhave +{0}/+{1}. The Tavern\nalways has 7 cards.",
-    "cost": 3,
+    "cost": 1,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "subset_demon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -762,6 +967,9 @@
     "card_type": 44,
     "text": "Your minions from Tier 3 or lower have +7/+5.",
     "cost": 2,
+    "subset_beast": true,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -772,6 +980,7 @@
     "card_type": 44,
     "text": "At the end of each turn, increase your maximum Gold by 1.",
     "cost": 1,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -781,9 +990,13 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Avenge ({0}):</b> Give\nyour minions +{1}/+{2}\npermanently and deal\n1 damage to them.",
-    "cost": 2,
+    "cost": 1,
+    "script_data_num_1": 3,
+    "script_data_num_2": 4,
+    "script_data_num_3": 5,
     "avenge": true,
-    "avenge_target": 3,
+    "subset_beast": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -794,6 +1007,9 @@
     "card_type": 44,
     "text": "[x]Get a Soul Rewinder\nand a Wrath Weaver.\nYour Soul Rewinders\nalso gain Attack.",
     "cost": 3,
+    "evolution_card_id": 100949,
+    "subset_demon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -804,6 +1020,10 @@
     "card_type": 44,
     "text": "Get a Slimy Felblood. Your Fiery and Slimy Felbloods give Attack <i>and</i> Health.",
     "cost": 4,
+    "evolution_card_id": 109418,
+    "subset_demon": true,
+    "subset_elemental": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -814,6 +1034,8 @@
     "card_type": 44,
     "text": "Get a Faceless Manipulator.",
     "cost": 1,
+    "evolution_card_id": 103396,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -823,6 +1045,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Minions in the Tavern have +{1}/+{1}. Improves every 4 times you <b>Refresh</b>. <i>({0} left!)</i>",
+    "script_data_num_1": 4,
+    "script_data_num_2": 1,
+    "subset_demon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -832,7 +1058,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Minions in the Tavern have +{1}/+{1}. Improves every 4 times you <b>Refresh</b>. <i>({0} left!)</i>",
-    "cost": 2,
+    "cost": 1,
+    "script_data_num_1": 4,
+    "script_data_num_2": 2,
+    "subset_demon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -843,6 +1073,9 @@
     "card_type": 44,
     "text": "Your minions have +2/+1.",
     "cost": 2,
+    "subset_beast": true,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -853,6 +1086,9 @@
     "card_type": 44,
     "text": "Your minions have +8/+5.",
     "cost": 1,
+    "subset_beast": true,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -863,6 +1099,10 @@
     "card_type": 44,
     "text": "[x]Whenever you summon\na minion, give it <b>Divine\nShield</b>. <i>({1} times per\ncombat.)</i>@[x]Whenever you summon\na minion, give it <b>Divine\nShield</b>. <i>({0} left!)</i>",
     "cost": 3,
+    "script_data_num_1": 5,
+    "script_data_num_2": 5,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -872,6 +1112,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]When you buy a\nGreater <b>Trinket</b>, this\ntransforms into a\ncopy of it.",
+    "script_data_num_1": 3,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -882,6 +1124,8 @@
     "card_type": 44,
     "text": "[x]In 2 turns, choose a\nGreater <b>Trinket</b> to buy and\nreplace this. <i>(2 turns left!)</i>@[x]In 2 turns, choose a\nGreater <b>Trinket</b> to buy and\nreplace this. <i>(Next turn!)</i>",
     "cost": 1,
+    "script_data_num_1": 2,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -892,6 +1136,10 @@
     "card_type": 44,
     "text": "Whenever you play a card, give a friendly Dragon +{0}/+{1}.",
     "cost": 1,
+    "script_data_num_1": 4,
+    "script_data_num_2": 4,
+    "subset_dragon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -901,6 +1149,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Whenever you play a card, give a friendly Dragon +{0}/+{1}.",
+    "script_data_num_1": 6,
+    "script_data_num_2": 4,
+    "subset_dragon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -911,6 +1163,8 @@
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Give\nyour left and right-most\nminions <b>Divine Shield</b>.",
     "cost": 1,
+    "subset_dragon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -921,6 +1175,9 @@
     "card_type": 44,
     "text": "[x]After a friendly Mech\nloses <b>Divine Shield</b>, give\nit <b>Divine Shield</b>.\n<i>(3 times per combat.)</i>@[x]After a friendly Mech\nloses <b>Divine Shield</b>, give\nit <b>Divine Shield</b>. <i>({0} left!)</i>",
     "cost": 4,
+    "script_data_num_1": 3,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -929,8 +1186,10 @@
     "name": "Nerglish Phrasebook",
     "card_set": 1453,
     "card_type": 44,
-    "text": "[x]After you play a minion,\ngive the left-most minion\nin your hand +3/+2.",
+    "text": "[x]After you play a minion,\ngive the left-most minion\nin your hand +3/+3.",
     "cost": 1,
+    "subset_murloc": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -941,6 +1200,8 @@
     "card_type": 44,
     "text": "[x]After you play a minion,\ngive the left-most minion\nin your hand +6/+6.",
     "cost": 1,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -951,6 +1212,12 @@
     "card_type": 44,
     "text": "[x]Get {0} |4(copy, copies) of\nDreamer's Embrace.\nAt the start of each turn,\nget {1} more.",
     "cost": 3,
+    "script_data_num_1": 2,
+    "script_data_num_2": 1,
+    "evolution_card_id": 105266,
+    "subset_dragon": true,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -960,7 +1227,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Give your\nNaga \"<b>Deathrattle:</b> Get a\nrandom <b>Spellcraft</b> spell.\"",
-    "cost": 2,
+    "cost": 1,
+    "subset_naga": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -970,6 +1239,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Prized Promo-Drake.\nYour first <b>Start of Combat</b>\neffect each combat\ntriggers an extra time.",
+    "evolution_card_id": 72073,
+    "subset_dragon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -979,7 +1251,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "After you play a Naga, get a random <b>Spellcraft</b> spell.",
-    "cost": 4,
+    "cost": 7,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -989,7 +1263,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Spitescale Special.\nYour first two <b>Spellcraft</b>\nspells each turn cast\nan extra time. <i>({0} left!)</i>",
-    "cost": 4,
+    "cost": 5,
+    "script_data_num_1": 2,
+    "evolution_card_id": 110406,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1000,6 +1278,9 @@
     "card_type": 44,
     "text": "[x]Get a Sky Pirate\nFlagbearer. Your Sky\nPirates have +6 Attack.",
     "cost": 5,
+    "evolution_card_id": 113148,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1010,6 +1291,9 @@
     "card_type": 44,
     "text": "[x]Each combat, after 2\nfriendly Pirates attack,\ngain 1 Gold next turn.\n<i>({0} left!)</i>",
     "cost": 1,
+    "script_data_num_1": 2,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1018,8 +1302,12 @@
     "name": "Booty Bay Brew",
     "card_set": 1453,
     "card_type": 44,
-    "text": "Whenever you spend Gold, give a friendly Pirate +{0}/+{1}.",
-    "cost": 1,
+    "text": "Whenever you spend Gold, give two friendly Pirates +{0}/+{1}.",
+    "cost": 3,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "subset_pirate": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1028,7 +1316,12 @@
     "name": "Booty Bay Brew",
     "card_set": 1453,
     "card_type": 44,
-    "text": "Whenever you spend Gold, give a friendly Pirate +{0}/+{1}.",
+    "text": "Whenever you spend Gold, give two friendly Pirates +{0}/+{1}.",
+    "cost": 2,
+    "script_data_num_1": 6,
+    "script_data_num_2": 6,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1039,6 +1332,9 @@
     "card_type": 44,
     "text": "Whenever a friendly minion attacks, give it +4 Attack.",
     "cost": 2,
+    "subset_pirate": true,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1049,6 +1345,7 @@
     "card_type": 44,
     "text": "[x]At the start of each turn, get\na plain copy of the highest-\nTier minion in your last\nopponent's warband.",
     "cost": 1,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1058,7 +1355,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "After {1} friendly minions die, get a random Beast. <i>({0} left!)</i>",
-    "cost": 4,
+    "cost": 1,
+    "script_data_num_1": 7,
+    "script_data_num_2": 7,
+    "subset_beast": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1069,6 +1370,9 @@
     "card_type": 44,
     "text": "[x]Get 2 random <b>Magnetic</b>\nMecha-Demons.\nAt the start of each turn,\nget 2 more.",
     "cost": 3,
+    "subset_demon": true,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1079,6 +1383,11 @@
     "card_type": 44,
     "text": "Get a Hot-Air Surveyor. <b>Blood Gems</b> played from your hand give an extra +{0}/+{1}.",
     "cost": 1,
+    "script_data_num_1": 6,
+    "script_data_num_2": 6,
+    "evolution_card_id": 113152,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1087,8 +1396,12 @@
     "name": "Redeemer Portrait",
     "card_set": 1453,
     "card_type": 44,
-    "text": "Get a Nalaa the Redeemer. Your Nalaa the Redeemers give an extra +{0}/+{1}.",
-    "cost": 2,
+    "text": "[x]Get a Nalaa the Redeemer.\nYour Nalaa the Redeemers\ngive an extra +{0}/+{1}.",
+    "cost": 1,
+    "script_data_num_1": 4,
+    "script_data_num_2": 4,
+    "evolution_card_id": 104468,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1098,7 +1411,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "After you sell {1} minions, get a random Elemental. <i>({0} left!)</i>",
-    "cost": 1,
+    "cost": 2,
+    "script_data_num_1": 6,
+    "script_data_num_2": 6,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1109,6 +1426,9 @@
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Give 2\nfriendly Elementals\n\"<b>Deathrattle:</b> Summon a\nFlourishing Frostling\".",
     "cost": 3,
+    "evolution_card_id": 101267,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1118,7 +1438,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Double\nthe stats of your two\nlowest-Attack minions.",
-    "cost": 3,
+    "cost": 2,
+    "subset_dragon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1129,6 +1451,8 @@
     "card_type": 44,
     "text": "<b>Start of Combat:</b> Give your minions +2/+2.",
     "cost": 2,
+    "subset_dragon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1139,6 +1463,8 @@
     "card_type": 44,
     "text": "<b>Start of Combat:</b> Give your minions +6/+6.",
     "cost": 3,
+    "subset_dragon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1148,6 +1474,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Lightfang Enforcer.\nYour Lightfang Enforcers\nhave all minion types.",
+    "evolution_card_id": 59707,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1158,6 +1486,7 @@
     "card_type": 44,
     "text": "<b>Start of Combat:</b> Summon a copy of your left-most minion.",
     "cost": 5,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1167,7 +1496,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "The Tavern offers 2 extra {0} whenever it is <b>Refreshed</b>.",
-    "cost": 2,
+    "cost": 1,
+    "script_data_num_1": 92,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1178,6 +1509,8 @@
     "card_type": 44,
     "text": "[x]After you summon a Mech\nin combat, give a friendly\nMech <b>Divine Shield</b>.",
     "cost": 3,
+    "subset_mech": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1188,6 +1521,8 @@
     "card_type": 44,
     "text": "[x]After you play an\nElemental, your next\nTavern spell costs (1) less.",
     "cost": 2,
+    "subset_elemental": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1197,7 +1532,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Whenever a friendly\nminion with no type dies,\nget a random Tavern spell.",
-    "cost": 4,
+    "cost": 2,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1208,6 +1544,12 @@
     "card_type": 44,
     "text": "[x]After you buy 2 <b>Battlecry</b>\nminions, get a random\n<b>Battlecry</b> minion. <i>({0} left!)</i>",
     "cost": 2,
+    "script_data_num_1": 2,
+    "subset_dragon": true,
+    "subset_murloc": true,
+    "subset_pirate": true,
+    "subset_elemental": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1218,6 +1560,8 @@
     "card_type": 44,
     "text": "[x]At the end of each turn,\ngive your minions with\n<b>Divine Shield</b> +3 Attack.",
     "cost": 4,
+    "subset_mech": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1228,6 +1572,8 @@
     "card_type": 44,
     "text": "[x]At the end of each turn,\ngive your minions with\n<b>Divine Shield</b> +7 Attack.",
     "cost": 1,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1238,6 +1584,9 @@
     "card_type": 44,
     "text": "The first {1} Tavern spells you buy each turn are free. <i>({0} left!)</i>",
     "cost": 2,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1247,6 +1596,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Lovesick Balladist.\nAt the start of each turn,\nget another. Your Lovesick\n__Balladists also give Attack.",
+    "evolution_card_id": 99011,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1256,7 +1608,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get 3 <b>Blood Gems</b>.\nYour <b>Blood Gems</b> give\nan extra +{0}/+{1}.",
-    "cost": 2,
+    "script_data_num_1": 2,
+    "script_data_num_2": 1,
+    "subset_quilboar": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1267,6 +1622,10 @@
     "card_type": 44,
     "text": "[x]Get 5 <b>Blood Gems</b>.\nYour <b>Blood Gems</b> give\nan extra +{0}/+{1}.",
     "cost": 2,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1277,6 +1636,8 @@
     "card_type": 44,
     "text": "Your Undead have\n+3 Attack.",
     "cost": 1,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1286,6 +1647,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Your Undead have\n+{0} Attack.",
+    "script_data_num_1": 15,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1296,6 +1660,9 @@
     "card_type": 44,
     "text": "[x]Get a Famished Felbat.\nThe Tavern always has\n7 cards.",
     "cost": 8,
+    "evolution_card_id": 72067,
+    "subset_demon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1305,6 +1672,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Minions in the Tavern have +1/+1 for each minion you've sold this turn.",
+    "subset_demon": true,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1315,6 +1685,9 @@
     "card_type": 44,
     "text": "Minions in the Tavern have +2/+2 for each minion you've sold this turn.",
     "cost": 8,
+    "subset_demon": true,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1325,6 +1698,7 @@
     "card_type": 44,
     "text": "[x]Get a random Tier 7\nminion. At the start of\neach turn, get another.",
     "cost": 4,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1335,6 +1709,7 @@
     "card_type": 44,
     "text": "Spin the Wheel of Yogg-Saron. At the start of each turn, spin it again.",
     "cost": 5,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1345,6 +1720,8 @@
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Give each\nof your minions Health\nequal to half its Attack.",
     "cost": 5,
+    "subset_dragon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1354,6 +1731,7 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Gain 4 Gold.\nIncrease your maximum\nGold by 4.",
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1363,6 +1741,7 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Gain 2 Gold.\nThe Tavern no longer offers\ncards from Tier 1 or Tier 2.",
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1372,7 +1751,12 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "After you spend {2} Gold, cast Shiny Ring. <i>({0} Gold left!)</i>",
-    "cost": 2,
+    "cost": 3,
+    "script_data_num_1": 7,
+    "script_data_num_3": 7,
+    "evolution_card_id": 109230,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1383,6 +1767,8 @@
     "card_type": 44,
     "text": "The Lesser <b>Trinket</b> Shop opens in {0} turns!@The Lesser <b>Trinket</b> Shop opens next turn!",
     "tech_level": 4,
+    "script_data_num_1": 5,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1393,6 +1779,8 @@
     "card_type": 44,
     "text": "The Greater <b>Trinket</b> Shop opens in {0} turns!@The second <b>Trinket</b> Shop opens next turn!",
     "tech_level": 6,
+    "script_data_num_1": 8,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1403,6 +1791,8 @@
     "card_type": 44,
     "text": "[x]Get a Knockoff\nWisdomball. At the start\nof each turn, repeat this.",
     "cost": 2,
+    "evolution_card_id": 113902,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1412,6 +1802,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "At the end of each turn, give a random friendly Murloc +8/+8 and <b>Venomous</b>.",
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1420,8 +1812,11 @@
     "name": "Spell-powered Wrench",
     "card_set": 1453,
     "card_type": 44,
-    "text": "After you play a <b>Magnetic</b> minion, get a random Tavern spell.",
-    "cost": 1,
+    "text": "After you play a <b>Magnetic</b> minion, cast Repair Job on a random friendly Mech.",
+    "cost": 2,
+    "evolution_card_id": 133711,
+    "subset_mech": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1432,6 +1827,10 @@
     "card_type": 44,
     "text": "[x]After a friendly minion\nloses <b>Divine Shield</b>, get a\nrandom Tavern spell.\n<i>({1} times per combat.)</i>@[x]After a friendly minion\nloses <b>Divine Shield</b>, get a\nrandom Tavern spell.\n<i>({0} left!)</i>",
     "cost": 3,
+    "script_data_num_1": 4,
+    "script_data_num_2": 4,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1441,6 +1840,12 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Dr. Boom's Monster.\nAt the start of every turn,\nget another.",
+    "cost": 6,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "evolution_card_id": 115676,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1450,6 +1855,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Drakkari Enchanter.\nYour Drakkari Enchanters\nare both Mechs and\nElementals.",
+    "evolution_card_id": 101314,
+    "subset_mech": true,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1459,7 +1868,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Whenever a friendly Beast\nattacks, give it +{0} Attack\nand permanently improve\nthis.",
-    "cost": 5,
+    "script_data_num_1": 2,
+    "subset_beast": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1470,6 +1881,9 @@
     "card_type": 44,
     "text": "[x]Get an Archlich Kel'Thuzad.\nAfter you destroy a minion\noutside combat, give\nyour minions +2/+2.",
     "cost": 4,
+    "evolution_card_id": 105518,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1478,8 +1892,12 @@
     "name": "Maw Caster Portrait",
     "card_set": 1453,
     "card_type": 44,
-    "text": "[x]Get a Maw Caster.\nWhenever you destroy a\nminion outside combat,\nget a 3-Gold Coin Pouch.",
+    "text": "[x]Get a Maw Caster.\nWhenever you destroy a\nminion outside combat,\ngain {0} Gold.",
     "cost": 4,
+    "script_data_num_1": 2,
+    "evolution_card_id": 121508,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1490,6 +1908,10 @@
     "card_type": 44,
     "text": "[x]When you spend 20 Gold,\ndouble your minions'\nAttack. <i>(Twice per game.)</i>@[x]When you spend 20 Gold,\ndouble your minions'\nAttack. <i>({0} left!)</i>",
     "cost": 2,
+    "script_data_num_1": 20,
+    "script_data_num_3": 2,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1500,6 +1922,10 @@
     "card_type": 44,
     "text": "At the end of each turn, give your Golden minions +{0}/+{1}.",
     "cost": 2,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "subset_pirate": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1510,6 +1936,10 @@
     "card_type": 44,
     "text": "At the end of each turn, give your Golden minions +{0}/+{1}.",
     "cost": 2,
+    "script_data_num_1": 10,
+    "script_data_num_2": 10,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1519,6 +1949,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After you spend {4} Gold,\ngive your Pirates\n+{2}/+{2} and improve\nthis. <i>({0} Gold left!)</i>",
+    "script_data_num_1": 10,
+    "script_data_num_3": 1,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1530,6 +1964,7 @@
     "text": "[x]<b>Avenge (3):</b> Your Tavern\nspells give an extra\n+1 Attack this game.",
     "cost": 3,
     "avenge": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1539,9 +1974,13 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Avenge ({0}):</b> Your Tavern\nspells give an extra\n+{1}/+{2} this game.",
-    "cost": 4,
+    "cost": 5,
+    "script_data_num_1": 4,
+    "script_data_num_2": 1,
+    "script_data_num_3": 1,
     "avenge": true,
-    "avenge_target": 4,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1551,6 +1990,7 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Gain 2 Gold.\nBuy your Greater <b>Trinket</b>\nnext turn instead\nof Turn 9.",
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1561,6 +2001,9 @@
     "card_type": 44,
     "text": "[x]Get a Bristlebach.\nYour Bristlebachs play\n<b>Blood Gems</b> on all\nfriendly minions.",
     "cost": 6,
+    "evolution_card_id": 100997,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1570,7 +2013,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "At the end of each turn, your Undead have\n+2 Attack this game <i>(wherever they are)</i>.",
-    "cost": 3,
+    "cost": 1,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1581,6 +2026,8 @@
     "card_type": 44,
     "text": "[x]The first time you buy a\nminion each turn, get a\n<b>Magnetic</b> Satellite with\nits stats.",
     "cost": 2,
+    "subset_mech": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1590,6 +2037,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "<b>Blood Gems</b> played from your hand give minions <b>Divine Shield</b> until next turn.",
+    "subset_quilboar": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1600,6 +2049,9 @@
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Give a\nfriendly minion of each\ndifferent type +{0}/+{1}.\nImprove this permanently.",
     "cost": 1,
+    "script_data_num_1": 3,
+    "script_data_num_2": 2,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1610,6 +2062,7 @@
     "card_type": 44,
     "text": "[x]Whenever you cast a\nTavern spell, give your\nminions with no type\n+4/+4.",
     "cost": 5,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1619,6 +2072,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Get {0} different <b>Magnetic</b> Mechs of ANY Tier.",
+    "script_data_num_1": 5,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1628,7 +2084,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Get a Charging Czarina. Your Charging Czarinas also give Health.",
-    "cost": 5,
+    "cost": 3,
+    "evolution_card_id": 110321,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1638,6 +2097,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]At the end of your turn,\nthis plays {0} <b>Blood Gems</b>\non a friendly minion of\neach type.",
+    "script_data_num_1": 7,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1647,6 +2109,7 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Cast a random Tavern spell for each different friendly minion type. At the start of each turn, repeat this.",
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1657,6 +2120,9 @@
     "card_type": 44,
     "text": "[x]Craft a custom Undead.\nAt the start of every 2 turns,\nrepeat this. <i>({0} |4(turn, turns) left!)</i>",
     "cost": 2,
+    "script_data_num_1": 2,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1667,6 +2133,9 @@
     "card_type": 44,
     "text": "[x]Get a Bassgill.\nAfter you summon a\nMurloc in combat,\ngive it <b>Divine Shield</b>.",
     "cost": 1,
+    "evolution_card_id": 98926,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1677,6 +2146,7 @@
     "card_type": 44,
     "text": "Get six different\nTier 1 minions.",
     "cost": 2,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1687,6 +2157,8 @@
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Trigger\nall friendly <b>Deathrattles</b>.",
     "cost": 3,
+    "subset_beast": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1696,7 +2168,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]When you have {1} Gold,\nget a random Golden\nTier 5 minion.\n<i>(Once per game.)</i>",
-    "cost": 3,
+    "cost": 2,
+    "script_data_num_2": 15,
+    "subset_pirate": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1705,8 +2180,10 @@
     "name": "Baleful Incense",
     "card_set": 1453,
     "card_type": 44,
-    "text": "<b>Start of Combat:</b> Give your left- and right-most Undead <b>Reborn</b>.",
-    "cost": 3,
+    "text": "<b>Start of Combat:</b> Give your left and right-most Undead <b>Reborn</b>.",
+    "cost": 4,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1717,6 +2194,7 @@
     "card_type": 44,
     "text": "[x]<b>Discover</b> a Tier 4 minion\nwith a type. At the start\nof each turn, get another\ncopy of it.",
     "cost": 6,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1726,6 +2204,7 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Discover</b> a Tier 5 minion\nwith a type. At the start\nof each turn, get another\ncopy of it.",
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1736,6 +2215,7 @@
     "card_type": 44,
     "text": "[x]<b>Discover</b> a minion of\nyour Tier. Set its stats\nto 12/12.",
     "cost": 1,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1745,6 +2225,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "<b>Discover</b> two Tier 6 minions. Set their stats to {0}/{0}.",
+    "script_data_num_1": 30,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1754,7 +2236,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Whenever a friendly\nDragon attacks, give it\n<b>Divine Shield</b>.\n<i>({1} times per combat.)</i>@[x]Whenever a friendly\nDragon attacks, give it\n<b>Divine Shield</b>.\n<i>({0} left!)</i>",
-    "cost": 4,
+    "cost": 3,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "subset_dragon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1765,6 +2251,9 @@
     "card_type": 44,
     "text": "Get a Timewarped Poet.",
     "cost": 4,
+    "evolution_card_id": 127441,
+    "subset_dragon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1775,6 +2264,8 @@
     "card_type": 44,
     "text": "Your <b>Start of Combat</b> effects trigger an extra time.",
     "cost": 7,
+    "subset_dragon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1784,7 +2275,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Your first two <b>Refreshes</b>\neach turn contain only\nTier 6 cards. <i>({0} left!)</i>",
-    "cost": 3,
+    "cost": 1,
+    "script_data_num_1": 2,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1795,6 +2288,7 @@
     "card_type": 44,
     "text": "Your end of turn effects trigger an extra time.",
     "cost": 3,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1804,6 +2298,7 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Transform all your minions into random Tier 4 minions.",
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1814,6 +2309,9 @@
     "card_type": 44,
     "text": "[x]<b>Discover</b> a <b>Battlecry</b>\nminion. <b>Avenge (2):</b>\nTrigger a friendly <b>Battlecry</b>.",
     "avenge": true,
+    "subset_dragon": true,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1824,6 +2322,11 @@
     "card_type": 44,
     "text": "[x]One <b>Battlecry</b> each turn\ntriggers two extra times.\n<i>({0} left!)</i>",
     "cost": 2,
+    "script_data_num_1": 1,
+    "script_data_num_2": 2,
+    "subset_dragon": true,
+    "subset_murloc": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1832,7 +2335,9 @@
     "name": "Tarecgosa Sticker",
     "card_set": 1453,
     "card_type": 44,
-    "text": "[x]Your left- and right-most\nDragons permanently keep\n<b><b>Bonus Keyword</b>s</b> and stats\ngained in combat.",
+    "text": "[x]Your left and right-most\nDragons permanently keep\n<b><b>Bonus Keyword</b>s</b> and stats\ngained in combat.",
+    "subset_dragon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1843,6 +2348,8 @@
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Make\nyour highest-Tier Dragon\nGolden.",
     "cost": 5,
+    "subset_dragon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1852,6 +2359,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]In two turns,\ngain 10 Gold.\n<i>(Once per game.)</i>@[x]In two turns, gain\n10 Gold. <i>({0} |4(turn, turns) left!)</i>",
+    "script_data_num_1": 2,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1862,6 +2371,9 @@
     "card_type": 44,
     "text": "Your Tavern spells give an extra +{0}/+{1}. At the start of each turn, improve this.",
     "cost": 2,
+    "script_data_num_1": 1,
+    "script_data_num_2": 1,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1871,7 +2383,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Your Tavern spells give an extra +{1}/+{2}. After you cast 5 Tavern spells, improve this. <i>({0} left!)</i>",
-    "cost": 3,
+    "cost": 4,
+    "script_data_num_1": 5,
+    "script_data_num_2": 1,
+    "script_data_num_3": 1,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1882,6 +2398,12 @@
     "card_type": 44,
     "text": "[x]Your Tavern spells give an\nextra +{1}/+{2}. After you cast\n{4} Tavern spells from hand,\nimprove this. <i>({0} left!)</i>",
     "cost": 4,
+    "script_data_num_1": 6,
+    "script_data_num_2": 1,
+    "script_data_num_3": 1,
+    "subset_pirate": true,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1891,6 +2413,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Your Elementals that give stats grant an extra +2/+1.",
+    "subset_elemental": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1901,6 +2425,8 @@
     "card_type": 44,
     "text": "Your Elementals that give stats grant an extra +4/+2.",
     "cost": 1,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1911,6 +2437,9 @@
     "card_type": 44,
     "text": "Get a Monstrous Macaw. Your Monstrous Macaws also trigger your left-most <b>Battlecry</b>.",
     "cost": 2,
+    "evolution_card_id": 62230,
+    "subset_beast": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1920,6 +2449,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Selfless Hero.\nYour Selfless Heroes also\ntrigger on <b>Battlecry</b>.",
+    "evolution_card_id": 96769,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1929,6 +2460,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get an 12/12 Battlecruiser.\nWhenever the Tavern is\n<b>Refreshed</b>, add a\nBattlecruiser Upgrade to it.",
+    "evolution_card_id": 118684,
+    "subset_mech": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1939,6 +2473,9 @@
     "card_type": 44,
     "text": "Get a Golden Mishmash and a {0}/{0} Amalgam with <b>Venomous</b>.",
     "cost": 4,
+    "script_data_num_1": 10,
+    "evolution_card_id": 77838,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1948,6 +2485,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After you cast {1} spells,\nthis plays a <b>Blood Gem</b> on\nall your minions.\n<i>({0} left!)</i>",
+    "script_data_num_1": 4,
+    "script_data_num_2": 4,
+    "subset_quilboar": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1958,6 +2499,10 @@
     "card_type": 44,
     "text": "[x]After you cast {1} spells,\nthis plays two <b>Blood Gems</b>\non all your minions.\n<i>({0} left!)</i>",
     "cost": 6,
+    "script_data_num_1": 5,
+    "script_data_num_2": 5,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -1968,6 +2513,8 @@
     "card_type": 44,
     "text": "[x]The first minion you sell\neach turn plays its <b>Blood\nGems</b> on the 3 highest-Tier\nminions in the Tavern.",
     "cost": 1,
+    "subset_quilboar": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1977,7 +2524,7 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Steal the highest-Tier\ncard from the Tavern.\nAt the end of each turn,\nrepeat this.",
-    "cost": 1,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1988,6 +2535,9 @@
     "card_type": 44,
     "text": "[x]Get a 6/6 Impulsive\nTrickster. Your Impulsive\nTricksters' <b>Deathrattles</b>\ntarget adjacent minions.",
     "cost": 1,
+    "evolution_card_id": 72059,
+    "subset_demon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -1997,7 +2547,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]One Demon each turn\ncosts Health instead of\nGold to buy. <i>({0} left!)</i>",
-    "cost": 4,
+    "cost": 2,
+    "script_data_num_1": 1,
+    "subset_demon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2007,7 +2560,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]One Tavern spell each turn\ncosts Health instead of\nGold to buy. <i>({0} left!)</i>",
-    "cost": 1,
+    "script_data_num_1": 1,
+    "subset_demon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2017,6 +2572,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Gain 2 Gold and take\n2 damage. At the start\nof each turn, repeat this\n<i>(if possible)</i>.",
+    "subset_demon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2027,6 +2584,9 @@
     "card_type": 44,
     "text": "Get 2 False Implicators. Your Demons always consume the highest-Health minion in the Tavern.",
     "cost": 1,
+    "evolution_card_id": 108115,
+    "subset_demon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2037,6 +2597,12 @@
     "card_type": 44,
     "text": "[x]Get a Felemental.\nYour Felementals give\nan extra +{0}/+{1}.",
     "cost": 2,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "evolution_card_id": 97553,
+    "subset_demon": true,
+    "subset_elemental": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2046,7 +2612,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Sellemental.\nAt the start of each turn,\nget another.",
-    "cost": 4,
+    "cost": 5,
+    "evolution_card_id": 64038,
+    "subset_elemental": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2057,6 +2626,10 @@
     "card_type": 44,
     "text": "[x]At the end of each turn, get a\nWindfall Tornado and give it\n+{0}/+{0}. <i>(Improved by each\nminion you've sold this turn!)</i>",
     "cost": 8,
+    "script_data_num_1": 1,
+    "evolution_card_id": 116738,
+    "subset_elemental": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2066,6 +2639,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]At the end of each turn, get a\nWindfall Tornado and give it\n+{0}/+{0}. <i>(Improved by each\nminion you've sold this turn!)</i>",
+    "script_data_num_1": 2,
+    "evolution_card_id": 116738,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2076,6 +2653,7 @@
     "card_type": 44,
     "text": "Remove all your minions. Gain 3 Gold for each removed.",
     "cost": 1,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2085,7 +2663,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Get three random\nTier 4 minions.",
-    "cost": 2,
+    "cost": 1,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2095,9 +2674,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Avenge (5):</b> Summon a\n{0}/{1} Beetle.\nGive it <b>Taunt</b>.",
-    "cost": 1,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
     "avenge": true,
-    "avenge_target": 2,
+    "subset_beast": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2106,10 +2687,13 @@
     "name": "Beetle Band",
     "card_set": 1453,
     "card_type": 44,
-    "text": "[x]<b>Avenge (6):</b> Summon two\n{0}/{1} Beetles.\nGive them <b>Taunt</b>.",
+    "text": "[x]<b>Avenge (7):</b> Summon two\n{0}/{1} Beetles.\nGive them <b>Taunt</b>.",
     "cost": 5,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
     "avenge": true,
-    "avenge_target": 2,
+    "subset_beast": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2120,6 +2704,9 @@
     "card_type": 44,
     "text": "[x]After you trigger\na <b>Deathrattle</b>, give your\nright-most minion +2/+2\npermanently.",
     "cost": 3,
+    "subset_beast": true,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2129,6 +2716,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After you trigger\na <b>Deathrattle</b>, give your\nright-most minion +{0}/+{1}\npermanently.",
+    "script_data_num_1": 6,
+    "script_data_num_2": 4,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2140,6 +2730,9 @@
     "text": "<b>Avenge (2):</b> Give your minions +1/+1.",
     "cost": 3,
     "avenge": true,
+    "subset_beast": true,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2151,6 +2744,9 @@
     "text": "<b>Avenge (2):</b> Give your minions +4/+4.",
     "cost": 2,
     "avenge": true,
+    "subset_beast": true,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2160,6 +2756,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Gain 5 Armor. After\nyou play a Demon, deal\n1 damage to your hero.",
+    "subset_demon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2170,6 +2768,8 @@
     "card_type": 44,
     "text": "After you play an Elemental, gain a free <b>Refresh</b>.",
     "cost": 3,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2180,6 +2780,10 @@
     "card_type": 44,
     "text": "[x]At the end of each turn, give\nyour left-most minion +{0}/+{1}.\n<i>(Improved by each <b>Battlecry</b>\nyou've triggered this turn!)</i>",
     "cost": 2,
+    "script_data_num_1": 3,
+    "script_data_num_2": 2,
+    "subset_murloc": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2190,6 +2794,8 @@
     "card_type": 44,
     "text": "[x]After the Tavern is\n<b>Refreshed</b>, give Murlocs\nin it +5/+5 and a random\n<b>Bonus Keyword</b>.",
     "cost": 2,
+    "subset_murloc": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2201,6 +2807,8 @@
     "text": "[x]<b>Spellcraft:</b> Give a\nMurloc a random\n<b>Bonus Keyword</b>.",
     "cost": 3,
     "spellcraft_id": 121139,
+    "subset_murloc": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2209,8 +2817,12 @@
     "name": "Bluegill Flippers",
     "card_set": 1453,
     "card_type": 44,
-    "text": "[x]After you cast a Tavern\nspell, give the left-most\nminion in your hand and\nwarband +{0}/+{1}.",
-    "cost": 1,
+    "text": "[x]Whenever you cast a Tavern\nspell, give the left-most\nminion in your hand and\nwarband +{0}/+{1}.",
+    "cost": 2,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "subset_murloc": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2220,7 +2832,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Natural Blessing. At the\nstart of each turn, get another.\nYour Natural Blessings\nalso affect minions in hand.",
-    "cost": 3,
+    "evolution_card_id": 104472,
+    "subset_murloc": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2230,6 +2844,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Make the next {0}\nyou buy Golden.\nGain 5 free <b>Refreshes</b>.",
+    "script_data_num_1": 92,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2240,6 +2856,9 @@
     "card_type": 44,
     "text": "[x]After 2 minions in the\nTavern are consumed, get\na random Tavern spell.\n<i>({0} left!)</i>",
     "cost": 4,
+    "script_data_num_1": 2,
+    "subset_demon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2250,6 +2869,8 @@
     "card_type": 44,
     "text": "<b>Start of Combat:</b> This plays 3 <b>Blood Gems</b> on all your minions.",
     "cost": 6,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2259,6 +2880,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Get a copy of '{0}'.",
+    "evolution_card_id": 119960,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2268,6 +2892,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After your last minion dies\neach combat, summon your\nfirst Demon that died with\nits maximum stats.",
+    "subset_demon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2278,6 +2904,9 @@
     "card_type": 44,
     "text": "[x]Get a Thaumaturgist.\nYour Thaumaturgists'\n<b>Spellcrafts</b> are permanent.",
     "cost": 2,
+    "evolution_card_id": 115563,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2288,6 +2917,9 @@
     "card_type": 44,
     "text": "[x]At the end of each turn,\ngive your left-most minion\n+{0}/+{0}. After you cast\na spell, improve this.",
     "cost": 4,
+    "script_data_num_1": 3,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2298,6 +2930,9 @@
     "card_type": 44,
     "text": "Get a Hackerfin. At the end of each turn, trigger your Hackerfins' <b>Battlecries</b>.",
     "cost": 5,
+    "evolution_card_id": 115848,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2308,6 +2943,9 @@
     "card_type": 44,
     "text": "Get a Tide Oracle Morgl.",
     "cost": 1,
+    "evolution_card_id": 103047,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2317,7 +2955,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After you cast {1} spells,\nget a random Naga.\n<i>({0} left!)</i>",
-    "cost": 2,
+    "cost": 3,
+    "script_data_num_1": 7,
+    "script_data_num_2": 7,
+    "subset_naga": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2328,6 +2970,9 @@
     "card_type": 44,
     "text": "[x]Get {0} random <b>Spellcraft</b>\nspells. At the start of\neach turn, get {0} more.",
     "cost": 2,
+    "script_data_num_1": 3,
+    "subset_naga": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2338,6 +2983,10 @@
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Give\nyour Naga +{1} Health.\n<i>(Improved by every 4 spells\nyou've cast this game!)</i>@[x]<b>Start of Combat:</b> Give\nyour Naga +{1} Health.\n<i>(Cast {2}/4 spells\nto improve!)</i>",
     "cost": 1,
+    "script_data_num_1": 4,
+    "script_data_num_2": 1,
+    "subset_naga": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2348,6 +2997,9 @@
     "card_type": 44,
     "text": "[x]Get a Weary Mage. Your\nWeary Mages' <b>Spellcrafts</b>\nare permanent.",
     "cost": 5,
+    "evolution_card_id": 119921,
+    "subset_naga": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2358,6 +3010,10 @@
     "card_type": 44,
     "text": "[x]Your minions have\n+{1} Attack. <i>(Improved\nby every 4 spells you've\ncast this game!)</i>@[x]Your minions have\n+{1} Attack.\n<i>(Cast {2}/4 spells\nto improve!)</i>",
     "cost": 2,
+    "script_data_num_1": 4,
+    "script_data_num_2": 1,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2368,6 +3024,8 @@
     "card_type": 44,
     "text": "[x]The Tavern offers an extra\nTavern spell whenever it is\n<b>Refreshed</b>. The first one you\nbuy each turn costs (1) less.",
     "cost": 1,
+    "script_data_num_1": 1,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2377,6 +3035,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get an Azerite\nEmpowerment. At the\nstart of each turn, get\nanother.",
+    "evolution_card_id": 109232,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2387,6 +3047,9 @@
     "card_type": 44,
     "text": "[x]Get a Gritty Headhunter\nthat gives a Marauder's\nContract. At the start of\neach turn, repeat this.",
     "cost": 8,
+    "evolution_card_id": 115900,
+    "subset_pirate": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2397,6 +3060,9 @@
     "card_type": 44,
     "text": "[x]Make a random friendly\nminion from Tier {0} or below\nGolden. At the start of\neach turn, repeat this.",
     "cost": 1,
+    "script_data_num_1": 4,
+    "subset_pirate": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2407,6 +3073,9 @@
     "card_type": 44,
     "text": "Get a Goldgrubber and an Aureate Laureate.",
     "cost": 1,
+    "evolution_card_id": 61066,
+    "subset_pirate": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2417,6 +3086,8 @@
     "card_type": 44,
     "text": "[x]At the end of each turn,\ngive your left-most minion\n+4/+3. Repeat for each\nfriendly Golden minion.",
     "cost": 4,
+    "subset_pirate": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2426,7 +3097,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Get a Doubloon Grifter. The first Pirate you buy each turn is free.",
-    "cost": 6,
+    "cost": 3,
+    "script_data_num_1": 1,
+    "evolution_card_id": 116035,
+    "subset_pirate": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2436,6 +3111,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "<b>Start of Combat:</b> Give the highest-Health minion from your hand +4/+4. When you have space, summon it for this combat only.",
+    "subset_murloc": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2445,6 +3122,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get an Arcane Behemoth.",
+    "cost": 2,
+    "evolution_card_id": 119613,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2455,6 +3136,10 @@
     "card_type": 44,
     "text": "[x]After the Tavern is\n<b>Refreshed</b>, give its\nminions +{0}/+{1} this turn.",
     "cost": 3,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "subset_demon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2465,6 +3150,11 @@
     "card_type": 44,
     "text": "[x]Get a Woodland Defiler.\n<b>Fodders</b> in the Tavern\nhave +{0}/+{1}.",
     "cost": 1,
+    "script_data_num_1": 4,
+    "script_data_num_2": 4,
+    "evolution_card_id": 130076,
+    "subset_demon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2475,6 +3165,11 @@
     "card_type": 44,
     "text": "[x]Get a Woodland Defiler.\n<b>Fodders</b> in the Tavern\nhave +{0}/+{1}.",
     "cost": 1,
+    "script_data_num_1": 15,
+    "script_data_num_2": 15,
+    "evolution_card_id": 130076,
+    "subset_demon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2484,7 +3179,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After you <b>Refresh</b> {1} times,\nthe highest-Tier minion in the\nTavern costs Health instead\nof Gold to buy. <i>({0} left!)</i>",
-    "cost": 3,
+    "cost": 1,
+    "script_data_num_1": 4,
+    "script_data_num_2": 4,
+    "subset_demon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2494,6 +3193,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After you play a Demon,\nanother friendly Demon\nconsumes a minion in the\nTavern to gain its stats.",
+    "subset_demon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2504,6 +3205,10 @@
     "card_type": 44,
     "text": "After your hero takes damage, your Tavern spells give an extra +{0}/+{1} this turn.",
     "cost": 4,
+    "script_data_num_1": 1,
+    "script_data_num_2": 1,
+    "subset_demon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2513,7 +3218,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Flaming Enforcer.\nWhenever your Flaming\nEnforcers trigger, also give\nthe stats to their neighbors.",
-    "cost": 5,
+    "cost": 6,
+    "evolution_card_id": 126924,
+    "subset_demon": true,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2523,7 +3232,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Whenever you <b>Magnetize</b>\na minion, give it +{0}/+{1}\nand improve this.",
-    "cost": 1,
+    "cost": 3,
+    "script_data_num_1": 1,
+    "script_data_num_2": 1,
+    "subset_mech": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2534,6 +3247,10 @@
     "card_type": 44,
     "text": "[x]Whenever you <b>Magnetize</b>\na minion, give it +{0}/+{1}\nand improve this.",
     "cost": 3,
+    "script_data_num_1": 3,
+    "script_data_num_2": 2,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2544,6 +3261,8 @@
     "card_type": 44,
     "text": "Get a random <b>Magnetic</b> Mech. At the start of each turn, get another.",
     "cost": 4,
+    "subset_mech": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2553,6 +3272,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "After {1} friendly minions die, get a random Mech. <i>({0} left!)</i>",
+    "script_data_num_1": 8,
+    "script_data_num_2": 8,
+    "subset_mech": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2563,6 +3286,9 @@
     "card_type": 44,
     "text": "Get a Timewarped Skipper.",
     "cost": 4,
+    "evolution_card_id": 127129,
+    "subset_murloc": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2573,6 +3299,11 @@
     "card_type": 44,
     "text": "[x]Get a Cloning Conch.\nAt the start of every\n{1} turns, repeat this.\n<i>({0} |4(turn, turns) left!)</i>",
     "cost": 5,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "evolution_card_id": 110400,
+    "subset_murloc": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2582,8 +3313,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "<b>Spellcraft:</b> Destroy a friendly Undead to get a random Undead.",
-    "cost": 3,
+    "cost": 4,
     "spellcraft_id": 131136,
+    "subset_undead": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2593,7 +3326,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Mama Mrrglton\nor a Papa Mrrglton.\nAt the start of each turn,\nrepeat this.",
-    "cost": 6,
+    "cost": 2,
+    "evolution_card_id": 131145,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2604,6 +3340,9 @@
     "card_type": 44,
     "text": "Get a Timewarped Radio Star. Give it <b>Reborn</b>.",
     "cost": 1,
+    "evolution_card_id": 127447,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2613,7 +3352,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Bristlemane Scrapsmith.\nAfter a friendly minion with\n<b>Taunt</b> dies, play a permanent\n<b>Blood Gem</b> on your Scrapsmiths.",
-    "cost": 1,
+    "evolution_card_id": 97115,
+    "subset_quilboar": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2623,7 +3364,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After you trigger a\n<b>Deathrattle</b>, your\n<b>Blood Gems</b> give an extra\n+{2}/+{4} until next combat.",
-    "cost": 5,
+    "cost": 1,
+    "script_data_num_3": 2,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2633,7 +3377,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After you trigger a\n<b>Deathrattle</b>, this plays a\npermanent <b>Blood Gem</b> on\n{0} random friendly minions.",
-    "cost": 5,
+    "cost": 3,
+    "script_data_num_1": 3,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2644,6 +3391,9 @@
     "card_type": 44,
     "text": "[x]Get a Vinespeaker.\nYour Vinespeakers also\nimprove the Health given\nby your <b>Blood Gems</b>.",
     "cost": 6,
+    "evolution_card_id": 130157,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2653,7 +3403,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Get a <b>Blood Gem</b> that gives a Quilboar <b>Taunt</b>, <b>Divine Shield</b>, or <b>Reborn</b>. At the start of each turn, repeat this.",
-    "cost": 2,
+    "subset_quilboar": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2663,7 +3414,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After you play a <b>Blood Gem</b>\nfrom hand, this plays a\n<b>Blood Gem</b> on your minions\nwith <b>Divine Shield</b>.",
-    "cost": 1,
+    "subset_quilboar": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2673,7 +3425,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]After you summon {1}\nBeasts, get a random\nBeast. <i>({0} left!)</i>",
-    "cost": 3,
+    "cost": 1,
+    "script_data_num_1": 6,
+    "script_data_num_2": 6,
+    "subset_beast": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2683,7 +3439,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Your Beasts\nhave +{0}/+{1} this combat.\nAfter you summon a Beast,\nimprove this permanently.",
-    "cost": 6,
+    "cost": 3,
+    "script_data_num_1": 1,
+    "script_data_num_2": 1,
+    "subset_beast": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2694,6 +3454,8 @@
     "card_type": 44,
     "text": "[x]Get a Stomping Stegodon.\n<b>Start of Combat:</b> Give\nyour two left-most Beasts\n<b>Divine Shield</b>.",
     "cost": 5,
+    "subset_beast": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2704,6 +3466,10 @@
     "card_type": 44,
     "text": "After you cast a Tavern spell, give your Pirates +{0}/+{1}.",
     "cost": 3,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2713,7 +3479,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "<b>Start of Combat:</b> Give {0} random friendly Pirates <b>Divine Shield</b>.",
-    "cost": 1,
+    "cost": 3,
+    "script_data_num_1": 4,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2724,6 +3493,10 @@
     "card_type": 44,
     "text": "[x]Get a Proud Privateer and\n{0} random <b>Bounties</b>.\nAt the start of each turn,\nget another {0} <b>Bounties</b>.",
     "cost": 5,
+    "script_data_num_1": 2,
+    "evolution_card_id": 122520,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2733,6 +3506,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Whenever you get a Pirate, give your left-most minion +{0}/+{1}.",
+    "script_data_num_1": 12,
+    "script_data_num_2": 12,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2742,7 +3519,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Give {0} friendly\nPirates \"<b>Deathrattle:</b> Summon a 1/1\nSky Pirate and give it this minion's\nAttack. It attacks immediately.\"",
-    "cost": 1,
+    "cost": 4,
+    "script_data_num_1": 3,
+    "subset_pirate": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2751,8 +3531,12 @@
     "name": "Deathtouch Apple",
     "card_set": 1453,
     "card_type": 44,
-    "text": "[x]After a friendly Undead is\n<b>Reborn</b>, give it <b>Reborn</b>.\n<i>({1} times per combat.)</i>@[x]After a friendly Undead is\n<b>Reborn</b>, give it <b>Reborn</b>.\n<i>({0} left!)</i>",
-    "cost": 3,
+    "text": "[x]After a friendly Undead is\n<b>Reborn</b>, give it <b>Reborn</b>.\n<i>({1} times per turn.)</i>@[x]After a friendly Undead is\n<b>Reborn</b>, give it <b>Reborn</b>.\n<i>({0} left!)</i>",
+    "cost": 4,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2762,7 +3546,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Destroy\nyour 3 left-most minions.\nAfter your last minion dies,\nresummon them.",
-    "cost": 4,
+    "cost": 5,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2772,8 +3558,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "<b>Spellcraft:</b> Destroy a friendly Undead to get\n2 random Undead.",
-    "cost": 2,
+    "cost": 4,
     "spellcraft_id": 131134,
+    "subset_undead": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2784,6 +3572,11 @@
     "card_type": 44,
     "text": "[x]Get a Falling Sky Golem. <b>Start\nof Combat:</b> Give your minions\n\"<b>Deathrattle:</b> Give your minions\n+{0}/+{1} permanently.\"",
     "cost": 3,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "evolution_card_id": 130798,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2792,8 +3585,12 @@
     "name": "Beatboxer Portrait",
     "card_set": 1453,
     "card_type": 44,
-    "text": "Get a Polarizing Beatboxer and {0} random <b>Magnetic</b> Mech.",
+    "text": "Get a Polarizing Beatboxer.",
     "cost": 6,
+    "script_data_num_1": 1,
+    "evolution_card_id": 98713,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2803,7 +3600,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]At the end of each turn,\n<b>Magnetize</b> an\nAccord-o-Tron to your left-\nand right-most Mechs.",
-    "cost": 4,
+    "cost": 5,
+    "evolution_card_id": 98576,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2813,7 +3613,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Magnetic</b> Mechs cost (2).\nThe Tavern offers an\nextra one whenever it is\n<b>Refreshed</b>.",
-    "cost": 2,
+    "cost": 5,
+    "subset_mech": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2824,6 +3626,11 @@
     "card_type": 44,
     "text": "[x]After you buy a Tavern\nspell, get a 1/1 Murloc\nand teach it that spell.\n<i>({1} times per turn.)</i>@[x]After you buy a Tavern\nspell, get a 1/1 Murloc\nand teach it that spell.\n<i>({0} left!)</i>",
     "cost": 4,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "evolution_card_id": 122285,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2834,6 +3641,8 @@
     "card_type": 44,
     "text": "[x]At the end of your turn,\ntrigger your left and right-\nmost minions' <b>Battlecries</b>.",
     "cost": 4,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2843,7 +3652,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]At the end of each turn, give\nyour two left-most minions\n+{0}/+{1}. <i>(Improved by your\n<b>Battlecries</b> triggered this game!)</i>",
-    "cost": 3,
+    "cost": 2,
+    "script_data_num_1": 1,
+    "script_data_num_2": 2,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2854,6 +3667,9 @@
     "card_type": 44,
     "text": "[x]<b>Start of Combat:</b> Give your\nMurlocs the Attack of the\nhighest-Attack minion\nin your hand.",
     "cost": 5,
+    "script_data_num_1": 2,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2865,6 +3681,9 @@
     "text": "[x]<b>Spellcraft:</b> <b>Refresh</b> the\nTavern with <b>Battlecry</b>\nminions. They cost (1).",
     "cost": 5,
     "spellcraft_id": 131310,
+    "subset_dragon": true,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2874,7 +3693,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "You can use your Hero Power an extra time each turn.\nAfter you use your Hero Power,\ngain (1) Gold.",
-    "cost": 1,
+    "cost": 2,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2885,6 +3705,7 @@
     "card_type": 44,
     "text": "Get the <b>Buddy</b> of your Hero Power.",
     "cost": 3,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2895,6 +3716,7 @@
     "card_type": 44,
     "text": "Get the Golden <b>Buddy</b> of your Hero Power.",
     "cost": 4,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2905,6 +3727,8 @@
     "card_type": 44,
     "text": "Get a Triple Prize. Whenever you would get a Triple Reward, get a Triple Prize instead.",
     "cost": 2,
+    "evolution_card_id": 130856,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2914,6 +3738,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "When you reach Tier {0}, gain {1} gold.",
+    "script_data_num_1": 6,
+    "script_data_num_2": 12,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2924,6 +3751,7 @@
     "card_type": 44,
     "text": "Get two minions each from Tiers 1, 2, and 3.",
     "cost": 2,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2933,6 +3761,7 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Get a random Lesser <b>Trinket</b>.",
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2942,6 +3771,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Get a random Greater <b>Trinket</b> and {0} Gold.",
+    "script_data_num_1": 4,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2951,7 +3782,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Duplicating Lens.\nAt the start of every\n{1} turns, repeat this.\n<i>({0} |4(turn, turns) left!)</i>",
-    "cost": 2,
+    "cost": 3,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "evolution_card_id": 130853,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2961,6 +3796,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Gain {0} Gold.\nYour next <b>Trinket</b> is a\nLesser <b>Trinket</b>.",
+    "script_data_num_1": 10,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2970,6 +3807,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Cast Ice Block.\nGain {0} Gold.",
+    "script_data_num_1": 5,
+    "evolution_card_id": 58512,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2980,6 +3820,8 @@
     "card_type": 44,
     "text": "[x]<b>Discover</b> a Tier 7 minion.\nLock it in your hand for\n{0} |4 (turn, turns).",
     "cost": 1,
+    "script_data_num_1": 2,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -2989,6 +3831,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Discover</b> a Golden Tier 7\nminion. Lock it in your\nhand for {0} |4 (turn, turns).",
+    "script_data_num_1": 2,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -2998,7 +3842,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "<b>Discover</b> a 2-Cost minion from the Minor <b>Timewarp</b>.",
-    "cost": 2,
+    "cost": 1,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3008,7 +3853,7 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "<b>Discover</b> a 2-Cost minion from the Major <b>Timewarp</b>.",
-    "cost": 2,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -3018,7 +3863,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Rylak Metalhead.\n<b>Start of Combat:</b> Trigger\nyour Rylak Metalheads'\n<b>Deathrattles</b>.",
-    "cost": 2,
+    "cost": 4,
+    "evolution_card_id": 98829,
+    "subset_beast": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3030,6 +3878,7 @@
     "text": "[x]<b>Spellcraft:</b> Choose a\nfriendly minion. Double\nits stats and lock it in your\nhand for 1 turn.",
     "cost": 1,
     "spellcraft_id": 131315,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -3038,8 +3887,11 @@
     "name": "Chromatic Tear",
     "card_set": 1453,
     "card_type": 44,
-    "text": "[x]Get {0} random\n<b>Chromadrakes.</b>\nAt the start of each turn,\nrepeat this.",
-    "cost": 5,
+    "text": "[x]Get a random\n<b>Chromadrake.</b>\nAt the start of each turn,\nrepeat this.",
+    "cost": 2,
+    "script_data_num_1": 1,
+    "subset_dragon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3050,6 +3902,10 @@
     "card_type": 44,
     "text": "[x]Get 2 random\n<b>Chromadrakes.</b> After you\nplay {1} <b>Battlecry</b> minions,\nrepeat this. <i>({0} left!)</i>",
     "cost": 1,
+    "script_data_num_1": 7,
+    "script_data_num_2": 7,
+    "subset_dragon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -3060,6 +3916,11 @@
     "card_type": 44,
     "text": "[x]Get an Egg of the Endtimes.\nAt the start of every {1} turns,\nrepeat this. <i>({0} |4(turn, turns) left!)</i>",
     "cost": 2,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "evolution_card_id": 126848,
+    "subset_dragon": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3070,6 +3931,9 @@
     "card_type": 44,
     "text": "Get a Golden Egg of the Endtimes. It hatches next turn.",
     "cost": 2,
+    "evolution_card_id": 129953,
+    "subset_dragon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -3079,8 +3943,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]<b>Avenge ({0}):</b> Give the\nAttack of your right-most\nminion to another\nfriendly Dragon.",
+    "script_data_num_1": 3,
     "avenge": true,
-    "avenge_target": 3,
+    "subset_dragon": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -3090,7 +3956,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Cast Easterly Winds.\nAt the start of each turn, cast it again.",
-    "cost": 3,
+    "evolution_card_id": 126909,
+    "subset_elemental": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3100,7 +3968,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Cast Easterly Winds four\ntimes. At the start of each\nturn, cast it twice more.",
-    "cost": 4,
+    "cost": 1,
+    "evolution_card_id": 126909,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -3110,7 +3981,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "After you play an Elemental, get a random Tavern spell. <i>(Twice per turn.)</i>@[x]After you play an\nElemental, get a random\nTavern spell. <i>({0} left!)</i>",
-    "cost": 2,
+    "cost": 1,
+    "script_data_num_1": 2,
+    "subset_elemental": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3120,6 +3994,9 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "After the Tavern is <b>Refreshed</b>, give the stats of its highest-Attack minion to its lowest.",
+    "subset_demon": true,
+    "subset_elemental": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3129,7 +4006,12 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Temperature Shift.\nAfter you play {1} Elementals,\nrepeat this. <i>({0} left!)</i>",
-    "cost": 5,
+    "cost": 6,
+    "script_data_num_1": 10,
+    "script_data_num_2": 10,
+    "evolution_card_id": 117670,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -3140,6 +4022,8 @@
     "card_type": 44,
     "text": "[x]After you <b>Refresh</b>, double\nthe stats of the highest-\nHealth minion in the\nTavern.",
     "cost": 6,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -3150,6 +4034,11 @@
     "card_type": 44,
     "text": "[x]Get a Mounting Avalanche.\nAfter you sell {1} minions,\nrepeat this. <i>({0} left!)</i>",
     "cost": 1,
+    "script_data_num_1": 4,
+    "script_data_num_2": 4,
+    "evolution_card_id": 122862,
+    "subset_elemental": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -3160,6 +4049,9 @@
     "card_type": 44,
     "text": "Get a Timewarped Leapfrogger.",
     "cost": 1,
+    "evolution_card_id": 126513,
+    "subset_beast": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3169,7 +4061,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Whenever you summon a Beast, give it +{0}/+{1}.",
-    "cost": 1,
+    "script_data_num_1": 6,
+    "script_data_num_2": 6,
+    "subset_beast": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3179,8 +4074,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "<b>Spellcraft:</b> Give a Beast +2/+2 and <b>Reborn</b>.",
-    "cost": 3,
+    "cost": 5,
     "spellcraft_id": 130909,
+    "subset_beast": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3190,7 +4087,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Get {0} random <b>Bounties</b>. At the start of each turn, repeat this.",
-    "cost": 5,
+    "cost": 6,
+    "script_data_num_1": 2,
+    "subset_pirate": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3200,6 +4100,11 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Once you cast {1} spells,\nyour Tavern spells give\nan extra +{2}/+{4}. <i>({0} left!)</i>@[x]Once you cast {1} spells,\nyour Tavern spells give\nan extra +{2}/+{4}. <i>(Done!)</i>",
+    "script_data_num_1": 12,
+    "script_data_num_2": 12,
+    "script_data_num_3": 4,
+    "subset_naga": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3209,7 +4114,8 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "Tavern spells that give stats cost (2) less.",
-    "cost": 1,
+    "subset_naga": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3220,6 +4126,11 @@
     "card_type": 44,
     "text": "[x]Get a Tide Raiser. After you\ncast a spell in combat,\nget a copy of the spell.\n<i>({1} times per combat.)</i>@[x]Get a Tide Raiser. After you\ncast a spell in combat,\nget a copy of the spell.\n<i>({0} left!)</i>",
     "cost": 4,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "evolution_card_id": 126629,
+    "subset_naga": true,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3229,7 +4140,12 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Whenever you cast a spell,\ngive your minions +{0}/+{1}\npermanently.\n<i>(+{2}/+{4} while in combat!)</i>",
-    "cost": 6,
+    "cost": 4,
+    "script_data_num_1": 1,
+    "script_data_num_2": 1,
+    "script_data_num_3": 2,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -3239,7 +4155,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get a Groundbreaker.\nYour Groundbreakers also\ngive stats to the minion\nto their left.",
-    "cost": 3,
+    "cost": 5,
+    "evolution_card_id": 114816,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -3250,6 +4169,9 @@
     "card_type": 44,
     "text": "[x]Whenever you cast a\n<b>Spellcraft</b> spell, cast\nMight of Stormwind.",
     "cost": 4,
+    "evolution_card_id": 131152,
+    "subset_naga": true,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -3260,6 +4182,7 @@
     "card_type": 44,
     "text": "[x]Gain a free <b>Refresh</b> that\ncontains plain copies of\nminions in your warband.",
     "cost": 2,
+    "spell_school": 12,
     "trinket": true
   },
   {
@@ -3269,7 +4192,10 @@
     "card_set": 1453,
     "card_type": 44,
     "text": "[x]Get an extra copy of the\nnext {1} minions you buy.\n<i>({0} left!)</i>@[x]Get an extra copy of the\nnext {1} minions you buy.\n<i>(Done!)</i>",
-    "cost": 1,
+    "cost": 2,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "spell_school": 11,
     "trinket": true
   },
   {
@@ -3280,6 +4206,610 @@
     "card_type": 44,
     "text": "[x]Get an extra copy of the\nnext {1} minions you buy.\n<i>({0} left!)</i>@[x]Get an extra copy of the\nnext {1} minions you buy.\n<i>(Done!)</i>",
     "cost": 4,
+    "script_data_num_1": 4,
+    "script_data_num_2": 4,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_200",
+    "dbf_id": 133387,
+    "name": "Herding Horn",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Whenever a friendly <b>Rally</b> minion attacks, gain a free <b>Refresh</b>.",
+    "cost": 1,
+    "subset_beast": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_201",
+    "dbf_id": 133388,
+    "name": "Lionfish Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Lurking Lionfish.\nWhenever a friendly Beast\nattacks, give it +{0}/+{1}.",
+    "cost": 1,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "evolution_card_id": 132794,
+    "subset_beast": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_202",
+    "dbf_id": 133389,
+    "name": "Warcry Totem",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]The first two <b>Battlecry</b>\nminions you buy each turn\nare free. <i>({0} left!)</i>",
+    "cost": 2,
+    "script_data_num_1": 2,
+    "subset_dragon": true,
+    "subset_murloc": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_203",
+    "dbf_id": 133390,
+    "name": "Dragon Skull",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever you trigger a\n<b>Battlecry</b>, give your left-\nand right-most minions\n+{0}/+{1}.",
+    "cost": 3,
+    "script_data_num_1": 5,
+    "script_data_num_2": 5,
+    "subset_dragon": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_204",
+    "dbf_id": 133391,
+    "name": "Plaguerunner Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Plaguerunner.\nAfter you destroy a\nPlaguerunner outside\ncombat, get a plain copy.",
+    "cost": 2,
+    "evolution_card_id": 126451,
+    "subset_undead": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_205",
+    "dbf_id": 133392,
+    "name": "Deathwhisper Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After a friendly minion is <b>Reborn</b>, give your minions +{0}/+{1}.",
+    "cost": 2,
+    "script_data_num_1": 2,
+    "script_data_num_2": 2,
+    "subset_undead": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_206",
+    "dbf_id": 133393,
+    "name": "Ominous Stone",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Discover</b> a Tier 4 minion\nof your most common\ntype with a <b>Dark Gift</b>.",
+    "script_data_num_1": 2,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_208",
+    "dbf_id": 133395,
+    "name": "Floating Candle Set",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Spellcraft:</b> Trigger a friendly minion's <b>Deathrattle</b>.",
+    "cost": 3,
+    "spellcraft_id": 133396,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_211",
+    "dbf_id": 133399,
+    "name": "Lovely Locket",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you cast a spell on\na friendly minion, this\ncasts it on another\nfriendly minion.",
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_212",
+    "dbf_id": 133400,
+    "name": "Wolfhead Flail",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "At the end of your turn, trigger your two left-most <b><b>Deathrattles</b>.</b>",
+    "cost": 5,
+    "subset_beast": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_213",
+    "dbf_id": 133401,
+    "name": "Lightfeather Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Start of Combat:</b> Give your <b>Rally</b> minions <b>Divine Shield</b>.",
+    "cost": 1,
+    "subset_beast": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_214",
+    "dbf_id": 133402,
+    "name": "Insurrectionist's Blade",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "At the end of your turn, trigger all friendly <b>Rallies</b>.",
+    "cost": 3,
+    "subset_dragon": true,
+    "subset_quilboar": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_215",
+    "dbf_id": 133403,
+    "name": "Dragon's Eye",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your Dragons' <b>Battlecries</b> trigger an extra time.",
+    "cost": 4,
+    "subset_dragon": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_216",
+    "dbf_id": 133404,
+    "name": "Eternal Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Golden Eternal Knight.\nAfter a friendly Undead dies,\nyour Eternal Knights have\n+{0}/+{1} this game.",
+    "cost": 5,
+    "script_data_num_1": 4,
+    "script_data_num_2": 2,
+    "evolution_card_id": 95262,
+    "subset_undead": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_217",
+    "dbf_id": 133405,
+    "name": "Funeral Wreath",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After a friendly minion is\n<b>Reborn</b>, get a plain\ncopy of it. <i>({1} times\nper combat.)</i>@[x]After a friendly minion is\n<b>Reborn</b>, get a plain\ncopy of it. <i>({0} left!)</i>",
+    "cost": 3,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "subset_undead": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_220",
+    "dbf_id": 133696,
+    "name": "Glowing Crystal",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "At the start of your turn, gain 1 Gold for each different friendly minion type.",
+    "cost": 1,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_300",
+    "dbf_id": 133340,
+    "name": "Frigid Blossom",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you <b>Refresh</b>, reduce\nthe cost of upgrading\nthe Tavern by (1).",
+    "subset_elemental": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_301",
+    "dbf_id": 133341,
+    "name": "Lockbox Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Lockbox. If you already\nhave one, it opens {0} |4(turn, turns)\nsooner instead. At the start\nof each turn, repeat this.",
+    "cost": 2,
+    "script_data_num_1": 2,
+    "evolution_card_id": 132766,
+    "subset_pirate": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_302",
+    "dbf_id": 133342,
+    "name": "Gold Mallet",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of your turn, give\nyour minions +{0}/+{1}.\n<i>(Improved by Golden minions\nyou've played this game!)</i>",
+    "cost": 2,
+    "script_data_num_1": 2,
+    "script_data_num_2": 1,
+    "subset_pirate": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_302t",
+    "dbf_id": 133343,
+    "name": "Gold Mallet",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of your turn, give\nyour minions +{0}/+{1}.\n<i>(Improved by Golden minions\nyou've played this game!)</i>",
+    "cost": 2,
+    "script_data_num_1": 4,
+    "script_data_num_2": 2,
+    "subset_pirate": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_303",
+    "dbf_id": 133346,
+    "name": "Glass of Perspective",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a random <b>Choose One</b> card. At the start of each turn, get another.",
+    "cost": 2,
+    "subset_quilboar": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_303t",
+    "dbf_id": 133348,
+    "name": "Glass of Perspective",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get 2 random <b>Choose One</b> cards. At the start of each turn, get 2 more.",
+    "cost": 3,
+    "subset_quilboar": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_305",
+    "dbf_id": 133350,
+    "name": "Rune of Transmutation",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you cast 15 spells,\nreplace this with a random\nGreater Naga <b>Trinket</b>.\n<i>({0} left!)</i>",
+    "script_data_num_1": 15,
+    "subset_naga": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_307",
+    "dbf_id": 133379,
+    "name": "Wand of Divination",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you cast 3 spells on\nminions, gain 1 Gold.\n<i>({0} left!)</i>",
+    "script_data_num_1": 3,
+    "subset_quilboar": true,
+    "subset_naga": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_308",
+    "dbf_id": 133380,
+    "name": "Trailblazer Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your <b>Choose One</b> cards have both effects combined.",
+    "cost": 4,
+    "subset_quilboar": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_309",
+    "dbf_id": 133381,
+    "name": "Wax Lance",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Discover</b> a Tier 7 minion with a <b>Dark Gift</b>.",
+    "cost": 3,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_361",
+    "dbf_id": 133720,
+    "name": "Myrmidon Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Start of Combat:</b> Double your left and right-most Naga's stats.",
+    "cost": 1,
+    "subset_naga": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_362",
+    "dbf_id": 133721,
+    "name": "Cyclist Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Showy Cyclist.\nYour Showy Cyclists'\n<b>Deathrattles</b> give\npermanent stats.",
+    "cost": 4,
+    "evolution_card_id": 115565,
+    "subset_naga": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_363",
+    "dbf_id": 133714,
+    "name": "Escapee Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Golden Enterprising\nEscapee. Your Lockboxes\nopen {0} |4(turn, turns) sooner.",
+    "cost": 6,
+    "script_data_num_1": 1,
+    "evolution_card_id": 132763,
+    "subset_pirate": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_370",
+    "dbf_id": 133713,
+    "name": "Maldraxxus Dagger",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Discover</b> a plain copy of a\nminion in your warband\nwith a <b>Dark Gift</b>. At the start\nof each turn, repeat this.",
+    "cost": 7,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_371",
+    "dbf_id": 133722,
+    "name": "Honeycomb Ring",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Your Tavern spells give an\nextra +{0}/+{1}. After you\ncast a spell on a minion,\nimprove for this turn only.",
+    "cost": 1,
+    "script_data_num_1": 1,
+    "script_data_num_2": 1,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_372",
+    "dbf_id": 133712,
+    "name": "Sphere of Memory",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of your turn,\nget {0} copies of the last\nTavern spell you cast.",
+    "cost": 2,
+    "script_data_num_1": 3,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_373",
+    "dbf_id": 133715,
+    "name": "Multilayered Shield",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Your Tavern spells give an\nextra +{0}/+{1}.\n<i>(Improved by each different\nfriendly minion type!)</i>",
+    "cost": 2,
+    "script_data_num_1": 1,
+    "script_data_num_2": 2,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_380",
+    "dbf_id": 133719,
+    "name": "Amplifying Essence",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Your Elementals give an\nextra +{1}/+{2}. After you\nplay 5 Elementals,\nimprove this. <i>({0} left!)</i>",
+    "cost": 4,
+    "script_data_num_1": 5,
+    "script_data_num_2": 1,
+    "script_data_num_3": 1,
+    "subset_elemental": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_390",
+    "dbf_id": 134199,
+    "name": "Baller Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Fire Baller or a\nSnow Baller. At the start\nof each turn, repeat this.",
+    "cost": 3,
+    "evolution_card_id": 116736,
+    "subset_elemental": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_800",
+    "dbf_id": 133060,
+    "name": "Demonic Bloodletter",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever you cast a Tavern\nspell, give minions in the\nTavern +{0}/+{1} this game.",
+    "cost": 2,
+    "script_data_num_1": 1,
+    "script_data_num_2": 1,
+    "subset_demon": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_801",
+    "dbf_id": 133061,
+    "name": "Consuming Claw",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever a friendly\nDemon consumes a\nminion, it also gains its\n<b><b>Bonus Keyword</b>s</b> and +{0}/+{1}.",
+    "cost": 2,
+    "script_data_num_1": 5,
+    "script_data_num_2": 5,
+    "subset_demon": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_810",
+    "dbf_id": 133062,
+    "name": "Inductive Gyroblade",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of your turn, get a\n{0}/{1} <b>Magnetic</b> Satellite.\n<i>(Improved by each Tavern\nspell you've cast this turn!)</i>",
+    "cost": 2,
+    "script_data_num_1": 4,
+    "script_data_num_2": 4,
+    "subset_mech": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_810t",
+    "dbf_id": 133694,
+    "name": "Inductive Gyroblade",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of your turn, get a\n{0}/{1} <b>Magnetic</b> Satellite.\n<i>(Improved by each Tavern\nspell you've cast this turn!)</i>",
+    "cost": 2,
+    "script_data_num_1": 8,
+    "script_data_num_2": 8,
+    "subset_mech": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_811",
+    "dbf_id": 133063,
+    "name": "Defensive Shell",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]The first minion you\nplay each turn gains\n<b>Divine Shield</b>.",
+    "cost": 1,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_812",
+    "dbf_id": 133695,
+    "name": "Emergency Gearblade",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "At the end of your turn, cast Repair Job on your left-most Mech.",
+    "cost": 2,
+    "evolution_card_id": 133711,
+    "subset_mech": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_820",
+    "dbf_id": 133064,
+    "name": "Flighty Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Flighty Scout. After\nyou cast a Tavern spell, give\nFlighty Scouts in your hand\nand warband +{0}/+{1}.",
+    "cost": 2,
+    "script_data_num_1": 3,
+    "script_data_num_2": 3,
+    "evolution_card_id": 120677,
+    "subset_murloc": true,
+    "spell_school": 11,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_830",
+    "dbf_id": 133066,
+    "name": "Bloodfury Shield",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Whenever you cast a Tavern spell, add a <b>Fodder</b> to your next <b>Refresh</b>.",
+    "cost": 2,
+    "subset_demon": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_831",
+    "dbf_id": 133067,
+    "name": "Felsteel Cleaver",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you cast a spell on a\nTavern minion, a random\nfriendly minion consumes\nit to gain its stats.",
+    "subset_demon": true,
+    "subset_quilboar": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_840",
+    "dbf_id": 133068,
+    "name": "Secret Schematic",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you buy a Mech,\nget a random Tavern\nspell.",
+    "subset_mech": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_841",
+    "dbf_id": 133069,
+    "name": "Assembler Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b>\n<b>Magnetize</b> an Auto\nAssembler to all your\nMechs.",
+    "cost": 3,
+    "evolution_card_id": 120025,
+    "subset_mech": true,
+    "spell_school": 12,
+    "trinket": true
+  },
+  {
+    "id": "BG36_MagicItem_850",
+    "dbf_id": 133070,
+    "name": "Cookie's Stirring Rod",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After you play 5 Murlocs, get two random Tavern spells. <i>({0} left!)</i>",
+    "cost": 2,
+    "script_data_num_1": 5,
+    "subset_murloc": true,
+    "spell_school": 12,
     "trinket": true
   }
 ]

@@ -1,0 +1,3285 @@
+[
+  {
+    "id": "BG30_MagicItem_301",
+    "dbf_id": 111388,
+    "name": "Eternal Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get an Eternal Knight.\n<b>Start of Combat:</b> Give your\nEternal Knights <b>Taunt</b>\nand <b>Reborn</b>.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_303",
+    "dbf_id": 111403,
+    "name": "Automaton Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Start of Combat:</b> When you have space, summon an Ancestral Automaton.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_310",
+    "dbf_id": 112102,
+    "name": "Rivendare Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Titus Rivendare.\n<b>Start of Combat:</b> Double\nthe Health of your\nTitus Rivendares.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_402",
+    "dbf_id": 111476,
+    "name": "Conductor Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Snarling Conductor.\nWhenever you discard a\ncard, this plays a <b>Blood Gem</b>\non all your minions.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_403",
+    "dbf_id": 111488,
+    "name": "Ironforge Anvil",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Start of Combat:</b> Triple the stats of your minions with no type.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_406",
+    "dbf_id": 111502,
+    "name": "Butcher's Sickle",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Butchering.\nAt the start of each turn,\nget another.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_407",
+    "dbf_id": 111505,
+    "name": "Ship in a Bottle",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Summon\nand get a random Pirate.\nIt attacks immediately.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_410",
+    "dbf_id": 111512,
+    "name": "Quilligraphy Set",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Avenge ({0}):</b> Your <b>Blood\nGems</b> give an extra\n+1 Health this game.",
+    "avenge": true,
+    "avenge_target": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_410t2",
+    "dbf_id": 115253,
+    "name": "Quilligraphy Set",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Avenge ({0}):</b> Your <b>Blood Gems</b> give an extra +1/+1 this game.",
+    "cost": 6,
+    "avenge": true,
+    "avenge_target": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_411",
+    "dbf_id": 111514,
+    "name": "Hoggy Bank",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b>\nGive your Quilboar\n\"<b>Deathrattle:</b> Get 2\n<b>Blood Gems</b>.\"",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_414",
+    "dbf_id": 111533,
+    "name": "Kodo Leather Pouch",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you buy a card,\ngive two random\nfriendly minions +2/+1.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_414t",
+    "dbf_id": 115221,
+    "name": "Kodo Leather Pouch",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you buy a card,\ngive two random\nfriendly minions +4/+4.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_416",
+    "dbf_id": 111556,
+    "name": "Token of the Old Gods",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Spellcraft:</b> Choose a\nminion. Then choose a\nminion from a Tier higher\nto transform it into.",
+    "cost": 2,
+    "spellcraft_id": 112813,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_418",
+    "dbf_id": 111607,
+    "name": "Bronzebeard Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Brann Bronzebeard and\na random <b>Battlecry</b> minion.\nYour Brann Bronzebeards are\nboth Murlocs and Dragons.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_419",
+    "dbf_id": 111608,
+    "name": "Exquisite Dishware",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of each turn,\nget a random minion of\neach different type\nyou control.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_420",
+    "dbf_id": 111609,
+    "name": "Book of Medivh",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Discover</b> a Tavern spell. At the start of each turn, <b>Discover</b> another.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_420t",
+    "dbf_id": 115230,
+    "name": "Book of Medivh",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Discover</b> 2 Tavern spells. At the start of each turn, <b>Discover</b> 2 more.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_422",
+    "dbf_id": 111664,
+    "name": "Lorewalker Scroll",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever you cast a\nspell on a minion,\ngive it +{0}/+{1}.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_422t",
+    "dbf_id": 117416,
+    "name": "Lorewalker Scroll",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever you cast a\nspell on a minion,\ngive it +{0}/+{1}.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_423",
+    "dbf_id": 111999,
+    "name": "Innkeeper's Stein",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]The Tavern offers an extra\nminion of a higher Tier\nwhenever it is <b>Refreshed</b>.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_425",
+    "dbf_id": 112001,
+    "name": "Azeroth Model Globe",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the start of every two\nturns, gain {1} Gold and\n<b>Discover</b> a Tier 6 minion.\n<i>({0} |4(turn, turns) left!)</i>",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_426",
+    "dbf_id": 112002,
+    "name": "Colorful Compass",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a random {0}.\nAt the start of each turn,\nget another.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_426t",
+    "dbf_id": 115250,
+    "name": "Colorful Compass",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get 2 random {0}.\nAt the start of each turn,\nget 2 more.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_427",
+    "dbf_id": 112073,
+    "name": "Tiger Carving",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever a friendly minion\ntakes damage, give a\nrandom friendly minion\n+{0} Attack permanently.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_427t",
+    "dbf_id": 115231,
+    "name": "Tiger Carving",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever a friendly minion\ntakes damage, give a\nrandom friendly minion\n+{0} Attack permanently.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_429",
+    "dbf_id": 112078,
+    "name": "Demonblood Gourd",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Spellcraft:</b> Choose a\nfriendly minion. It consumes\na random minion in the\nTavern to gain its stats.",
+    "spellcraft_id": 112401,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_430",
+    "dbf_id": 112079,
+    "name": "Rockin' Music Box",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a random <b>Battlecry</b>\nminion. At the start of\neach turn, get another.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_431",
+    "dbf_id": 112400,
+    "name": "Azerite Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Living Azerite.\nYour Living Azerites\nalso give stats to\nfriendly Elementals.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_432",
+    "dbf_id": 112402,
+    "name": "Belcher Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get an Operatic Belcher.\nWhenever a friendly minion\nloses <b>Venomous</b>, it gains\n+4/+4 permanently.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_432t",
+    "dbf_id": 115240,
+    "name": "Belcher Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get an Operatic Belcher.\nWhenever a friendly minion\nloses <b>Venomous</b>, it gains\n+14/+14 permanently.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_433",
+    "dbf_id": 112083,
+    "name": "Alliance Keychain",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]The first time a friendly\nminion dies each combat,\ngive its maximum stats to\na random friendly minion.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_433t",
+    "dbf_id": 115248,
+    "name": "Alliance Keychain",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]The first time a friendly\nminion dies each combat,\ngive its maximum stats to\n2 random friendly minions.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_434",
+    "dbf_id": 112855,
+    "name": "Replica Cathedral",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your first spell each turn casts an extra time.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_435",
+    "dbf_id": 112082,
+    "name": "Goldenizer Supply",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "At the end of every {1} turns, get a Goldenizer. <i>({0} |4(turn, turns) left!)</i>@At the end of every {1} turns, get a Goldenizer. <i>(End of this turn!)</i>",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_437",
+    "dbf_id": 112080,
+    "name": "Staff of the Scourge",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Avenge (5):</b> Give a random friendly Undead <b>Reborn</b>.",
+    "cost": 5,
+    "avenge": true,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_438t",
+    "dbf_id": 113302,
+    "name": "Mug of the Sire",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever you would\nsummon a minion that\ndoesn't fit in your warband,\ngive your minions +5 Attack.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_439",
+    "dbf_id": 112990,
+    "name": "Designer Eyepatch",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "You only need 2 copies of a Pirate to make it Golden.",
+    "cost": 7,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_440",
+    "dbf_id": 113095,
+    "name": "Boom Controller",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]When you have space,\nsummon an exact copy\nof your first Mech that\ndied each combat.",
+    "cost": 7,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_441",
+    "dbf_id": 113099,
+    "name": "Tinyfin Onesie",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Your\nleft-most minion gains the\nstats of the highest-Health\nminion in your hand.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_442",
+    "dbf_id": 113096,
+    "name": "Blood Golem Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever a friendly Quilboar\ndies, summon a Golem with\nstats equal to its <b>Blood Gems</b>.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_540",
+    "dbf_id": 112381,
+    "name": "Slamma Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you summon a\nBeast in combat,\ndouble its Attack.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_541",
+    "dbf_id": 112382,
+    "name": "Nether Pendant",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Minions in the Tavern have\n+{1}/+{1}. Improves every 3\ntimes your hero takes damage\n__outside combat. <i>({0} left!)</i>",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_542",
+    "dbf_id": 112383,
+    "name": "Emerald Dreamcatcher",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Set your\nDragons' Attack to the\nhighest in your warband.",
+    "cost": 7,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_543",
+    "dbf_id": 112385,
+    "name": "Devourer Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Channel the\nDevourer. At the start of\neach turn, get another.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_544",
+    "dbf_id": 112392,
+    "name": "Nomi Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you play an Elemental,\ngive Elementals in the\nTavern +{0}/+{1} this game.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_544t",
+    "dbf_id": 115235,
+    "name": "Nomi Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you play an Elemental,\ngive Elementals in the\nTavern +{0}/+{1} this game.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_545",
+    "dbf_id": 112397,
+    "name": "Fridge Magnet",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Avenge ({0}):</b> Get a random\n<b>Magnetic</b> minion.",
+    "cost": 3,
+    "avenge": true,
+    "avenge_target": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_546",
+    "dbf_id": 112398,
+    "name": "Jar o' Gems",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After 2 friendly minions\nattack each combat, this\nplays a <b>Blood Gem</b> on all\n____your Quilboar. <i>({0} left!)</i>",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_547",
+    "dbf_id": 112399,
+    "name": "Comfy Coffin",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you cast a Tavern\nspell, your Undead have\n+1 Attack this game\n<i>(wherever they are)</i>.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_547t",
+    "dbf_id": 115226,
+    "name": "Comfy Coffin",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you cast a Tavern\nspell, your Undead have\n+2 Attack this game\n<i>(wherever they are)</i>.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_548",
+    "dbf_id": 112464,
+    "name": "Glowscale Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Timewarped Glowscale.\nAfter you cast a <b>Spellcraft</b> spell, give your minions with <b>Divine Shield</b> +{0}/+{1}.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_555",
+    "dbf_id": 117905,
+    "name": "Surprise Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get an Elemental of\nSurprise. <i>(More appear\nwhen you least expect\nthem...)</i>",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_700",
+    "dbf_id": 117794,
+    "name": "Deathly Phylactery",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Discover</b> a <b>Deathrattle</b>\nminion. Your first\n<b>Deathrattle</b> each combat\ntriggers an extra time.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_701",
+    "dbf_id": 117795,
+    "name": "The Eye of Sargeras",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Every fourth card you\nbuy costs Health instead\nof Gold. <i>({0} left!)</i>@[x]Every fourth card you\nbuy costs Health instead\nof Gold. <i>(Ready!)</i>",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_702",
+    "dbf_id": 117796,
+    "name": "Primalfin Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Primalfin Lookout.\nAfter you <b>Discover</b> a\nminion, get a random\nTavern spell.",
+    "cost": 8,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_703",
+    "dbf_id": 117801,
+    "name": "Mystery Cube",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Choose from 2 new Lesser\n<b><b>Trinket</b>s</b> to replace this\nfor free. At the start of\neach turn, repeat this.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_705",
+    "dbf_id": 117854,
+    "name": "Bartend-o-Tron's Oilcan",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Reduce the Cost of\nupgrading the Tavern by\n(3). At the start of each\nturn, repeat this.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_706",
+    "dbf_id": 117857,
+    "name": "Reflective Pendant",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a plain copy of a\nrandom friendly minion.\nAt the start of each turn,\nrepeat this.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_707",
+    "dbf_id": 117860,
+    "name": "Tickatus Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Discover</b> a Tier 3 Darkmoon\nPrize. At the start of every\nthree turns, repeat this.\n<i>({0} |4(turn, turns) left!)</i>",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_709",
+    "dbf_id": 117894,
+    "name": "Electromagnetic Device",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Discover</b> a <b>Magnetic</b>\nMech. Whenever a friendly\nminion is <b>Magnetized</b>,\ngive it +3/+3.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_709t",
+    "dbf_id": 121689,
+    "name": "Electromagnetic Device",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Discover</b> 2 <b>Magnetic</b>\nMechs. Whenever a friendly\nminion is <b>Magnetized</b>,\ngive it +4/+4.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_710",
+    "dbf_id": 117896,
+    "name": "Fungalmancer Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you sell 5 minions,\nget a random Murloc.\n<i>({0} left!)</i>",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_711",
+    "dbf_id": 117897,
+    "name": "Marine Signet",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you play 4 minions,\nget a random Tier {1}\nTavern spell and improve\nthis. <i>({0} left!)</i>@[x]After you play 4 minions,\nget a random Tier {1}\nTavern spell.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_713",
+    "dbf_id": 117906,
+    "name": "Bleeding Heart",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After {1} friendly minions die, get a random Undead. <i>({0} left!)</i>",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_714",
+    "dbf_id": 117944,
+    "name": "Precious Pearl",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Spellcraft:</b> Give a minion +30/+30 until next turn.",
+    "spellcraft_id": 117945,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_777",
+    "dbf_id": 117895,
+    "name": "Goose Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Silver Goose.\nAfter you summon\n3 Silver Fledglings, get\na Lucky Egg. <i>({0} left!)</i>",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_801",
+    "dbf_id": 110928,
+    "name": "Sinstone Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]The first {1} times you\n<b>Discover</b> a card each turn,\nget an extra copy of it.\n<i>({0} left!)</i>",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_803",
+    "dbf_id": 110956,
+    "name": "Kaboom Bot Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Kaboom Bot.\nYour Kaboom Bots'\n<b>Deathrattles</b> deal\n10 extra damage.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_804",
+    "dbf_id": 110957,
+    "name": "Ancient Wishbone",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your Hero Power triggers twice.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_821",
+    "dbf_id": 110966,
+    "name": "Fish Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Fish of N'Zoth.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_821t2",
+    "dbf_id": 111046,
+    "name": "Fishy Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Summon\na Golden Fish of N'Zoth\nthat copies <b>Deathrattles</b>.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_822",
+    "dbf_id": 114208,
+    "name": "Twin Sky Lanterns",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]When you have space,\nsummon a copy of the\nfirst minion you summon\neach combat.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_822t2",
+    "dbf_id": 115247,
+    "name": "Twin Sky Lanterns",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]When you have space,\nsummon 2 copies of the\nfirst minion you summon\neach combat.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_825",
+    "dbf_id": 111255,
+    "name": "Smuggler Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Whelp Smuggler.\nSet its stats to 12/12.\nYour Whelp Smugglers\nare Dragons.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_828",
+    "dbf_id": 114212,
+    "name": "Shaker Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Zesty Shaker. Your\nZesty Shakers give an\nextra copy of the spell.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_841",
+    "dbf_id": 111092,
+    "name": "Glowing Gauntlet",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Minions in the Tavern\nhave +{0}/+{1}. The Tavern\nalways has 7 cards.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_843t",
+    "dbf_id": 115251,
+    "name": "Horde Keychain",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your minions from Tier 3 or lower have +7/+5.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_847",
+    "dbf_id": 111448,
+    "name": "Goblin Wallet",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "At the end of each turn, increase your maximum Gold by 1.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_864",
+    "dbf_id": 110972,
+    "name": "Gilnean Thorned Rose",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Avenge ({0}):</b> Give\nyour minions +{1}/+{2}\npermanently and deal\n1 damage to them.",
+    "cost": 2,
+    "avenge": true,
+    "avenge_target": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_868",
+    "dbf_id": 110975,
+    "name": "Rewinder Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Soul Rewinder\nand a Wrath Weaver.\nYour Soul Rewinders\nalso gain Attack.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_869",
+    "dbf_id": 111404,
+    "name": "Felblood Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Slimy Felblood. Your Fiery and Slimy Felbloods give Attack <i>and</i> Health.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_876",
+    "dbf_id": 111207,
+    "name": "Manipulator Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Faceless Manipulator.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_879",
+    "dbf_id": 111384,
+    "name": "Dalaran Cheese Wheel",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Minions in the Tavern have +{1}/+{1}. Improves every 4 times you <b>Refresh</b>. <i>({0} left!)</i>",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_879t",
+    "dbf_id": 115236,
+    "name": "Dalaran Cheese Wheel",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Minions in the Tavern have +{1}/+{1}. Improves every 4 times you <b>Refresh</b>. <i>({0} left!)</i>",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_880",
+    "dbf_id": 111211,
+    "name": "Feral Talisman",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your minions have +2/+1.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_880t",
+    "dbf_id": 111250,
+    "name": "Feral Talisman",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your minions have +8/+5.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_886",
+    "dbf_id": 110967,
+    "name": "Reinforced Shield",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever you summon\na minion, give it <b>Divine\nShield</b>. <i>({1} times per\ncombat.)</i>@[x]Whenever you summon\na minion, give it <b>Divine\nShield</b>. <i>({0} left!)</i>",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_888",
+    "dbf_id": 112895,
+    "name": "Souvenir Stand",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]When you buy a\nGreater <b>Trinket</b>, this\ntransforms into a\ncopy of it.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_891",
+    "dbf_id": 112991,
+    "name": "Trip Vouchers",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]In 2 turns, choose a\nGreater <b>Trinket</b> to buy and\nreplace this. <i>(2 turns left!)</i>@[x]In 2 turns, choose a\nGreater <b>Trinket</b> to buy and\nreplace this. <i>(Next turn!)</i>",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_900",
+    "dbf_id": 110985,
+    "name": "Dragonwing Glider",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Whenever you play a card, give a friendly Dragon +{0}/+{1}.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_900t",
+    "dbf_id": 115223,
+    "name": "Dragonwing Glider",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Whenever you play a card, give a friendly Dragon +{0}/+{1}.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_902",
+    "dbf_id": 111401,
+    "name": "Holy Mallet",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Give\nyour left and right-most\nminions <b>Divine Shield</b>.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_910",
+    "dbf_id": 111529,
+    "name": "Mechagon Adapter",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After a friendly Mech\nloses <b>Divine Shield</b>, give\nit <b>Divine Shield</b>.\n<i>(3 times per combat.)</i>@[x]After a friendly Mech\nloses <b>Divine Shield</b>, give\nit <b>Divine Shield</b>. <i>({0} left!)</i>",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_914",
+    "dbf_id": 110991,
+    "name": "Nerglish Phrasebook",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you play a minion,\ngive the left-most minion\nin your hand +3/+2.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_914t",
+    "dbf_id": 115237,
+    "name": "Nerglish Phrasebook",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you play a minion,\ngive the left-most minion\nin your hand +6/+6.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_916",
+    "dbf_id": 111253,
+    "name": "Essence of Dreams",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get {0} |4(copy, copies) of\nDreamer's Embrace.\nAt the start of each turn,\nget {1} more.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_917",
+    "dbf_id": 111557,
+    "name": "Rusty Trident",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Give your\nNaga \"<b>Deathrattle:</b> Get a\nrandom <b>Spellcraft</b> spell.\"",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_918",
+    "dbf_id": 117798,
+    "name": "Promo Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Prized Promo-Drake.\nYour first <b>Start of Combat</b>\neffect each combat\ntriggers an extra time.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_919",
+    "dbf_id": 117797,
+    "name": "Nazjatar Postcard",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After you play a Naga, get a random <b>Spellcraft</b> spell.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_920",
+    "dbf_id": 111400,
+    "name": "Spitescale Sushi Roll",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Spitescale Special.\nYour first two <b>Spellcraft</b>\nspells each turn cast\nan extra time. <i>({0} left!)</i>",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_921",
+    "dbf_id": 117799,
+    "name": "Flagbearer Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Sky Pirate\nFlagbearer. Your Sky\nPirates have +6 Attack.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_923",
+    "dbf_id": 111406,
+    "name": "Elementium Chest",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Each combat, after 2\nfriendly Pirates attack,\ngain 1 Gold next turn.\n<i>({0} left!)</i>",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_924",
+    "dbf_id": 110993,
+    "name": "Booty Bay Brew",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Whenever you spend Gold, give a friendly Pirate +{0}/+{1}.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_924t",
+    "dbf_id": 115245,
+    "name": "Booty Bay Brew",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Whenever you spend Gold, give a friendly Pirate +{0}/+{1}.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_925",
+    "dbf_id": 115464,
+    "name": "Ceremonial Sword",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Whenever a friendly minion attacks, give it +4 Attack.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_930",
+    "dbf_id": 117800,
+    "name": "Burgling Claw",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the start of each turn, get\na plain copy of the highest-\nTier minion in your last\nopponent's warband.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_931",
+    "dbf_id": 111408,
+    "name": "Lucky Tabby",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After {1} friendly minions die, get a random Beast. <i>({0} left!)</i>",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_942",
+    "dbf_id": 117855,
+    "name": "Mecha-Jaraxxus Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get 2 random <b>Magnetic</b>\nMecha-Demons.\nAt the start of each turn,\nget 2 more.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_943",
+    "dbf_id": 117856,
+    "name": "Surveyor Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Hot-Air Surveyor. <b>Blood Gems</b> played from your hand give an extra +{0}/+{1}.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_944",
+    "dbf_id": 117858,
+    "name": "Redeemer Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Nalaa the Redeemer. Your Nalaa the Redeemers give an extra +{0}/+{1}.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_951",
+    "dbf_id": 111499,
+    "name": "Lava Lamp",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After you sell {1} minions, get a random Elemental. <i>({0} left!)</i>",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_952",
+    "dbf_id": 111500,
+    "name": "Jarred Frostling",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Give 2\nfriendly Elementals\n\"<b>Deathrattle:</b> Summon a\nFlourishing Frostling\".",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_962",
+    "dbf_id": 111417,
+    "name": "Training Certificate",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Double\nthe stats of your two\nlowest-Attack minions.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_970",
+    "dbf_id": 111920,
+    "name": "Valorous Medallion",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Start of Combat:</b> Give your minions +2/+2.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_970t",
+    "dbf_id": 115219,
+    "name": "Valorous Medallion",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Start of Combat:</b> Give your minions +6/+6.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_971",
+    "dbf_id": 111921,
+    "name": "Enforcer Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Lightfang Enforcer.\nYour Lightfang Enforcers\nhave all minion types.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_972",
+    "dbf_id": 111922,
+    "name": "Karazhan Chess Set",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Start of Combat:</b> Summon a copy of your left-most minion.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_973",
+    "dbf_id": 111962,
+    "name": "Minion Bait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "The Tavern offers 2 extra {0} whenever it is <b>Refreshed</b>.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_978",
+    "dbf_id": 111976,
+    "name": "Blingtron's Sunglasses",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you summon a Mech\nin combat, give a friendly\nMech <b>Divine Shield</b>.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_979",
+    "dbf_id": 111977,
+    "name": "Primordial Terrarium",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you play an\nElemental, your next\nTavern spell costs (1) less.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_981",
+    "dbf_id": 112850,
+    "name": "The Eye of Dalaran",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever a friendly\nminion with no type dies,\nget a random Tavern spell.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_982",
+    "dbf_id": 112004,
+    "name": "Shaman Prayer Beads",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you buy 2 <b>Battlecry</b>\nminions, get a random\n<b>Battlecry</b> minion. <i>({0} left!)</i>",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_984",
+    "dbf_id": 112005,
+    "name": "Charging Staff",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of each turn,\ngive your minions with\n<b>Divine Shield</b> +3 Attack.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_984t",
+    "dbf_id": 115258,
+    "name": "Charging Staff",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of each turn,\ngive your minions with\n<b>Divine Shield</b> +7 Attack.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_986",
+    "dbf_id": 112009,
+    "name": "Peacebloom Candle",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "The first {1} Tavern spells you buy each turn are free. <i>({0} left!)</i>",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_987",
+    "dbf_id": 112011,
+    "name": "Balladist Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Lovesick Balladist.\nAt the start of each turn,\nget another. Your Lovesick\n__Balladists also give Attack.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_988",
+    "dbf_id": 112013,
+    "name": "Great Boar Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get 3 <b>Blood Gems</b>.\nYour <b>Blood Gems</b> give\nan extra +{0}/+{1}.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_988t",
+    "dbf_id": 115225,
+    "name": "Great Boar Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get 5 <b>Blood Gems</b>.\nYour <b>Blood Gems</b> give\nan extra +{0}/+{1}.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_989",
+    "dbf_id": 112014,
+    "name": "Artisanal Urn",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your Undead have\n+3 Attack.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_989t",
+    "dbf_id": 117157,
+    "name": "Artisanal Urn",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your Undead have\n+{0} Attack.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_991",
+    "dbf_id": 112054,
+    "name": "Felbat Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Famished Felbat.\nThe Tavern always has\n7 cards.",
+    "cost": 8,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_992",
+    "dbf_id": 112055,
+    "name": "Darnassus Pie",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Minions in the Tavern have +1/+1 for each minion you've sold this turn.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_992t",
+    "dbf_id": 115218,
+    "name": "Darnassus Pie",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Minions in the Tavern have +2/+2 for each minion you've sold this turn.",
+    "cost": 8,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_993",
+    "dbf_id": 113103,
+    "name": "Pagle's Fishing Rod",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a random Tier 7\nminion. At the start of\neach turn, get another.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_994",
+    "dbf_id": 113104,
+    "name": "Yogg-Tastic Pastry",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Spin the Wheel of Yogg-Saron. At the start of each turn, spin it again.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_995",
+    "dbf_id": 112411,
+    "name": "Bronze Timepiece",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Give each\nof your minions Health\nequal to half its Attack.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_996",
+    "dbf_id": 112988,
+    "name": "Bob's Tip Jar",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Gain 4 Gold.\nIncrease your maximum\nGold by 4.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_998",
+    "dbf_id": 113101,
+    "name": "Bob-blehead",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Gain 2 Gold.\nThe Tavern no longer offers\ncards from Tier 1 or Tier 2.",
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_999",
+    "dbf_id": 113102,
+    "name": "Fancy Spellbook",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After you spend {2} Gold, cast Shiny Ring. <i>({0} Gold left!)</i>",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG30_Trinket_1st",
+    "dbf_id": 116510,
+    "name": "Lesser Trinket",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "The Lesser <b>Trinket</b> Shop opens in {0} turns!@The Lesser <b>Trinket</b> Shop opens next turn!",
+    "tech_level": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG30_Trinket_2nd",
+    "dbf_id": 116614,
+    "name": "Greater Trinket",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "The Greater <b>Trinket</b> Shop opens in {0} turns!@The second <b>Trinket</b> Shop opens next turn!",
+    "tech_level": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG31_MagicItem_903",
+    "dbf_id": 120155,
+    "name": "Wisdomball Supply",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Knockoff\nWisdomball. At the start\nof each turn, repeat this.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_111",
+    "dbf_id": 121690,
+    "name": "Toxic Stinger",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "At the end of each turn, give a random friendly Murloc +8/+8 and <b>Venomous</b>.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_170",
+    "dbf_id": 120864,
+    "name": "Spell-powered Wrench",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After you play a <b>Magnetic</b> minion, get a random Tavern spell.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_171",
+    "dbf_id": 120865,
+    "name": "Divine Signet",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After a friendly minion\nloses <b>Divine Shield</b>, get a\nrandom Tavern spell.\n<i>({1} times per combat.)</i>@[x]After a friendly minion\nloses <b>Divine Shield</b>, get a\nrandom Tavern spell.\n<i>({0} left!)</i>",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_172",
+    "dbf_id": 120866,
+    "name": "Boom's Monster Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Dr. Boom's Monster.\nAt the start of every turn,\nget another.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_179",
+    "dbf_id": 121156,
+    "name": "Drakkari Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Drakkari Enchanter.\nYour Drakkari Enchanters\nare both Mechs and\nElementals.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_200",
+    "dbf_id": 120932,
+    "name": "All-Purpose Kibble",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever a friendly Beast\nattacks, give it +{0} Attack\nand permanently improve\nthis.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_204",
+    "dbf_id": 121507,
+    "name": "Kel'Thuzad Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get an Archlich Kel'Thuzad.\nAfter you destroy a minion\noutside combat, give\nyour minions +2/+2.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_205",
+    "dbf_id": 121558,
+    "name": "Maw Caster Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Maw Caster.\nWhenever you destroy a\nminion outside combat,\nget a 3-Gold Coin Pouch.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_230",
+    "dbf_id": 120937,
+    "name": "Extravagant Scale",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]When you spend 20 Gold,\ndouble your minions'\nAttack. <i>(Twice per game.)</i>@[x]When you spend 20 Gold,\ndouble your minions'\nAttack. <i>({0} left!)</i>",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_231",
+    "dbf_id": 120938,
+    "name": "Gilded Anchor",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "At the end of each turn, give your Golden minions +{0}/+{1}.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_231t",
+    "dbf_id": 121035,
+    "name": "Gilded Anchor",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "At the end of each turn, give your Golden minions +{0}/+{1}.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_232",
+    "dbf_id": 120939,
+    "name": "Shark Cannon",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you spend {4} Gold,\ngive your Pirates\n+{2}/+{2} and improve\nthis. <i>({0} Gold left!)</i>",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_270",
+    "dbf_id": 121039,
+    "name": "Wicked Tome",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Avenge (3):</b> Your Tavern\nspells give an extra\n+1 Attack this game.",
+    "cost": 3,
+    "avenge": true,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_270t",
+    "dbf_id": 121041,
+    "name": "Wicked Tome",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Avenge ({0}):</b> Your Tavern\nspells give an extra\n+{1}/+{2} this game.",
+    "cost": 4,
+    "avenge": true,
+    "avenge_target": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_271",
+    "dbf_id": 121120,
+    "name": "Ornate Clock",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Gain 2 Gold.\nBuy your Greater <b>Trinket</b>\nnext turn instead\nof Turn 9.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_274",
+    "dbf_id": 121044,
+    "name": "Bristlebach Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Bristlebach.\nYour Bristlebachs play\n<b>Blood Gems</b> on all\nfriendly minions.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_276",
+    "dbf_id": 121121,
+    "name": "Enigmatic Headstone",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "At the end of each turn, your Undead have\n+2 Attack this game <i>(wherever they are)</i>.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_278",
+    "dbf_id": 121125,
+    "name": "Reusable Batteries",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]The first time you buy a\nminion each turn, get a\n<b>Magnetic</b> Satellite with\nits stats.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_279",
+    "dbf_id": 121126,
+    "name": "Tough Tusk Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Blood Gems</b> played from your hand give minions <b>Divine Shield</b> until next turn.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_280",
+    "dbf_id": 121127,
+    "name": "Eclectic Shrine",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Give a\nfriendly minion of each\ndifferent type +{0}/+{1}.\nImprove this permanently.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_281",
+    "dbf_id": 121128,
+    "name": "Wizard's Pipe",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever you cast a\nTavern spell, give your\nminions with no type\n+4/+4.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_282",
+    "dbf_id": 121129,
+    "name": "Turbocharged Drill",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get {0} different <b>Magnetic</b> Mechs of ANY Tier.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_283",
+    "dbf_id": 121130,
+    "name": "Czarina Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Charging Czarina. Your Charging Czarinas also give Health.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_284",
+    "dbf_id": 121132,
+    "name": "Aggem Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of your turn,\nthis plays {0} <b>Blood Gems</b>\non a friendly minion of\neach type.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_286",
+    "dbf_id": 121134,
+    "name": "Lavish Cape",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Cast a random Tavern spell for each different friendly minion type. At the start of each turn, repeat this.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_300",
+    "dbf_id": 120827,
+    "name": "Putricide Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Craft a custom Undead.\nAt the start of every 2 turns,\nrepeat this. <i>({0} |4(turn, turns) left!)</i>",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_301",
+    "dbf_id": 120942,
+    "name": "Bassgill Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Bassgill.\nAfter you summon a\nMurloc in combat,\ngive it <b>Divine Shield</b>.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_304",
+    "dbf_id": 111420,
+    "name": "Horn of Summoning",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get six different\nTier 1 minions.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_306",
+    "dbf_id": 120926,
+    "name": "Herald Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Trigger\nall friendly <b>Deathrattles</b>.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_350",
+    "dbf_id": 111387,
+    "name": "Splinter of Aurum",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]When you have {1} Gold,\nget a random Golden\nTier 5 minion.\n<i>(Once per game.)</i>",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_360",
+    "dbf_id": 120137,
+    "name": "Baleful Incense",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Start of Combat:</b> Give your left- and right-most Undead <b>Reborn</b>.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_361",
+    "dbf_id": 111399,
+    "name": "Portable Factory",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Discover</b> a Tier 4 minion\nwith a type. At the start\nof each turn, get another\ncopy of it.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_361t",
+    "dbf_id": 120925,
+    "name": "Portable Factory",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Discover</b> a Tier 5 minion\nwith a type. At the start\nof each turn, get another\ncopy of it.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_362",
+    "dbf_id": 121498,
+    "name": "Innkeeper's Hearth",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Discover</b> a minion of\nyour Tier. Set its stats\nto 12/12.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_362t",
+    "dbf_id": 121684,
+    "name": "Innkeeper's Hearth",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Discover</b> two Tier 6 minions. Set their stats to {0}/{0}.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_363",
+    "dbf_id": 120870,
+    "name": "Faerie Dragon Scale",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever a friendly\nDragon attacks, give it\n<b>Divine Shield</b>.\n<i>({1} times per combat.)</i>@[x]Whenever a friendly\nDragon attacks, give it\n<b>Divine Shield</b>.\n<i>({0} left!)</i>",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_364",
+    "dbf_id": 120875,
+    "name": "Poet Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Timewarped Poet.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_365",
+    "dbf_id": 120967,
+    "name": "Valdrakken Wind Chimes",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your <b>Start of Combat</b> effects trigger an extra time.",
+    "cost": 7,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_366",
+    "dbf_id": 120928,
+    "name": "Guiding Candle",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Your first two <b>Refreshes</b>\neach turn contain only\nTier 6 cards. <i>({0} left!)</i>",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_367",
+    "dbf_id": 120873,
+    "name": "Ghastly Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your end of turn effects trigger an extra time.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_400",
+    "dbf_id": 111427,
+    "name": "Shrine of Evolution",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Transform all your minions into random Tier 4 minions.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_415",
+    "dbf_id": 120874,
+    "name": "Battle Horn",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Discover</b> a <b>Battlecry</b>\nminion. <b>Avenge (2):</b>\nTrigger a friendly <b>Battlecry</b>.",
+    "avenge": true,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_416",
+    "dbf_id": 121037,
+    "name": "War Drum",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]One <b>Battlecry</b> each turn\ntriggers two extra times.\n<i>({0} left!)</i>",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_417",
+    "dbf_id": 121061,
+    "name": "Tarecgosa Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Your left- and right-most\nDragons permanently keep\n<b><b>Bonus Keyword</b>s</b> and stats\ngained in combat.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_419",
+    "dbf_id": 121040,
+    "name": "Yu'lon Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Make\nyour highest-Tier Dragon\nGolden.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_428",
+    "dbf_id": 112075,
+    "name": "Worn Treasure Map",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]In two turns,\ngain 10 Gold.\n<i>(Once per game.)</i>@[x]In two turns, gain\n10 Gold. <i>({0} |4(turn, turns) left!)</i>",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_700",
+    "dbf_id": 120863,
+    "name": "Marvelous Mushroom",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your Tavern spells give an extra +{0}/+{1}. At the start of each turn, improve this.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_801",
+    "dbf_id": 120138,
+    "name": "Heart of the Forest",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your Tavern spells give an extra +{1}/+{2}. After you cast 5 Tavern spells, improve this. <i>({0} left!)</i>",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_801t",
+    "dbf_id": 120160,
+    "name": "Heart of the Forest",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Your Tavern spells give an\nextra +{1}/+{2}. After you cast\n{4} Tavern spells from hand,\nimprove this. <i>({0} left!)</i>",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_802",
+    "dbf_id": 120140,
+    "name": "Fountain Pen",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your Elementals that give stats grant an extra +2/+1.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_802t",
+    "dbf_id": 120161,
+    "name": "Fountain Pen",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Your Elementals that give stats grant an extra +4/+2.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_803",
+    "dbf_id": 120152,
+    "name": "Macaw Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Monstrous Macaw. Your Monstrous Macaws also trigger your left-most <b>Battlecry</b>.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_804",
+    "dbf_id": 120151,
+    "name": "Selfless Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Selfless Hero.\nYour Selfless Heroes also\ntrigger on <b>Battlecry</b>.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_806",
+    "dbf_id": 120799,
+    "name": "Battlecruiser Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get an 12/12 Battlecruiser.\nWhenever the Tavern is\n<b>Refreshed</b>, add a\nBattlecruiser Upgrade to it.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_807",
+    "dbf_id": 120145,
+    "name": "Curator Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Golden Mishmash and a {0}/{0} Amalgam with <b>Venomous</b>.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_808",
+    "dbf_id": 120146,
+    "name": "Bloodbound Earrings",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you cast {1} spells,\nthis plays a <b>Blood Gem</b> on\nall your minions.\n<i>({0} left!)</i>",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_808t",
+    "dbf_id": 121038,
+    "name": "Bloodbound Earrings",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you cast {1} spells,\nthis plays two <b>Blood Gems</b>\non all your minions.\n<i>({0} left!)</i>",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_809",
+    "dbf_id": 120147,
+    "name": "Gem Donation",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]The first minion you sell\neach turn plays its <b>Blood\nGems</b> on the 3 highest-Tier\nminions in the Tavern.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_817",
+    "dbf_id": 120154,
+    "name": "Rendle Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Steal the highest-Tier\ncard from the Tavern.\nAt the end of each turn,\nrepeat this.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_820",
+    "dbf_id": 120696,
+    "name": "Impulsive Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a 6/6 Impulsive\nTrickster. Your Impulsive\nTricksters' <b>Deathrattles</b>\ntarget adjacent minions.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_821",
+    "dbf_id": 120698,
+    "name": "Pilgrimp Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]One Demon each turn\ncosts Health instead of\nGold to buy. <i>({0} left!)</i>",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_822",
+    "dbf_id": 121033,
+    "name": "Bazaar Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]One Tavern spell each turn\ncosts Health instead of\nGold to buy. <i>({0} left!)</i>",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_823",
+    "dbf_id": 121034,
+    "name": "Wax Imprinter",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Gain 2 Gold and take\n2 damage. At the start\nof each turn, repeat this\n<i>(if possible)</i>.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_824",
+    "dbf_id": 121059,
+    "name": "Implicator Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get 2 False Implicators. Your Demons always consume the highest-Health minion in the Tavern.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_830",
+    "dbf_id": 121062,
+    "name": "Felemental Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Felemental.\nYour Felementals give\nan extra +{0}/+{1}.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_831",
+    "dbf_id": 120800,
+    "name": "Sellemental Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Sellemental.\nAt the start of each turn,\nget another.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_832",
+    "dbf_id": 120801,
+    "name": "Windfall Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of each turn, get a\nWindfall Tornado and give it\n+{0}/+{0}. <i>(Improved by each\nminion you've sold this turn!)</i>",
+    "cost": 8,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_832t",
+    "dbf_id": 120927,
+    "name": "Windfall Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of each turn, get a\nWindfall Tornado and give it\n+{0}/+{0}. <i>(Improved by each\nminion you've sold this turn!)</i>",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_844",
+    "dbf_id": 111109,
+    "name": "Sacrificial Altar",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Remove all your minions. Gain 3 Gold for each removed.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_858",
+    "dbf_id": 120139,
+    "name": "Explorer's Binoculars",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get three random\nTier 4 minions.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_860",
+    "dbf_id": 120760,
+    "name": "Beetle Band",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Avenge (5):</b> Summon a\n{0}/{1} Beetle.\nGive it <b>Taunt</b>.",
+    "cost": 1,
+    "avenge": true,
+    "avenge_target": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_860t",
+    "dbf_id": 121182,
+    "name": "Beetle Band",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Avenge (6):</b> Summon two\n{0}/{1} Beetles.\nGive them <b>Taunt</b>.",
+    "cost": 5,
+    "avenge": true,
+    "avenge_target": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_862",
+    "dbf_id": 120930,
+    "name": "Unholy Sanctum",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you trigger\na <b>Deathrattle</b>, give your\nright-most minion +2/+2\npermanently.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_862t",
+    "dbf_id": 120936,
+    "name": "Unholy Sanctum",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you trigger\na <b>Deathrattle</b>, give your\nright-most minion +{0}/+{1}\npermanently.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_864",
+    "dbf_id": 121500,
+    "name": "Bird Feeder",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Avenge (2):</b> Give your minions +1/+1.",
+    "cost": 3,
+    "avenge": true,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_864t",
+    "dbf_id": 121501,
+    "name": "Bird Feeder",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Avenge (2):</b> Give your minions +4/+4.",
+    "cost": 2,
+    "avenge": true,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_887",
+    "dbf_id": 111252,
+    "name": "Shadowy Elixir",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Gain 5 Armor. After\nyou play a Demon, deal\n1 damage to your hero.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_888",
+    "dbf_id": 120705,
+    "name": "Recycling Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After you play an Elemental, gain a free <b>Refresh</b>.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_890",
+    "dbf_id": 121115,
+    "name": "Cliffdiver Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of each turn, give\nyour left-most minion +{0}/+{1}.\n<i>(Improved by each <b>Battlecry</b>\nyou've triggered this turn!)</i>",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_891",
+    "dbf_id": 121137,
+    "name": "Finley's Helmet",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After the Tavern is\n<b>Refreshed</b>, give Murlocs\nin it +5/+5 and a random\n<b>Bonus Keyword</b>.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_892",
+    "dbf_id": 121138,
+    "name": "Vibrant Bubble",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Spellcraft:</b> Give a\nMurloc a random\n<b>Bonus Keyword</b>.",
+    "cost": 3,
+    "spellcraft_id": 121139,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_893",
+    "dbf_id": 121140,
+    "name": "Bluegill Flippers",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you cast a Tavern\nspell, give the left-most\nminion in your hand and\nwarband +{0}/+{1}.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_894",
+    "dbf_id": 121141,
+    "name": "Blessing Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Natural Blessing. At the\nstart of each turn, get another.\nYour Natural Blessings\nalso affect minions in hand.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_901",
+    "dbf_id": 120159,
+    "name": "Gold-plated Compass",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Make the next {0}\nyou buy Golden.\nGain 5 free <b>Refreshes</b>.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_902",
+    "dbf_id": 121068,
+    "name": "Statue of Hir'eek",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After 2 minions in the\nTavern are consumed, get\na random Tavern spell.\n<i>({0} left!)</i>",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_904",
+    "dbf_id": 120156,
+    "name": "Hogwash Basin",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Start of Combat:</b> This plays 3 <b>Blood Gems</b> on all your minions.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_906",
+    "dbf_id": 120157,
+    "name": "Artanis Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a copy of '{0}'.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_907",
+    "dbf_id": 121113,
+    "name": "S'Thara Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After your last minion dies\neach combat, summon your\nfirst Demon that died with\nits maximum stats.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_920",
+    "dbf_id": 120606,
+    "name": "Thaumaturgist Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Thaumaturgist.\nYour Thaumaturgists'\n<b>Spellcrafts</b> are permanent.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_922",
+    "dbf_id": 120619,
+    "name": "Charming Panpipes",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of each turn,\ngive your left-most minion\n+{0}/+{0}. After you cast\na spell, improve this.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_925",
+    "dbf_id": 121109,
+    "name": "Hackerfin Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Hackerfin. At the end of each turn, trigger your Hackerfins' <b>Battlecries</b>.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_926",
+    "dbf_id": 121111,
+    "name": "Morgl Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Tide Oracle Morgl.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_930",
+    "dbf_id": 120610,
+    "name": "Archaic Scroll",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you cast {1} spells,\nget a random Naga.\n<i>({0} left!)</i>",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_931",
+    "dbf_id": 120617,
+    "name": "Azsharan Statuette",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get {0} random <b>Spellcraft</b>\nspells. At the start of\neach turn, get {0} more.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_932",
+    "dbf_id": 120611,
+    "name": "Vash'jir Anemone",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Give\nyour Naga +{1} Health.\n<i>(Improved by every 4 spells\nyou've cast this game!)</i>@[x]<b>Start of Combat:</b> Give\nyour Naga +{1} Health.\n<i>(Cast {2}/4 spells\nto improve!)</i>",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_933",
+    "dbf_id": 120613,
+    "name": "Weary Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Weary Mage. Your\nWeary Mages' <b>Spellcrafts</b>\nare permanent.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_934",
+    "dbf_id": 120618,
+    "name": "Dazzling Dagger",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Your minions have\n+{1} Attack. <i>(Improved\nby every 4 spells you've\ncast this game!)</i>@[x]Your minions have\n+{1} Attack.\n<i>(Cast {2}/4 spells\nto improve!)</i>",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_935",
+    "dbf_id": 120616,
+    "name": "Lubber Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]The Tavern offers an extra\nTavern spell whenever it is\n<b>Refreshed</b>. The first one you\nbuy each turn costs (1) less.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_944",
+    "dbf_id": 121499,
+    "name": "Empowerment Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get an Azerite\nEmpowerment. At the\nstart of each turn, get\nanother.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_950",
+    "dbf_id": 120804,
+    "name": "Gritty Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Gritty Headhunter\nthat gives a Marauder's\nContract. At the start of\neach turn, repeat this.",
+    "cost": 8,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_951",
+    "dbf_id": 120809,
+    "name": "Gold Pendant",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Make a random friendly\nminion from Tier {0} or below\nGolden. At the start of\neach turn, repeat this.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_953",
+    "dbf_id": 120867,
+    "name": "Goldgrubber Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Goldgrubber and an Aureate Laureate.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_954",
+    "dbf_id": 120868,
+    "name": "Auric Offering",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of each turn,\ngive your left-most minion\n+4/+3. Repeat for each\nfriendly Golden minion.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_957",
+    "dbf_id": 121036,
+    "name": "Grifter Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Doubloon Grifter. The first Pirate you buy each turn is free.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_960",
+    "dbf_id": 120924,
+    "name": "Crocheted Sungill",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Start of Combat:</b> Give the highest-Health minion from your hand +4/+4. When you have space, summon it for this combat only.",
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_998",
+    "dbf_id": 121114,
+    "name": "Behemoth Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get an Arcane Behemoth.",
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_150",
+    "dbf_id": 131276,
+    "name": "Cursed Crystal",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After the Tavern is\n<b>Refreshed</b>, give its\nminions +{0}/+{1} this turn.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_151",
+    "dbf_id": 131278,
+    "name": "Defiler Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Woodland Defiler.\n<b>Fodders</b> in the Tavern\nhave +{0}/+{1}.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_151t",
+    "dbf_id": 131277,
+    "name": "Defiler Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Woodland Defiler.\n<b>Fodders</b> in the Tavern\nhave +{0}/+{1}.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_152",
+    "dbf_id": 131280,
+    "name": "Demonic Tapestry",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you <b>Refresh</b> {1} times,\nthe highest-Tier minion in the\nTavern costs Health instead\nof Gold to buy. <i>({0} left!)</i>",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_154",
+    "dbf_id": 131282,
+    "name": "Ur'zul Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you play a Demon,\nanother friendly Demon\nconsumes a minion in the\nTavern to gain its stats.",
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_155",
+    "dbf_id": 131283,
+    "name": "Felburned Ledger",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After your hero takes damage, your Tavern spells give an extra +{0}/+{1} this turn.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_156",
+    "dbf_id": 131284,
+    "name": "Flaming Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Flaming Enforcer.\nWhenever your Flaming\nEnforcers trigger, also give\nthe stats to their neighbors.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_300",
+    "dbf_id": 130875,
+    "name": "Copper Coil",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever you <b>Magnetize</b>\na minion, give it +{0}/+{1}\nand improve this.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_300t",
+    "dbf_id": 130878,
+    "name": "Copper Coil",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever you <b>Magnetize</b>\na minion, give it +{0}/+{1}\nand improve this.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_301",
+    "dbf_id": 130879,
+    "name": "Scraper Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a random <b>Magnetic</b> Mech. At the start of each turn, get another.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_302",
+    "dbf_id": 130880,
+    "name": "Stormcoil Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After {1} friendly minions die, get a random Mech. <i>({0} left!)</i>",
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_303",
+    "dbf_id": 130881,
+    "name": "Skipper Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Timewarped Skipper.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_305",
+    "dbf_id": 131137,
+    "name": "Conch Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Cloning Conch.\nAt the start of every\n{1} turns, repeat this.\n<i>({0} |4(turn, turns) left!)</i>",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_306",
+    "dbf_id": 131135,
+    "name": "Jailer Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Spellcraft:</b> Destroy a friendly Undead to get a random Undead.",
+    "cost": 3,
+    "spellcraft_id": 131136,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_309",
+    "dbf_id": 131296,
+    "name": "Errgl Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Mama Mrrglton\nor a Papa Mrrglton.\nAt the start of each turn,\nrepeat this.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_310",
+    "dbf_id": 131252,
+    "name": "Radio Star Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Timewarped Radio Star. Give it <b>Reborn</b>.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_430",
+    "dbf_id": 130900,
+    "name": "Scrapsmith Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Bristlemane Scrapsmith.\nAfter a friendly minion with\n<b>Taunt</b> dies, play a permanent\n<b>Blood Gem</b> on your Scrapsmiths.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_431t",
+    "dbf_id": 130902,
+    "name": "Thornspike Pauldron",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you trigger a\n<b>Deathrattle</b>, your\n<b>Blood Gems</b> give an extra\n+{2}/+{4} until next combat.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_432",
+    "dbf_id": 130906,
+    "name": "Blood Amulet",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you trigger a\n<b>Deathrattle</b>, this plays a\npermanent <b>Blood Gem</b> on\n{0} random friendly minions.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_433",
+    "dbf_id": 130905,
+    "name": "Vinespeaker Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Vinespeaker.\nYour Vinespeakers also\nimprove the Health given\nby your <b>Blood Gems</b>.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_434",
+    "dbf_id": 130904,
+    "name": "Jewelry Box",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a <b>Blood Gem</b> that gives a Quilboar <b>Taunt</b>, <b>Divine Shield</b>, or <b>Reborn</b>. At the start of each turn, repeat this.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_435",
+    "dbf_id": 131275,
+    "name": "Bloodbound Ring",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you play a <b>Blood Gem</b>\nfrom hand, this plays a\n<b>Blood Gem</b> on your minions\nwith <b>Divine Shield</b>.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_700",
+    "dbf_id": 130895,
+    "name": "Wildfeather Duster",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you summon {1}\nBeasts, get a random\nBeast. <i>({0} left!)</i>",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_701",
+    "dbf_id": 130896,
+    "name": "Fang Anklet",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Your Beasts\nhave +{0}/+{1} this combat.\nAfter you summon a Beast,\nimprove this permanently.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_702",
+    "dbf_id": 130897,
+    "name": "Stegodon Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Stomping Stegodon.\n<b>Start of Combat:</b> Give\nyour two left-most Beasts\n<b>Divine Shield</b>.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_710",
+    "dbf_id": 130892,
+    "name": "Miniature Ship",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After you cast a Tavern spell, give your Pirates +{0}/+{1}.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_711",
+    "dbf_id": 130893,
+    "name": "Protective Ring",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Start of Combat:</b> Give {0} random friendly Pirates <b>Divine Shield</b>.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_712",
+    "dbf_id": 130891,
+    "name": "Privateer Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Proud Privateer and\n{0} random <b>Bounties</b>.\nAt the start of each turn,\nget another {0} <b>Bounties</b>.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_713",
+    "dbf_id": 130894,
+    "name": "Trusty Crowbar",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Whenever you get a Pirate, give your left-most minion +{0}/+{1}.",
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_714",
+    "dbf_id": 131001,
+    "name": "Powder Keg",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Give {0} friendly\nPirates \"<b>Deathrattle:</b> Summon a 1/1\nSky Pirate and give it this minion's\nAttack. It attacks immediately.\"",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_731",
+    "dbf_id": 131131,
+    "name": "Deathtouch Apple",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After a friendly Undead is\n<b>Reborn</b>, give it <b>Reborn</b>.\n<i>({1} times per combat.)</i>@[x]After a friendly Undead is\n<b>Reborn</b>, give it <b>Reborn</b>.\n<i>({0} left!)</i>",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_732",
+    "dbf_id": 131132,
+    "name": "Soul Fermenter",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Destroy\nyour 3 left-most minions.\nAfter your last minion dies,\nresummon them.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_733",
+    "dbf_id": 131133,
+    "name": "Jailer Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Spellcraft:</b> Destroy a friendly Undead to get\n2 random Undead.",
+    "cost": 2,
+    "spellcraft_id": 131134,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_740",
+    "dbf_id": 131138,
+    "name": "Sky Golem Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Falling Sky Golem. <b>Start\nof Combat:</b> Give your minions\n\"<b>Deathrattle:</b> Give your minions\n+{0}/+{1} permanently.\"",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_741",
+    "dbf_id": 131139,
+    "name": "Beatboxer Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Polarizing Beatboxer and {0} random <b>Magnetic</b> Mech.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_742",
+    "dbf_id": 131140,
+    "name": "Accord-o-Tron Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of each turn,\n<b>Magnetize</b> an\nAccord-o-Tron to your left-\nand right-most Mechs.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_743",
+    "dbf_id": 131141,
+    "name": "Electrode Attractor",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Magnetic</b> Mechs cost (2).\nThe Tavern offers an\nextra one whenever it is\n<b>Refreshed</b>.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_750",
+    "dbf_id": 131303,
+    "name": "Magicfin Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you buy a Tavern\nspell, get a 1/1 Murloc\nand teach it that spell.\n<i>({1} times per turn.)</i>@[x]After you buy a Tavern\nspell, get a 1/1 Murloc\nand teach it that spell.\n<i>({0} left!)</i>",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_752",
+    "dbf_id": 131305,
+    "name": "Young Murk-Eye Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of your turn,\ntrigger your left and right-\nmost minions' <b>Battlecries</b>.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_753",
+    "dbf_id": 131306,
+    "name": "Murky Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]At the end of each turn, give\nyour two left-most minions\n+{0}/+{1}. <i>(Improved by your\n<b>Battlecries</b> triggered this game!)</i>",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_754",
+    "dbf_id": 131307,
+    "name": "Dramaloc Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Start of Combat:</b> Give your\nMurlocs the Attack of the\nhighest-Attack minion\nin your hand.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_755",
+    "dbf_id": 131308,
+    "name": "Chillmere Mosaic",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Spellcraft:</b> <b>Refresh</b> the\nTavern with <b>Battlecry</b>\nminions. They cost (1).",
+    "cost": 5,
+    "spellcraft_id": 131310,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_801",
+    "dbf_id": 130028,
+    "name": "Sous Chef Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "You can use your Hero Power an extra time each turn.\nAfter you use your Hero Power,\ngain (1) Gold.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_803",
+    "dbf_id": 130097,
+    "name": "Maxwell Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get the <b>Buddy</b> of your Hero Power.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_803t",
+    "dbf_id": 130098,
+    "name": "Maxwell Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get the Golden <b>Buddy</b> of your Hero Power.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_812",
+    "dbf_id": 130830,
+    "name": "Corrupted Tome",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Triple Prize. Whenever you would get a Triple Reward, get a Triple Prize instead.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_814",
+    "dbf_id": 130832,
+    "name": "Stuffed Coin Purse",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "When you reach Tier {0}, gain {1} gold.",
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_815",
+    "dbf_id": 130833,
+    "name": "Magician's Top Hat",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get two minions each from Tiers 1, 2, and 3.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_816",
+    "dbf_id": 130834,
+    "name": "Orb of the Unknown",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a random Lesser <b>Trinket</b>.",
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_816t",
+    "dbf_id": 131328,
+    "name": "Orb of the Unknown",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a random Greater <b>Trinket</b> and {0} Gold.",
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_817",
+    "dbf_id": 130835,
+    "name": "Lens Case",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Duplicating Lens.\nAt the start of every\n{1} turns, repeat this.\n<i>({0} |4(turn, turns) left!)</i>",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_818",
+    "dbf_id": 130836,
+    "name": "Mysterious Orb",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Gain {0} Gold.\nYour next <b>Trinket</b> is a\nLesser <b>Trinket</b>.",
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_820",
+    "dbf_id": 130838,
+    "name": "Safety Patch",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Cast Ice Block.\nGain {0} Gold.",
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_821",
+    "dbf_id": 130839,
+    "name": "Kaleidoscope",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Discover</b> a Tier 7 minion.\nLock it in your hand for\n{0} |4 (turn, turns).",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_821t",
+    "dbf_id": 131309,
+    "name": "Kaleidoscope",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Discover</b> a Golden Tier 7\nminion. Lock it in your\nhand for {0} |4 (turn, turns).",
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_823",
+    "dbf_id": 130841,
+    "name": "Timeworn Candelabra",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Discover</b> a 2-Cost minion from the Minor <b>Timewarp</b>.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_823t",
+    "dbf_id": 130868,
+    "name": "Timeworn Candelabra",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Discover</b> a 2-Cost minion from the Major <b>Timewarp</b>.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_834",
+    "dbf_id": 131312,
+    "name": "Rylak Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Rylak Metalhead.\n<b>Start of Combat:</b> Trigger\nyour Rylak Metalheads'\n<b>Deathrattles</b>.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_838",
+    "dbf_id": 131314,
+    "name": "Double Stitch Needle",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Spellcraft:</b> Choose a\nfriendly minion. Double\nits stats and lock it in your\nhand for 1 turn.",
+    "cost": 1,
+    "spellcraft_id": 131315,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_840",
+    "dbf_id": 130886,
+    "name": "Chromatic Tear",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get {0} random\n<b>Chromadrakes.</b>\nAt the start of each turn,\nrepeat this.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_840t",
+    "dbf_id": 130977,
+    "name": "Chromatic Tear",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get 2 random\n<b>Chromadrakes.</b> After you\nplay {1} <b>Battlecry</b> minions,\nrepeat this. <i>({0} left!)</i>",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_842",
+    "dbf_id": 130887,
+    "name": "Egg of the Endtimes Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get an Egg of the Endtimes.\nAt the start of every {1} turns,\nrepeat this. <i>({0} |4(turn, turns) left!)</i>",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_848t",
+    "dbf_id": 130978,
+    "name": "Egg of the Endtimes Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Golden Egg of the Endtimes. It hatches next turn.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_849",
+    "dbf_id": 130999,
+    "name": "Cloud Serpent Horn",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]<b>Avenge ({0}):</b> Give the\nAttack of your right-most\nminion to another\nfriendly Dragon.",
+    "avenge": true,
+    "avenge_target": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_850",
+    "dbf_id": 130888,
+    "name": "Pocket Cyclone",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Cast Easterly Winds.\nAt the start of each turn, cast it again.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_850t",
+    "dbf_id": 131329,
+    "name": "Pocket Cyclone",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Cast Easterly Winds four\ntimes. At the start of each\nturn, cast it twice more.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_851",
+    "dbf_id": 130889,
+    "name": "Water Wheel",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After you play an Elemental, get a random Tavern spell. <i>(Twice per turn.)</i>@[x]After you play an\nElemental, get a random\nTavern spell. <i>({0} left!)</i>",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_852",
+    "dbf_id": 130976,
+    "name": "Lightning in a Bottle",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "After the Tavern is <b>Refreshed</b>, give the stats of its highest-Attack minion to its lowest.",
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_861",
+    "dbf_id": 130873,
+    "name": "Baller Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Temperature Shift.\nAfter you play {1} Elementals,\nrepeat this. <i>({0} left!)</i>",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_862",
+    "dbf_id": 130874,
+    "name": "Upstart Embers",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]After you <b>Refresh</b>, double\nthe stats of the highest-\nHealth minion in the\nTavern.",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_863",
+    "dbf_id": 131000,
+    "name": "Avalanche Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Mounting Avalanche.\nAfter you sell {1} minions,\nrepeat this. <i>({0} left!)</i>",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_870",
+    "dbf_id": 130876,
+    "name": "Leapfrogger Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get a Timewarped Leapfrogger.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_871",
+    "dbf_id": 130877,
+    "name": "Mama Bear Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Whenever you summon a Beast, give it +{0}/+{1}.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_872",
+    "dbf_id": 130908,
+    "name": "Ophidian Staff",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "<b>Spellcraft:</b> Give a Beast +2/+2 and <b>Reborn</b>.",
+    "cost": 3,
+    "spellcraft_id": 130909,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_890",
+    "dbf_id": 130890,
+    "name": "Sunken Anchor",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Get {0} random <b>Bounties</b>. At the start of each turn, repeat this.",
+    "cost": 5,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_920",
+    "dbf_id": 130898,
+    "name": "Bubble Crown",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Once you cast {1} spells,\nyour Tavern spells give\nan extra +{2}/+{4}. <i>({0} left!)</i>@[x]Once you cast {1} spells,\nyour Tavern spells give\nan extra +{2}/+{4}. <i>(Done!)</i>",
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_921",
+    "dbf_id": 130980,
+    "name": "Cowrie Necklace",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "Tavern spells that give stats cost (2) less.",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_922",
+    "dbf_id": 130899,
+    "name": "Tide Raiser Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Tide Raiser. After you\ncast a spell in combat,\nget a copy of the spell.\n<i>({1} times per combat.)</i>@[x]Get a Tide Raiser. After you\ncast a spell in combat,\nget a copy of the spell.\n<i>({0} left!)</i>",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_923",
+    "dbf_id": 130865,
+    "name": "Bewitched Ribbon",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever you cast a spell,\ngive your minions +{0}/+{1}\npermanently.\n<i>(+{2}/+{4} while in combat!)</i>",
+    "cost": 6,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_924",
+    "dbf_id": 130907,
+    "name": "Groundbreaker Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get a Groundbreaker.\nYour Groundbreakers also\ngive stats to the minion\nto their left.",
+    "cost": 3,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_925",
+    "dbf_id": 130981,
+    "name": "Coral Spear",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Whenever you cast a\n<b>Spellcraft</b> spell, cast\nMight of Stormwind.",
+    "cost": 4,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_930",
+    "dbf_id": 131002,
+    "name": "Warband Whistle",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Gain a free <b>Refresh</b> that\ncontains plain copies of\nminions in your warband.",
+    "cost": 2,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_931",
+    "dbf_id": 131003,
+    "name": "Transcribing Typewriter",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get an extra copy of the\nnext {1} minions you buy.\n<i>({0} left!)</i>@[x]Get an extra copy of the\nnext {1} minions you buy.\n<i>(Done!)</i>",
+    "cost": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_931t",
+    "dbf_id": 131325,
+    "name": "Transcribing Typewriter",
+    "card_set": 1453,
+    "card_type": 44,
+    "text": "[x]Get an extra copy of the\nnext {1} minions you buy.\n<i>({0} left!)</i>@[x]Get an extra copy of the\nnext {1} minions you buy.\n<i>(Done!)</i>",
+    "cost": 4,
+    "trinket": true
+  }
+]

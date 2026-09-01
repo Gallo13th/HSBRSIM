@@ -39,3 +39,12 @@ CLAUDE.md
 .env
 .venv/
 venv/
+
+# Scratch / audit prompts
+CHECK.MD
+
+# Collected game data (trajectories from exploration runs)
+data/trajectories_cli/
+data/trajectories_hybrid/
+data/trajectories_real/
+*.npz
