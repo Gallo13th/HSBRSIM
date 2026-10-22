@@ -41,6 +41,7 @@ CHOICE_CONFIRM = (0.50, 0.70)
 BOB_PORTRAIT = (0.50, 0.14)       # 拖随从到这里卖出
 UPGRADE_BTN = (0.3875, 0.733)     # 酒馆升级按钮
 REFRESH_BTN = (0.594, 0.733)      # 刷新按钮
+REFRESH_POINTS = [(0.142, 0.872), (0.294, 0.817), (0.594, 0.733)]
 SHOP_Y = 0.34
 SHOP_SPACING = 0.077
 BOARD_Y = 0.52
@@ -309,6 +310,24 @@ class ClickBot:
             return True
         return False
 
+    def refresh_shop(self, st: Dict[str, Any]) -> bool:
+        """legal.refresh 时刷新商店；坐标候选逐个验证。"""
+        if not ((st.get("legal") or {}).get("refresh")):
+            return False
+        gold0 = int(st.get("gold") or 0)
+        shop0 = tuple(m.get("card") for m in (st.get("shop") or []))
+        before = self._sig(st)
+        for pt in REFRESH_POINTS:
+            self.click(*pt, note="refresh")
+            time.sleep(0.5)
+            now = self.state()
+            shop1 = tuple(m.get("card") for m in (now.get("shop") or []))
+            if (int(now.get("gold") or 0) != gold0 or shop1 != shop0
+                    or self._sig(now) != before):
+                self.turn_actions += 1
+                return True
+        return False
+
     def settle_screenshot(self, st: Dict[str, Any], turn: int) -> None:
         """每回合操作做完后截图 + 落盘状态，供异步复盘。"""
         if turn <= 0 or self._settled_turn == turn:
@@ -477,6 +496,9 @@ class ClickBot:
                         continue
                     if self._upgrade_turn != turn and self.upgrade_tavern(st):
                         self._upgrade_turn = turn
+                        self.fail_streak = 0
+                        continue
+                    if self.refresh_shop(st):
                         self.fail_streak = 0
                         continue
                     self.fail_streak += 1
