@@ -550,3 +550,101 @@ def test_choose_one_target_spell_uses_legal_modes(tmp_path, monkeypatch) -> None
     assert dest == px(*bot._board_pts(1)[0])
     notes = [r.get("note", "") for r in read_log(bot) if r.get("kind") == "drag"]
     assert notes and notes[0].startswith("play_spell:BG31_880->board[0]")
+
+
+class FlakyStates:
+    """交替返回“正常状态/脏帧”，模拟战斗过渡时内存状态抖动。"""
+
+    def __init__(self, normal, flicker):
+        self.normal = normal
+        self.flicker = flicker
+        self.i = 0
+
+    def next(self):
+        self.i += 1
+        return self.flicker if self.i % 2 == 0 else self.normal
+
+
+def test_changed_filters_transient_flicker(tmp_path, monkeypatch) -> None:
+    """单帧抖动不算“动作成功”：必须连续两帧一致（run 0034 卡死问题的回归）。"""
+    normal = make_state(hand=[minion("A", 1, 1, eid=1)], gold=3)
+    flicker = make_state(hand=[], gold=3)          # 脏帧：hand 数量抖动
+    bot, _fs, _shots = make_bot(tmp_path, monkeypatch, [normal])
+    bot.state = FlakyStates(normal, flicker).next
+    before = bot._sig(normal)
+    assert bot._changed(before, timeout=0.35) is False
+
+
+def test_changed_accepts_stable_change(tmp_path, monkeypatch) -> None:
+    normal = make_state(hand=[minion("A", 1, 1, eid=1)], gold=3)
+    changed = make_state(hand=[], gold=3)          # 稳定变化（连续两帧一致）
+    bot, _fs, _shots = make_bot(tmp_path, monkeypatch, [normal])
+    bot.state = lambda: changed
+    before = bot._sig(normal)
+    assert bot._changed(before, timeout=0.35) is True
+
+
+def test_play_hand_attempt_guard_limits_retries(tmp_path, monkeypatch) -> None:
+    """同一张手牌每回合最多 2 次真实拖拽（主拖+1 次兜底），避免重复点击。"""
+    mn = minion("BG_TEST_M", 1, 1, cost=3, eid=77, kind="minion")
+    st0 = make_state(hand=[mn], board=[minion("A", 1, 1, eid=1)], gold=3,
+                     legal_=legal(play={"0": {"positions": [0],
+                                              "use": {"targets": [],
+                                                      "modes": None,
+                                                      "valid": True},
+                                              "magnetize": []}}))
+    bot, _fs, _shots = make_bot(tmp_path, monkeypatch, [st0])
+    calls = {"n": 0}
+
+    def flaky(before, timeout=3.0):
+        calls["n"] += 1
+        return calls["n"] >= 2          # 第 1 次失败（触发兜底），第 2 次成功
+
+    bot._changed = flaky
+    for _ in range(4):
+        bot.play_hand(st0)
+    assert len(bot.backend.drags) == 2, bot.backend.drags
+
+
+def test_play_hand_attempt_counter_resets_per_turn(tmp_path, monkeypatch) -> None:
+    spell = minion("BG36_520t", 0, 0, cost=1, eid=77, kind="spell")
+    st0 = make_state(hand=[spell], gold=3,
+                     legal_=legal(play={"0": {"positions": [0],
+                                              "use": {"targets": [],
+                                                      "modes": None,
+                                                      "valid": True},
+                                              "magnetize": []}}))
+    bot, _fs, _shots = make_bot(tmp_path, monkeypatch, [st0])
+    bot._changed = lambda before, timeout=3.0: True
+    bot._played_this_turn["play:77:BG36_520t"] = 2
+    bot.play_hand(st0)
+    assert bot.backend.drags == []
+    bot._played_this_turn.clear()                          # 新回合
+    bot.play_hand(st0)
+    assert len(bot.backend.drags) == 1
+
+
+def test_choice_stale_frame_not_clicked(tmp_path, monkeypatch) -> None:
+    """choices 非空但 legal.choose 为空（战斗滞后帧）→ 禁止盲点。"""
+    st0 = make_state(choices=[{"card": "X"}] * 5,
+                     legal_=legal(choose=[]), pending="discover")
+    bot, _fs, _shots = make_bot(tmp_path, monkeypatch, [st0])
+    assert bot.do_choice(st0) is False
+    assert bot.backend.clicks == []
+    logs = read_log(bot)
+    assert any(r.get("kind") == "stale_choice_ignored" for r in logs)
+
+
+def test_choice_five_option_layout_falls_back_to_hide(tmp_path, monkeypatch) -> None:
+    """5 选 1 未知布局：点完候选布局后点「隐藏」，记录 choice_layout_unknown 且本回合不再重试。"""
+    choices = [{"card": f"BG34_Giant_{i}"} for i in range(5)]
+    st0 = make_state(choices=choices, legal_=legal(choose=[0, 1, 2, 3, 4]),
+                     pending="discover", turn=8)
+    bot, _fs, _shots = make_bot(tmp_path, monkeypatch, [st0])
+    assert bot.do_choice(st0) is False
+    notes = [r.get("note") for r in read_log(bot) if r.get("kind") == "click"]
+    assert notes, "应该尝试点击候选布局"
+    assert notes[-1] == "choice_hide"
+    logs = read_log(bot)
+    assert any(r.get("kind") == "choice_layout_unknown" for r in logs)
+    assert bot._choice_fail_turn == 8

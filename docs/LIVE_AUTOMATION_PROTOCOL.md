@@ -194,7 +194,7 @@ runs/live/<run_id>/
 | play minion | 已实现（拖 hand→board；点手牌选中→点棋盘也可） | `PLAY_MINION` | 同文件 `play_*` |
 | play spell 无目标 | 已实现（拖到棋盘中央） | `PLAY_SPELL` | run1 `play_spell:BG28_810` 成功 |
 | play spell 有目标 | 已实现：`legal.play[i].use.targets` 拖拽→点击兜底 | `PLAY_SPELL` | run2 `play_spell:*->board[*]` |
-| play spell choose-one + 目标 | **已实现三段式**：`use.modes` 取合法目标 → 拖到目标弹出 Choose One → 点选项 (0.406/0.631,0.489) → 再点目标结算 | `PLAY_SPELL` | gap L06/L15；run4 截图确认交互，待 live 复验 |
+| play spell choose-one + 目标 | **已实现并实机成功结算**：`use.modes` 取合法目标 → 拖到目标弹出 Choose One → 点选项 (0.406/0.631,0.489) → 再点目标结算 | `PLAY_SPELL` | run `live_20261023_0029_games3_fix` 00:25:43（BG31_880，hand 3→2）；gap L06/L15 |
 | sell | 已实现（拖随从到 Bob） | `SELL` | 旧 run |
 | reroll | 已实现（顶部右侧 0.572,0.156） | `REROLL` | run1 turn1 成功 |
 | upgrade | 已实现（顶部左侧 0.406,0.144） | `UPGRADE` | 旧 run |
@@ -250,18 +250,38 @@ runs/live/<run_id>/
    证据：`runs/live/live_20261022_2352_bot37_v2/screenshots/actions/235336_a0021_drag_play_spell_BG31_880-_board_0_.png`、
    `235340_a0023_click_choose_one.png`。代码已按此实现，待 live 复验（L06/L15）。
 
+5. **战斗/切回合期内存状态滞后**：`phase=recruit` 但画面在战斗时，`choices`/
+   `shop`/`board` 可能是陈旧帧（run 0034 中 `choices=5` 在战斗期反复触发盲点）。
+   守卫：`_changed` 连续两帧一致才算变化；`choices` 非空但 `legal.choose` 为空
+   视为 stale，只等待不点击（`stale_choice_ignored`）。
+6. **5+ 选弹层（三连奖励/巨型发现）布局未校准**：`BG34_Giant/Treasure` 组合
+   （5 选 1）实测会让按 discover/饰品布局的点击全部落空（run 0034 turn8）。
+   当前兜底：`_choice_layouts` 试两套布局 → 失败则点「隐藏」（`choice_hide`）并记
+   `choice_layout_unknown` + 截图，本回合不再重试；**仍需一次专门截图标定**（L04/L26）。
+7. **同一张手牌重复拖拽**：脏帧误判成功时旧逻辑会每轮重试；现预算为每牌每回合
+   最多 2 次真实拖拽（主拖 + 1 次 ±0.03 坐标兜底）。
+8. **手牌 fan 布局**：>5 张时间距收紧（7 张实测约 72px/1600=0.045），
+   `_hand_pts` 已按 `HAND_SPACING - 0.0055*(n-5)` 校准并保留 ±0.03 兜底。
+
 更新坐标必须：① 附新截图证据；② 同步 `tests/test_live_clickbot.py` 的布局断言。
 
 
 ## 8. 验证与失效处理
 
-- 动作前后比较 `state` 签名：`phase/turn/gold/board stats/hand/choices`;
-- 成功：任一签名变化；
+- 动作前后比较 `state` 签名：`phase/turn/gold/board stats/hand/choices/shop.frozen`；
+- 成功：**连续两帧一致**的状态变化（`_changed` 内置稳定判定，过滤战斗/切回合
+  滞后帧；单帧抖动不算成功 —— run `live_20261023_0029_games3_fix` 的
+  同一张不可用牌死循环就是单帧误判导致）；
 - 失败：加入本回合黑名单 key（`buy:.../play:.../...`）；
+- 同一张手牌每回合最多 2 次真实拖拽（`_played_this_turn` 预算，主拖+1 兜底）；
 - 同回合 2 次 no-effect → 密集截图；
 - 每回合最多 30 个动作，避免死循环；
 - 刷新/升级等候选动作带**搜索预算**，不是固定次数；
-- 金币/商店/手牌变化后必须清空黑名单，重新决策。
+- 金币/商店/手牌变化后必须清空黑名单，重新决策；
+- `choices` 非空但 `legal.choose` 为空 = 战斗滞后帧 → 不点击，记
+  `stale_choice_ignored`；
+- 5+ 选弹层（三连奖励/巨型发现）布局未校准时：多布局候选 → 最后点「隐藏」
+  （`choice_hide`）收掉弹层，记 `choice_layout_unknown` + 截图，本回合不再重试。
 
 ## 9. 生命周期
 
