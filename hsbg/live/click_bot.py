@@ -81,6 +81,7 @@ class ClickBot:
     _overlay_turn: int = -1
     _settled_turn: int = -1
     _upgrade_turn: int = -1
+    _refresh_turn: int = -1
 
     def __post_init__(self):
         self.out_dir = Path(self.out_dir)
@@ -311,12 +312,17 @@ class ClickBot:
         return False
 
     def refresh_shop(self, st: Dict[str, Any]) -> bool:
-        """legal.refresh 时刷新商店；坐标候选逐个验证。"""
+        """legal.refresh 时刷新商店；每回合最多一次，避免空店反复刷新。"""
+        if self._refresh_turn == int(st.get("turn") or 0):
+            return False
         if not ((st.get("legal") or {}).get("refresh")):
+            return False
+        if not (st.get("shop") or []):
             return False
         gold0 = int(st.get("gold") or 0)
         shop0 = tuple(m.get("card") for m in (st.get("shop") or []))
         before = self._sig(st)
+        self._refresh_turn = int(st.get("turn") or 0)
         for pt in REFRESH_POINTS:
             self.click(*pt, note="refresh")
             time.sleep(0.5)
