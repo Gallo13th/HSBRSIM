@@ -43,12 +43,14 @@ UPGRADE_BTN = (0.394, 0.145)      # 酒馆升级按钮（顶部左侧）
 REFRESH_BTN = (0.60, 0.18)        # 刷新按钮（顶部右侧）
 REFRESH_POINTS = [(0.60, 0.18)]
 SHOP_Y = 0.34
-SHOP_SPACING = 0.077
+SHOP_SPACING = 0.087
+SHOP_CENTER = 0.555
 BOARD_Y = 0.52
-BOARD_SPACING = 0.077
+BOARD_SPACING = 0.087
+BOARD_CENTER = 0.555
 HAND_Y = 0.90
-HAND_SPACING = 0.040
-HAND_CENTER = 0.475
+HAND_SPACING = 0.075
+HAND_CENTER = 0.49
 RESULT_POINTS = [(0.5393, 0.8492), (0.50, 0.86), (0.50, 0.50), (0.78, 0.92)]
 
 
@@ -84,6 +86,7 @@ class ClickBot:
     _refresh_turn: int = -1
     _refresh_failed_turn: int = -1
     _refresh_count_turn: int = 0
+    _turn_started_at: float = 0.0
 
     def __post_init__(self):
         self.out_dir = Path(self.out_dir)
@@ -161,21 +164,28 @@ class ClickBot:
         except Exception:
             return None
 
-    def _focus(self) -> None:
+    def _focus(self) -> bool:
         try:
             h = getattr(self._window, "hwnd", None)
             if h:
                 u = ctypes.windll.user32
-                u.ShowWindow(h, 9)
-                u.BringWindowToTop(h)
-                u.SetForegroundWindow(h)
-                try:
-                    u.SwitchToThisWindow(h, True)
-                except Exception:
-                    pass
-                time.sleep(0.1)
+                for _ in range(3):
+                    u.ShowWindow(h, 9)
+                    u.BringWindowToTop(h)
+                    u.SetForegroundWindow(h)
+                    try:
+                        u.SwitchToThisWindow(h, True)
+                    except Exception:
+                        pass
+                    time.sleep(0.12)
+                    if u.GetForegroundWindow() == h:
+                        return True
+                self.log(kind="foreground_failed", hwnd=h,
+                         foreground=u.GetForegroundWindow())
+                return False
         except Exception:
             pass
+        return True
 
     def click(self, fx: float, fy: float, note: str = "") -> None:
         if self.dry_run:
@@ -211,7 +221,7 @@ class ClickBot:
                        int(m.get("hp") or 0)) for m in (st.get("board") or [])),
                 tuple((m.get("card"), m.get("kind")) for m in (st.get("hand") or [])))
 
-    def _changed(self, before: Tuple, timeout: float = 1.2) -> bool:
+    def _changed(self, before: Tuple, timeout: float = 3.0) -> bool:
         """Poll state until it changes or timeout (UI animations are async)."""
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -267,6 +277,9 @@ class ClickBot:
         return False
 
     def do_hero(self, st: Dict[str, Any]) -> bool:
+        # 已选完/只剩等待其他玩家时不再重复点
+        if len(st.get("choices") or []) < 4:
+            return False
         # 可能弹出“英雄栏位锁定”确认框，先点取消
         self.click(0.56, 0.58, note="hero_locked_cancel")
         time.sleep(0.25)
@@ -285,7 +298,14 @@ class ClickBot:
         return False
 
     def _hand_pts(self, n: int):
-        return _center(n, HAND_SPACING, HAND_Y, HAND_CENTER)
+        spacing = HAND_SPACING if n <= 5 else max(0.052, HAND_SPACING - 0.004 * (n - 5))
+        return _center(n, spacing, HAND_Y, HAND_CENTER)
+
+    def _board_pts(self, n: int):
+        return _center(n, BOARD_SPACING, BOARD_Y, BOARD_CENTER)
+
+    def _shop_pts(self, n: int):
+        return _center(n, SHOP_SPACING, SHOP_Y, SHOP_CENTER)
 
     def _resolve_choose_one(self, before: Tuple) -> bool:
         """施放 Choose One 法术后的二选一弹层（内存 choices 可能为空）。"""
@@ -302,7 +322,7 @@ class ClickBot:
         hand = st.get("hand") or []
         if not board or not hand or len(board) < 7:
             return False
-        pts = _center(len(board), BOARD_SPACING, BOARD_Y)
+        pts = self._board_pts(len(board))
         idx = min(range(len(board)),
                   key=lambda i: int(board[i].get("atk") or 0) + int(board[i].get("hp") or 0))
         key = f"sell:{board[idx].get('eid')}:{board[idx].get('card')}"
@@ -418,7 +438,7 @@ class ClickBot:
         hand = st.get("hand") or []
         if not shop or len(hand) >= 9:
             return False
-        pts = _center(len(shop), SHOP_SPACING, SHOP_Y)
+        pts = self._shop_pts(len(shop))
         order = sorted(range(len(shop)),
                        key=lambda i: self._minion_score(shop[i]), reverse=True)
         for i in order:
@@ -446,7 +466,7 @@ class ClickBot:
         if not hand:
             return False
         hand_pts = self._hand_pts(len(hand))
-        board_pts = _center(max(1, len(board) + 1), BOARD_SPACING, BOARD_Y)
+        board_pts = self._board_pts(max(1, len(board) + 1))
         for idx, m in enumerate(hand):
             kind = str(m.get("kind") or "")
             if kind not in ("minion", "spell"):
@@ -459,16 +479,44 @@ class ClickBot:
             entry = legal_play.get(str(idx))
             if legal_play and entry is None:
                 continue
-            # targeted spells/minions are skipped for now (need target click)
+            targets = []
             if isinstance(entry, dict):
-                use = entry.get("use") or {}
-                if use.get("targets"):
-                    continue
+                targets = ((entry.get("use") or {}).get("targets") or [])
             before = self._sig(st)
+            target_dest = None
             if kind == "spell":
-                # 无目标法术：拖到棋盘中央施放
-                self.drag(hand_pts[idx], (0.50, 0.52), duration=0.42,
-                          note=f"cast:{m.get('card')}")
+                if targets:
+                    t = targets[0]
+                    zone = str(t.get("zone") or "board")
+                    ti = int(t.get("index") or 0)
+                    if zone == "board" and board:
+                        board_actual = self._board_pts(len(board))
+                        dest = board_actual[min(ti, len(board_actual) - 1)]
+                    elif zone == "shop":
+                        shop_actual = self._shop_pts(max(1, len(st.get("shop") or [])))
+                        dest = shop_actual[min(ti, len(shop_actual) - 1)]
+                    else:
+                        dest = (0.50, 0.52)
+                    # 目标法术：先点手牌选中，再点目标随从
+                    self.click(hand_pts[idx], note=f"select:{m.get('card')}")
+                    time.sleep(0.30)
+                    # 先点目标，失败再依次尝试其它随从位置（坐标校准误差兜底）
+                    cand_pts = [dest]
+                    if zone == "board" and board:
+                        for p in self._board_pts(len(board)):
+                            if p != dest:
+                                cand_pts.append(p)
+                    for p in cand_pts:
+                        self.click(*p, note=f"target:{zone}[{ti}]")
+                        time.sleep(0.30)
+                        if self._sig(self.state()) != before:
+                            self.turn_actions += 1
+                            return True
+                    target_dest = dest
+                else:
+                    # 无目标法术：拖到棋盘中央施放
+                    self.drag(hand_pts[idx], (0.50, 0.52), duration=0.42,
+                              note=f"cast:{m.get('card')}")
             else:
                 self.drag(hand_pts[idx],
                           board_pts[min(len(board), len(board_pts) - 1)],
@@ -476,6 +524,13 @@ class ClickBot:
             if self._changed(before):
                 self.turn_actions += 1
                 return True
+            if kind == "spell" and target_dest is not None:
+                # 点选失败时退回拖拽到目标
+                self.drag(hand_pts[idx], target_dest, duration=0.45,
+                          note=f"cast:{m.get('card')}->target")
+                if self._changed(before):
+                    self.turn_actions += 1
+                    return True
             if kind == "spell" and self._resolve_choose_one(before):
                 self.turn_actions += 1
                 return True
@@ -524,6 +579,7 @@ class ClickBot:
                     self.turn_actions = 0
                     self.failed.clear()
                     self._refresh_count_turn = 0
+                    self._turn_started_at = time.time()
                     time.sleep(0.8)
                 self.log(kind="state", phase=phase, turn=turn,
                          gold=st.get("gold"), board=len(st.get("board") or []),
@@ -558,11 +614,18 @@ class ClickBot:
                     time.sleep(0.3)
                     continue
                 if phase == "recruit":
-                    if self._settled_turn == turn:
+                    # 过滤战斗/切回合脏帧，避免按错误长度算坐标
+                    if (len(st.get("shop") or []) > 7 or len(st.get("board") or []) > 7
+                            or len(st.get("hand") or []) > 10):
+                        time.sleep(0.8)
+                        continue
+                    if not (st.get("shop") or []) and not (st.get("board") or []):
+                        # 战斗/回合过渡帧：不按空棋盘乱点
                         time.sleep(1.0)
                         continue
                     if self.turn_actions >= self.max_actions_per_turn:
-                        self.settle_screenshot(st, turn)
+                        if time.time() - self._turn_started_at > 5:
+                            self.settle_screenshot(st, turn)
                         time.sleep(0.5)
                         continue
                     scores = self.action_scores(st)
@@ -596,7 +659,7 @@ class ClickBot:
                         self.fail_streak = 0
                         continue
                     self.fail_streak += 1
-                    if self.fail_streak >= 3:
+                    if self.fail_streak >= 3 and time.time() - self._turn_started_at > 5:
                         self.settle_screenshot(st, turn)
                     time.sleep(min(2.0, 0.4 + 0.3 * self.fail_streak))
                     continue
