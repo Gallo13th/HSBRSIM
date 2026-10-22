@@ -37,7 +37,7 @@ HERO_OPTIONS = [(0.22, 0.44), (0.36, 0.44), (0.50, 0.44), (0.64, 0.44)]
 HERO_CONFIRM = (0.50, 0.71)
 CHOICE_Y = 0.45
 CHOICE_SPACING = 0.14
-CHOICE_CONFIRM = (0.50, 0.70)
+CHOICE_CONFIRM = (0.50, 0.66)
 BOB_PORTRAIT = (0.50, 0.14)       # 拖随从到这里卖出
 UPGRADE_BTN = (0.394, 0.145)      # 酒馆升级按钮（顶部左侧）
 REFRESH_BTN = (0.60, 0.18)        # 刷新按钮（顶部右侧）
@@ -83,6 +83,7 @@ class ClickBot:
     _upgrade_turn: int = -1
     _refresh_turn: int = -1
     _refresh_failed_turn: int = -1
+    _refresh_count_turn: int = 0
 
     def __post_init__(self):
         self.out_dir = Path(self.out_dir)
@@ -148,6 +149,7 @@ class ClickBot:
     def screenshot(self, tag: str) -> Optional[str]:
         try:
             from PIL import ImageGrab
+            self._focus()
             w = self._window
             if w is None or not w.client_rect:
                 return None
@@ -165,8 +167,13 @@ class ClickBot:
             if h:
                 u = ctypes.windll.user32
                 u.ShowWindow(h, 9)
+                u.BringWindowToTop(h)
                 u.SetForegroundWindow(h)
-                time.sleep(0.08)
+                try:
+                    u.SwitchToThisWindow(h, True)
+                except Exception:
+                    pass
+                time.sleep(0.1)
         except Exception:
             pass
 
@@ -199,7 +206,10 @@ class ClickBot:
         return (st.get("phase"), st.get("turn"), len(st.get("hand") or []),
                 len(st.get("board") or []), len(st.get("shop") or []),
                 tuple(c.get("eid") for c in (st.get("choices") or [])),
-                int(st.get("gold") or 0))
+                int(st.get("gold") or 0),
+                tuple((m.get("card"), int(m.get("atk") or 0),
+                       int(m.get("hp") or 0)) for m in (st.get("board") or [])),
+                tuple((m.get("card"), m.get("kind")) for m in (st.get("hand") or [])))
 
     def _changed(self, before: Tuple, timeout: float = 1.2) -> bool:
         """Poll state until it changes or timeout (UI animations are async)."""
@@ -237,7 +247,7 @@ class ClickBot:
     # ------------------------------------------------------------ actions
     def do_choice(self, st: Dict[str, Any]) -> bool:
         choices = st.get("choices") or []
-        if not choices or "choice" in self.failed:
+        if not choices:
             return False
         pts = _center(len(choices), 0.20 if len(choices) <= 3 else 0.14, CHOICE_Y)
         for idx, pt in enumerate(pts):
@@ -247,7 +257,11 @@ class ClickBot:
             now = self.state()
             if not (now.get("choices") or []):
                 return True
-            if self._sig(now) != before:
+            # 饰品商店等需要点“确认”
+            self.click(*CHOICE_CONFIRM, note="choice_confirm")
+            time.sleep(0.45)
+            now = self.state()
+            if not (now.get("choices") or []) or self._sig(now) != before:
                 return True
         self._fail("choice", st, "choices 未消失")
         return False
@@ -273,6 +287,15 @@ class ClickBot:
     def _hand_pts(self, n: int):
         return _center(n, HAND_SPACING, HAND_Y, HAND_CENTER)
 
+    def _resolve_choose_one(self, before: Tuple) -> bool:
+        """施放 Choose One 法术后的二选一弹层（内存 choices 可能为空）。"""
+        for pt in ((0.44, 0.47), (0.56, 0.47)):
+            self.click(*pt, note="choose_one")
+            time.sleep(0.45)
+            if self._sig(self.state()) != before:
+                return True
+        return False
+
     def sell_board(self, st: Dict[str, Any]) -> bool:
         """棋盘满且有手牌时，卖最弱随从腾格子（拖到 Bob 头像）。"""
         board = st.get("board") or []
@@ -295,9 +318,8 @@ class ClickBot:
         return False
 
     def upgrade_tavern(self, st: Dict[str, Any]) -> bool:
-        """尝试升级；0 费升级/legal.upgrade 缺失时也点一次验证。"""
-        legal = bool((st.get("legal") or {}).get("upgrade"))
-        if not legal and int(st.get("gold") or 0) > 0:
+        """legal.upgrade 时点顶部升级按钮并校验 tier。"""
+        if not ((st.get("legal") or {}).get("upgrade")):
             return False
         tier_before = st.get("tier")
         before = self._sig(st)
@@ -349,6 +371,8 @@ class ClickBot:
                 refresh += 25.0
             if len(board) >= 7:
                 refresh += 10.0
+            # 搜索预算：同一回合每多刷一次，期望收益递减
+            refresh -= 30.0 * self._refresh_count_turn
         return {"buy": 80.0 + best_buy, "play": 60.0 + best_play,
                 "sell": sell, "upgrade": upgrade, "refresh": refresh}
 
@@ -369,6 +393,7 @@ class ClickBot:
             if (int(now.get("gold") or 0) != gold0 or shop1 != shop0
                     or self._sig(now) != before):
                 self.turn_actions += 1
+                self._refresh_count_turn += 1
                 return True
         self._refresh_failed_turn = int(st.get("turn") or 0)
         return False
@@ -451,6 +476,9 @@ class ClickBot:
             if self._changed(before):
                 self.turn_actions += 1
                 return True
+            if kind == "spell" and self._resolve_choose_one(before):
+                self.turn_actions += 1
+                return True
             self._fail(key, st, "打出后状态未变化")
         return False
 
@@ -495,6 +523,7 @@ class ClickBot:
                     self.last_turn = turn
                     self.turn_actions = 0
                     self.failed.clear()
+                    self._refresh_count_turn = 0
                     time.sleep(0.8)
                 self.log(kind="state", phase=phase, turn=turn,
                          gold=st.get("gold"), board=len(st.get("board") or []),
@@ -563,7 +592,7 @@ class ClickBot:
                         self._upgrade_turn = turn
                         self.fail_streak = 0
                         continue
-                    if self.refresh_shop(st):
+                    if self.action_scores(st)["refresh"] > 40 and self.refresh_shop(st):
                         self.fail_streak = 0
                         continue
                     self.fail_streak += 1
