@@ -355,7 +355,10 @@ class TestMagicfinRelic(unittest.TestCase):
         pick = ch.options[0]
         others = [c for c in ch.options if c != pick]
         ch.choose(0)
-        ch.choose(0)                            # 出契约的二次结算
+        # G-P1（2026-10-23）: 引擎拒绝同一选择的二次结算——不会进入
+        # 脚本 resolve，故未选项不会被重复释放（旧实现靠脚本自查幂等）。
+        with self.assertRaises(GameStateError):
+            ch.choose(0)                            # 出契约的二次结算
         self.assertEqual(g.spell_pool.available(pick), before[pick] - 1)
         for cid in others:
             self.assertEqual(g.spell_pool.available(cid), before[cid])

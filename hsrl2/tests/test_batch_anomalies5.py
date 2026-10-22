@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 
 from hsrl2.db import CardDB
-from hsrl2.game import Game
+from hsrl2.game import Game, GameStateError
 from hsrl2.hero import Hero
 from hsrl2.scripts import REGISTRY
 from hsrl2.scripts.batches import batch_anomalies5 as B5
@@ -249,7 +249,19 @@ class TestAnomalousCube(unittest.TestCase):
             [t.card_id for t in a.trinkets if t.card_id == HARMLESS_LESSER_A],
             [HARMLESS_LESSER_A])
         self.assertEqual(a._second_power_id, pid)      # 槽保留，未落空消耗
-        ch.choose(1)                                   # 正对照: 另一选项生效
+        # G-P1（2026-10-23）: PendingChoice 一次性——同一选择重复 choose 被
+        # 引擎拒绝（旧实现允许"换选项再选"的越契约路径）。
+        with self.assertRaises(GameStateError):
+            ch.choose(1)
+        self.assertNotIn(HARMLESS_LESSER_B,
+                         [t.card_id for t in a.trinkets])
+        # 正当路径: 落空已回滚每局次数（resolve 内 refund_hero_power_use）
+        # → 技能可再次使用，在新选择里选 B（覆盖"另一选项生效"原意）。
+        self.assertTrue(g.use_hero_power(a, power_id=pid))
+        ch2 = take_choice(g, "trinket_replace", a)
+        ch2.options = [get_db().get(HARMLESS_LESSER_A),
+                       get_db().get(HARMLESS_LESSER_B)]
+        ch2.choose(1)
         self.assertIn(HARMLESS_LESSER_B, [t.card_id for t in a.trinkets])
         self.assertIsNone(a._second_power_id)
 
