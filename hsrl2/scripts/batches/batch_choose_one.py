@@ -72,8 +72,6 @@ AMBIGUOUS 1 张（不注册）: BG33_319 Rimescale Priestess —
 
 from __future__ import annotations
 
-import re
-
 from hsrl2.actions import Buff, GetRandomMinion
 from hsrl2.actions.bloodgem import GetBloodGems, PlayBloodGems
 from hsrl2.events import (
@@ -94,31 +92,21 @@ from hsrl2.tags import GameTag, Race
 _QUILBOAR_RACES = (Race.QUILBOAR, Race.ALL)   # ALL 视为所有种族 (RULES §6.18)
 _BEAST_RACES = (Race.BEAST, Race.ALL)
 
-# Choose One 标题格式: "Choose One - "（dash 可落在 </b> 之外——BG31_842
-# "<b>Choose One</b> - Give ..." 格式）
-_CHOOSE_ONE_HEADER = re.compile(r"Choose One(?:</b>)?\s*-")
+# Choose One 判定统一实现见 hsrl2/scripts/choose_one_authority.py
+# （G-C5——标题正则 ∩ 非 Spellcraft 宿主；本文件旧副本已删除）。
 
 
 def _is_choose_one_card(game, card) -> bool:
-    """"Choose One card" 判定（Turbo Hogrider 触发条件，模块 docstring 裁定）。
+    """"Choose One card" 判定（Turbo Hogrider 触发条件）。
 
-    官方 = CardDefs CHOOSE_ONE tag。可观测面 def.keywords 的 choose_one
-    标志不可靠（XML_KEYWORD_MAP 不含 CHOOSE_ONE——标志仅来自文本兜底，
-    而生成器法术导出路径不跑文本检测: BG31_893 Gem Day/BG30_117t 族
-    keywords 为空）→ 判定式 = 文本含 Choose One 标题格式（"Choose One
-    -"，dash 可在 </b> 外——BG31_842 格式）∧ 非 Spellcraft 宿主
-    （spellcraft_id 非空的随从其 Choose One 文案属于被授予的法术本体，
-    如 BG30_117——其授予的 BG30_117t 是真 Choose One 卡，随从不是）。
-    36.2.2 全库核对与 XML tag 集完全一致（含提及型负例
-    Hogrider/Trailblazer/BG31_329/BG36_331/BG31_892，见
-    test_batch_choose_one 漂移守护）。
+    **统一实现（G-C5，2026-10-22）**: 委托
+    `hsrl2/scripts/choose_one_authority.py::is_choose_one_entity`
+    （标题正则 ∩ 非 Spellcraft 宿主）。旧实现在本文件内重复一份正则，
+    与 batch_rally2/batch_unfreeze 的硬编码清单三处并存；现已收口到
+    单一权威。官方 = CardDefs CHOOSE_ONE tag（XML 核对一致）。
     """
-    d = game.db.get(card.card_id)
-    if d is None:
-        return False
-    if d.spellcraft_id is not None:
-        return False   # Spellcraft 宿主: Choose One 文案属被授予法术 (BG30_117)
-    return _CHOOSE_ONE_HEADER.search(d.text or "") is not None
+    from hsrl2.scripts.choose_one_authority import is_choose_one_entity
+    return is_choose_one_entity(game, card)
 
 
 def _num(d, index: int, card_id: str, what: str) -> int:

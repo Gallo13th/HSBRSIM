@@ -49,10 +49,17 @@ CardDef）; 结构差异卡（Maw Caster "Destroy 1 to Discover 2"）经
      需在 _run_play_events 计数）
   3. 池法术无 "gives stats" 资格标志（Rimescale Priestess 依赖;
      建议 generate_bg_data.py 导出或主线给出权威清单）
-  4. choose_one + 定向战吼（Sprightly Scarab）引擎无组合分流——
-     play_minion 的 choose_options 分支吞掉 needs_target 分支，目标
-     PendingChoice 由脚本层 battlecry 自建（本批模式，报告主线评审）
-  5. Evolving Strategy 的 tier 状态随来源随从（spellcraft_source_uuid
+  4. ~~choose_one + 定向战吼（Sprightly Scarab）引擎无组合分流~~ **已收口
+     （2026-10-22 P0，engine-mech-auditor 引擎侧）**: `play_minion`/
+     `play_spell` 改为两阶段状态机「抉择 → 目标 → 结算」，
+     `choose_options` 与 `needs_target` 可组合；本批 Sprightly Scarab
+     改为声明 `needs_target + target_candidates`，不再在 battlecry
+     内自建目标 PendingChoice。测试见
+     `hsrl2/tests/test_engine_choose_target.py`（引擎契约）+ 本批
+     特性测试。
+  5. Choose One 旧脚本 `choose="both"` 双效（本批两张）已补分支——
+     `CHOOSE_BOTH` 光环/308 饰品/实体 tag 下不再静默零效果。
+  6. Evolving Strategy 的 tier 状态随来源随从（spellcraft_source_uuid
      解析）; 随从离场后法术回退基础 tier（边角: 官方无记载，已查
      wiki 三页无 Notes——见 EvolvingStrategySpellScript docstring）
 """
@@ -1113,21 +1120,23 @@ class SprightlyScarabScript:
          经 ctx["choose"] 触发 battlecry。金色引擎触发 2 次 → 同一
          key 应用 2 次、每次按基础 CardDef（_per_trigger_def）→
          总额 = 金色文本（2/2/8）。
-      2. 目标: "Give a Beast"（两分支同一目标域）——引擎 choose_options
-         分支不产生目标 PendingChoice（缺口 #4）→ 脚本层自建: ctx 无
-         target 时 append PendingChoice(kind="battlecry_target",
-         候选=友方存活 Beast 含 ALL、含 source 自身——文本无
-         "another"/"other"); resolve → apply(key, pick)。显式 target
-         传入时直接 apply。
+      2. 目标: "Give a Beast"（两分支同一目标域，文本无
+         "another"/"other"）——声明 `needs_target = True` +
+         `target_candidates`，由**引擎两阶段状态机**（2026-10-22 P0:
+         抉择 → 目标 → 战吼）串行挂起两个 PendingChoice；两阶段就绪
+         后以 ctx={"choose": key, "target": pick} 调 battlecry。
+         候选 = 友方存活 Beast（含 ALL、含 source 自身）。
       3. apply(key, target): "reborn" → [Buff(num(0), num(1)),
          GainKeyword(REBORN)]; "windfury" → [Buff(atk=num(2)),
-         GainKeyword(WINDFURY)]。金色触发 2 次时两次目标选择各自
-         独立（官方金色定向战妁双选）。
-      4. 无 Beast 候选 → 战吼落空。
+         GainKeyword(WINDFURY)]; "both"（CHOOSE_BOTH 光环/308/实体
+         tag）→ 两分支并联（4 个 Action）。
+      4. 金色触发 2 次共用**同一目标**（引擎定向战吼口径：目标在
+         结算前选定一次，效果按触发次数重复施加）。
+      5. 无 Beast 候选 / 无目标 → 战吼落空。
 
     Test: test_batch_misc.py — 选 reborn 分支目标 Beast +num(0)/num(1)
     且 Reborn / 选 windfury 分支 +num(2) 攻且 Windfury / 目标候选仅
-    Beast / 金色两次应用总额=金色 num / 无 Beast 落空
+    Beast / 金色两次应用总额=金色 num / CHOOSE_BOTH 双效 / 无 Beast 落空
 
     Params: {0}=1 {1}=1 {2}=4（36.2.2 基线，金色 {0}=2 {1}=2 {2}=8;
     每次触发值=基础 CardDef）
@@ -1137,41 +1146,37 @@ class SprightlyScarabScript:
         ("reborn", "Give a Beast +{0}/+{1} and Reborn"),
         ("windfury", "Give a Beast +{2} Attack and Windfury"),
     ]
+    needs_target = True
+
+    @staticmethod
+    def target_candidates(source, game):
+        """友方存活 Beast（含 ALL、含 source 自身——文本无 another）。"""
+        hero = source.controller
+        if hero is None:
+            return []
+        return [m for m in hero.board
+                if not m.dead and m.race in _BEAST_RACES]
 
     @staticmethod
     def _apply(source, game, key, target):
         d = _per_trigger_def(game, source)
-        if key == "reborn":
-            return [Buff(target, atk=d.num(0), health=d.num(1)),
+        out = []
+        if key in ("reborn", "both"):
+            out += [Buff(target, atk=d.num(0), health=d.num(1)),
                     GainKeyword(target, GameTag.REBORN)]
-        if key == "windfury":
-            return [Buff(target, atk=d.num(2)),
+        if key in ("windfury", "both"):
+            out += [Buff(target, atk=d.num(2)),
                     GainKeyword(target, GameTag.WINDFURY)]
-        return None
+        return out or None
 
     @staticmethod
     def battlecry(source, game, ctx):
-        hero = source.controller
         c = ctx or {}
         key = c.get("choose")
-        if hero is None or key is None:
-            return None
         target = c.get("target")
-        if target is not None:
-            return SprightlyScarabScript._apply(source, game, key, target)
-        candidates = [m for m in hero.board
-                      if not m.dead and m.race in _BEAST_RACES]
-        if not candidates:
+        if source.controller is None or key is None or target is None:
             return None
-
-        def resolve(pick):
-            game.run_actions(
-                SprightlyScarabScript._apply(source, game, key, pick))
-
-        game.pending_choices.append(PendingChoice(
-            hero, candidates, "battlecry_target",
-            resolve_callback=resolve))
-        return None
+        return SprightlyScarabScript._apply(source, game, key, target)
 
 
 # ══════════════════ BG30_123 Fearless Foodie（choose_one） ══════════════════
@@ -1189,13 +1194,16 @@ class FearlessFoodieScript:
          BLOOD_GEM_BONUS_ATK/HEALTH 递增（对手牌打出与 PlayBloodGems
          直施的宝石统一生效，actions/bloodgem 契约）。
       3. "gems" → GetBloodGems(hero, num(2))——进手牌（满手排队）。
-      4. 每次触发值 = 基础 CardDef（_per_trigger_def）; 金色引擎触发
+      4. "both"（CHOOSE_BOTH 光环/308/实体 tag）→ **两分支并联**返回
+         [ImproveBloodGems, GetBloodGems]（2026-10-22 P0: 旧实现对
+         "both" 返回 None → 静默零效果）。
+      5. 每次触发值 = 基础 CardDef（_per_trigger_def）; 金色引擎触发
          2 次 → improve 总额 2×(1/1)=2/2 = 金色 num、gems 总额
          2×4=8 = 金色 num(2) ✓。
 
     Test: test_batch_misc.py — improve 分支 BLOOD_GEM_BONUS_ATK/HEALTH
     +num(0)/num(1) / gems 分支手牌 +num(2) 张 BG20_GEM / 金色总额
-    =金色 num / 后续宝石实际增益抬升
+    =金色 num / CHOOSE_BOTH 双效 / 后续宝石实际增益抬升
 
     Params: {0}=1 {1}=1 {2}=4（36.2.2 基线，金色 {0}=2 {1}=2 {2}=8;
     每次触发值=基础 CardDef）
@@ -1213,11 +1221,14 @@ class FearlessFoodieScript:
         if hero is None or key is None:
             return None
         d = _per_trigger_def(game, source)
-        if key == "improve":
-            return ImproveBloodGems(hero, atk=d.num(0), health=d.num(1))
-        if key == "gems":
-            return GetBloodGems(hero, d.num(2))
-        return None
+        out = []
+        if key in ("improve", "both"):
+            out.append(ImproveBloodGems(hero, atk=d.num(0), health=d.num(1)))
+        if key in ("gems", "both"):
+            out.append(GetBloodGems(hero, d.num(2)))
+        if not out:
+            return None
+        return out[0] if len(out) == 1 else out
 
 
 # ══════════════════ spellcraft2 — 法术塑造随从（5/6） ══════════════════

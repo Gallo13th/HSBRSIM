@@ -20,9 +20,9 @@ from hsrl2.game import Game
 from hsrl2.hero import Hero
 from hsrl2.minion import Minion
 from hsrl2.scripts import REGISTRY, bind_all
-from hsrl2.scripts.batches.batch_unfreeze import (
-    CHOOSE_ONE_MINION_IDS,
-    CHOOSE_ONE_SPELL_IDS,
+from hsrl2.scripts.choose_one_authority import (
+    pool_choose_one_minion_ids,
+    pool_choose_one_spell_ids,
 )
 from hsrl2.tags import GameTag, Race, Zone
 
@@ -102,10 +102,14 @@ def drain_spell_pool(game: Game, keep: set[str],
 
 
 def drain_minion_pool(game: Game, keep: set[str]) -> None:
-    for cid in CHOOSE_ONE_MINION_IDS | CHOOSE_ONE_SPELL_IDS:
+    """占用除 keep 外的全部 Choose One 池卡（权威判定函数，G-C5）。"""
+    db = get_db()
+    minion_ids = set(pool_choose_one_minion_ids(db))
+    spell_ids = set(pool_choose_one_spell_ids(db))
+    for cid in minion_ids | spell_ids:
         if cid in keep:
             continue
-        pool = (game.minion_pool if cid in CHOOSE_ONE_MINION_IDS
+        pool = (game.minion_pool if cid in minion_ids
                 else game.spell_pool)
         while pool.available(cid) > 0:
             assert pool.acquire(cid)

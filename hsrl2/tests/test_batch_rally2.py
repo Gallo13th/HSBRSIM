@@ -23,12 +23,14 @@ from hsrl2.minion import Minion
 from hsrl2.scripts import REGISTRY, bind_all
 from hsrl2.scripts.batches.batch_rally2 import (
     CHEFS_CHOICE_ID,
-    CHOOSE_ONE_MINION_IDS,
-    CHOOSE_ONE_SPELL_IDS,
     CHROMADRAKE_IDS,
     FORAGING_BAT_ID,
     MIGHTY_DRAGONBREATH_ID,
     TASTY_LOBSTER_ID,
+)
+from hsrl2.scripts.choose_one_authority import (
+    pool_choose_one_minion_ids,
+    pool_choose_one_spell_ids,
 )
 from hsrl2.tags import GameTag, Race, Zone
 
@@ -46,6 +48,16 @@ def get_db() -> CardDB:
     if _db is None:
         _db = CardDB.load(DATA_DIR)
     return _db
+
+
+def choose_one_minion_ids() -> set:
+    """Choose One 池随从 id 集——权威判定函数（G-C5 统一实现）。"""
+    return set(pool_choose_one_minion_ids(get_db()))
+
+
+def choose_one_spell_ids() -> set:
+    """Choose One 池法术 id 集——权威判定函数（G-C5 统一实现）。"""
+    return set(pool_choose_one_spell_ids(get_db()))
 
 
 def make_hero(name: str = "Hero") -> Hero:
@@ -726,13 +738,15 @@ class TestBrambleTunneler(unittest.TestCase):
     def test_rally_gets_choose_one_card_and_occupies_pool(self):
         game = make_game(seed=245)
         a, b = game.heroes
+        minion_ids = choose_one_minion_ids()
+        spell_ids = choose_one_spell_ids()
         snap = {cid: game.spell_pool.available(cid)
-                for cid in CHOOSE_ONE_SPELL_IDS}
+                for cid in spell_ids}
         tunneler = put(game, "BG36_331", a)
         attack(game, tunneler, dummy(b))
         self.assertEqual(len(a.hand), 1)
         gained = a.hand[0]
-        all_ids = CHOOSE_ONE_MINION_IDS | CHOOSE_ONE_SPELL_IDS
+        all_ids = minion_ids | spell_ids
         self.assertIn(gained.card_id, all_ids)
         d = get_db().get(gained.card_id)
         if d.is_pool_spell:
@@ -746,10 +760,10 @@ class TestBrambleTunneler(unittest.TestCase):
     def test_rally_both_pools_drained_no_effect(self):
         game = make_game(seed=246)
         a, b = game.heroes
-        for cid in CHOOSE_ONE_MINION_IDS:
+        for cid in choose_one_minion_ids():
             while game.minion_pool.available(cid) > 0:
                 self.assertTrue(game.minion_pool.acquire(cid))
-        for cid in CHOOSE_ONE_SPELL_IDS:
+        for cid in choose_one_spell_ids():
             while game.spell_pool.available(cid):   # 抽干（per-tier 副本）
                 assert game.spell_pool.acquire(cid)
         tunneler = put(game, "BG36_331", a)
@@ -766,7 +780,8 @@ class TestBrambleTunneler(unittest.TestCase):
     @unittest.skipUnless(XML_PATH.exists(), "hsdata CardDefs.xml absent")
     def test_choose_one_ids_match_xml(self):
         """漂移守护: Choose One id 集 == XML CHOOSE_ONE ∩ 池标志
-        （minion: IS_BACON_POOL_MINION 非金色; spell: bg_pool_spells）。"""
+        （minion: IS_BACON_POOL_MINION 非金色; spell: bg_pool_spells）。
+        期望值来自权威判定函数（G-C5 统一实现），与脚本候选域同源。"""
         xml = XML_PATH.read_text(encoding="utf-8")
         minions, spells = set(), set()
         for m in re.finditer(
@@ -791,8 +806,8 @@ class TestBrambleTunneler(unittest.TestCase):
             cid, body = m.group(1), m.group(2)
             if 'name="CHOOSE_ONE"' in body and cid in pool_spell_ids:
                 spells.add(cid)
-        self.assertEqual(minions, set(CHOOSE_ONE_MINION_IDS))
-        self.assertEqual(spells, set(CHOOSE_ONE_SPELL_IDS))
+        self.assertEqual(minions, choose_one_minion_ids())
+        self.assertEqual(spells, choose_one_spell_ids())
 
 
 class TestRally2BatchRegistry(unittest.TestCase):
