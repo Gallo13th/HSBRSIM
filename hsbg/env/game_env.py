@@ -196,10 +196,16 @@ class BattlegroundsEnv:
                        "agent_choice_autoresolved_end_recruit_phase": 0,
                        "agent_choice_autoresolved_opponent_phase": 0,
                        "agent_choice_autoresolved_game_over": 0,
-                       "agent_choice_autoresolved_auto_choice_config": 0}
+                       "agent_choice_autoresolved_auto_choice_config": 0,
+                       # P1（take_choice 接入）: 选择被消费但结算抛错（failed）
+                       # 的计数/明细（interactive + 自动结算两条路径都记）。
+                       "choice_resolution_errors": 0,
+                       "agent_choice_autoresolved_failed": 0}
         self._errors: List[str] = []
         #: v3: 本局不可暂停阶段被自动结算的智能体选择明细（纯数据，info 暴露）
         self._auto_resolved_choices: List[Dict[str, Any]] = []
+        #: P1: 选择结算失败明细（resolution_error/failed；纯数据，info 暴露）
+        self._choice_failures: List[Dict[str, Any]] = []
         self._engine_error: Optional[str] = None
         self._was_truncated = False
         self._closed = False
@@ -300,6 +306,7 @@ class BattlegroundsEnv:
         self._elimination_order = []
         self._errors = []
         self._auto_resolved_choices = []
+        self._choice_failures = []
         self._turn_stats = _TurnStats()
         self._done = False
         self._was_truncated = False
@@ -443,9 +450,45 @@ class BattlegroundsEnv:
             fp_before = self._progress_fingerprint()
             result = driver.apply_action(self.game, self._agent, descriptor)
             if not result.success:
-                # 候选被引擎拒绝（理论上不应发生）→ 视为非法动作，不推进
-                self._stats["invalid"] += 1
                 reward = float(rc.invalid_action) if rc.invalid_action else 0.0
+                if result.failed:
+                    # P1: 选择已被 take_choice 消费并标记 failed（终态）。
+                    # 不能当普通 invalid 返回旧 obs（旧 obs 里还显示该选择，
+                    # 且后续可能还有嵌套选择）→ 记录失败 + 刷新观测。
+                    self._stats["invalid"] += 1
+                    failure = {
+                        "where": "interactive_step",
+                        "kind": str(result.choice_kind or ""),
+                        "index": int(result.choice_index),
+                        "owner_is_agent": True,
+                        "failed": True,
+                        "error_type": str(result.error_type or ""),
+                        "error": str(result.error or ""),
+                        "resolution_error": str(result.resolution_error or ""),
+                    }
+                    self._record_choice_failure(failure)
+                    pending = self._drain_choices()
+                    self._obs = self._observe(pending=pending)
+                    info = self._make_info(
+                        terminated_reason="choice_resolution_error")
+                    info["invalid"] = True
+                    info["wrong_action"] = True
+                    info["action_error"] = result.error
+                    info["action_error_type"] = result.error_type
+                    info["choice_failed"] = True
+                    info["resolution_error"] = {
+                        "kind": failure["kind"],
+                        "index": failure["index"],
+                        "error_type": failure["error_type"],
+                        "error": failure["error"],
+                        "resolution_error": failure["resolution_error"],
+                    }
+                    terminal = self._termination_check()
+                    if terminal is not None:
+                        return terminal
+                    return self._obs, reward, False, False, info
+                # 普通引擎拒绝（动作未生效、状态不推进）→ 非法动作
+                self._stats["invalid"] += 1
                 info = self._make_info(terminated_reason="engine_rejected")
                 info["invalid"] = True
                 info["wrong_action"] = True
@@ -790,6 +833,57 @@ class BattlegroundsEnv:
                 "auto_choice:{}:kind={}:picked={}/{}:turn={}".format(
                     where, rec.get("kind", ""), rec.get("picked", -1),
                     rec.get("n_options", 0), rec.get("turn", -1)))
+        if rec.get("failed"):
+            self._errors.append(
+                "auto_choice_failed:{}:kind={}:error_type={}".format(
+                    where, rec.get("kind", ""), rec.get("error_type", "")))
+
+    def _record_choice_failure(self, rec: Dict[str, Any]) -> None:
+        """记录一次「选择已被消费但结算抛错」（``resolution_error`` / failed）。
+
+        P1：interactive 步的 choose 失败与不可暂停阶段的自动结算失败都走这里，
+        进 ``stats["choice_resolution_errors"]`` + ``info["choice_failures"]``
+        + ``_errors``（有界），避免 failed 状态被当成普通非法动作丢掉。
+        """
+        rec = dict(rec)
+        where = str(rec.get("where", "") or "unknown")
+        rec["where"] = where
+        self._stats["choice_resolution_errors"] = int(
+            self._stats.get("choice_resolution_errors", 0)) + 1
+        if rec.get("auto_resolved"):
+            self._stats["agent_choice_autoresolved_failed"] = int(
+                self._stats.get("agent_choice_autoresolved_failed", 0)) + 1
+        if len(self._choice_failures) < 64:               # 明细有界
+            self._choice_failures.append(rec)
+        if len(self._errors) < 200:                       # 日志有界
+            self._errors.append(
+                "choice_failed:{}:kind={}:index={}:{}: {}".format(
+                    where, rec.get("kind", ""), rec.get("index", -1),
+                    rec.get("error_type", ""), rec.get("error", "")))
+
+    def _mark_auto_resolution_failures(
+            self, records: List[Dict[str, Any]],
+            failed: List[Dict[str, Any]]) -> None:
+        """把 driver 返回的 failed 记录关联回「自动结算」快照（v3.1）。
+
+        ``_snapshot_agent_choices`` 在结算前生成，不知道是否会失败；这里按
+        ``(kind, picked, turn)`` 对齐 failed 记录，给快照明细补 ``failed/
+        error_type/error``，供 ``info["auto_resolved_choices"]`` 使用。
+        """
+        for rec in records:
+            for frec in failed:
+                if not frec.get("owner_is_agent"):
+                    continue
+                if str(frec.get("kind", "")) != str(rec.get("kind", "")):
+                    continue
+                if int(frec.get("index", -1)) != int(rec.get("picked", -2)):
+                    continue
+                if int(frec.get("turn", -1)) != int(rec.get("turn", -2)):
+                    continue
+                rec["failed"] = True
+                rec["error_type"] = str(frec.get("error_type", ""))
+                rec["error"] = str(frec.get("error", ""))
+                break
 
     def _drain_choices(self) -> Any:
         """结算选择：非智能体的自动；智能体的按 ``auto_choice`` 决定。"""
@@ -803,13 +897,22 @@ class BattlegroundsEnv:
             auto_recs = self._snapshot_agent_choices("auto_choice_config")
             policy_fn = lambda choice: driver.default_pick_index(choice, game)
         errors: List[str] = []
+        failed: List[Dict[str, Any]] = []
         pending = driver.resolve_pending_choices(
-            game, self._agent, policy_fn, errors=errors)
+            game, self._agent, policy_fn, errors=errors, failed=failed,
+            agent=self._agent)
         if errors:
             self._errors.extend(errors)
             self._stats["choice_errors"] += len(errors)
+        self._mark_auto_resolution_failures(auto_recs, failed)
         for rec in auto_recs:
             self._record_auto_resolved(rec)
+        for rec in failed:
+            self._record_choice_failure({
+                **rec, "where": "interactive_drain",
+                "auto_resolved": bool(rec.get("owner_is_agent")
+                                      and self.config.auto_choice),
+            })
         return pending
 
     def _drain_all_choices(self, *, where: str = "auto") -> None:
@@ -823,12 +926,21 @@ class BattlegroundsEnv:
             return
         records = self._snapshot_agent_choices(where)
         errors: List[str] = []
-        driver.resolve_pending_choices(game, None, None, errors=errors)
+        failed: List[Dict[str, Any]] = []
+        driver.resolve_pending_choices(game, None, None,
+                                       errors=errors, failed=failed,
+                                       agent=self._agent)
         if errors:
             self._errors.extend(errors)
             self._stats["choice_errors"] += len(errors)
+        self._mark_auto_resolution_failures(records, failed)
         for rec in records:
             self._record_auto_resolved(rec)
+        for rec in failed:
+            self._record_choice_failure({
+                **rec, "where": where,
+                "auto_resolved": bool(rec.get("owner_is_agent")),
+            })
 
     # ══════════════════════════════════════════════════════════════
     # 内部：事件回调
@@ -926,6 +1038,7 @@ class BattlegroundsEnv:
         agent = self._agent
         turn_before = int(game.turn)
         errors: List[str] = []
+        failed: List[Dict[str, Any]] = []
 
         def _hold(choice: Any) -> bool:
             if getattr(choice, "owner", None) is not agent:
@@ -934,7 +1047,7 @@ class BattlegroundsEnv:
 
         old = game.pending_choices
         queue = driver.ChoiceQueue(game, hold_fn=_hold, errors=errors,
-                                   agent=agent)
+                                   agent=agent, failed=failed)
         game.pending_choices = queue
         engine_error = None
         try:
@@ -952,6 +1065,13 @@ class BattlegroundsEnv:
             rec = dict(rec)
             rec["where"] = "end_recruit_phase"
             self._record_auto_resolved(rec)
+        # P1: 自动结算失败的 resolution_error/failed 同样留痕（interactive
+        # 路径之外的唯一发生点；含 EoT/淘汰/战斗内选择）。
+        for rec in failed:
+            self._record_choice_failure({
+                **rec, "where": "end_recruit_phase",
+                "auto_resolved": bool(rec.get("owner_is_agent")),
+            })
         if errors:
             self._errors.extend(errors)
             self._stats["choice_errors"] += len(errors)
@@ -1082,6 +1202,14 @@ class BattlegroundsEnv:
                 self._stats.get("agent_choice_autoresolved", 0)),
             "auto_resolved_choices": [dict(r)
                                       for r in self._auto_resolved_choices],
+            # P1（take_choice 接入）: 选择结算失败（resolution_error/failed）
+            # 的计数/明细 + 本步标记（interactive 失败时另置 True）。
+            "choice_resolution_errors": int(
+                self._stats.get("choice_resolution_errors", 0)),
+            "agent_choice_autoresolved_failed": int(
+                self._stats.get("agent_choice_autoresolved_failed", 0)),
+            "choice_failures": [dict(r) for r in self._choice_failures],
+            "choice_failed": False,
         }
         # 观测 v2: info["obs_extra"] 复用当前 obs.extra（同源、不重复构建）。
         # 保留该键兼容旧消费方；新代码优先读 obs.extra / obs.get_extra()。
