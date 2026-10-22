@@ -475,5 +475,76 @@ class TestRealSprightlyScarabContract(unittest.TestCase):
         self.assertTrue(beast.has(GameTag.WINDFURY))
 
 
+class TestRandomTrinketGrantRegistryGate(unittest.TestCase):
+    """G-R1 补口（task-6）: ``grant_random_trinket`` 同样过 REGISTRY 闸。"""
+
+    def _narrow(self, game, defs):
+        game.db.trinket_offer_pool = lambda: list(defs)
+        self.addCleanup(
+            lambda: game.db.__dict__.pop("trinket_offer_pool", None))
+
+    def test_unscripted_pick_replaced_by_registered(self):
+        db = get_db()
+        unscripted = next(
+            d for d in db.trinket_offer_pool() if REGISTRY.get(d.id) is None)
+        school = unscripted.spell_school
+        scripted = next(
+            d for d in db.trinket_offer_pool()
+            if REGISTRY.get(d.id) is not None and d.spell_school == school)
+        game = make_game(seed=61)
+        hero = game.heroes[0]
+        self._narrow(game, [unscripted, scripted])
+        kind = "lesser" if school == 11 else "greater"
+
+        entity = game.grant_random_trinket(hero, kind=kind)
+        self.assertIsNotNone(entity)
+        self.assertIsNotNone(REGISTRY.get(entity.card_id))
+        self.assertEqual(entity.card_id, scripted.id)
+        self.assertIn(scripted.id, hero.trinkets_granted)
+
+    def test_only_unscripted_pool_whiffs(self):
+        db = get_db()
+        unscripted = next(
+            d for d in db.trinket_offer_pool() if REGISTRY.get(d.id) is None)
+        game = make_game(seed=62)
+        hero = game.heroes[0]
+        self._narrow(game, [unscripted])
+        kind = "lesser" if unscripted.spell_school == 11 else "greater"
+
+        self.assertIsNone(game.grant_random_trinket(hero, kind=kind))
+        self.assertEqual(list(hero.trinkets), [])
+        self.assertEqual(list(hero.trinkets_granted), [])
+
+    def test_real_pool_grants_only_registered(self):
+        game = make_game(seed=63)
+        hero = game.heroes[0]
+        granted = 0
+        for _ in range(30):
+            entity = game.grant_random_trinket(hero, kind="lesser")
+            if entity is None:
+                break
+            self.assertIsNotNone(
+                REGISTRY.get(entity.card_id),
+                f"无脚本饰品被随机授予: {entity.card_id}")
+            granted += 1
+        self.assertGreater(granted, 0)
+
+    def test_kind_filter_preserved(self):
+        db = get_db()
+        lesser = next(d for d in db.trinket_offer_pool()
+                      if REGISTRY.get(d.id) is not None
+                      and d.spell_school == 11)
+        greater = next(d for d in db.trinket_offer_pool()
+                       if REGISTRY.get(d.id) is not None
+                       and d.spell_school == 12)
+        game = make_game(seed=64)
+        hero = game.heroes[0]
+        self._narrow(game, [lesser, greater])
+
+        entity = game.grant_random_trinket(hero, kind="lesser")
+        self.assertIsNotNone(entity)
+        self.assertEqual(db.get(entity.card_id).spell_school, 11)
+
+
 if __name__ == "__main__":
     unittest.main()

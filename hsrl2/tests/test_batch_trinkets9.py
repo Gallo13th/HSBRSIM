@@ -23,7 +23,7 @@ import unittest
 from pathlib import Path
 
 from hsrl2.db import CardDB
-from hsrl2.game import Game
+from hsrl2.game import Game, GameStateError
 from hsrl2.hero import Hero
 from hsrl2.scripts import REGISTRY
 from hsrl2.scripts.batches import batch_trinkets9 as B9
@@ -389,7 +389,10 @@ class TestMysteryCube(unittest.TestCase):
         ch.choose(0)
         after = [t.card_id for t in a.trinkets]
         self.assertEqual(after, [CHARGING_STAFF])
-        ch.choose(1)                                   # 同一选择重复结算
+        # G-P1（2026-10-23）: 同一 PendingChoice 重复 choose 被引擎拒绝
+        # （不重复结算；stale resolve 的 no-op 语义只作用于第一次结算）。
+        with self.assertRaises(GameStateError):
+            ch.choose(1)
         self.assertEqual([t.card_id for t in a.trinkets], after)
 
 

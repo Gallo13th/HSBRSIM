@@ -942,8 +942,19 @@ class TestTrinketGrantProtocol(unittest.TestCase):
             def on_bind(source, g, ctx):
                 calls.append(source.card_id)
 
+        # 保存真实注册并在测试结束恢复（2026-10-23: 旧实现直接 del 会
+        # 永久删掉 Charging Staff 的真实脚本，污染后续用例/全量套件）。
+        self._orig_lesser = REGISTRY.get(self.LESSER)
         REGISTRY[self.LESSER] = Probe
+        self.addCleanup(self._restore_lesser)
         return game, game.heroes[0], calls
+
+    def _restore_lesser(self):
+        from hsrl2.scripts import REGISTRY
+        if self._orig_lesser is None:
+            REGISTRY.pop(self.LESSER, None)
+        else:
+            REGISTRY[self.LESSER] = self._orig_lesser
 
     def test_grant_runs_on_bind_and_is_idempotent(self):
         from hsrl2.scripts import REGISTRY
@@ -956,7 +967,7 @@ class TestTrinketGrantProtocol(unittest.TestCase):
             self.assertIsNone(game.grant_trinket(a, self.LESSER))  # 幂等
             self.assertEqual(len(a.trinkets), 1)
         finally:
-            del REGISTRY[self.LESSER]
+            self._restore_lesser()
 
     def test_trinket_granted_event_fires(self):
         from hsrl2.events import Listener
@@ -972,7 +983,7 @@ class TestTrinketGrantProtocol(unittest.TestCase):
             self.assertIs(seen[0]["hero"], a)
             self.assertEqual(seen[0]["source"], "test")
         finally:
-            del REGISTRY[self.LESSER]
+            self._restore_lesser()
 
     def test_grant_random_respects_kind_and_excludes_granted(self):
         game, a, _ = self._game(seed=92)

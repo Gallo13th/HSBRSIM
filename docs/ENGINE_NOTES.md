@@ -577,6 +577,29 @@ c=1 会给 health +4，与期望 +3 不符）；`test_batch_soc.py` 相关期望
 **影响面**：饰品 offer 池变小（有脚本子集）；Choose One+目标卡行为改变；
 无脚本饰品不再能被购买（符合“宁缺勿错”）。RNG 行为保持：过滤在采样后替换。
 
+## F-21 grant_random_trinket 过滤 + PendingChoice 幂等/回滚（2026-10-22 8h P1）
+
+**文件**：`hsrl2/game.py`；测试 `hsrl2/tests/test_engine_pending_choice.py`（12 例）+
+`test_engine_choose_target.py`（+4）。
+
+**改动**：
+1. `grant_random_trinket` 随机授予路径复用 `_gate_trinket_picks`：
+   采样口径保持旧 RNG 消耗，命中无脚本项确定性替换为已注册项；
+   无替补返回 None。测试覆盖替换/仅无脚本/真实池/kind 档位。
+2. `PendingChoice` 一次性：新增 `resolved/failed/resolution_error/is_settled/_settling`；
+   重复 `choose` 抛 `GameStateError`，重入拒绝，越界不消费；
+   resolve 抛错 → `failed=True` 终态（不可重试，防半应用重复），异常上抛。
+   新增 `Game.take_choice(index, owner=)` 原子 pop+choose API。
+3. 3 个既有“越契约二次结算”测试收紧；修复 test_engine_gaps PROBE 删除真实
+   REGISTRY 项的污染。
+
+**测试**：`pytest hsrl2/tests` 4816 passed / 6 skipped；`pytest tests` 642 passed /
+2 skipped；verify_all --fast 4/4；smoke 8 局 crashes=0。
+
+**影响面**：二次 choose 由静默 no-op 改为显式异常；resolve 失败不再可重试；
+env 应优先改用 `Game.take_choice` 并记录 `resolution_error`。
+
+
 
 
 

@@ -136,7 +136,18 @@ class GameStateError(RuntimeError):
 
 
 class PendingChoice:
-    """发现/选择待决。队列化 — 旧引擎单槽覆盖 bug 的修复。"""
+    """发现/选择待决。队列化 — 旧引擎单槽覆盖 bug 的修复。
+
+    契约（docs/ENGINE_API.md §5.2，G-P1 加固 2026-10-23）:
+      - `choose(i)` **只结算、不出队**——调用方必须先
+        `pending_choices.pop(0)`（推荐原子封装 `Game.take_choice(i)`）；
+      - **一次性**：成功后 `resolved=True`；再次 `choose` 抛
+        `GameStateError`，**不会重复结算**（旧实现会重复施加效果）；
+      - **失败回滚标记**：结算回调抛错时选择被消费并标记
+        `failed=True` + `resolution_error`（异常原样上抛，由环境层记录）。
+        终态不可重试——避免"半应用"效果被第二次 choose 重复施加；
+        越界/重入等**未开始结算**的错误不消费选择。
+    """
 
     def __init__(self, owner: Hero, options: Sequence[Any], kind: str,
                  resolve_callback=None):
@@ -144,13 +155,45 @@ class PendingChoice:
         self.options = list(options)
         self.kind = kind            # "discover_minion" / "dark_gift" / ...
         self.resolve_callback = resolve_callback
+        # 结算状态机（G-P1）: pending → resolved（成功）/ failed（抛错，终态）
+        self.resolved: bool = False
+        self.failed: bool = False
+        self.resolution_error: Optional[BaseException] = None
+        self._settling: bool = False   # 重入守卫（回调内再次 choose）
+
+    @property
+    def is_settled(self) -> bool:
+        """已结算（成功或失败）——失败也是终态，不可重试。"""
+        return self.resolved or self.failed
 
     def choose(self, index: int) -> None:
+        if self._settling:
+            raise GameStateError(
+                f"choice {self.kind!r} is resolving "
+                f"(re-entrant choose refused)")
+        if self.resolved:
+            raise GameStateError(
+                f"choice {self.kind!r} already resolved "
+                f"(duplicate choose refused)")
+        if self.failed:
+            raise GameStateError(
+                f"choice {self.kind!r} previously failed "
+                f"({self.resolution_error!r}); resolution is final, "
+                f"retry refused")
         if not 0 <= index < len(self.options):
             raise GameStateError(f"choice index {index} out of range")
         pick = self.options[index]
-        if self.resolve_callback:
-            self.resolve_callback(pick)
+        self._settling = True
+        try:
+            if self.resolve_callback:
+                self.resolve_callback(pick)
+        except Exception as exc:   # noqa: BLE001 — 结算失败须显式标记后上抛
+            self.failed = True
+            self.resolution_error = exc
+            raise
+        finally:
+            self._settling = False
+        self.resolved = True
         # 发现类选择完成事件（Hooktusk "After you Discover a card" 等）
         # 非卡牌选择（英雄技能三选一）不计入 "Discover a **card**"——
         # 否则 Hooktusk 类 "After you Discover a card" 被动会被技能发现
@@ -296,6 +339,28 @@ class Game:
             h.game = self
 
     # ══════════════════ 招募回合流程 ══════════════════
+
+    def take_choice(self, index: int = 0, *,
+                    owner: Optional[Hero] = None) -> "PendingChoice":
+        """原子结算队首选择: `pending_choices.pop(0)` + `choice.choose(index)`。
+
+        G-P1 推荐入口（docs/ENGINE_API.md §5.2）: 引擎的 `choose()` 只结算
+        不出队，调用方必须先 pop；本方法把两步合成一次调用，避免
+        "忘记 pop → 重复结算" 的经典事故。
+
+        - 队列空 / 队首 owner 与 `owner` 不符 → `GameStateError`，**不 pop**；
+        - pop 后 resolve 抛错：选择已被消费并标记 `failed`（回滚标记），
+          异常原样上抛（环境层捕获后记录 `resolution_error`）。
+        """
+        if not self.pending_choices:
+            raise GameStateError("take_choice: no pending choice")
+        choice = self.pending_choices[0]
+        if owner is not None and choice.owner is not owner:
+            raise GameStateError(
+                f"take_choice: front choice owner is not the requested owner")
+        self.pending_choices.pop(0)
+        choice.choose(index)
+        return choice
 
     def start_game(self) -> None:
         self.turn = 1
@@ -5022,7 +5087,13 @@ class Game:
 
     def grant_random_trinket(self, hero: Hero, kind: str | None = None,
                              source: str = "grant"):
-        """随机授予一张**未获得过**的饰品（kind: "lesser"/"greater"）。"""
+        """随机授予一张**未获得过**的饰品（kind: "lesser"/"greater"）。
+
+        **脚本注册闸（2026-10-23 G-R1 补口）**: 拟授予项若无 `REGISTRY`
+        脚本，则走 `_gate_trinket_picks` 的确定性替换（取池内下一张已注册
+        且未获得项，不额外消耗 `game.rng`）；无替补 → 返回 None（宁缺勿错，
+        不再授予空转饰品）。与 `_offer_trinkets` 同一闸门口径。
+        """
         school = 11 if kind == "lesser" else 12 if kind == "greater" \
             else None
         pool = [d for d in self.db.trinket_offer_pool()
@@ -5030,8 +5101,12 @@ class Game:
                 and (school is None or d.spell_school == school)]
         if not pool:
             return None
+        # 采样口径保持不变（rng 消耗序列与旧实现逐位一致）→ 再确定性替换
         d = self.rng.choice(pool, label="grant_random_trinket")
-        return self.grant_trinket(hero, d.id, source=source)
+        gated = self._gate_trinket_picks(pool, [d])
+        if not gated:
+            return None
+        return self.grant_trinket(hero, gated[0].id, source=source)
 
     def replace_trinket(self, hero: Hero, old, new_id: str) -> None:
         """用新饰品替换 hero 的某张饰品（旧实体移除，新实体 on_bind）。"""
