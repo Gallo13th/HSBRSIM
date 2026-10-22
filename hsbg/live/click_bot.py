@@ -41,7 +41,7 @@ CHOICE_CONFIRM = (0.50, 0.70)
 BOB_PORTRAIT = (0.50, 0.14)       # 拖随从到这里卖出
 UPGRADE_BTN = (0.3875, 0.733)     # 酒馆升级按钮
 REFRESH_BTN = (0.594, 0.733)      # 刷新按钮
-REFRESH_POINTS = [(0.142, 0.872), (0.294, 0.817), (0.594, 0.733)]
+REFRESH_POINTS = [(0.142, 0.872)]
 SHOP_Y = 0.34
 SHOP_SPACING = 0.077
 BOARD_Y = 0.52
@@ -487,6 +487,9 @@ class ClickBot:
                     time.sleep(0.3)
                     continue
                 if phase == "recruit":
+                    if self._settled_turn == turn:
+                        time.sleep(1.0)
+                        continue
                     if self.turn_actions >= self.max_actions_per_turn:
                         self.settle_screenshot(st, turn)
                         time.sleep(0.5)
@@ -508,9 +511,6 @@ class ClickBot:
                         self.fail_streak = 0
                         continue
                     self.fail_streak += 1
-                    if self.fail_streak >= 2 and self._overlay_turn != turn:
-                        self._overlay_turn = turn
-                        self._click_overlay(st)
                     if self.fail_streak >= 3:
                         self.settle_screenshot(st, turn)
                     time.sleep(min(2.0, 0.4 + 0.3 * self.fail_streak))
