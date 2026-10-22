@@ -82,6 +82,7 @@ class ClickBot:
     _settled_turn: int = -1
     _upgrade_turn: int = -1
     _refresh_turn: int = -1
+    _refresh_failed_turn: int = -1
 
     def __post_init__(self):
         self.out_dir = Path(self.out_dir)
@@ -311,16 +312,55 @@ class ClickBot:
             return True
         return False
 
+    def _minion_score(self, m: Dict[str, Any]) -> float:
+        try:
+            return float(int(m.get("atk") or 0) + int(m.get("hp") or 0)
+                         + 2 * int(m.get("tier") or 1))
+        except Exception:
+            return 0.0
+
+    def action_scores(self, st: Dict[str, Any]) -> Dict[str, float]:
+        """把买/打/卖/升级/刷新都当成候选动作打分，而不是固定优先级。"""
+        gold = int(st.get("gold") or 0)
+        shop = st.get("shop") or []
+        board = st.get("board") or []
+        hand = st.get("hand") or []
+        legal = st.get("legal") or {}
+        affordable = [m for m in shop
+                      if (3 if m.get("cost") is None else int(m.get("cost") or 0)) <= gold]
+        best_buy = max((self._minion_score(m) for m in affordable), default=0.0)
+        legal_play = legal.get("play") or {}
+        play_vals = []
+        for idx, m in enumerate(hand):
+            if str(idx) not in legal_play:
+                continue
+            if m.get("kind") == "minion" and len(board) >= 7:
+                continue
+            play_vals.append(self._minion_score(m) if m.get("kind") == "minion" else 30.0)
+        best_play = max(play_vals, default=0.0)
+        sell = 30.0 if len(board) >= 7 and hand else 0.0
+        upgrade = 130.0 if legal.get("upgrade") and gold == 0 else (70.0 if legal.get("upgrade") else 0.0)
+        refresh = 0.0
+        if legal.get("refresh") and gold >= 1:
+            refresh = 50.0
+            if not shop:
+                refresh += 60.0
+            if not affordable:
+                refresh += 25.0
+            if len(board) >= 7:
+                refresh += 10.0
+        return {"buy": 80.0 + best_buy, "play": 60.0 + best_play,
+                "sell": sell, "upgrade": upgrade, "refresh": refresh}
+
     def refresh_shop(self, st: Dict[str, Any]) -> bool:
-        """legal.refresh 时刷新商店；每回合最多一次，避免空店反复刷新。"""
-        if self._refresh_turn == int(st.get("turn") or 0):
+        """刷新是候选动作；成功可连续刷新，失败则本回合不再点。"""
+        if self._refresh_failed_turn == int(st.get("turn") or 0):
             return False
         if not ((st.get("legal") or {}).get("refresh")):
             return False
         gold0 = int(st.get("gold") or 0)
         shop0 = tuple(m.get("card") for m in (st.get("shop") or []))
         before = self._sig(st)
-        self._refresh_turn = int(st.get("turn") or 0)
         for pt in REFRESH_POINTS:
             self.click(*pt, note="refresh")
             time.sleep(0.5)
@@ -330,6 +370,7 @@ class ClickBot:
                     or self._sig(now) != before):
                 self.turn_actions += 1
                 return True
+        self._refresh_failed_turn = int(st.get("turn") or 0)
         return False
 
     def settle_screenshot(self, st: Dict[str, Any], turn: int) -> None:
@@ -353,7 +394,10 @@ class ClickBot:
         if not shop or len(hand) >= 9:
             return False
         pts = _center(len(shop), SHOP_SPACING, SHOP_Y)
-        for i, item in enumerate(shop):
+        order = sorted(range(len(shop)),
+                       key=lambda i: self._minion_score(shop[i]), reverse=True)
+        for i in order:
+            item = shop[i]
             key = f"buy:{item.get('eid')}:{item.get('card')}"
             if key in self.failed:
                 continue
@@ -491,6 +535,20 @@ class ClickBot:
                     if self.turn_actions >= self.max_actions_per_turn:
                         self.settle_screenshot(st, turn)
                         time.sleep(0.5)
+                        continue
+                    scores = self.action_scores(st)
+                    self.log(kind="decision", turn=turn, **scores)
+                    if (self._upgrade_turn != turn
+                            and scores["upgrade"] >= max(scores["buy"], scores["play"],
+                                                         scores["sell"], scores["refresh"])
+                            and self.upgrade_tavern(st)):
+                        self._upgrade_turn = turn
+                        self.fail_streak = 0
+                        continue
+                    if (scores["refresh"] >= max(scores["buy"], scores["play"],
+                                                 scores["sell"], scores["upgrade"])
+                            and self.refresh_shop(st)):
+                        self.fail_streak = 0
                         continue
                     if self.buy_shop(st):
                         self.fail_streak = 0
