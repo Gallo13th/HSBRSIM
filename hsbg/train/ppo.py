@@ -527,9 +527,16 @@ class PPOTrainer:
         *,
         config: Optional[PPOConfig] = None,
         device: Optional[str] = None,
+        allow_legacy: Optional[bool] = None,
     ) -> "PPOTrainer":
-        """从 checkpoint 恢复策略/编码器/PPO 配置（续训入口）。"""
-        policy = EntityTransformerPolicy.load(checkpoint_path, map_location="cpu")
+        """从 checkpoint 恢复策略/编码器/PPO 配置（续训入口）。
+
+        旧观测（v2）时代的 ckpt 默认"内存迁移 + UserWarning"（详见
+        ``docs/POLICY_OBS_V3.md``）；``allow_legacy=False`` 严格报错。
+        """
+        policy = EntityTransformerPolicy.load(
+            checkpoint_path, map_location="cpu", allow_legacy=allow_legacy
+        )
         encoder = policy.make_encoder()
         if config is None:
             cfg_dict = (policy.meta or {}).get("ppo_config") or {}

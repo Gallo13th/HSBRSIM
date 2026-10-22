@@ -23,6 +23,8 @@ key                       shape                       说明
 ``entity_mask``           float32 [B, E]              1=真实实体
 ``entity_zone``           int64 [B, E]                区域下标
 ``entity_pos``            int64 [B, E]                区域槽位下标（位置编码）
+``entity_secondary``      int64 [B, E]                选项第二 id 词表下标（v3；
+                                                      0=无，仅 choice 区非 0）
 ``global``                float32 [B, G]              全局标量
 ``cand_kind``             int64 [B, C]                动作类型下标
 ``cand_num``              float32 [B, C, NC]          候选数值特征
@@ -245,6 +247,9 @@ ENCODED_KEYS: Tuple[str, ...] = (
     "entity_mask",
     "entity_zone",
     "entity_pos",
+    #: v3：choice 选项的第二 id（Dark Gift 的 gift_id / 任务 offer 的
+    #: reward_id）词表下标；0 = 无。旧观测/缺字段时全 0。
+    "entity_secondary",
     "global",
     "cand_kind",
     "cand_num",
@@ -270,6 +275,8 @@ class EncoderDims:
     candidate_max: int = CANDIDATE_MAX
     num_zones: int = NUM_ZONES
     num_card_types: int = NUM_CARD_TYPES
+    #: 动作类型数（v3: 13；写进 checkpoint 用于旧 ckpt 兼容性检查）
+    num_action_kinds: int = NUM_ACTION_KINDS
 
     def as_dict(self) -> Dict[str, int]:
         return {
@@ -280,6 +287,7 @@ class EncoderDims:
             "candidate_max": self.candidate_max,
             "num_zones": self.num_zones,
             "num_card_types": self.num_card_types,
+            "num_action_kinds": self.num_action_kinds,
         }
 
     @classmethod
@@ -293,7 +301,7 @@ class EncoderDims:
             num_zones=self.num_zones,
             num_races=NUM_RACES,
             num_keywords=NUM_KEYWORDS,
-            num_action_kinds=NUM_ACTION_KINDS,
+            num_action_kinds=self.num_action_kinds,
             board_max=BOARD_MAX,
             hand_max=HAND_MAX,
             tavern_max=TAVERN_MAX,
@@ -487,8 +495,38 @@ def _iter_records(records: Any) -> Iterable[Dict[str, Any]]:
                         yield rec
 
 
+def secondary_ids_from_extra(obs: Observation) -> Tuple[str, ...]:
+    """``extra["pending_choice_options"]`` → 与 choice 槽位对齐的第二 id。
+
+    观测 v3 契约（见 ``hsbg.env.spec.Observation``）：选择步的
+    ``extra["pending_choice_options"]`` 是 dict 列表，每个元素含 ``index`` /
+    ``card_id`` / ``secondary_id`` / ``label`` / ``cost``。``secondary_id``
+    是 Dark Gift 的 ``gift_id``、任务 offer 的 ``reward_id``（无则 ``None``）。
+
+    本函数只做**兜底安全**解析：缺失 / 非列表 / 元素类型不对 / id 非字符串
+    一律降级为空串（编码为 0），保证旧 v2 观测与脏数据不崩。返回长度可能
+    短于 choice 选项数（超出部分视为无第二 id）。
+    """
+    extra = obs.extra or {}
+    meta = extra.get("pending_choice_options")
+    if not isinstance(meta, (list, tuple)):
+        return ()
+    out: List[str] = []
+    for item in meta:
+        sid: Any = None
+        if isinstance(item, dict):
+            sid = item.get("secondary_id")
+        elif isinstance(item, (list, tuple)) and len(item) >= 2:
+            sid = item[1]
+        if sid is None or isinstance(sid, (dict, list, tuple, set)):
+            out.append("")
+        else:
+            out.append(str(sid))
+    return tuple(out)
+
+
 def collect_card_ids(obs: Observation) -> Set[str]:
-    """收集单条观测里出现的全部 card_id（含选择选项）。"""
+    """收集单条观测里出现的全部 card_id（含选择选项与第二 id）。"""
     ids: Set[str] = set()
 
     def _add(tok: Optional[EntityToken]) -> None:
@@ -509,6 +547,11 @@ def collect_card_ids(obs: Observation) -> Set[str]:
     if obs.pending_choice is not None:
         for tok in obs.pending_choice.options:
             _add(tok)
+    # v3：Dark Gift 的 gift_id / 任务 offer 的 reward_id 也要进词表，
+    # 否则策略侧只能拿到 <UNK>（gift 身份不可区分）。
+    for sid in secondary_ids_from_extra(obs):
+        if sid:
+            ids.add(sid)
     if obs.hero is not None and obs.hero.hero_id:
         ids.add(obs.hero.hero_id)
     return ids
@@ -539,6 +582,7 @@ class ObservationEncoder:
         entity_mask = np.zeros(E, dtype=np.float32)
         entity_zone = np.zeros(E, dtype=np.int64)
         entity_pos = np.zeros(E, dtype=np.int64)
+        entity_secondary = np.zeros(E, dtype=np.int64)
         cand_kind = np.zeros(C, dtype=np.int64)
         cand_num = np.zeros((C, dims.cand_num_dim), dtype=np.float32)
         cand_src = np.zeros(C, dtype=np.int64)
@@ -557,6 +601,8 @@ class ObservationEncoder:
                 (obs.pending_choice.options if obs.pending_choice is not None else ())
             ),
         }
+        # v3：choice 选项的第二 id（与 pending_choice.options 下标对齐）
+        choice_secondary_ids = secondary_ids_from_extra(obs)
         for zone, tokens in zone_entities.items():
             off = ZONE_OFFSET[zone]
             zidx = ZONE_INDEX[zone]
@@ -567,6 +613,11 @@ class ObservationEncoder:
                 entity_zone[gi] = zidx
                 entity_pos[gi] = min(int(tok.slot if tok.slot >= 0 else slot), MAX_ZONE_SLOTS - 1)
                 entity_card[gi] = self.vocab.index(tok.card_id)
+                if zone == ZONE_CHOICE and slot < len(choice_secondary_ids):
+                    sid = choice_secondary_ids[slot]
+                    if sid:
+                        # 未知 id → <UNK>（仍保留"存在第二 id"信号）
+                        entity_secondary[gi] = self.vocab.index(sid)
                 self._fill_entity_features(
                     entity_num[gi], tok, zone=zone, slot=slot,
                     zone_slots=zone_slots, global_index=gi,
@@ -604,6 +655,7 @@ class ObservationEncoder:
             "entity_mask": entity_mask,
             "entity_zone": entity_zone,
             "entity_pos": entity_pos,
+            "entity_secondary": entity_secondary,
             "global": global_vec,
             "cand_kind": cand_kind,
             "cand_num": cand_num,
@@ -813,6 +865,7 @@ def to_torch(
         "entity_card",
         "entity_zone",
         "entity_pos",
+        "entity_secondary",
         "cand_kind",
         "cand_src",
         "cand_tgt",
@@ -884,6 +937,7 @@ __all__ = [
     "SPECIAL_TOKENS",
     "entity_index",
     "collect_card_ids",
+    "secondary_ids_from_extra",
     "stack_encoded",
     "to_torch",
     "move_batch_to",
