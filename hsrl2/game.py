@@ -1065,6 +1065,20 @@ class Game:
                              ctx={"hero": hero, "source": source})
         return True
 
+    def _entity_target_candidates(self, script, entity, hero: Hero) -> list:
+        """脚本声明的目标候选（随从/法术两条路径共用）。
+
+        目标协议（docs/ENGINE_API.md §4.4）: 脚本类
+        ``target_candidates(entity, game)`` —— 随从作首参、法术实体作首参；
+        未声明 → 默认**友方存活棋盘**（RULES §6.10 先例）。
+        与英雄技能路径（`target_candidates(hero, game)`）的首参不同，
+        故由本方法集中解析，避免调用点各自复制默认域。
+        """
+        cand_fn = getattr(script, "target_candidates", None)
+        if cand_fn is not None:
+            return list(cand_fn(entity, self))
+        return [m for m in hero.board if not m.dead]
+
     def play_minion(self, hero: Hero, minion: Minion,
                     position: Optional[int] = None,
                     target: Optional[Entity] = None,
@@ -1085,6 +1099,15 @@ class Game:
         Choose One: 脚本类声明 ``choose_options = [(key, label), ...]``
         时，产生 PendingChoice(kind="choose_one")，选定 key 传入
         ctx={"choose": key} 后触发 on_play 钩子。
+
+        **Choose One × 定向战吼组合（两阶段状态机）**: 同时声明
+        ``choose_options`` 与 ``needs_target`` 时，按官方打出顺序
+        「抉择 → 目标 → 结算」串行挂起两个 PendingChoice（第一个
+        kind="choose_one"，第二个 kind="battlecry_target"）；两阶段
+        都就绪后才把 ``ctx={"choose": key, "target": pick}`` 送入
+        战吼钩子。``CHOOSE_BOTH`` 双效生效时跳过抉择阶段、只保留目标
+        阶段（choose="both"）。无目标候选 / 显式目标非法 → 战吼落空
+        （随从已入场，与单目标路径同语义）。
         """
         # UNPLAYABLE: CardDef.unplayable 权威 + 实体级手牌锁定
         # （Search Through Time "Lock it in your hand until next turn"）
@@ -1117,41 +1140,52 @@ class Game:
                  hero.get(GameTag.CARDS_PLAYED_THIS_TURN, 0) + 1)
         self.summon(hero, minion, position)
 
-        # Choose One 分流（RULES: 打出时二选一）。双效合并: 棋盘
-        # CHOOSE_BOTH 光环（Thorned Trailblazer）或实体自带 CHOOSE_BOTH
-        # tag（Fandral's Fortune 发现的恒双效卡）时跳过选择直接双效
-        both = (hero.get(GameTag.CHOOSE_BOTH, False)     # 光环类（308）
-                or any(m.has(GameTag.CHOOSE_BOTH) for m in hero.board)
-                or minion.has(GameTag.CHOOSE_BOTH))
-        if script is not None and getattr(script, "choose_options", None):
+        # Choose One / 定向战吼统一**两阶段状态机**（2026-10-22 P0，
+        # docs/AUDIT_ENGINE_MECHANICS.md G-C1/G-C2）:
+        #   随从入场 → 抉择（若有）→ 目标（若有）→ 结算（战吼×次数）
+        # 旧实现 choose_options 分支提前 return，吞掉 needs_target 分支
+        # （Sprightly Scarab 只能脚本层自建目标选择；且旧脚本在
+        # CHOOSE_BOTH 光环下 choose="both" 静默零效果）。
+        has_choose = script is not None and bool(
+            getattr(script, "choose_options", None))
+        needs_target = script is not None and bool(
+            getattr(script, "needs_target", False))
+        # 双效合并: 英雄级（308 饰品）/ 棋盘 CHOOSE_BOTH 光环
+        # （Thorned Trailblazer）/ 实体自带 tag（Fandral's Fortune 发现）
+        both = (has_choose and (
+            hero.get(GameTag.CHOOSE_BOTH, False)
+            or any(m.has(GameTag.CHOOSE_BOTH) for m in hero.board)
+            or minion.has(GameTag.CHOOSE_BOTH)))
+
+        def _continue(choose=None, tgt=target):
+            """阶段 2: 目标（若需）→ 结算；战吼落空语义保持不变。"""
+            if needs_target:
+                candidates = self._entity_target_candidates(
+                    script, minion, hero)
+                if tgt is not None:
+                    if tgt not in candidates:
+                        # 非法目标: 随从已入场（不可撤回），战吼落空
+                        return self._run_play_effects(hero, minion,
+                                                      choose=choose)
+                elif candidates:
+                    self.pending_choices.append(PendingChoice(
+                        hero, candidates, "battlecry_target",
+                        resolve_callback=lambda pick: self._run_play_effects(
+                            hero, minion, target=pick, choose=choose)))
+                    return True
+                # 无候选: 战吼落空，随从已入场
+            return self._run_play_effects(hero, minion, target=tgt,
+                                          choose=choose)
+
+        if has_choose:
             if both:
-                return self._run_play_effects(hero, minion, target=target,
-                                              choose="both")
+                return _continue(choose="both")
             options = list(script.choose_options)
             self.pending_choices.append(PendingChoice(
                 hero, [k for k, _ in options], "choose_one",
-                resolve_callback=lambda key: self._run_play_effects(
-                    hero, minion, target=target, choose=key)))
+                resolve_callback=lambda key: _continue(choose=key)))
             return True
-
-        # 定向战吼分流
-        if script is not None and getattr(script, "needs_target", False):
-            cand_fn = getattr(script, "target_candidates", None)
-            candidates = (list(cand_fn(minion, self))
-                          if cand_fn is not None
-                          else [m for m in hero.board if not m.dead])
-            if target is not None:
-                if target not in candidates:
-                    # 非法目标: 随从已入场（不可撤回），战吼落空
-                    return self._run_play_effects(hero, minion)
-            elif candidates:
-                self.pending_choices.append(PendingChoice(
-                    hero, candidates, "battlecry_target",
-                    resolve_callback=lambda pick: self._run_play_effects(
-                        hero, minion, target=pick)))
-                return True
-            # 无候选: 战吼落空，随从已入场
-        return self._run_play_effects(hero, minion, target=target)
+        return _continue()
 
     def _run_play_effects(self, hero: Hero, minion: Minion,
                           target: Optional[Entity] = None,
@@ -1498,6 +1532,12 @@ class Game:
         target → PendingChoice(kind="spell_target")，选定后结算; 无候选
         → 效果落空但法术照常消耗（官方: 无法术目标时法术仍可施放）。
 
+        Choose One 法术: ``choose_options`` 声明 → 先挂
+        PendingChoice(kind="choose_one")，选定 key 经 ctx["choose"] 传入
+        on_play；与 needs_target 同时声明时按「抉择 → 目标 → 施放」
+        两阶段串行挂起（play_minion 同构）。CHOOSE_BOTH 双效（英雄级/
+        棋盘光环/**法术实体 tag**）时跳过抉择、直接 choose="both"。
+
         计数分流（官方语义）:
           - **酒馆法术**（is_pool_spell）才计入 TAVERN_SPELLS_CAST_* 并
             广播 tavern_spell_cast——"每施放一个酒馆法术"类效果的数据源
@@ -1511,37 +1551,43 @@ class Game:
 
         script = spell.scripts
         # Choose One 法术（脚本声明 choose_options，与随从同构）。
-        # both_options 光环（Thorned Trailblazer "has both effects combined"）
-        # 生效时跳过选择、直接以 choose="both" 双效结算
-        if script is not None and getattr(script, "choose_options", None):
-            both = (hero.get(GameTag.CHOOSE_BOTH, False)
-                    or any(m.has(GameTag.CHOOSE_BOTH) for m in hero.board))
-            if both:
-                return self._finish_play_spell(hero, spell, target=target,
-                                               card_def=d, choose="both")
-            options = list(script.choose_options)
+        # 双效合并: 英雄级（308）/ 棋盘 CHOOSE_BOTH 光环 / **法术实体自带**
+        # CHOOSE_BOTH tag（Fandral's Fortune 发现的恒双效法术；2026-10-22 P0
+        # 修复——旧实现漏读实体 tag，见 docs/AUDIT_ENGINE_MECHANICS.md G-C3）。
+        # 组合协议与 play_minion 同构: 抉择 → 目标 → 施放结算（两阶段状态机）。
+        has_choose = script is not None and bool(
+            getattr(script, "choose_options", None))
+        needs_target = script is not None and bool(
+            getattr(script, "needs_target", False))
+        both = (has_choose and (
+            hero.get(GameTag.CHOOSE_BOTH, False)
+            or any(m.has(GameTag.CHOOSE_BOTH) for m in hero.board)
+            or spell.has(GameTag.CHOOSE_BOTH)))
 
-            def _choose_finish(key):
-                self._finish_play_spell(hero, spell, target=target,
-                                        card_def=d, choose=key)
+        def _continue(choose=None, tgt=target):
+            """阶段 2: 目标（若需）→ 施放；无候选 = 落空但照常消耗。"""
+            if needs_target and tgt is None:
+                candidates = self._entity_target_candidates(
+                    script, spell, hero)
+                if candidates:
+                    self.pending_choices.append(PendingChoice(
+                        hero, candidates, "spell_target",
+                        resolve_callback=lambda pick: _continue(
+                            choose=choose, tgt=pick)))
+                    return True
+                # 无候选: 落空但照常消耗
+            return self._finish_play_spell(
+                hero, spell, target=tgt, card_def=d, choose=choose)
+
+        if has_choose:
+            if both:
+                return _continue(choose="both")
+            options = list(script.choose_options)
             self.pending_choices.append(PendingChoice(
                 hero, [k for k, _ in options], "choose_one",
-                resolve_callback=_choose_finish))
+                resolve_callback=lambda key: _continue(choose=key)))
             return True
-        if script is not None and getattr(script, "needs_target", False) \
-                and target is None:
-            cand_fn = getattr(script, "target_candidates", None)
-            candidates = (list(cand_fn(spell, self))
-                          if cand_fn is not None
-                          else [m for m in hero.board if not m.dead])
-            if candidates:
-                self.pending_choices.append(PendingChoice(
-                    hero, candidates, "spell_target",
-                    resolve_callback=lambda pick: self._finish_play_spell(
-                        hero, spell, target=pick, card_def=d)))
-                return True
-            # 无候选: 落空但照常消耗
-        return self._finish_play_spell(hero, spell, target=target, card_def=d)
+        return _continue()
 
     def _resolve_cast_permanence(self, hero: Hero, spell: Spell,
                                  target: Optional[Entity]) -> bool:
@@ -4994,6 +5040,30 @@ class Game:
         self.events.unregister_owner(old)
         return self.grant_trinket(hero, new_id, source="replace")
 
+    def _gate_trinket_picks(self, pool, picks) -> list:
+        """G-R1: 商店候选只保留有 `REGISTRY` 脚本的饰品。
+
+        **确定性替换**（不消耗 `game.rng`）: 采样/保底仍在原候选池上执行，
+        使 rng 消耗序列与旧实现逐位一致（seed 确定性/既有 seed-sensitive
+        回归不被打破）；随后把无脚本项替换为同池已注册且未选中的项（按池
+        顺序），无替补则该项落空。官方掉落权重未公布，替换项顺序即池顺序。
+        """
+        from hsrl2.scripts import REGISTRY  # 延迟导入避免循环依赖
+        gated = [d for d in picks if REGISTRY.get(d.id) is not None]
+        drop = len(picks) - len(gated)
+        if drop <= 0:
+            return list(picks)
+        chosen_ids = {d.id for d in gated}
+        for d in pool:
+            if drop <= 0:
+                break
+            if d.id in chosen_ids or REGISTRY.get(d.id) is None:
+                continue
+            gated.append(d)
+            chosen_ids.add(d.id)
+            drop -= 1
+        return gated
+
     def _offer_trinkets(self, hero: Hero, kind: str) -> None:
         """饰品商店: `C.TRINKET_CHOICES`（=4）选 1（+放弃选项）。
 
@@ -5004,6 +5074,11 @@ class Game:
         T9 混入 Lesser）;
         采样等权（官方类型关联权重未公布——Malygos 裁定先例）;
         保证约束（§7.4.2）: ≥1 无类型 + ≥1 费 ≤2。
+
+        **脚本注册闸（2026-10-22 P0，docs/AUDIT_ENGINE_MECHANICS.md G-R1）**:
+        无 `REGISTRY` 脚本的饰品不进 offer——旧实现直接拿数据池，37.0 数据
+        升级后有 **41/357** 张无脚本饰品仍可被购买（扣金、on_bind 缺失 =
+        空转动作）。口径与任务 offer 一致（`_offer_quests` 只给已注册任务）。
         """
         # "Your next Trinket is a Lesser Trinket"（Mysterious Orb
         # `BG35_MagicItem_818`）: hero 级覆写读取点，**消费即清**
@@ -5012,6 +5087,9 @@ class Game:
             kind = forced
             hero._next_trinket_kind = None
         school = 11 if kind == "lesser" else 12 if kind == "greater" else None
+        # 采样候选池保持**原口径**（未获得 × 档位）——见 _gate_trinket_picks:
+        # 脚本注册闸放在采样/保底之后做确定性替换，以保持 game.rng 消耗
+        # 序列逐位不变（seed 确定性回归安全；下游 seed-sensitive 测试依赖）。
         pool = [d for d in self.db.trinket_offer_pool()
                 if d.id not in hero.trinkets_granted
                 and (school is None or d.spell_school == school)]
@@ -5029,6 +5107,15 @@ class Game:
             cheap = [d for d in pool if (d.cost or 0) <= 2]
             if cheap and len(pick) > 1:
                 pick[0] = self.rng.choice(cheap, label="trinket_cheap")
+
+        # 脚本注册闸（2026-10-22 P0，docs/AUDIT_ENGINE_MECHANICS.md G-R1）:
+        # 无 REGISTRY 脚本的饰品不得出现在商店（37.0 数据升级遗留 41/357，
+        # 购买会扣金但 on_bind 缺失 = 空转）。放在采样/保底之后做**确定性
+        # 替换**——不额外消耗 game.rng，保持同一 seed 的原 RNG 流（训练/
+        # 回归确定性）。无同档位替补 → 该位落空（offer 少于 4 张）。
+        pick = self._gate_trinket_picks(pool, pick)
+        if not pick:
+            return
 
         def resolve(d):
             if d is None:

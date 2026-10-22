@@ -1438,7 +1438,7 @@ db.by_dbf(dbf_id)              # CardDef | None
 db.golden_version(def)         # 金色本体 CardDef | None
 db.pool_minions()              # 247 张池内随从（非金）
 db.pool_spells()               # 75 张池内酒馆法术
-db.dark_gifts()                # 43 个 Dark Gift
+db.dark_gifts()                # 47 个 Dark Gift（37.0.0.255130 实测）
 db.trinket_offer_pool()        # 331 个可被商店提供的饰品
 len(db)                        # 3683
 ```
