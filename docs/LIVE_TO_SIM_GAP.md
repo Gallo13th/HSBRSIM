@@ -127,12 +127,17 @@
 
 | ID | 缺口 | 证据 | 优先级 |
 |---|---|---|---|
-| L15 | Choose One 脚本 44 张只实现 14 张 | `REGISTRY` 审计；BG31_880 在 live 反复出现 | P0 |
+| L15 | Choose One 协议三分裂（引擎 14 / 自建 5 / 无脚本 10 base；池内 12 实体有结算，但组合/双效缺口） | `docs/AUDIT_ENGINE_MECHANICS.md`；BG31_880 在 live 反复出现 | P0 |
 | L16 | live 英雄确认页 | 截图 `215643_...start_combat.png`，`start_combat` 90 次 | P0 |
 | L17 | live Dark Gift 购买/三选一 | 本轮 `dark_gift=0`，47 张数据卡 | P0 |
 | L18 | live 英雄技能 | 本轮 `hero_power=0`，env 已支持 | P0 |
 | L19 | live Activate（发动） | 本轮 `activate=0`，50/52 脚本已有 | P1 |
 | L20 | env 无 move/reorder | 引擎有 `position`，env 无显式动作 | P1 |
+| L21 | 17/118 英雄主技能无脚本（含 37.0 新英雄），env 全量抽英雄 | `AUDIT_ENGINE_MECHANICS` G-H1 | P0 |
+| L22 | 饰品 offer 池未过 REGISTRY，41/357 无脚本饰品可买 | `game.py:5015-5017` G-R1 | P0 |
+| L23 | Choose One 组合/双效：choose+needs_target 互斥、法术实体 CHOOSE_BOTH 不读、旧脚本 both 静默 | G-C1/C2/C3 | P0 |
+| L24 | PendingChoice.choose 不出队/无幂等，resolve 抛错丢选择 | G-P1 | P1 |
+| L25 | 数据层无 target 元数据（99 needs_target / 46 target_candidates） | G-T1 | P1 |
 
 ---
 

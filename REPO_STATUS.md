@@ -80,6 +80,8 @@ python tools/version_sync.py --apply --yes
 - 协议：[docs/LIVE_AUTOMATION_PROTOCOL.md](docs/LIVE_AUTOMATION_PROTOCOL.md)
 - 差距表：[docs/LIVE_TO_SIM_GAP.md](docs/LIVE_TO_SIM_GAP.md)
 - 审计：[docs/AUDIT_LIVE_TO_SIM.md](docs/AUDIT_LIVE_TO_SIM.md)
+  - 环境层：[docs/AUDIT_ENV_ACTIONS.md](docs/AUDIT_ENV_ACTIONS.md)
+  - 引擎/卡牌：[docs/AUDIT_ENGINE_MECHANICS.md](docs/AUDIT_ENGINE_MECHANICS.md)
 - 动作 schema：[docs/schemas/live_action.schema.json](docs/schemas/live_action.schema.json)
 - 采集：`python hsbg/live/click_bot.py --games 0 --max-seconds 0`
   - 每次 click/drag 后截图到 `runs/live/<run>/screenshots/actions/`
