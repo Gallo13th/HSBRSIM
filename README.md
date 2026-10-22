@@ -128,6 +128,10 @@ BC：320 局教师示范 / 30,300 样本；验证集动作准确率 **85.6%**（
 - `docs/AUDIT_LIVE_TO_SIM.md` — Live 截图/文档/代码审计与机制缺口
 - `docs/AUDIT_ENV_ACTIONS.md` — env 动作/观测覆盖审计
 - `docs/AUDIT_ENGINE_MECHANICS.md` — 引擎/卡牌机制审计
+- `docs/AUDIT_PROTOCOL.md` — 审计协议（证据等级/gap schema/回归门槛）
+- `docs/MULTI_AGENT_RULES.md` — 多智能体任务板/写范围/handoff
+- `docs/POLICY_OBS_V3.md` — obs v3/MOVE_MINION/旧 checkpoint 迁移
+- `docs/8H_FINAL_REPORT.md` — 8h 自主工作最终报告
 - `docs/schemas/live_action.schema.json` — 动作日志 JSON Schema
 - `docs/ENGINE_NOTES.md` — 引擎修改记录（F-01…F-05）
 - `AGENTS.md` — 协作与验收约定

@@ -360,3 +360,15 @@ print('game.py lines', sum(1 for _ in open('hsrl2/game.py',encoding='utf-8')))
 - 三篇被审查审计：[AUDIT_LIVE_TO_SIM.md](AUDIT_LIVE_TO_SIM.md)、[AUDIT_ENV_ACTIONS.md](AUDIT_ENV_ACTIONS.md)、[AUDIT_ENGINE_MECHANICS.md](AUDIT_ENGINE_MECHANICS.md)
 - gap 台账：[LIVE_TO_SIM_GAP.md](LIVE_TO_SIM_GAP.md)
 - 环境契约：[ENV_SPEC.md](ENV_SPEC.md)、引擎 API：[ENGINE_API.md](ENGINE_API.md)
+
+---
+
+## 11. Lead 裁决（2026-10-23 00:35）
+
+- **C01 换位/重排**：统一为 **P0**，L05/L20 同步；env 已实现 `MOVE_MINION`（b4a12db），后续引擎补公开 `Game.move_minion`。
+- **C05 三连/发现 live 优先级**：维持 **P0**（真实对局必须处理奖励卡）。
+- **C06 法术实体 `CHOOSE_BOTH`**：引擎侧 **P1**（已修，7372b6f）；live Choose One 协议仍 P0。
+- **L15/C03 Choose One 口径**：以 `docs/audit/choose_one_matrix.json` 为权威；结论 = 36 卡/36 脚本 missing=[]（ed765c3），不再用 14/5/10 粗分解做验收。
+- **C02 Dark Gift 数量**：权威 47；`AUDIT_ENV_ACTIONS`/`ENGINE_API` 已修。
+- **C08 ENV_SPEC 版本**：权威 `Observation.version=3`（env b4a12db）；旧 v2 checkpoint 由 policy `allow_legacy` 迁移/警告。
+- **L24 PendingChoice**：P1，本轮已修 engine 幂等/失败终态（09095da）；env 可改用 `take_choice`。
