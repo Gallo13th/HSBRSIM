@@ -336,6 +336,75 @@ def test_auto_choice_never_exposes_choice():
     env.close()
 
 
+def test_auto_resolved_agent_choice_is_marked_not_silent():
+    """v3：不可暂停阶段自动结算智能体选择时必须留痕（stats/info/日志）。"""
+    from hsrl2.game import PendingChoice
+    from hsbg.env import driver
+
+    env = BattlegroundsEnv(seed=33)
+    env.reset(seed=33)
+    driver.resolve_pending_choices(env.game, None)   # 清掉开局选择
+    agent = env.agent_hero
+    env.game.pending_choices.append(PendingChoice(
+        agent, ["a", "b", "c"], "unit_test",
+        resolve_callback=lambda pick: None))
+
+    env._drain_all_choices(where="unit_test")
+    assert env.stats["agent_choice_autoresolved"] == 1
+    assert env.stats["agent_choice_autoresolved_unit_test"] == 1
+    rec = env._auto_resolved_choices[-1]
+    assert rec["where"] == "unit_test"
+    assert rec["kind"] == "unit_test"
+    assert rec["n_options"] == 3
+    assert rec["picked"] == 0
+    assert any("auto_choice:unit_test" in e for e in env._errors)
+
+    info = env._make_info()
+    assert info["agent_choice_autoresolved"] == 1
+    assert info["auto_resolved_choices"][-1]["kind"] == "unit_test"
+    obs = env._observe()
+    assert obs.extra["env_stats"]["agent_choice_autoresolved"] == 1
+    assert obs.extra["env_stats"]["agent_choice_autoresolved_unit_test"] == 1
+    env.close()
+
+
+def test_choice_queue_records_only_auto_resolved_agent_choices():
+    """ChoiceQueue：自动结算的智能体选择留痕；被 hold 的不留痕。"""
+    from hsrl2.game import PendingChoice
+    from hsbg.env import driver
+    from tests.test_env_support import make_engine_game
+
+    game, heroes = make_engine_game(seed=34)
+    agent, other = heroes[0], heroes[1]
+    queue = driver.ChoiceQueue(game, agent=agent)
+    game.pending_choices = queue
+    try:
+        queue.append(PendingChoice(
+            agent, ["x", "y"], "unit_choice",
+            resolve_callback=lambda pick: None))
+        assert len(queue) == 0                          # 已自动结算
+        assert len(queue.auto_resolved_agent_choices) == 1
+        rec = queue.auto_resolved_agent_choices[-1]
+        assert rec["kind"] == "unit_choice"
+        assert rec["n_options"] == 2 and rec["picked"] == 0
+        # 非智能体（对手）的选择不记入 agent 留痕
+        queue.append(PendingChoice(
+            other, ["p", "q"], "unit_other",
+            resolve_callback=lambda pick: None))
+        assert len(queue.auto_resolved_agent_choices) == 1
+        # hold_fn 保留的选择不自动结算、不留痕
+        queue2 = driver.ChoiceQueue(game, agent=agent,
+                                    hold_fn=lambda choice: True)
+        game.pending_choices = queue2
+        queue2.append(PendingChoice(
+            agent, ["held"], "unit_held",
+            resolve_callback=lambda pick: None))
+        assert len(queue2) == 1
+        assert queue2.auto_resolved_agent_choices == []
+    finally:
+        game.pending_choices = []
+
+
 def test_placement_reward_formula():
     """只有 placement 权重时，累计奖励 == 名次映射值。"""
     reward = RewardConfig(placement=1.0, health_delta=0.0,

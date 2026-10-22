@@ -64,7 +64,7 @@ __all__ = [
 
 #: 观测协议版本（spec.Observation.version）
 ENTITY_TOKEN_VERSION = int(Observation.__dataclass_fields__[
-    "version"].default)          # 跟随 spec.py（v2），不手抄
+    "version"].default)          # 跟随 spec.py（v3），不手抄
 
 # ══════════════════════════════════════════════════════════════════════
 # 归一化映射（引擎枚举 → spec 字符串）
@@ -460,6 +460,95 @@ def _pending_token(game: Game, hero: Hero,
     )
 
 
+def _option_primary_id(opt: Any) -> str:
+    """PendingChoice 选项 → 主卡 id 字符串（None/str/tuple/实体/CardDef）。"""
+    if opt is None:
+        return ""
+    if isinstance(opt, str):
+        return opt
+    if isinstance(opt, tuple):
+        return str(opt[0]) if opt else ""
+    return str(getattr(opt, "id", "") or getattr(opt, "card_id", "") or "")
+
+
+def _option_secondary_id(opt: Any) -> Optional[str]:
+    """PendingChoice 选项的**第二 id**。
+
+    v3 结构化兼容方案的核心：Dark Gift 选项是 ``(minion_id, gift_id)``、
+    任务 offer 是 ``(quest_id, reward_id)``——``EntityToken`` 只保留主 id，
+    第二 id 此前只能塞进调试字段 ``name``。这里原样返回第二元素。
+    """
+    if not isinstance(opt, tuple) or len(opt) < 2:
+        return None
+    tail = opt[1]
+    return None if tail is None else str(tail)
+
+
+def _pending_choice_options_extra(
+        game: Optional[Game], pending: PendingChoice) -> List[Dict[str, Any]]:
+    """``extra["pending_choice_options"]``：选项的结构化元数据（v3）。
+
+    每个元素与 ``CandidateAction(kind="choose", option=i)`` 的 ``option``
+    一一对应：``{index, card_id, secondary_id, label, name, secondary_name,
+    cost}``。纯数据、可 pickle、不含引擎对象（观测 v2 契约不变）。
+
+    - ``secondary_id``：Dark Gift 的 gift_id / 任务 offer 的 reward_id /
+      其它二元组选项的第二元素；一维选项为 ``None``。
+    - ``label``：分支/选项展示文本。当前引擎 ``PendingChoice`` 不携带 label
+      （choose_one 只放 key），若未来引擎提供 ``labels``/``option_labels``
+      属性则自动读取；否则为 ``None``。
+    - ``cost``：选项卡（饰品等）的花费；未知为 -1。
+    """
+    labels = getattr(pending, "labels", None) \
+        or getattr(pending, "option_labels", None)
+    out: List[Dict[str, Any]] = []
+    for i, opt in enumerate(getattr(pending, "options", ()) or ()):
+        cid = _option_primary_id(opt)
+        sid = _option_secondary_id(opt)
+        label = None
+        if labels is not None:
+            try:
+                label = labels[i] if i < len(labels) else None
+            except Exception:                             # noqa: BLE001
+                label = None
+        name = ""
+        cost = -1
+        secondary_name = None
+
+        def _lookup(key: Optional[str]):
+            if not key or game is None:
+                return None
+            try:
+                return game.db.get(str(key))
+            except Exception:                             # noqa: BLE001
+                return None
+
+        d = _lookup(cid)
+        if d is not None:
+            name = str(getattr(d, "name", "") or "")
+            try:
+                raw_cost = getattr(d, "cost", None)
+                cost = int(raw_cost) if raw_cost is not None else -1
+            except (TypeError, ValueError):
+                cost = -1
+        if not name:
+            name = str(getattr(opt, "name", "") or cid or
+                       ("" if opt is not None else "pass"))
+        d2 = _lookup(sid)
+        if d2 is not None:
+            secondary_name = str(getattr(d2, "name", "") or "")
+        out.append({
+            "index": int(i),
+            "card_id": cid,
+            "secondary_id": sid,
+            "label": label,
+            "name": name,
+            "secondary_name": secondary_name,
+            "cost": int(cost),
+        })
+    return _plain_extra(out)
+
+
 def _plain_extra(value: Any) -> Any:
     """递归深拷贝为**纯数据**（dict/list/str/int/float/bool/None）。
 
@@ -672,7 +761,11 @@ def build_extra_state(
     - 大厅公开: ``elimination``（含名次）+ ``elimination_order``（先淘汰先出）
     - 战斗: ``last_combat``（**只有己方**本场/上回合战斗摘要，避免隐藏信息）
     - 己方死亡计数: ``deaths_by_card_id``
-    - 统计: ``turn_stats/env_stats``（调用方提供时）
+    - 统计: ``turn_stats/env_stats``（调用方提供时；v3 起 ``env_stats`` 含
+      ``agent_choice_autoresolved`` 等不可暂停阶段自动结算计数）
+    - 选择步附加（v3，由 :func:`build_observation` 注入，不在本函数内）:
+      ``pending_choice_options``（选项 ``card_id/secondary_id/label/...``，
+      见 :func:`_pending_choice_options_extra`）
     """
     if zones is None:
         zones = driver.collect_zones(game, hero)
@@ -827,6 +920,13 @@ def build_observation(
         # 传入的 dict 可能是调用方复用/可变对象 → 深拷贝纯数据，保证
         # 每个 Observation 的 extra 相互独立且不含引擎对象
         extra = _plain_extra(extra)
+    if pending is not None:
+        # v3: 选择步把选项的结构化第二 id / label 一并放进 extra（兼容方案，
+        # 不改 EntityToken/PendingChoice 既有字段）。与 choose(option=i)
+        # 的 option 下标一一对应。
+        extra = dict(extra)
+        extra["pending_choice_options"] = _pending_choice_options_extra(
+            game, pending)
     return Observation(
         version=ENTITY_TOKEN_VERSION,
         turn=int(turn if turn is not None else game.turn),

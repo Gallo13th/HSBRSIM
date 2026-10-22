@@ -4,6 +4,16 @@
 权威实现：`hsbg/env/spec.py`（数据结构）、`hsbg/env/`（行为）。
 修改任何字段或语义时，先改 spec.py，再同步本文档，并升 `Observation.version`。
 
+> **版本历史**
+> - **v2**（2026-10-18）：`Observation.extra`（决策状态袋）。
+> - **v3**（2026-10-22）：新增 `ActionKind.MOVE_MINION`（棋盘重排，动作枚举
+>   追加在末尾，既有 12 类索引不变）；选择步 `extra["pending_choice_options"]`
+>   暴露选项结构化第二 id/list（Dark Gift 的 `gift_id`、任务 offer 的
+>   `reward_id`）；不可暂停阶段（EoT/淘汰/对手招募/终局清理）被自动结算的
+>   智能体选择**不再静默**：`info["agent_choice_autoresolved"]` /
+>   `info["auto_resolved_choices"]` / `stats` 计数 / `_errors` 日志三重标记。
+>   全部为**向后兼容的新增**（既有字段/语义不变）。
+
 ---
 
 ## 1. 总体模型
@@ -35,7 +45,7 @@ reset() ──► obs(招募/选择)
 
 | 字段 | 含义 |
 |------|------|
-| `version` | 协议版本（当前 1） |
+| `version` | 协议版本（当前 **3**） |
 | `turn` | 回合数（1 起） |
 | `phase` | `"recruit"` / `"choice"` / `"game_over"` |
 | `hero` | `HeroToken`：health/armor/tier/gold/upgrade_cost/power_* |
@@ -49,10 +59,10 @@ reset() ──► obs(招募/选择)
 | `alive_count` / `total_players` / `rank` | 大厅统计与当前名次 |
 | `pending_choice` | `PendingChoice`：kind/options/for_agent；非 choice 步为 None |
 | `candidates` | 本步合法候选动作元组（顺序即动作下标） |
-| `extra` | **v2 新增**：决策相关但非实体槽位的状态（纯 dict，可 pickle） |
+| `extra` | **v2 新增；v3 增键**：决策相关但非实体槽位的状态（纯 dict，可 pickle） |
 | `log` | 调试日志（策略不得依赖） |
 
-`Observation.version = 2`。`extra` 的常用键（与 `info["obs_extra"]` 同源）：
+`Observation.version = 3`。`extra` 的常用键（与 `info["obs_extra"]` 同源）：
 
 | 键 | 含义 |
 |----|------|
@@ -65,6 +75,28 @@ reset() ──► obs(招募/选择)
 | `last_combat` | 最近一场战斗结果摘要 |
 | `pending_hand_queue` | 满手等待入场的生成卡数 |
 | `minion_flags` | 随从的 EXHAUSTED/FROZEN/ACTIVATE_USED/WINDFURY_ATTACKS 等 |
+| `pending_choice_options` | **v3**：选择步选项结构（见 §2.1） |
+| `env_stats` | **v3**：含 `agent_choice_autoresolved` 等自动结算计数 |
+
+### 2.1 选择步选项结构（v3）
+
+`EntityToken` 表达不了「二元组选项」的第二 id（Dark Gift 的 `gift_id`、任务
+offer 的 `reward_id`）。v3 用 **extra 兼容方案**（不改 `EntityToken` 字段）：
+`phase="choice"` 时 `extra["pending_choice_options"]` 为列表，元素与
+`CandidateAction(kind="choose", option=i)` 的 `option` 下标一一对应：
+
+```python
+{"index": i,            # 选项下标（= choose.option）
+ "card_id": str,        # 主卡 id（minion/quest/trinket/spell/...）
+ "secondary_id": str|None,  # Dark Gift 的 gift_id / 任务 offer 的 reward_id
+ "label": str|None,    # 引擎提供 labels 时的分支文本，否则 None
+ "name": str,          # 主卡显示名（调试可读，策略应优先用 id）
+ "secondary_name": str|None,
+ "cost": int}          # 选项卡花费（未知 -1；饰品商店用）
+```
+
+`PendingChoice.prompt` 目前恒为空；`choose_one` 的 options 仍是脚本 key
+（分支 label 需引擎侧提供 `labels` 属性后自动透传）。
 
 `extra` 必须可 pickle、禁止放引擎对象；训练侧可选择性编码（不要求策略使用全部键）。
 
@@ -93,10 +125,38 @@ races, keywords, golden, entity_id, name`。
 | `use_dark_gift` | S14 黑暗赠礼 | — |
 | `end_turn` | 结束招募阶段 | — |
 | `choose` | 结算选择 `option` | option |
+| `move_minion` | **v3**：棋盘重排（`board[src_slot]` → 目标槽位） | src, position（目标槽位 0..n-1） |
 
 **目标组合**：环境为需要目标的动作生成所有合法目标组合（例如战吼目标
 可指向己方棋盘/酒馆；磁力只能指向己方机械；法术按其目标规则）。若某动作
 的合法目标集合为空，则不生成该候选。
+
+**棋盘重排（v3，`move_minion`）**：招募期可把棋盘随从拖到其它槽位（位置影响
+战斗攻击顺序、Cleave/相邻效果）。实现说明：
+
+- 引擎（vendored `hsrl2`）**没有公开 reorder API**。env 层采用最小可行接口：
+  改 `hero.board` 列表顺序 + 调用引擎既有 `game._update_positions(hero)` 重算
+  `ZONE_POSITION`；不 fire 事件、不触发 on_summon/入场/死亡流程、不动其它状态。
+  因此语义与客户端拖拽换位一致（同一批实体，仅顺序变化）。
+- 当前**枚举**只生成相邻交换（`board[i] ↔ board[i+1]`，共 n-1 个候选），
+  避免 n*(n-1)（满场 42）挤占 `CANDIDATE_MAX=64` 的手牌打出预算；任意排列
+  可经多次相邻交换达成。`apply_action` 本身已支持任意目标槽位（0..n-1），
+  若后续放宽枚举只需改 driver。
+- 观测无需新字段：`board` 元组顺序即槽位，`extra["board_states"][].zone_position`
+  同步反映新顺序。
+
+**不可暂停阶段的选择（v3 可见性）**：`end_recruit_phase` 内（EoT/战斗/淘汰/
+对手招募/终局清理）产生的智能体 `PendingChoice` 仍按既有契约自动结算（引擎
+同步阶段不能暂停）；但 v3 起**不再静默**：
+
+- `info["agent_choice_autoresolved"]`：本局累计自动结算的智能体选择数；
+- `info["auto_resolved_choices"]`：最近明细（≤64 条，纯数据）；
+- `stats["agent_choice_autoresolved"]` + 按场景细分
+  `agent_choice_autoresolved_{end_recruit_phase,opponent_phase,game_over,
+  auto_choice_config}`（`obs.extra["env_stats"]` 可见）；
+- `env._errors` 追加 `auto_choice:<where>:kind=...:picked=i/n:turn=T`（有界）；
+- **新回合开始后**产生的智能体选择（任务/饰品三选一）仍会保留为
+  `phase="choice"` 决策步（ChoiceQueue `hold_fn` 契约不变）。
 
 **非法动作**：环境中永远不应出现非法候选；若调用方传入非候选动作，
 环境返回不推进状态、`reward=invalid_action`、`info["invalid"]=True`。
@@ -183,7 +243,9 @@ episode_steps / alive_count`。
 - 非法动作惩罚、超时惩罚、每步惩罚。
 - 所有奖励在 episode 内累加；训练侧再做 return 标准化。
 - `info` 必须含：`turn, rank, health, alive_count, combat, wrong_action,
-  terminated_reason, seed, episode_steps`。
+  terminated_reason, seed, episode_steps`；v3 起另含
+  `agent_choice_autoresolved` / `auto_resolved_choices`（不可暂停阶段自动
+  结算的智能体选择，见 §3）。
 
 ## 6. 对手与教师
 

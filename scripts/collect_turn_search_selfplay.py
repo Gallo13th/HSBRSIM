@@ -38,6 +38,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from hsbg.env import BattlegroundsEnv  # noqa: E402
+from hsbg.env import spec as env_spec  # noqa: E402
 from hsbg.rl.api import run_episode  # noqa: E402
 from hsbg.rl.api import obs_digest as _summary_obs_digest  # noqa: E402
 from hsbg.search.policy import TurnSearchPolicy, TurnSearchPolicyConfig  # noqa: E402
@@ -464,7 +465,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                           "checkpoint": str(args.evaluator_checkpoint)},
         "opponent": str(args.opponent),
         "num_players": int(args.num_players),
-        "obs_version": 2,
+        "obs_version": int(env_spec.Observation().version),
         "seed_range": [int(args.seed_start),
                         int(args.seed_start) + int(args.episodes) - 1],
         "golden_split": golden_split,

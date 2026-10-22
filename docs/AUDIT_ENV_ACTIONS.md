@@ -32,7 +32,7 @@ BattlegroundsEnv.step(action)
   因此 `CandidateAction.src/tgt_zone+slot` 就是观测槽位。
 - **动作契约**：`spec.ActionKind`（spec.py:68-86）共 12 类；`CandidateAction`（spec.py:209-235）
   字段 `kind/src_zone/src_slot/tgt_zone/tgt_slot/position/option/cost`。
-- **观测契约**：`Observation.version=2`（spec.py:251）；实体槽 + 全局标量 + `pending_choice`
+- **观测契约**：`Observation.version=3`（spec.py:251）；实体槽 + 全局标量 + `pending_choice`
   + `extra`（observation.py:643-769，纯数据、可 pickle）。
 - **选择即动作**：所有引擎 `PendingChoice` 走 `phase="choice"`、候选只有 `choose`（option 下标），
   `driver.enumerate_choice`（driver.py:935-940）；观测把 options 序列化为 `EntityToken`
@@ -177,7 +177,8 @@ BattlegroundsEnv.step(action)
 **live 需要**：T3 起花 3 金点 Dark Gift 按钮 → 出现 3 个「随从 + Dark Gift」配对选项
 （每个随从绑不同 gift，gift 是持久附魔）→ 选一个，随从带 gift 入手；饰品（Ominous Stone /
 Wax Lance / Maldraxxus Dagger）、英雄技能也会触发同一协议。证据：规则/数据
-`docs/reference_old/REFACTOR_PLAN.md:135-138`、`docs/ENGINE_API.md:331,1152,1441`（43 个 gift）、
+`docs/reference_old/REFACTOR_PLAN.md:135-138`、`docs/ENGINE_API.md:331,1152`
+（Dark Gift 实测 **47** 个：`data/bg_dark_gifts.json` 长度 47）、
 引擎实现 game.py:2261-2315（主路径）、`batch_trinkets20.py:426-470`（饰品触发）、
 `batch_trinkets22.py:300-386`（SoT 触发）。
 
@@ -335,40 +336,44 @@ game.py:2079-2172（主/副槽、single/multi target），`docs/ENGINE_API.md:33
 
 ### 交互 7：随从位置 / 换位（board reorder）
 
+**C04 统一表述**：**引擎有「打出 position」参数，但无公开 reorder/move API；env 需新增
+move 动作**（`ActionKind.MOVE_MINION`）。优先级按 `docs/AUDIT_CONSISTENCY.md` 与 gap 台账
+统一为 **P0**（L05「随从换位/重排」= L20，Lead 仲裁升 P0，`docs/LIVE_TO_SIM_GAP.md` 由 Lead 更新）。
+
 **live 需要**：招募阶段可把棋盘随从拖到任意槽位（重排/换位），位置决定战斗攻击顺序与
-相邻效果（Cleave/Rally/相邻 buff）。证据：`docs/LIVE_TO_SIM_GAP.md:57`（L05：live
-「随从换位/重排 未实现；引擎 position 参数存在，env 候选少」）；
+相邻效果（Cleave/Rally/相邻 buff）。证据：`docs/LIVE_TO_SIM_GAP.md:57`（L05/L20）、
 `docs/LIVE_AUTOMATION_PROTOCOL.md:185`；引擎 `_update_positions` 维护 `ZONE_POSITION`
 （game.py:5124-5126），战斗按 board 列表顺序（summon 插入 position，game.py:1403-1426）。
 
-**env 现状（只支持「打出时插入位置」，不支持换位）**
-- 打出位置：`CandidateAction.position`（spec.py:222-223；-1=最右），
+**env 现状（v3 已实现最小可行 move；引擎仍无公开 reorder/move API —— C04）**
+- 打出位置（原有）：`CandidateAction.position`（spec.py:222-223；-1=最右），
   `_position_variants` 生成 -1 与 0..n-1（driver.py:420-422），apply 传给
   `game.play_minion(position=...)`（driver.py:976-984）。观测 board 元组顺序即槽位
   （observation.py:802-803; spec.py:257-258）。测试：`tests/test_env_actions.py:196-215`。
-- **没有任何 reorder/move/swap 动作**：`ActionKind` 12 类中无对应项（spec.py:68-86）；
-  `driver.enumerate_actions` 无此类枚举（driver.py:849-920）；`apply_action` 无此类分支
-  （driver.py:962-1027）；`hsbg/env/spec.py` 的 `CandidateAction` 也无「目标槽位移动」表达
-  （position 仅用于 play）。
-- **引擎侧也没有公开重排 API**：只有内部 `_update_positions`（game.py:5124-5126）与
-  `summon` 插入（game.py:1418-1421）、脚本私有 `hero.board.remove/insert`（如
-  `batch_hero_actives.py:574-581` 的 Jandice 换位）。ENV_SPEC/AGENTS 禁止 env 直接篡改引擎
-  棋盘（`docs/ENV_SPEC.md:147-150`「只使用引擎公开 API…不得直接篡改棋盘」）。
+- **v3 新增换位**：`ActionKind.MOVE_MINION`（spec.py 追加末尾，旧 12 类索引不变）；
+  `driver._enumerate_moves` 对 board 每对相邻随从生成 1 个候选（n-1 个，
+  `position=i+1`），`_apply_move_minion` 支持任意目标槽位 0..n-1：只改
+  `hero.board` 顺序 + 调引擎私有 `_update_positions` 重算 `ZONE_POSITION`，
+  不 fire 事件/不触发 on_summon（等价客户端拖拽换位）。观测无需新字段
+  （board 顺序 + `extra.board_states[].zone_position`）。测试：`tests/test_env_move.py`
+  （枚举/apply/非法位置/可达性反转/env step/候选上限/版本）。
+- **引擎侧仍无公开 reorder/move API**（C04）：只有内部 `_update_positions`
+  （game.py:5124-5126）与 `summon` 插入（game.py:1403-1426）、脚本私有
+  `hero.board.remove/insert`（如 `batch_hero_actives.py:574-581` 的 Jandice 换位）。
+  因此 v3 依赖引擎私有方法（未改 `hsrl2/**`）；建议引擎主线补
+  `Game.move_minion(hero, minion, position) -> bool` 收口（校验 board/position/
+  no-op、更新 positions、返回合法性），env 再切换到公开 API。
 
-**缺口**
-1. **P0 完全缺失换位动作**：训练/评测环境无法表达 live 每回合都可做的核心定位操作；
-   策略只能在「打出瞬间」决定位置，无法在后续调整（卖掉/换位保护关键随从、调整 cleave 顺序）。
-2. 需引擎新增公开 API（vendored 只读，必须走 AGENTS §1 的发动机变更流程）：
-   建议 `Game.move_minion(hero, minion, position) -> bool`：
-   校验 minion 在 board、position 0..len-1、不触发 on_summon、更新 `ZONE_POSITION`
-   （`_update_positions`）、必要时 fire 轻量事件；返回合法性。
-3. env 侧配套：spec 加 `ActionKind.MOVE_MINION`（升 Observation.version）；driver 枚举
-   「每个 board 随从 × 每个目标槽位（排除原槽位）」或交换对（2×C(7,2)≈42 个 → 会挤占
-   CANDIDATE_MAX，需优先级/预算策略，参考 `_trim_tail_preserving` driver.py:783-815）；
-   apply 分支；observation 无需改（board 顺序已被观测）。
-4. 测试：`tests/test_env_actions.py::test_move_minion_changes_board_order`（枚举 + apply +
-   ZONE_POSITION/board 顺序一致 + 非法位置被拒）；引擎回归测试需加在 `hsrl2/tests/`
-   并保持全绿（AGENTS §1）；策略 encoder 无需改字段（board 顺序已有 slot 特征）。
+**剩余缺口**
+1. **P1（引擎）**：无公开 reorder API → env 依赖 `game._update_positions` 私有方法；
+   若引擎重构该 helper，env 需同步（有测试兜底）。修复：引擎主线新增 `move_minion`。
+2. **P2（枚举粒度）**：当前只枚举相邻交换（任意排列经多次交换可达，移动端到端
+   最多 n-1 个动作）；`apply_action` 已支持任意槽位，若 CANDIDATE_MAX/预算允许可
+   直接枚举任意目标槽位（n*(n-1)≈42 会挤占手牌预算，需预算策略）。
+3. **P2（策略侧）**：`NUM_ACTION_KINDS` 12→13，旧 checkpoint 的动作 kind embedding
+   不再匹配（需重训/迁移）；`Observation.version` 已升 3 作兼容性判据。
+4. **测试**：v3 `tests/test_env_move.py` 已覆盖 env 行为；引擎侧如有公开 API 需在
+   `hsrl2/tests/` 加回归并保持全绿（AGENTS §1）。
 
 ---
 
@@ -383,25 +388,39 @@ game.py:2079-2172（主/副槽、single/multi target），`docs/ENGINE_API.md:33
 | 1e | 磁力吸附 | `PLAY_MINION` | `tgt_zone/tgt_slot`（宿主） | `keywords=magnetic`、宿主槽位 | ⚠️ 部分（普通打出丢失、无 flag P1/P2） |
 | 2 | 抉择 Choose One | `PLAY_MINION`/`PLAY_SPELL` + `CHOOSE` | 无（打出时）；嵌套 `battlecry_target` | `pending_choice(kind=choose_one)`、options | ⚠️ 支持但选项语义丢失（P1） |
 | 3 | ACTIVATE | `ACTIVATE` + `CHOOSE` | 无（目标经 `activate_target` choice） | `keywords=activate`、`extra.board_states[].activate_used_this_turn`、候选 `cost` | ✅ 支持主路径（落空候选 P2、无测试 P1） |
-| 4 | Dark Gift（购买/选择） | `USE_DARK_GIFT` + `CHOOSE` | 无（选项即目标） | `pending_choice(kind=dark_gift)`、`extra.dark_gift` | ⚠️ 动作支持；**gift 不可观测 P0** |
+| 4 | Dark Gift（购买/选择） | `USE_DARK_GIFT` + `CHOOSE` | 无（选项即目标） | `pending_choice(kind=dark_gift)`、`extra.pending_choice_options[].secondary_id`(gift_id)、`extra.dark_gift` | ✅ v3 支持（gift_id 进 extra；`tests/test_env_dark_gift_obs.py`） |
 | 5 | 英雄技能（主/副槽） | `HERO_POWER` | 单目标 `tgt_*`；多目标 choice | `hero.power_*`（仅主）、`extra.powers[]` | ⚠️ 部分（身份 P1、6 上限 P1、副槽观测 P2） |
 | 6a | 三连奖励 Discover | `CHOOSE` | 无（选项下标） | `pending_choice(kind=triple_reward)`、options | ✅ 机制支持（无测试 P1、非暂停期自动结算 P1） |
 | 6b | 饰品商店 | `CHOOSE` | 无（选项下标） | `pending_choice(kind=trinket_offer)`、`trinkets`、option cost | ✅ 机制支持（可买性/测试 P2/P1） |
 | 6c | 其他 Discover（随从/法术/技能） | `CHOOSE` | 无 | `pending_choice(kind=discover_*)`、options | ✅ 机制支持（无测试 P1） |
 | 6d | 任务 offer | `CHOOSE` | 无 | `pending_choice(kind=quest_offer)`、`extra.quest*` | ⚠️ 二元组语义丢失 P2 |
 | 7a | 打出位置 | `PLAY_MINION` | `position`（-1/0..n） | `board[]` 顺序 | ✅ 支持（tests/test_env_actions.py:196-215） |
-| 7b | 棋盘换位/重排 | **无** | **无** | board 顺序（可观测但不可修改） | ❌ **不支持（P0）** |
+| 7b | 棋盘换位/重排 | `MOVE_MINION`（v3） | src（board 槽位）+ `position`（目标槽位） | `board[]` 顺序、`extra.board_states[].zone_position` | ✅ v3 支持（相邻交换枚举；引擎无公开 API P1；`tests/test_env_move.py`） |
 
 ---
 
 ## 4. 缺口清单与优先级
 
+### 4.0 实施状态（2026-10-22，env v3）
+
+| 缺口 | 状态 | 落地内容 / 证据 |
+|------|------|-----------------|
+| P0-1 换位 | ✅ 已实现（env 层最小接口） | `ActionKind.MOVE_MINION`（追加末尾，旧 12 索引不变）；driver 枚举相邻交换 + apply 任意槽位（改 `hero.board` 序 + `game._update_positions`，不 fire 事件）；观测沿用 `board` 顺序；`tests/test_env_move.py`（24 项）；文档 `ENV_SPEC.md` §3 |
+| P0-2 Dark Gift 第二 id | ✅ 已实现（extra 兼容方案） | `observation._pending_choice_options_extra`：choice 步 `extra["pending_choice_options"]` 含 `card_id/secondary_id(gift_id/reward_id)/label/name/cost`；`tests/test_env_dark_gift_obs.py`；engine 若提供 `PendingChoice.labels` 自动透传 |
+| P0-3 非暂停期选择静默 | ✅ 已实现（标记，不谎报） | `ChoiceQueue.auto_resolved_agent_choices` + `game_env._snapshot_agent_choices/_record_auto_resolved`：`info["agent_choice_autoresolved"]`、`info["auto_resolved_choices"]`、`stats[agent_choice_autoresolved_*]`、`_errors` 新增 `auto_choice:<where>:...`；`tests/test_env_game.py::test_auto_resolved_agent_choice_is_marked_not_silent` / `test_choice_queue_records_only_auto_resolved_agent_choices` |
+| Observation 版本 | ✅ v3 | `spec.py` version=3（只增不改；`extra` 新键、ActionKind 追加）；`docs/ENV_SPEC.md` 版本历史与字段表已同步 |
+
+> 行为边界（诚实记录）：P0-3 仅"留痕"，**没有**把 EoT/淘汰/对手期选择改成可决策步
+> （需要改 `_hold` 判据与 `_drive_opponents` 中断语义，属后续 P1 改造）；P0-1 当前
+> 枚举只给相邻交换（任意排列经多次交换可达），且依赖引擎私有 `_update_positions`
+> （引擎无公开 reorder API，未改 `hsrl2/**`）。
+
 ### P0（阻断真实交互等价 / 训练动作空间完整性）
 | ID | 缺口 | 证据 | 建议 |
 |----|------|------|------|
-| P0-1 | 无棋盘换位/重排动作；引擎亦无公开 API | spec.py:68-86；driver.py:849-1027；game.py:5124-5126；LIVE_TO_SIM_GAP.md:57 | 引擎加 `move_minion` + spec 加 `ActionKind.MOVE_MINION` + driver 枚举/apply + 测试 |
-| P0-2 | Dark Gift（及 quest_offer 等二元组）选项的第二 id 只存在于 `name` 调试字段，策略不可依赖 | observation.py:304-323, 447-460；spec.py:127-149,198-206；game.py:2294,2313,3934 | spec v3 增 `PendingChoiceOption{card_id,secondary_id,label,cost}`（或扩 EntityToken）；encoder/obs 同步 |
-| P0-3 | 非暂停阶段（EoT/淘汰/对手招募期）智能体 PendingChoice 被自动结算，无法决策 | game_env.py:750-759,858-861；driver.py:1140-1192；game.py:2737-2747,2791,3136-3175；batch_hero_passives2.py:879-881 | 保留 agent 选择并作为 choice 暴露（或至少统计+文档化）；改 `_hold` 判据为「选择产生阶段可决策」 |
+| P0-1 | 无棋盘换位/重排动作；**引擎有打出 position，但无公开 reorder/move API，env 需新增 move 动作**（C04） | spec.py:68-86；driver.py:849-1027；game.py:5124-5126；LIVE_TO_SIM_GAP.md:57（L05=L20，Lead 已升 P0） | ✅ env v3 已实现（`MOVE_MINION`，见 §4.0）；引擎公开 API 待主线补 |
+| P0-2 | Dark Gift（及 quest_offer 等二元组）选项的第二 id 只存在于 `name` 调试字段，策略不可依赖 | observation.py:304-323, 447-460；spec.py:127-149,198-206；game.py:2294,2313,3934 | ✅ 已实现（extra v3 结构见 §4.0/ENV_SPEC §2.1；后续可升级为 spec 一等字段） |
+| P0-3 | 非暂停阶段（EoT/淘汰/对手招募期）智能体 PendingChoice 被自动结算，无法决策 | game_env.py:750-759,858-861；driver.py:1140-1192；game.py:2737-2747,2791,3136-3175；batch_hero_passives2.py:879-881 | ✅ 已留痕（§4.0）；彻底可决策见 P1-6 |
 
 ### P1（关键交互部分不可达 / 观测语义不完整 / 无回归）
 | ID | 缺口 | 证据 |
@@ -409,9 +428,10 @@ game.py:2079-2172（主/副槽、single/multi target），`docs/ENGINE_API.md:33
 | P1-1 | 英雄技能单目标 6 变体硬上限（Maiev 7 / Arcane Alteration 10 目标丢失），无 no-target choice 回退 | driver.py:712,770-776；batch_hero_actives.py:156-157,365-366,484-485,608-609；game.py:2139-2172 |
 | P1-2 | 定向法术/被裁剪战吼无 choice 回退（目标不可达） | driver.py:546-566,587-607；game.py:1138-1152,1531-1544 |
 | P1-3 | 技能候选无 `power_id`；磁力候选无 `magnetic`；同签名候选不可区分，`_resolve_action` 取第一个 | spec.py:209-235；driver.py:195-205,534-541；game_env.py:500-503；encoder.py:700-726 |
-| P1-4 | Choose One 的 branch label/prompt 不进入观测（options 仅 key） | observation.py:292-303,447-460；game.py:1130-1134,1527-1529；spec.py:198-206 |
+| P1-4 | Choose One 的 branch label 不进入观测（options 仅 key）；v3 起若引擎提供 `labels` 已可透传，当前引擎未提供 | observation.py:292-303,447-460；game.py:1130-1134,1527-1529；spec.py:198-206 |
 | P1-5 | 三连/发现/饰品/任务/targeted-activate **零 env 回归测试**；审计门禁不含 choice 类 | grep `tests/test_env_*.py`；audit_env_coverage.py:62-65,226-227；tests/test_env_coverage.py:870-1018 |
 | P1-6 | 非暂停期选择自动结算（P0-3 的具体影响面）：Bigglesworth 淘汰 Discover、EoT Discover、对手期触发选择 | game_env.py:750-759,838,858-861；game.py:3175；batch_hero_passives2.py:817-884 |
+| P1-7 | **C04 引擎侧**：引擎有打出 position，但无公开 reorder/move API；env v3 暂依赖私有 `game._update_positions`（未改 `hsrl2/**`） | game.py:5124-5126；driver.py `_apply_move_minion`；tests/test_env_move.py |
 
 ### P2（语义/契约/边界）
 | ID | 缺口 | 证据 |
@@ -420,29 +440,30 @@ game.py:2079-2172（主/副槽、single/multi target），`docs/ENGINE_API.md:33
 | P2-2 | `CHOICE_OPTION_MAX=5` 与实际 choice 选项数（Galakrond 至多 7）不符，encoder 只编码 5 | spec.py:35；encoder.py:115-121,589-591；batch_hero_combat3.py:1362,1399-1401 |
 | P2-3 | trinket_offer 候选不带 cost、不过滤买不起选项；引擎静默不购买 | driver.py:935-940；game.py:5033-5039 |
 | P2-4 | ACTIVATE 可能枚举「必然落空」候选（引擎先扣费置 used） | driver.py:818-831；game.py:1908-1922；minions.py:293-294 |
-| P2-5 | `choose_one+needs_target` 组合 latent（driver 只在无 choose 时处理目标） | driver.py:546；game.py:1126-1135；batch_misc.py:52-54 |
+| P2-5 | `choose_one+needs_target` 组合：引擎 2026-10-22 已改两阶段状态机（抉择→目标→结算），env 经 choice 链完整表达；driver 不预枚举目标变体（既有行为，测试已按新协议更新） | driver.py:546；game.py:1126-1135；batch_misc.py:52-54；tests/test_env_coverage.py:224-252 |
 | P2-6 | 观测无实体 `activate_cost`；`board_states` 未进入策略编码器 | observation.py:596-618；encoder.py:657-682 |
-| P2-7 | spec/文档卫生：`EnvConfig.max_steps` 重复字段；`ENV_SPEC` 写 version=1；spec 注释引用不存在的 `hsbg/env/actions.py` | spec.py:374,381；spec.py:71；docs/ENV_SPEC.md:38 vs :55 |
+| P2-7 | spec/文档卫生：`EnvConfig.max_steps` 重复字段（spec.py:374,381，仍未修）；v3 已修 `ENV_SPEC` 版本 1/2 不一致（统一为 3）与 spec 注释引用的不存在 `hsbg/env/actions.py` | spec.py:374,381；spec.py:71；docs/ENV_SPEC.md:48,65 |
 | P2-8 | 手牌预算裁剪 target×position 变体（CANDIDATE_MAX=64） | driver.py:631-668,897-905 |
 
 ---
 
 ## 5. 测试建议汇总（按优先级）
 
-| 优先级 | 测试（建议位置/名称） | 断言要点 |
+| 优先级 | 测试（已落地 / 建议） | 断言要点 |
 |--------|------------------------|----------|
-| P0 | `tests/test_env_coverage.py::TestReorder`（需引擎 API 后） | 枚举换位候选 → apply → board 顺序/ZONE_POSITION 一致；非法位置被拒 |
-| P0 | `tests/test_env_coverage.py::TestDarkGiftObservation` | choice 选项带 secondary_id(gift)；不同 gift 可区分；选择生效 |
-| P0 | `tests/test_env_coverage.py::TestChoicePauseBoundary` | EoT/淘汰/对手期 agent 选择保留为 choice（改造后）或自动结算计数可见（现状） |
-| P1 | `tests/test_env_actions.py::test_hero_power_targets_over_6` | 7/10 目标全可达（choice 回退） |
-| P1 | `tests/test_env_actions.py::test_targeted_spell_choice_fallback` | 目标被裁/不可寻址时仍可施放并选择 |
-| P1 | `tests/test_env_actions.py::test_candidate_identity_fields` | 双技能槽/磁力普通打出候选可区分 |
-| P1 | `tests/test_env_coverage.py::TestTripleDiscoverTrinket` | 三连→choice→choose→手牌；饰品 offer 保留→选择→trinkets+金币；任务 offer |
-| P1 | `tests/test_env_coverage.py::TestActivateTarget` | Kelp Keeper 激活→choice→choose→战吼生效；0/2 费与每回合一次 |
-| P2 | `tests/test_env_observation.py::test_choose_one_label` | label/prompt 出现在观测 |
-| P2 | `tests/test_env_coverage.py::TestChoiceOptionMax` | 选项 >5 时编码/候选仍可决策 |
-| P2 | `tests/test_env_actions.py::test_trinket_offer_affordability` | 买不起选项过滤或候选带 cost |
-| P2 | 审计器：`scripts/audit_env_coverage.py` 增 choice 类门禁 | 20 局内 `triple_reward/trinket_offer/discover_*` 与 targeted activate 计数 >0 |
+| P0 | ✅ `tests/test_env_move.py`（已落地，24 项） | 枚举相邻交换 → apply → board 顺序/ZONE_POSITION 一致；非法位置被拒；env.step 生效；满场候选上限 |
+| P0 | ✅ `tests/test_env_dark_gift_obs.py`（已落地，9 项） | choice 选项 `secondary_id(gift_id)` 与引擎 options 一致、可 pickle；choose 后 DARK_GIFT tag 生效；quest_offer/trinket/choose_one 元数据 |
+| P0 | ✅ `tests/test_env_game.py::test_auto_resolved_agent_choice_is_marked_not_silent` 等（已落地） | EoT/淘汰/对手期自动结算计数/明细/日志可见（不静默）；hold 的选择不计入 |
+| P0 | 建议（需引擎公开 API 后）`hsrl2/tests/` move API 回归 | 引擎 `move_minion` 合法性/位置 tag/不触发 on_summon |
+| P1 | 建议 `tests/test_env_actions.py::test_hero_power_targets_over_6` | 7/10 目标全可达（choice 回退） |
+| P1 | 建议 `tests/test_env_actions.py::test_targeted_spell_choice_fallback` | 目标被裁/不可寻址时仍可施放并选择 |
+| P1 | 建议 `tests/test_env_actions.py::test_candidate_identity_fields` | 双技能槽/磁力普通打出候选可区分 |
+| P1 | 建议 `tests/test_env_coverage.py::TestTripleDiscoverTrinket` | 三连→choice→choose→手牌；饰品 offer 保留→选择→trinkets+金币；任务 offer |
+| P1 | 建议 `tests/test_env_coverage.py::TestActivateTarget` | Kelp Keeper 激活→choice→choose→战吼生效；0/2 费与每回合一次 |
+| P2 | 建议 `tests/test_env_observation.py::test_choose_one_label` | label/prompt 出现在观测 |
+| P2 | 建议 `tests/test_env_coverage.py::TestChoiceOptionMax` | 选项 >5 时编码/候选仍可决策 |
+| P2 | 建议 `tests/test_env_actions.py::test_trinket_offer_affordability` | 买不起选项过滤或候选带 cost |
+| P2 | 建议 审计器：`scripts/audit_env_coverage.py` 增 choice 类门禁 | 20 局内 `triple_reward/trinket_offer/discover_*` 与 targeted activate 计数 >0 |
 
 **回归门槛**（AGENTS §6）：改 `hsbg/env/**` 后 `python -m pytest tests -q` 全绿；
 改引擎需 `python -m pytest hsrl2/tests -q` 全绿；改 spec/Choice 语义须升
@@ -453,24 +474,30 @@ game.py:2079-2172（主/副槽、single/multi target），`docs/ENGINE_API.md:33
 ## 6. 证据索引（file:line）
 
 **契约/观测**
-- `hsbg/env/spec.py:30-39` 槽位上限与 `CHOICE_OPTION_MAX=5`；`:68-86` ActionKind（无换位）；
-  `:127-149` EntityToken（无 secondary/label/text）；`:198-206` PendingChoice(prompt 恒空)；
-  `:209-235` CandidateAction（无 power_id/flags）；`:251` version=2；
-  `:358-384` EnvConfig（`max_steps` 重复 :374/:381）；`:71` 引用不存在的 `hsbg/env/actions.py`。
-- `hsbg/env/observation.py:292-323` str/tuple 选项序列化（gift/reward 只进 name）；
-  `:395-428` HeroToken 只取 power_ids[0]；`:447-460` `_pending_token`；
-  `:508-545` `extra.powers`；`:548-558` `extra.dark_gift`；`:596-618` board_states；
-  `:643-769` build_extra_state；`:771-849` build_observation。
+- `hsbg/env/spec.py:30-39` 槽位上限与 `CHOICE_OPTION_MAX=5`；`:68-86` ActionKind（v3 追加
+  `MOVE_MINION` 于末尾，旧 12 索引不变）；`:127-149` EntityToken（v3 仍无 secondary/label/
+  text，改用 extra）；`:198-206` PendingChoice(prompt 恒空)；`:209-235` CandidateAction
+  （无 power_id/flags；position 在 move 时=目标槽位）；`:251` version=3（v3 版本历史）；
+  `:358-384` EnvConfig（`max_steps` 重复 :374/:381）；`:71` 已改为指向 `driver.py`。
+- `hsbg/env/observation.py:447-460` `_pending_token`（兼容旧字段）；`:463-535`
+  （v3）`_option_primary_id/_option_secondary_id/_pending_choice_options_extra`
+  （extra 结构化选项：`card_id/secondary_id/label/name/cost`）；
+  `:597-636` `extra.powers`；`:637-661` `extra.dark_gift`；`:685-707` board_states；
+  `:732-858` build_extra_state；`:864-945` build_observation（v3 注入
+  `extra["pending_choice_options"]`）。
 - `hsbg/env/driver.py:137-159` Zones；`:191` magnetic 字段；`:209-235` ActionDescriptor→Candidate；
-  `:420-422` position 变体；`:425-486` 目标候选求值；`:488-569` play_minion 变体；
-  `:573-608` play_spell 变体（无 choice 回退）；`:631-668` 手牌预算；
-  `:712` 单来源目标上限 6；`:715-780` 英雄技能枚举；`:818-831` Activate 枚举；
-  `:834-846` Dark Gift 枚举；`:849-920` enumerate_actions；`:935-959` choice 枚举/结算；
-  `:962-1027` apply_action；`:1046-1089` default_pick_index；`:1092-1192` FIFO/ChoiceQueue。
-- `hsbg/env/game_env.py:452-468` 动作后 drain+observe；`:477-503` 动作解析（签名首匹配）；
-  `:666-728` `_observe`；`:734-759` drain choices（agent 暴露 vs 全自动）；
-  `:808-839` 对手驱动（`:838` drain_all）；`:845-882` end_recruit_phase + ChoiceQueue
-  （`:858-861` hold 判据）；`:884-961` `_end_turn_step`。
+  `:420-423` position 变体；`:425-448`（v3）`_enumerate_moves`（相邻交换）；
+  `:450-511` 目标候选求值；`:513-596` play_minion 变体；`:598-634` play_spell 变体；
+  `:737` 单来源目标上限 6；`:749-805` 英雄技能枚举；`:808-843` tail 裁剪；
+  `:845-859` Activate 枚举；`:861-874` Dark Gift 枚举；`:876-963` enumerate_actions
+  （tail 接入 move）；`:977-1026`（v3）`_apply_move_minion`；`:1028-1093` apply_action；
+  `:1114-1157` default_pick_index；`:1208-1290` FIFO/ChoiceQueue（v3 agent 留痕）。
+- `hsbg/env/game_env.py:488-514` 动作解析（签名首匹配）；`:679-741` `_observe`；
+  `:747-776`（v3）`_snapshot_agent_choices`；`:778-792`（v3）`_record_auto_resolved`；
+  `:794-813` `_drain_choices`（auto_choice opt-in 留痕）；`:815-856` `_drain_all_choices
+  (where=)`；`:880-911` 对手驱动（where="opponent_phase"）；`:917-960` end_recruit_phase +
+  ChoiceQueue（hold + v3 auto 留痕）；`:963-1050` `_end_turn_step`；`:1053-1095`
+  `_make_info`（v3 `agent_choice_autoresolved/auto_resolved_choices`）。
 
 **引擎**
 - `hsrl2/game.py:340-431` 回合开始（任务/饰品 offer、SoT）；`:1068-1154` play_minion
@@ -480,7 +507,10 @@ game.py:2079-2172（主/副槽、single/multi target），`docs/ENGINE_API.md:33
   `:2261-2315` use_dark_gift（(card,gift) :2290-2314）；`:2702-2801` end_recruit_phase
   （EoT :2737-2747；淘汰 :2791；turn+1 :2797；begin recruit :2801）；
   `:3136-3175` eliminations/hero_eliminated；`:3909-3950` quest offer；
-  `:4997-5052` trinket offer；`:5115-5126` run_actions/_update_positions（无公开 reorder）。
+  `:4997-5052` trinket offer；`:5115-5126` run_actions/_update_positions（**C04：引擎有
+  打出 position，但无公开 reorder/move API**）。
+- 引擎 2026-10-22 选择协议变更：`hsrl2/game.py` play_minion/play_spell 两阶段状态机
+  （choose → target），env 侧以 choice 链适配（TEST `tests/test_env_coverage.py`）。
 - `hsrl2/actions/discover.py:118-207` Discover → PendingChoice；
   `hsrl2/scripts/minions.py:278-321` Activate→activate_target（无候选落空）；
   `hsrl2/scripts/batches/batch_misc.py:52-54,1105-1174` choose_one+target 缺口/Scarab 自建；
@@ -493,15 +523,20 @@ game.py:2079-2172（主/副槽、single/multi target），`docs/ENGINE_API.md:33
 - `tests/test_env_actions.py:72-84` 候选签名唯一（注：双主动技能会破此不变量）；
   `:196-215` 打出位置；`:428-450` FIFO；`:488-503` Dark Gift 动作；`:505-521` 英雄技能。
 - `tests/test_env_coverage.py:150-197` 定向法术；`:198-257` 定向战吼；`:258-294` 双目标；
-  `:296-354` Choose One；`:355-389` 磁力；`:390-460` 槽位；`:565-701` obs v2 / VecEnv；
+  `:296-354` Choose One；`:355-389` 磁力；`:390-460` 槽位；`:565-701` obs / VecEnv；
   `:702-869` 终止契约；`:870-1018` 覆盖门禁（合成构造，含 activate/dark_gift 出现性）。
+- **v3 新增测试**：`tests/test_env_move.py`（move 枚举/apply/可达性/env step/版本/候选上限）、
+  `tests/test_env_dark_gift_obs.py`（gift_id 进 extra/引擎一致性/choose 生效/其它选项类型）、
+  `tests/test_env_game.py::test_auto_resolved_agent_choice_is_marked_not_silent` 等。
 - `scripts/audit_env_coverage.py:62-65` GATE_KINDS（不含 choice 类）；`:226-227` choice_kinds 统计。
-- `docs/ENV_SPEC.md:38` vs `:55` version 不一致；`:80-95` 动作表（无换位；目标组合语义
-  `:97-99`）；`docs/ENV_INTERFACE_GAPS.md:397-413` A7 已记录边界（战斗选择自动、候选无
-  power_id/magnetic/note、64 上限）；`docs/LIVE_TO_SIM_GAP.md:52-66`（L04/L05/L06）；
-  `docs/LIVE_AUTOMATION_PROTOCOL.md:167-186` 动作矩阵；`docs/ENGINE_API.md:331,1152,1441`。
+- `docs/ENV_SPEC.md`：v3 版本历史、§2.1 选择选项结构、§3 `move_minion`/不可暂停阶段
+  标记、§5 info 新键（`version=3` 全文一致；旧 :38/:55 不一致已修）。
+  `docs/ENV_INTERFACE_GAPS.md:397-413` A7 已记录边界（战斗选择自动、候选无
+  power_id/magnetic/note、64 上限）；`docs/LIVE_TO_SIM_GAP.md:52-66`（L04/L05/L06，
+  其中 L05=L20 已按 AUDIT_CONSISTENCY 升 P0）；`docs/LIVE_AUTOMATION_PROTOCOL.md:167-186`
+  动作矩阵；`docs/ENGINE_API.md:331,1152`。
 - 数据：`data/bg_pool_minions.json:1048,3229-3230`（activate 卡）；
-  `data/bg_dark_gifts.json`（43 个 Dark Gift）。
+  `data/bg_dark_gifts.json`（实测 **47** 个 Dark Gift；`len(json)==47`）。
 
 ---
 
@@ -514,5 +549,9 @@ game.py:2079-2172（主/副槽、single/multi target），`docs/ENGINE_API.md:33
 - 已记录且本文认同的边界（不列为缺口）：战斗内 PendingChoice 自动结算（A7-1）；
   引擎内部实体/隐藏区目标不可寻址（A7-2）；`CandidateAction` 缺 flags（A7-3，本文升级为
   P1-3 因为影响 Dark Gift 之外的技能/磁力可达性）；64 候选上限（A7-4，本文仅 P2-8 裁剪问题）。
-- 本文**未做**运行验证（任务要求只读）：所有「支持/不支持」判断来自代码路径与现有测试；
-  建议的测试均未执行，需在 Lead 批准后在非只读会话中落地并跑 `pytest tests -q`。
+- **v3 实施状态（2026-10-22）**：P0-1/2/3 的 env 侧已按 task-1 落地并通过
+  `python -m pytest tests/test_env_move.py tests/test_env_dark_gift_obs.py -q`（24+9 项全绿）
+  与 `tests/test_env_*.py` 回归；全量 `pytest tests -q` 仅剩 1 项**非本改动引入**的
+  cross-scope 红（`tests/test_rollout.py::test_rollout_fast_opponents`，由并行 card-script
+  改动 `batch_rally2.CHOOSE_ONE_MINION_IDS` 重命名导致，已按门禁纪律上报 Lead 不越 scope 修）。
+  本文其余「建议」仍是后续 P1/P2 backlog，不代表已实现。

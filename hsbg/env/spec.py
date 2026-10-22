@@ -68,7 +68,7 @@ CARD_TYPE_UNKNOWN = "unknown"
 class ActionKind(str, enum.Enum):
     """候选动作类型。
 
-    引擎调用映射见 ``hsbg/env/actions.py``。
+    引擎调用映射见 ``hsbg/env/driver.py``（``apply_action``）。
     """
 
     BUY = "buy"                       # 从酒馆购买 -> 手牌
@@ -83,6 +83,10 @@ class ActionKind(str, enum.Enum):
     USE_DARK_GIFT = "use_dark_gift"   # S14 黑暗赠礼三选一
     END_TURN = "end_turn"             # 结束招募阶段（进入战斗）
     CHOOSE = "choose"                 # 结算 PendingChoice（option 下标）
+    #: 棋盘重排（v3 新增；追加在末尾，既有 12 类索引不变）。
+    #: ``src_zone/src_slot`` = 被移动随从；``position`` = 目标槽位（0..n-1）。
+    #: 当前环境枚举只生成相邻交换（i ↔ i+1），任意排列可经多次交换达成。
+    MOVE_MINION = "move_minion"
 
     def __str__(self) -> str:  # pragma: no cover - 便于日志
         return self.value
@@ -219,7 +223,8 @@ class CandidateAction:
     src_slot: int = -1
     tgt_zone: str = ZONE_NONE
     tgt_slot: int = -1
-    #: 打出随从时的棋盘插入位置（0..len(board)）；-1 = 追加到最右
+    #: 打出随从时的棋盘插入位置（0..len(board)）；-1 = 追加到最右。
+    #: ``move_minion`` 时表示目标槽位（0..len(board)-1）。
     position: int = -1
     #: choose 动作的选项下标
     option: int = -1
@@ -245,10 +250,16 @@ class Observation:
       （酒馆冻结、技能剩余次数、任务进度、暗黑赠礼、对手身份、淘汰顺序、
       最近战斗结果等）。来源与 ``env.extra_state()`` 同源；键集合稳定，
       训练侧可选择性编码。`extra` 必须可 pickle，禁止放引擎对象。
+    * v3（2026-10-22）：新增 ``ActionKind.MOVE_MINION``（追加在动作类型末尾，
+      既有 12 类索引不变）；``extra["pending_choice_options"]`` 携带
+      PendingChoice 选项的结构化第二 id（Dark Gift 的 gift_id、任务 offer 的
+      reward_id）与 label；``extra["env_stats"]["agent_choice_autoresolved"]``
+      统计不可暂停阶段被自动结算的智能体选择（不再静默）。既有字段/语义
+      全部兼容（只增不改）。
     """
 
     #: 协议版本，跨进程缓存/checkpoint 兼容性检查用
-    version: int = 2
+    version: int = 3
     turn: int = 0
     phase: str = PHASE_RECRUIT
     #: 智能体英雄

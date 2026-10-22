@@ -285,7 +285,8 @@ def test_rank_estimation_matches_health_order():
 def test_observation_version_and_log():
     env = BattlegroundsEnv(seed=31)
     obs = env.reset(seed=31)
-    assert obs.version == 2
+    expected = int(spec.Observation.__dataclass_fields__["version"].default)
+    assert obs.version == expected
     assert obs.version == int(
         spec.Observation.__dataclass_fields__["version"].default)
     assert "phase=recruit" in obs.log
