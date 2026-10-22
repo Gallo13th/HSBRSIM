@@ -80,14 +80,16 @@ class TestRegistryState(unittest.TestCase):
         "BG30_HERO_304p", "BG32_HERO_002p", "TB_BaconShop_HP_102",
     )
     DEFERRED_IDS = (
-        "BG20_HERO_202p", "BG20_HERO_242p", "BG20_HERO_283p",
+        "BG20_HERO_202p", "BG20_HERO_283p",
         "BG21_HERO_000p", "BG22_HERO_000p",
-        "BG24_HERO_100p",   # 任务载荷 0/17 DEFERRED → 效果空转（对抗审计）
         "BG25_HERO_100p", "BG31_HERO_801p", "BG31_HERO_811p",
-        "BG33_HERO_001p_ALT", "BG34_HERO_000p", "BG34_HERO_004p",
-        "BG35_HERO_001p", "TB_BaconShop_HP_020", "TB_BaconShop_HP_101",
+        "BG34_HERO_000p", "BG34_HERO_004p",
+        "TB_BaconShop_HP_020", "TB_BaconShop_HP_101",
         "TB_BaconShop_HP_106",
     )
+    # 2026-10-22 迁出（batch_hero_powers_37x 已实现并注册）:
+    # BG20_HERO_242p Guff / BG24_HERO_100p Denathrius /
+    # BG33_HERO_001p_ALT Loh / BG35_HERO_001p Genn
     # 曾在本批 DEFERRED、后由 batch_hero_remaining2 实现的技能
     LATER_IMPLEMENTED = ("BG22_HERO_004p",)   # Varden（实体级 FROZEN 就绪后）
 
@@ -130,9 +132,9 @@ class TestAdventureFinley(unittest.TestCase):
         self.assertEqual([c for c in offers if c.owner is b], [])
 
     def test_choose_patchwerk_replaces_and_wires_on_bind(self):
-        # seed 54: 候选含 Patchwerk（TB_BaconShop_HP_035）——D2 过滤候选池
-        # 后重新标定（原 seed 3 已不含它）
-        game = make_game(self.POWER, seed=54)
+        # seed 45: 候选含 Patchwerk（TB_BaconShop_HP_035）——2026-10-22
+        # 英雄技能池扩容后重新标定（原 seed 54 抽样前移）
+        game = make_game(self.POWER, seed=45)
         a, b = game.heroes
         choice = choices_of(game, "discover_hero_power")[0]
         # 候选池已过滤为已注册技能（D2）→ 按 id 定位 Patchwerk 而非
@@ -243,26 +245,22 @@ class TestLockAndLoadTavish(unittest.TestCase):
         self.assertEqual(a.board, [])
 
 
-class TestWhodunitDenathriusDeferred(unittest.TestCase):
-    """BG24_HERO_100p — DEFERRED（2026-09-01 对抗审计；2026-09-18 更新）。
+class TestWhodunitDenathrius(unittest.TestCase):
+    """BG24_HERO_100p — 开局二选一任务（2026-10-22 已由
+    `batch_hero_powers_37x.WhodunitScript` 接线并注册）。
 
-    机制（开局二选一任务 + complete_quest 发奖）本身正确，但本卡**未接线**。
-
-    2026-09-18 第四十九轮订正: 旧 DEFERRED 理由「任务卡 0/17 注册 → 选到的
-    任务永不推进/完成」**已随任务族落地失效**——`BG24_Quest_*` 现全部注册
-    （`batch_quests`，目标值权威 = 各卡 wiki 页 baseline requirement，见
-    `docs/agents/QUEST_DEFERRED_SPEC.md`）。本卡当前的真实缺口 = **接线**
-    （`on_bind` 选两任务 + 第 4 回合 offer 抑制），不是权威数据缺口。
-    另: 现有 `WhodunitScript` 的候选池写死 `BG24_Quest_*` 前缀，会把已
-    DEFERRED 的 `BG24_Quest_328` 与公告 token `BG24_Quest_Bob` 一并发出
-    → 接线时必须改用 `game.quest_offer_pool()`。详见
-    `batch_hero_remaining.py` 的类 docstring（本次未注册，属独立卡片工作项）。
+    历史: 2026-09-01 起 DEFERRED；任务族 2026-09-18 落地后缺口只剩接线
+    （on_bind 二选一 + 第 4 回合标准 offer 抑制），本批按
+    `game.quest_offer_pool()` 池门禁接线 → 迁出 DEFERRED。
+    行为层测试（选择/奖励暂存/offer 抑制）见
+    `test_batch_hero_powers_37x.py::TestWhodunit`。
     """
 
     POWER = "BG24_HERO_100p"
 
-    def test_unregistered(self):
-        self.assertNotIn(self.POWER, REGISTRY)
+    def test_registered(self):
+        self.assertIn(self.POWER, REGISTRY)
+        self.assertTrue(getattr(REGISTRY[self.POWER], "passive", False))
 
     def test_quest_payload_now_progresses(self):
         """2026-09-18 订正: 任务载荷**已可推进/完成**（旧前提失效的证明）。
@@ -287,6 +285,10 @@ class TestWhodunitDenathriusDeferred(unittest.TestCase):
         self.assertTrue(a._quest_completed)
         self.assertEqual(len(a.quest_rewards), 1)
 
+    @unittest.skipUnless(
+        (Path(__file__).resolve().parent.parent.parent
+         / "hsdata" / "CardDefs.xml").exists(),
+        "hsdata/CardDefs.xml absent（可选原始数据，见 docs/DATA_REBUILD.md）")
     def test_quest_base_progress_is_a_real_data_field(self):
         """数据权威核实（RULES §11.6）: 任务**基础值**确实在 CardDefs 里
         （QUEST_PROGRESS_TOTAL，17/17 张）——DEFERRED 的理由是奖励侧

@@ -65,20 +65,19 @@ IMPLEMENTED = (
 )
 
 # 本批 DEFERRED 台账（模块 docstring 逐条 Status/Dependency/Path）——
-# 全部保持未注册（SOP §6b 二态铁律）
+# 全部保持未注册（SOP §6b 二态铁律）。
+# 2026-10-22 迁出（batch_hero_powers_37x 已实现并注册）:
+# BG20_HERO_242p Guff / BG24_HERO_100p Denathrius /
+# BG33_HERO_001p_ALT Loh / BG35_HERO_001p Genn。
 DEFERRED_HERO_POWERS = (
     "BG20_HERO_202p",       # Master Nguyen Power of the Storm
-    "BG20_HERO_242p",       # Guff Runetotem Natural Balance
     "BG20_HERO_283p",       # Galewing Dungar's Gryphon
     "BG21_HERO_000p",       # Cariel Roame Conviction
-    "BG24_HERO_100p",       # Sire Denathrius Whodunit?
     "BG25_HERO_100p",       # Professor Putricide Build-An-Undead
     "BG31_HERO_801p",       # Jim Raynor Lift Off
     "BG31_HERO_811p",       # Kerrigan Spawning Pool
-    "BG33_HERO_001p_ALT",   # Loh, the Living Legend Heroic Inspiration
     "BG34_HERO_000p",       # Murozond Alternate Timeline
     "BG34_HERO_004p",       # Morchie Warped Conflux
-    "BG35_HERO_001p",       # Genn Greymane King of Duality
     "TB_BaconShop_HP_020",  # Akazamzarak Prestidigitation
     "TB_BaconShop_HP_101",  # Silas Darkmoon Come One, Come All!
     "TB_BaconShop_HP_106",  # Tickatus Prize Wall
@@ -477,7 +476,9 @@ class TestRegistryAndDeferredLedger(unittest.TestCase):
         for rid in DEFERRED_HERO_POWERS:
             self.assertIsNotNone(get_db().get(rid), rid)
             self.assertNotIn(rid, REGISTRY, rid)
-        self.assertEqual(len(DEFERRED_HERO_POWERS), 15)
+        # 15 → 11（2026-10-22 batch_hero_powers_37x 迁出 Guff /
+        # Denathrius / Loh / Genn 四项）
+        self.assertEqual(len(DEFERRED_HERO_POWERS), 11)
 
     def test_deferred_quest_rewards_not_registered(self):
         for rid in DEFERRED_QUEST_REWARDS:
