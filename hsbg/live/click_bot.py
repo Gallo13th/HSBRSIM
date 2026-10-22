@@ -12,6 +12,7 @@ Design:
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import subprocess
 import sys
@@ -26,6 +27,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from hsbg.live.config import LiveConfig
+from hsbg.live.launcher import launch_hearthstone_via_battlenet
 from hsbg.live.memory_state import read_memory_state
 from hsbg.live.wininput import Win32Backend, find_hearthstone_window
 
@@ -60,7 +62,7 @@ class ClickBot:
     max_actions_per_turn: int = 15
     games: int = 0                 # 0 = infinite
     max_seconds: float = 0.0       # 0 = infinite
-    auto_launch: bool = False
+    auto_launch: bool = True
     actions: int = 0
     errors: int = 0
     turn_actions: int = 0
@@ -70,6 +72,8 @@ class ClickBot:
     _rec: Any = None
     _window: Any = None
     _seen_game_over: bool = False
+    _unavailable: int = 0
+    _last_lobby_click: float = 0.0
 
     def __post_init__(self):
         self.out_dir = Path(self.out_dir)
@@ -85,8 +89,15 @@ class ClickBot:
             self._window = find_hearthstone_window()
         except Exception:
             self._window = None
+        if self._window is not None and str(getattr(self._window, "process", "")).lower() != "hearthstone.exe":
+            self._window = None
         if self._window is None and self.auto_launch:
-            self._launch()
+            launch_hearthstone_via_battlenet(
+                log=lambda m: self.log(kind="launcher", msg=str(m)))
+            try:
+                self._window = find_hearthstone_window()
+            except Exception:
+                self._window = None
         if self._window is None:
             return False
         self.backend = Win32Backend()
@@ -139,10 +150,22 @@ class ClickBot:
         except Exception:
             return None
 
+    def _focus(self) -> None:
+        try:
+            h = getattr(self._window, "hwnd", None)
+            if h:
+                u = ctypes.windll.user32
+                u.ShowWindow(h, 9)
+                u.SetForegroundWindow(h)
+                time.sleep(0.08)
+        except Exception:
+            pass
+
     def click(self, fx: float, fy: float, note: str = "") -> None:
         if self.dry_run:
             self.log(kind="dry_click", fx=fx, fy=fy, note=note)
             return
+        self._focus()
         self.backend.click(*self._pt(fx, fy))
         self.actions += 1
         self.log(kind="click", fx=fx, fy=fy, note=note)
@@ -152,6 +175,7 @@ class ClickBot:
         if self.dry_run:
             self.log(kind="dry_drag", a=a, b=b, note=note)
             return
+        self._focus()
         self.backend.drag([self._pt(*a), self._pt(*b)], duration=duration)
         self.actions += 1
         self.log(kind="drag", a=a, b=b, note=note)
@@ -167,6 +191,15 @@ class ClickBot:
                 len(st.get("board") or []), len(st.get("shop") or []),
                 tuple(c.get("eid") for c in (st.get("choices") or [])),
                 int(st.get("gold") or 0))
+
+    def _changed(self, before: Tuple, timeout: float = 1.2) -> bool:
+        """Poll state until it changes or timeout (UI animations are async)."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            time.sleep(0.18)
+            if self._sig(self.state()) != before:
+                return True
+        return False
 
     def _fail(self, key: str, st: Dict[str, Any], note: str) -> None:
         if key in self.failed:
@@ -202,6 +235,9 @@ class ClickBot:
         return False
 
     def do_hero(self, st: Dict[str, Any]) -> bool:
+        # 可能弹出“英雄栏位锁定”确认框，先点取消
+        self.click(0.56, 0.58, note="hero_locked_cancel")
+        time.sleep(0.25)
         before = self._sig(st)
         for pt in (HERO_OPTIONS[1], HERO_OPTIONS[2]):
             self.click(*pt, note="hero_option")
@@ -235,9 +271,7 @@ class ClickBot:
             before = self._sig(st)
             self.drag(pts[i], (HAND_CENTER, HAND_Y), duration=0.42,
                       note=f"buy:{item.get('card')}")
-            time.sleep(0.32)
-            after = self.state()
-            if self._sig(after) != before:
+            if self._changed(before):
                 self.turn_actions += 1
                 return True
             self._fail(key, st, "购买后状态未变化")
@@ -264,9 +298,7 @@ class ClickBot:
             self.drag(hand_pts[idx],
                       board_pts[min(len(board), len(board_pts) - 1)],
                       duration=0.42, note=f"play:{m.get('card')}")
-            time.sleep(0.32)
-            after = self.state()
-            if self._sig(after) != before:
+            if self._changed(before):
                 self.turn_actions += 1
                 return True
             self._fail(key, st, "上阵后状态未变化")
@@ -300,6 +332,15 @@ class ClickBot:
                 st = self.state()
                 phase = str(st.get("phase") or "")
                 turn = int(st.get("turn") or 0)
+                if not phase:
+                    self._unavailable += 1
+                    if self._unavailable >= 5:
+                        self.log(kind="game_unavailable", n=self._unavailable)
+                        self._connect()
+                        self._unavailable = 0
+                    time.sleep(1.0)
+                    continue
+                self._unavailable = 0
                 if turn != self.last_turn:
                     self.last_turn = turn
                     self.turn_actions = 0
@@ -321,16 +362,21 @@ class ClickBot:
                     self._seen_game_over = False
                     continue
                 if phase in ("no_active_game", "lobby", "menu"):
-                    self.click(*START, note="start")
-                    time.sleep(1.2)
-                    continue
-                if st.get("choices"):
-                    self.do_choice(st)
-                    time.sleep(0.3)
+                    # 主菜单 → 酒馆战棋；BG 大厅 → 开始；排队中不要反复点
+                    if time.time() - self._last_lobby_click > 10.0:
+                        self._last_lobby_click = time.time()
+                        self.click(0.50, 0.378, note="menu_battlegrounds")
+                        time.sleep(0.8)
+                        self.click(*START, note="start")
+                    time.sleep(1.0)
                     continue
                 if phase == "hero_select":
                     self.do_hero(st)
                     time.sleep(0.4)
+                    continue
+                if st.get("choices"):
+                    self.do_choice(st)
+                    time.sleep(0.3)
                     continue
                 if phase == "recruit":
                     if self.turn_actions >= self.max_actions_per_turn:
@@ -368,7 +414,7 @@ def main() -> int:
     ap.add_argument("--games", type=int, default=0, help="0=无限")
     ap.add_argument("--max-seconds", type=float, default=0)
     ap.add_argument("--max-actions-per-turn", type=int, default=15)
-    ap.add_argument("--auto-launch", action="store_true")
+    ap.add_argument("--auto-launch", action="store_true", default=True)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     bot = ClickBot(Path(args.out_dir), dry_run=args.dry_run,
