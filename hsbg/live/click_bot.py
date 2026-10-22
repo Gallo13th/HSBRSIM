@@ -34,7 +34,7 @@ from hsbg.live.wininput import Win32Backend, find_hearthstone_window
 # ---------------------------------------------------------------- 1600x900 calibration
 START = (0.759, 0.778)
 HERO_OPTIONS = [(0.22, 0.44), (0.36, 0.44), (0.50, 0.44), (0.64, 0.44)]
-HERO_CONFIRM = (0.50, 0.71)
+HERO_CONFIRM = (0.544, 0.622)
 CHOICE_Y = 0.45
 CHOICE_SPACING = 0.14
 CHOICE_CONFIRM = (0.50, 0.66)
@@ -360,13 +360,10 @@ class ClickBot:
         return False
 
     def do_hero(self, st: Dict[str, Any]) -> bool:
-        # 已选完/只剩等待其他玩家时：屏幕可能已进入“开始战斗”确认页
+        # 已选英雄后：点底部“确认”（不是 start_combat）
         if len(st.get("choices") or []) < 4:
-            if time.time() - self._last_start_combat < 8.0:
-                return False
-            self._last_start_combat = time.time()
             before = self._sig(st)
-            self.click(*START_COMBAT, note="start_combat")
+            self.click(*HERO_CONFIRM, note="hero_confirm")
             time.sleep(0.6)
             return self._sig(self.state()) != before
         # 可能弹出“英雄栏位锁定”确认框，先点取消

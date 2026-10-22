@@ -121,6 +121,19 @@
 - 同一 gap 不允许连续两轮 live 复现；
 - 每次 live run 结束更新本表统计。
 
+## 6. 机制级审计结论（2026-10-22）
+
+完整审计见 [AUDIT_LIVE_TO_SIM.md](AUDIT_LIVE_TO_SIM.md)。最重要的新增 gap：
+
+| ID | 缺口 | 证据 | 优先级 |
+|---|---|---|---|
+| L15 | Choose One 脚本 44 张只实现 14 张 | `REGISTRY` 审计；BG31_880 在 live 反复出现 | P0 |
+| L16 | live 英雄确认页 | 截图 `215643_...start_combat.png`，`start_combat` 90 次 | P0 |
+| L17 | live Dark Gift 购买/三选一 | 本轮 `dark_gift=0`，47 张数据卡 | P0 |
+| L18 | live 英雄技能 | 本轮 `hero_power=0`，env 已支持 | P0 |
+| L19 | live Activate（发动） | 本轮 `activate=0`，50/52 脚本已有 | P1 |
+| L20 | env 无 move/reorder | 引擎有 `position`，env 无显式动作 | P1 |
+
 ---
 
 相关：[LIVE_AUTOMATION_PROTOCOL.md](LIVE_AUTOMATION_PROTOCOL.md)
