@@ -58,13 +58,6 @@ class SearchSeat:
             return []
 
     def choose(self, game, hero, ctx: Optional[EnvContext] = None):
-        # 先走启发式（可执行性最好），PUCT 作为后备/扩展
-        try:
-            hd = self.heuristic.choose(game, hero, ctx)
-            if hd is not None:
-                return hd
-        except Exception:
-            pass
         step = driver.enumerate_step(game, hero, driver.collect_zones(game, hero))
         if not step.descriptors:
             return None
@@ -72,6 +65,7 @@ class SearchSeat:
         if turn != self._turn:
             self._turn = turn
             self._plan = self._replan(game, hero)
+        # 纯 PUCT：严格按搜索给出的 macro 顺序执行，不使用启发式兜底
         while self._plan:
             cand = self._plan.pop(0)
             for desc in step.descriptors:
@@ -80,13 +74,11 @@ class SearchSeat:
                         return desc
                 except Exception:
                     continue
-        try:
-            d = self.heuristic.choose(game, hero, ctx)
-            if d is not None:
-                return d
-        except Exception:
-            pass
-        return step.descriptors[0]
+        # macro 用尽：用 end_turn 结束本回合（不注入启发式动作）
+        for desc in step.descriptors:
+            if str(getattr(desc, "kind", "")) == "end_turn":
+                return desc
+        return step.descriptors[-1]
 
     def choose_option_index(self, obs):
         try:
@@ -134,15 +126,10 @@ class SearchAgent:
             for i, c in enumerate(obs.candidates):
                 if c.signature() == cand.signature():
                     return i
-        try:
-            d = self.seat.heuristic.choose(env.game, env.agent_hero)
-            if d is not None:
-                sig = d.to_candidate().signature()
-                for i, c in enumerate(obs.candidates):
-                    if c.signature() == sig:
-                        return i
-        except Exception:
-            pass
+        # 纯 PUCT：macro 用尽则 end_turn
+        for i, c in enumerate(obs.candidates):
+            if str(c.kind) == "end_turn":
+                return i
         return len(obs.candidates) - 1
 
 
@@ -151,7 +138,6 @@ class MultiSeatEnv(BattlegroundsEnv):
 
     def set_seat_policies(self, policies: List[Any]) -> None:
         self.seat_policies = policies
-        self._fallback = [HeuristicPolicy() for _ in range(len(policies))]
 
     def _drive_opponents(self, *, stop_if_agent_dead: bool = True) -> None:
         game = self.game
@@ -172,11 +158,6 @@ class MultiSeatEnv(BattlegroundsEnv):
                     desc = policy.choose(game, hero, ctx)
                 except Exception:
                     desc = None
-                if desc is None:
-                    try:
-                        desc = self._fallback[i].choose(game, hero, ctx)
-                    except Exception:
-                        desc = None
                 if desc is None:
                     break
                 res = driver.apply_action(game, hero, desc)
@@ -253,9 +234,12 @@ def main() -> int:
             })
 
     last_by_seat: Dict[str, Dict[str, Any]] = {}
+    last_board: Dict[str, List[Dict[str, Any]]] = {}
     for snap in snapshots:
         for s in snap["seats"]:
             last_by_seat[s["seat"]] = s
+            if s["board"]:
+                last_board[s["seat"]] = s["board"]
     alive_count = sum(1 for h in all_heroes if bool(getattr(h, "is_alive", False)))
     final = []
     for i, h in enumerate(all_heroes):
@@ -269,7 +253,7 @@ def main() -> int:
                       "alive": bool(getattr(h, "is_alive", False)),
                       "health": int(getattr(h, "health", 0) or 0),
                       "rank": rank,
-                      "board": last.get("board", board_snapshot(h))})
+                      "board": last_board.get(seat, last.get("board", []))})
     summary = {"seed": args.seed, "turns": int(getattr(env.game, "turn", 0)),
                "steps": steps, "wall_s": round(time.time() - t0, 1),
                "sims": args.sims, "width": args.width,
@@ -285,10 +269,11 @@ def main() -> int:
           f"- seed={args.seed}, turns={summary['turns']}, steps={steps}, "
           f"wall={summary['wall_s']}s, PUCT N={args.sims} W={args.width}",
           "- seats P0-P3 = PUCT search, P4-P7 = frozen BC", "",
-          "## Final", "", "| seat | policy | alive | hp | board |", "|---|---|---:|---:|---|"]
+          "## Final", "", "| rank | seat | policy | alive | hp | board |",
+          "|---:|---|---|---:|---:|---|"]
     for f in final:
-        md.append(f"| {f['seat']} | {f['policy']} | {int(f['alive'])} | "
-                  f"{f['health']} | {len(f['board'])} |")
+        md.append(f"| {f.get('rank', 0)} | {f['seat']} | {f['policy']} | "
+                  f"{int(f['alive'])} | {f['health']} | {len(f['board'])} |")
     md += ["", "## Per-turn boards", ""]
     for snap in snapshots:
         md.append(f"### Turn {snap['turn']}")

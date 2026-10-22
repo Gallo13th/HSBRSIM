@@ -71,9 +71,9 @@ python tools/version_sync.py --apply --yes
   - 产物 `runs/demo_warband_4search_vs_4bc/{showcase.json,README.md}`；
   - 结果：quarter 3:1 search 胜，final search-0 胜。
 - 全 8 座回合制对局：`scripts/demo_full_8seat.py`（`MultiSeatEnv` 子类，8 座位独立策略）
-  - 4 个 PUCT-search 座位 + 4 个冻结 BC 座位；seed=42、13 回合、120 步、14.6s；
-  - 产物 `runs/demo_full_8seat7/{episode.json,README.md}`，README 含**每回合 8 座位场面**；
-  - 结果：search P0 第 1、P3 第 2、P2 第 3，BC P4 第 4。
+  - 4 个 **纯 PUCT-search** 座位（无启发式兜底）+ 4 个冻结 BC 座位；seed=42、14 回合、108 步、14.4s；
+  - 产物 `runs/demo_full_puct_final/{episode.json,README.md}`，README 含**每回合 8 座位场面 + 最终名次**；
+  - 结果：search 拿到第 1/2/3 名（P3 冠军、P0 亚军、P2 季军），BC 最好第 4。零 invalid / engine error。
 
 ## 6. 已知限制
 
