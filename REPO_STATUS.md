@@ -70,8 +70,10 @@ python tools/version_sync.py --apply --yes
   - 4 个 PUCT/search 阵容 vs 4 个 BC checkpoint 阵容；
   - 产物 `runs/demo_warband_4search_vs_4bc/{showcase.json,README.md}`；
   - 结果：quarter 3:1 search 胜，final search-0 胜。
-- 全 8 座回合制对局脚本：`scripts/demo_4search_vs_4bc.py`（实验性；当前 env 是单智能体接口，
-  搜索座位接入仍需多策略 env 支持）。
+- 全 8 座回合制对局：`scripts/demo_full_8seat.py`（`MultiSeatEnv` 子类，8 座位独立策略）
+  - 4 个 PUCT-search 座位 + 4 个冻结 BC 座位；seed=42、13 回合、120 步、14.6s；
+  - 产物 `runs/demo_full_8seat7/{episode.json,README.md}`，README 含**每回合 8 座位场面**；
+  - 结果：search P0 第 1、P3 第 2、P2 第 3，BC P4 第 4。
 
 ## 6. 已知限制
 
