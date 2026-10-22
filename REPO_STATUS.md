@@ -87,20 +87,24 @@ python tools/version_sync.py --apply --yes
   - 每次 click/drag 后截图到 `runs/live/<run>/screenshots/actions/`
   - 同回合 2 次 no-effect → `diagnostics/` 5 帧 + state
   - 每回合 settled 截图/JSON；内存读取走子进程防崩
-- 当前 run：`runs/live/live_20261022_2330_bot37_final/`（真实自动进入/英雄选择/新动作验证；
-  20min 超时，1 局完成，actions=298；新动作 use_dark_gift/freeze/hero_power 各 1 次）
+- 当前 live 证据：`runs/live/LIVE_AUTOMATION_EVIDENCE_2.md`（task-8 三 run 合并）：
+  - 自动 game_over→下一局、英雄选择、ACTIVATE 19 次成功发动、freeze/DG 各 3 次、
+    choose-one+target 成功、no_effect 9/1767（4 次战斗过渡帧）；
+  - 单次 run 3 个完整 game_over 未达成（跨 run 2 完整 + 2 进行中）。
 - 8h 审计/修复（2026-10-22 23:07 →）：
-  - env：move_minion、Dark Gift gift_id 观测、EoT auto-resolve 留痕（commit b4a12db）；
-  - engine：饰品 offer REGISTRY 闸、choose+target 两阶段、法术 CHOOSE_BOTH（7372b6f）；
+  - env：move_minion、Dark Gift gift_id 观测、take_choice/失败诊断（b4a12db/c9cb58d）；
+  - engine：饰品 REGISTRY 闸、choose+target 两阶段、CHOOSE_BOTH、PendingChoice 一次性（7372b6f/09095da）；
   - cards：choose_one 36/36、10 base 抉择、6 英雄技能、11 DEFERRED（ed765c3）；
-  - 回归：hsrl2/tests 4800 passed/6 skipped；tests 622 passed/2 skipped；
-    verify_all --fast 4/4；smoke 8 局 crashes=0。
-
-- 待补 live 操作（P0/P1）：英雄技能、冻结、主动结束回合、目标法术稳定命中、三连/发现确认、开始战斗页识别。
+  - policy：obs v3/MOVE_MINION/旧 ckpt 迁移（8bf8c5a）；
+  - live：自动进入/英雄选择/5 新动作/稳定帧/尝试预算/5选兜底（8535264）；
+  - 回归：hsrl2/tests **4816 passed/6 skipped**；tests **663 passed/2 skipped**；
+    verify_all --fast **4/4**；smoke 8 局 **crashes=0**；live 33 passed；policy 19 passed。
+- 仍 open：5+ 选弹层布局标定（L04）、EoT 选择可决策化（L26/P2）、11 个英雄技能子系统、
+  launcher 从“游戏关闭”状态自动拉起未实机复验。
 
 ## 7. 已知限制
 
-- `hsdata/CardDefs.xml` 超过 GitHub 建议的 50MB（<100MB 限制，但建议后续切 Git LFS）；
 - `runs/` 下的模型 checkpoint / 数据集 / 评测结果不入库，需要按上面命令重新生成；
-- live 自动化仍是实验性、仅 1600×900 校准；不包含多局循环/刷新/升级/冻结/出售按钮；
+- live 自动化仍是实验性、仅 1600×900 校准；5+ 选弹层、战斗期内存滞后仍需样本；
 - 价值网络目前用随机阵容+随机 buff 训练，尚未对齐真实对局分布（见 `docs/WARBAND_VALUE_NETWORK.md`）。
+- 原始 `hsdata/CardDefs.xml` 不入库，重建流程见 `docs/DATA_REBUILD.md`。

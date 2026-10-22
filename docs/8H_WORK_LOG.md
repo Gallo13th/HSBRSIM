@@ -120,3 +120,11 @@
 - [ ] card-script-builder：至少 37.0 新英雄技能 + 数据字段；
 - [ ] protocol-writer：审计协议/多智能体规则；
 - [ ] Lead：集成 diff、跑 pytest hsrl2/tests + tests + smoke、真实局验证、写最终报告。
+
+### 00:00–01:10 P1/收尾
+
+- engine P1（09095da）：grant_random_trinket 过滤、PendingChoice 一次性/failed 终态、take_choice；
+- policy P1（8bf8c5a）：obs v3/MOVE_MINION/entity_secondary 编码、checkpoint format 2 + 旧 ckpt 迁移；
+- env P1（c9cb58d）：take_choice 全链路、choice 失败诊断、EoT 不可暂停结论；
+- live task-8（8535264）：稳定帧验证、每牌尝试预算、stale choices、5+ 选兜底、ACTIVATE 多局样本；
+- 最终门禁：engine 4816/6 skip、project 663/2 skip、verify_all 4/4、smoke 8/8、live 33 passed。
