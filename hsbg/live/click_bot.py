@@ -96,6 +96,7 @@ class ClickBot:
     _no_effect_count: int = 0
     _last_board_count: int = -1
     _board_drop_count: int = 0
+    _last_start_combat: float = 0.0
 
     def __post_init__(self):
         self.out_dir = Path(self.out_dir)
@@ -361,6 +362,9 @@ class ClickBot:
     def do_hero(self, st: Dict[str, Any]) -> bool:
         # 已选完/只剩等待其他玩家时：屏幕可能已进入“开始战斗”确认页
         if len(st.get("choices") or []) < 4:
+            if time.time() - self._last_start_combat < 8.0:
+                return False
+            self._last_start_combat = time.time()
             before = self._sig(st)
             self.click(*START_COMBAT, note="start_combat")
             time.sleep(0.6)

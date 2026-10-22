@@ -35,6 +35,17 @@
 结论：bot 已覆盖“买卖打刷升 + 基本选择”，但**冻结、英雄技能、主动结束回合、
 三连奖励、随从换位、目标选择稳定性**仍是空白或弱项。
 
+### 1.1 本轮截图直接证据
+
+- `runs/live/clickbot_every/screenshots/actions/220022_a0692_drag_play_BG36_345.png`
+  - 画面：第 4 回合、gold=0、board 6、顶部雪花冻结按钮可见、右下英雄技能按钮可见；
+  - 但动作日志只有 buy/play/refresh，没有 `freeze`/`hero_power`；
+- `runs/live/clickbot_every/actions.jsonl`：
+  - `start_combat` 90 次，说明英雄/战斗页状态识别兜底被反复触发；
+  - `freeze` / `hero_power` / `end_turn` / `reorder` 均为 0 次；
+- `runs/live/clickbot_every/screenshots/215824_turn02_settled.png`：
+  - 金币 0、商店 2、手牌 0，只能等待；说明“资源用尽”判定与 active end turn 缺失。
+
 ## 2. Gap 表
 
 | ID | 真实操作 | 证据 | bot | 模拟器/环境 | 建议 | 优先级 |
