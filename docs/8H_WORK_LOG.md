@@ -128,3 +128,10 @@
 - env P1（c9cb58d）：take_choice 全链路、choice 失败诊断、EoT 不可暂停结论；
 - live task-8（8535264）：稳定帧验证、每牌尝试预算、stale choices、5+ 选兜底、ACTIVATE 多局样本；
 - 最终门禁：engine 4816/6 skip、project 663/2 skip、verify_all 4/4、smoke 8/8、live 33 passed。
+
+### 01:20 checkpoint（提前完成）
+
+- 所有任务板任务 completed；无 in_progress；所有 bot 已停止。
+- 最终门禁：engine 4816/6 skip、project 663/2 skip、verify_all 4/4、smoke 8/8、live 33。
+- 最终报告：docs/8H_FINAL_REPORT.md；协议：docs/LIVE_AUTOMATION_PROTOCOL.md。
+- 后续 07:00 提醒已删除；工作树干净（HEAD 7ca245f + 最终文档提交）。
