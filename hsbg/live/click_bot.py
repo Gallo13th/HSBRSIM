@@ -137,6 +137,10 @@ class ClickBot:
         self._diag_keys: Set[str] = set()
         #: --exercise-actions 演练记录 action -> 成功次数
         self._exercised: Dict[str, int] = {}
+        #: 本回合每张手牌打出尝试次数（防止脏帧误判成功导致同卡重复点击）
+        self._played_this_turn: Dict[str, int] = {}
+        #: 选择弹层失败标记（同一回合不再重复尝试）
+        self._choice_fail_turn: int = -1
         self._t_start = 0.0
         self._connect()
 
@@ -339,6 +343,34 @@ class ClickBot:
     def _frozen_flags(st: Dict[str, Any]) -> Tuple[bool, ...]:
         return tuple(bool(m.get("frozen")) for m in (st.get("shop") or []))
 
+    @staticmethod
+    def _frozen_count(st: Dict[str, Any]) -> int:
+        return sum(1 for flag in ClickBot._frozen_flags(st) if flag)
+
+    @staticmethod
+    def _legal_flags(st: Dict[str, Any]) -> Dict[str, Any]:
+        """把 legal 压成统计用的短标记（多局长跑复盘：动作可得性统计）。"""
+        legal = st.get("legal") or {}
+        play = legal.get("play") or {}
+        modes = 0
+        try:
+            for entry in play.values():
+                modes += len(((entry or {}).get("use") or {}).get("modes") or [])
+        except Exception:
+            modes = -1
+        return {
+            "end": bool(legal.get("end")),
+            "refresh": bool(legal.get("refresh")),
+            "freeze": bool(legal.get("freeze")),
+            "upgrade": bool(legal.get("upgrade")),
+            "dark_gift": bool(legal.get("dark_gift")),
+            "powers": len(legal.get("powers") or {}),
+            "activate": len(legal.get("activate") or {}),
+            "play": len(play or {}),
+            "play_modes": modes,
+            "choose": len(legal.get("choose") or ()),
+        }
+
     def _sig(self, st: Dict[str, Any]) -> Tuple:
         return (st.get("phase"), st.get("turn"), len(st.get("hand") or []),
                 len(st.get("board") or []), len(st.get("shop") or []),
@@ -350,12 +382,23 @@ class ClickBot:
                 self._frozen_flags(st))
 
     def _changed(self, before: Tuple, timeout: float = 3.0) -> bool:
-        """Poll state until it changes or timeout (UI animations are async)."""
+        """状态变化必须连续两帧一致才确认（过滤战斗/切回合脏帧的瞬态抖动）。
+
+        实测：内存状态在战斗过渡/切回合时会出现 1 帧的 hand/board 抖动；
+        旧实现只比较一次，会把脏帧当成“动作成功”，导致同一张不可用法术
+        每轮重复点击（run live_20261023_0029_games3_fix 的 BG36_520t 循环）。
+        """
         deadline = time.time() + timeout
+        prev = None
         while time.time() < deadline:
             time.sleep(0.18)
-            if self._sig(self.state()) != before:
+            sig = self._sig(self.state())
+            if sig == before:
+                prev = None
+                continue
+            if prev is not None and sig == prev:
                 return True
+            prev = sig
         return False
 
     def _click_overlay(self, st: Dict[str, Any]) -> bool:
@@ -416,44 +459,82 @@ class ClickBot:
                  screenshot=shot)
 
     # ------------------------------------------------------------ actions
-    def _choice_pts(self, n: int, pending: str) -> List[Tuple[float, float]]:
-        """选择弹层坐标（37.0 new UI 实测）。
+    def _choice_layouts(self, n: int, pending: str) -> List[List[Tuple[float, float]]]:
+        """选择弹层候选布局（37.0 new UI 实测 + 未校准布局兜底）。
 
         - discover / 黑暗之赐三选一：3 张大卡 y≈0.444，间距 0.19，直接点击即选中；
-        - 饰品商店：4 张饰品卡 y≈0.40，间距 0.148，点卡后还需点「确认」。
+        - 饰品商店：4 张饰品卡 y≈0.40，间距 0.148，点卡后还需点「确认」；
+        - 5+ 选（三连奖励/巨型发现）：先按 discover 紧凑行试，再按饰品双行试，
+          都不行就点「隐藏」并且本回合不再重试（避免像 run 0034 turn8 那样卡住）。
         """
+        outs: List[List[Tuple[float, float]]] = []
         if n <= 3:
-            return _center(n, CHOICE_SPACING, CHOICE_Y)
-        if n == 4:
-            return _center(n, TRINKET_SPACING, TRINKET_Y, TRINKET_CENTER)
-        return _center(n, 0.14, CHOICE_Y)
+            outs.append(_center(n, CHOICE_SPACING, CHOICE_Y))
+        elif n == 4:
+            outs.append(_center(n, TRINKET_SPACING, TRINKET_Y, TRINKET_CENTER))
+        else:
+            outs.append(_center(n, 0.155, CHOICE_Y, 0.5))
+            outs.append(_center(n, 0.135, TRINKET_Y, 0.51))
+        return [pts for pts in outs if pts]
+
+    @staticmethod
+    def _choice_is_stale(st: Dict[str, Any]) -> bool:
+        """choices 非空但 legal.choose 为空 = 战斗/切回合滞后帧，禁止盲点。"""
+        if not (st.get("choices") or []):
+            return False
+        legal = st.get("legal") or {}
+        return not (legal.get("choose") or ())
 
     def do_choice(self, st: Dict[str, Any]) -> bool:
         choices = st.get("choices") or []
         if not choices:
             return False
+        if self._choice_is_stale(st):
+            self.log(kind="stale_choice_ignored", n=len(choices),
+                     turn=st.get("turn"), phase=st.get("phase"))
+            return False
         pending = str(st.get("pending") or "")
-        pts = self._choice_pts(len(choices), pending)
-        for idx, pt in enumerate(pts):
-            key = f"choose:{idx}"
-            if key in self.failed:
-                continue
-            card = (choices[idx] or {}).get("card") if idx < len(choices) else ""
-            before = self._sig(st)
-            self.click(*pt, note=f"choose[{idx}]:{card}")
-            time.sleep(0.6)
-            now = self.state()
-            if not (now.get("choices") or []):
-                self.turn_actions += 1
-                return True
-            # 饰品商店等需要点「确认」
-            self.click(*CHOICE_CONFIRM, note="choice_confirm")
-            time.sleep(0.6)
-            now = self.state()
-            if not (now.get("choices") or []) or self._sig(now) != before:
-                self.turn_actions += 1
-                return True
-            self.failed.add(key)
+        clicks = 0
+        for pts in self._choice_layouts(len(choices), pending):
+            for idx, pt in enumerate(pts):
+                key = f"choose:{idx}"
+                card = (choices[idx] or {}).get("card") if idx < len(choices) else ""
+                if key in self.failed and len(self._choice_layouts(len(choices), pending)) == 1:
+                    continue
+                before = self._sig(st)
+                self.click(*pt, note=f"choose[{idx}]:{card}")
+                clicks += 1
+                time.sleep(0.6)
+                now = self.state()
+                if not (now.get("choices") or []):
+                    self.turn_actions += 1
+                    return True
+                # 饰品商店/部分发现需要点「确认」
+                self.click(*CHOICE_CONFIRM, note="choice_confirm")
+                clicks += 1
+                time.sleep(0.6)
+                now = self.state()
+                if not (now.get("choices") or []):
+                    self.turn_actions += 1
+                    return True
+                if self._sig(now) != before:
+                    # 选中态变化（如高亮/价格刷新）仍算推进，继续尝试下一个布局
+                    break
+                if clicks >= 10:
+                    break
+            if clicks >= 10:
+                break
+        # 兜底：点「隐藏」把弹层收掉（选择保留为 pending，避免阻塞招募）
+        self.click(*CHOICE_HIDE, note="choice_hide")
+        time.sleep(0.5)
+        now = self.state()
+        if not (now.get("choices") or []):
+            self.turn_actions += 1
+            return True
+        self._choice_fail_turn = int(st.get("turn") or 0)
+        self.log(kind="choice_layout_unknown", n=len(choices), pending=pending,
+                 choices=[c.get("card") for c in choices[:6]],
+                 screenshot=self.screenshot("choice_layout_unknown"))
         self._fail("choice", st, "choices 未消失")
         return False
 
@@ -496,8 +577,9 @@ class ClickBot:
         return False
 
     def _hand_pts(self, n: int):
-        spacing = HAND_SPACING if n <= 5 else max(HAND_SPACING_TIGHT,
-                                                  HAND_SPACING - 0.003 * (n - 5))
+        # 实测：1-2 张间距约 100px(0.0625)，5 张起 fan 收紧，7 张约 72px(0.045)
+        spacing = HAND_SPACING if n <= 5 else max(
+            HAND_SPACING_TIGHT, HAND_SPACING - 0.0055 * (n - 5))
         return _center(n, spacing, HAND_Y, HAND_CENTER)
 
     def _board_pts(self, n: int):
@@ -541,13 +623,17 @@ class ClickBot:
         return False
 
     def _resolve_choose_one(self, before: Tuple) -> bool:
-        """Choose One 弹层：点左/右选项，任一次状态变化即成功。"""
+        """Choose One 弹层：点左/右选项，稳定状态变化才算成功。"""
         for pt in CHOOSE_ONE_OPTIONS:
             self.click(*pt, note="choose_one")
             time.sleep(0.45)
-            if self._sig(self.state()) != before:
+            if self._changed_stable(before, timeout=1.6):
                 return True
         return False
+
+    def _changed_stable(self, before: Tuple, timeout: float = 1.6) -> bool:
+        """轻量版 _changed：稳定两帧才返回 True。"""
+        return self._changed(before, timeout=timeout)
 
     def sell_board(self, st: Dict[str, Any]) -> bool:
         """棋盘满且有手牌时，卖最弱随从腾格子（拖到 Bob 头像）。"""
@@ -644,8 +730,8 @@ class ClickBot:
             hero_power = 72.0
             if self.exercise_actions and not self._exercised.get("hero_power"):
                 hero_power += 60.0
-        # 随从 Activate（发动）技能
-        activate = 65.0 if (legal.get("activate") or {}) else 0.0
+        # 随从 Activate（发动）技能：1 费换 +3/+3 等，强于刷新/买普通随从
+        activate = 95.0 if (legal.get("activate") or {}) else 0.0
         # 冻结：只在 --exercise-actions 时主动演练（自然策略下容易误冻好店）
         freeze = 0.0
         if legal.get("freeze") and self.exercise_actions and not self._exercised.get("freeze"):
@@ -739,8 +825,12 @@ class ClickBot:
             if kind == "minion" and len(board) >= 7:
                 continue
             key = f"play:{m.get('eid')}:{m.get('card')}"
-            if key in self.failed:
+            attempts = self._played_this_turn.get(key, 0)
+            if key in self.failed or attempts >= 2:
                 continue
+            # 主拖占 1 次预算；minion 允许 1 次 ±0.03 兜底 = 每牌每回合最多 2 次拖拽
+            budget = 2 - attempts
+            self._played_this_turn[key] = attempts + budget
             entry = legal_play.get(str(idx))
             if legal_play and entry is None:
                 continue
@@ -794,6 +884,18 @@ class ClickBot:
                 if self._changed(before):
                     self.turn_actions += 1
                     return True
+            if kind == "minion":
+                # 手牌 >5 张时 fan 布局间距收紧，按理论点可能落在卡缝里：
+                # 换 ±0.03 的手牌落点重试（预算内仅 1 次；每次失败约 3s，仅失败时触发）。
+                board_dest = board_pts[min(len(board), len(board_pts) - 1)]
+                alt_offsets = (0.03, -0.03) if budget >= 2 else ()
+                for dx in alt_offsets:
+                    alt_x = min(0.94, max(0.06, hand_pts[idx][0] + dx))
+                    self.drag((alt_x, hand_pts[idx][1]), board_dest,
+                              duration=0.42, note=f"play_minion:{m.get('card')}")
+                    if self._changed(before):
+                        self.turn_actions += 1
+                        return True
             if kind == "spell" and target_dest is not None:
                 # 点选失败时退回拖拽到目标
                 self.drag(hand_pts[idx], target_dest, duration=0.45,
@@ -820,7 +922,7 @@ class ClickBot:
                     self.drag(hand_pts[idx], pt, duration=0.50,
                               note=f"play_spell:{m.get('card')}->{zone}[{ti}]")
                     time.sleep(0.5)
-                    if self._sig(self.state()) != before:
+                    if self._changed_stable(before, timeout=1.6):
                         self.turn_actions += 1
                         return True
                     for opt_pt in CHOOSE_ONE_OPTIONS:
@@ -829,7 +931,7 @@ class ClickBot:
                         # 选项后进入选目标：点回目标随从结算
                         self.click(*pt, note=f"target:{zone}[{ti}]")
                         time.sleep(0.4)
-                        if self._sig(self.state()) != before:
+                        if self._changed_stable(before, timeout=1.6):
                             self.turn_actions += 1
                             return True
                     self.cancel_targeting()
@@ -1178,12 +1280,15 @@ class ClickBot:
                     self._turn_started_at = time.time()
                     self._last_board_count = -1
                     self._board_drop_count = 0
+                    self._played_this_turn.clear()
                     time.sleep(0.8)
                 self.log(kind="state", phase=phase, turn=turn,
                          gold=st.get("gold"), board=len(st.get("board") or []),
                          hand=len(st.get("hand") or []),
                          shop=len(st.get("shop") or []),
-                         choices=[c.get("card") for c in (st.get("choices") or [])])
+                         choices=[c.get("card") for c in (st.get("choices") or [])],
+                         frozen=self._frozen_count(st),
+                         legal=self._legal_flags(st))
                 if phase in ("game_over", "result", "spectating"):
                     if not self._seen_game_over:
                         self._seen_game_over = True
@@ -1210,6 +1315,16 @@ class ClickBot:
                     time.sleep(0.4)
                     continue
                 if st.get("choices"):
+                    if self._choice_is_stale(st):
+                        # 战斗/切回合滞后帧：choices 还在但 legal.choose 为空 → 不点
+                        self.log(kind="stale_choice_ignored", n=len(st.get("choices") or []),
+                                 turn=turn, phase=phase)
+                        time.sleep(0.8)
+                        continue
+                    if self._choice_fail_turn == turn:
+                        # 本回合已确认处理不了该弹层：不要每 2s 重复点
+                        time.sleep(0.8)
+                        continue
                     self.do_choice(st)
                     time.sleep(0.3)
                     continue
