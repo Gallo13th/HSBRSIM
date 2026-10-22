@@ -422,6 +422,31 @@ def _position_variants(n_board: int) -> List[int]:
     return [-1] + list(range(n_board))
 
 
+def _enumerate_moves(game: Game, hero: Hero,
+                     zones: Zones) -> List[ActionDescriptor]:
+    """棋盘重排候选（v3 ``ActionKind.MOVE_MINION``；当前只生成相邻交换）。
+
+    为什么是相邻交换而不是「任意目标槽位」：``CANDIDATE_MAX=64`` 下
+    ``n*(n-1)``（满场 42）会挤掉手牌打出变体；相邻交换共 ``n-1`` 个，
+    而**任意排列都可由若干次相邻交换达成**（每次交换是一个合法决策步，
+    招募期动作预算 40 足够）。``apply_action`` 本身支持任意目标槽位
+    （``position`` 0..n-1），后续若要放宽枚举只需改本函数。
+
+    重排不消耗金币、不 fire 引擎事件（真实客户端拖拽换位也不触发
+    on_summon/入场效果）；位置只在战斗/相邻效果结算时生效。
+    """
+    n = len(zones.board)
+    out: List[ActionDescriptor] = []
+    for i in range(n - 1):
+        m = zones.board[i]
+        if getattr(m, "dead", False):
+            continue
+        out.append(_desc(ActionKind.MOVE_MINION.value, src=m, zones=zones,
+                         position=i + 1, cost=0,
+                         note=f"swap {i}<->{i + 1}"))
+    return out
+
+
 def _script_targets(script: Any, source: Any, game: Game) -> List[Any]:
     """按脚本声明的 ``target_candidates`` 求目标集（异常 → 空集）。
 
@@ -804,6 +829,8 @@ def _trim_tail_preserving(tail: List[ActionDescriptor],
             return 85
         if d.kind == ActionKind.HERO_POWER.value:
             return 80 if d.tgt_entity is None else 60
+        if d.kind == ActionKind.MOVE_MINION.value:
+            return 45
         if d.kind == ActionKind.ACTIVATE.value:
             return 40
         if d.kind == ActionKind.SELL.value:
@@ -880,6 +907,8 @@ def enumerate_actions(game: Game, hero: Hero,
 
     tail: List[ActionDescriptor] = []
     tail.extend(_enumerate_sells(game, hero, zones))
+    # 棋盘重排（v3）：相邻交换；任意排列经多次交换可达（见 _enumerate_moves）
+    tail.extend(_enumerate_moves(game, hero, zones))
     tail.extend(_enumerate_hero_powers(game, hero, zones))
     tail.extend(_enumerate_activate(game, hero, zones))
     tail.extend(_enumerate_upgrade(game, hero))
@@ -945,6 +974,43 @@ def enumerate_choice(game: Game, choice: PendingChoice,
 # ══════════════════════════════════════════════════════════════════════
 
 
+def _apply_move_minion(game: Game, hero: Hero,
+                       desc: ActionDescriptor) -> bool:
+    """棋盘重排（v3）：把 ``src_entity`` 移到 ``desc.position`` 槽位。
+
+    引擎（vendored ``hsrl2``）**没有公开的 reorder/move API**，这里采用
+    env 层最小可行接口：只改 ``hero.board`` 列表顺序并调用引擎既有的
+    ``game._update_positions(hero)`` 重算 ``ZONE_POSITION`` tag。
+
+    安全性（与玩家拖拽换位等价）：
+    - 只接受仍在 ``hero.board`` 的存活随从、目标槽位 0..n-1 且 != 当前位；
+    - 不 fire 任何事件、不触发 on_summon/入场/死亡流程、不动其它状态；
+    - 同一批实体集合，战斗/相邻效果只读 board 顺序 → 语义即"换位"。
+    """
+    board = hero.board
+    m = desc.src_entity
+    if m is None or m not in board:
+        raise GameStateError("move_minion: src is not on agent board")
+    if getattr(m, "dead", False):
+        raise GameStateError("move_minion: src minion is dead")
+    n = len(board)
+    try:
+        dest = int(desc.position)
+    except (TypeError, ValueError):
+        raise GameStateError(f"move_minion: invalid position {desc.position!r}")
+    if not 0 <= dest < n:
+        raise GameStateError(
+            f"move_minion: position {dest} out of range [0,{n})")
+    cur = board.index(m)
+    if dest == cur:
+        raise GameStateError(
+            f"move_minion: src already at position {cur}")
+    board.remove(m)
+    board.insert(dest, m)
+    game._update_positions(hero)
+    return True
+
+
 def _apply_choose(game: Game, hero: Hero, desc: ActionDescriptor) -> bool:
     if not game.pending_choices:
         raise GameStateError("choose: no pending choice")
@@ -973,6 +1039,8 @@ def apply_action(game: Game, hero: Hero,
             ok = game.buy_from_tavern(hero, desc.src_entity)
         elif kind == ActionKind.SELL.value:
             ok = game.sell_minion(hero, desc.src_entity)
+        elif kind == ActionKind.MOVE_MINION.value:
+            ok = _apply_move_minion(game, hero, desc)
         elif kind == ActionKind.PLAY_MINION.value:
             position = None if desc.position < 0 else int(desc.position)
             kwargs: Dict[str, Any] = {"position": position}
@@ -1155,15 +1223,20 @@ class ChoiceQueue(list):
 
     def __init__(self, game: Game, *, picker: Any = None,
                  hold_fn: Any = None, cap: int = 2000,
-                 errors: Optional[List[str]] = None):
+                 errors: Optional[List[str]] = None,
+                 agent: Any = None):
         super().__init__()
         self._game = game
         self._picker = picker or (lambda c: default_pick_index(c, game))
         self._hold_fn = hold_fn
         self._cap = cap
         self._errors = errors if errors is not None else []
+        self._agent = agent
         self._busy = False
         self.drained = 0
+        #: 本阶段被**自动结算**的智能体选择（v3：不可暂停阶段的可见标记，
+        #: 环境层据此累计 ``agent_choice_autoresolved`` / info 日志，禁止静默）。
+        self.auto_resolved_agent_choices: List[Dict[str, Any]] = []
 
     # list 的 append 是引擎唯一写入点；这里「入队即结算」
     def append(self, choice: Any) -> None:                # type: ignore[override]
@@ -1183,10 +1256,20 @@ class ChoiceQueue(list):
                 return
             self.pop(0)
             self.drained += 1
+            is_agent_choice = (self._agent is not None
+                               and getattr(head, "owner", None) is self._agent)
             try:
                 idx = int(self._picker(head))
                 if not 0 <= idx < len(head.options):
                     idx = 0
+                if is_agent_choice:
+                    # v3: 记录"不可暂停阶段被自动结算的智能体选择"（不静默）。
+                    self.auto_resolved_agent_choices.append({
+                        "kind": str(getattr(head, "kind", "")),
+                        "turn": int(getattr(self._game, "turn", 0)),
+                        "n_options": len(head.options),
+                        "picked": int(idx),
+                    })
                 head.choose(idx)
             except Exception as exc:                      # noqa: BLE001
                 self._errors.append(f"{type(exc).__name__}: {exc}")

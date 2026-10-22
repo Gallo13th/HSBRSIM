@@ -188,8 +188,18 @@ class BattlegroundsEnv:
                        "play_minion_targeted": 0,
                        "play_spell_targeted": 0,
                        "magnetic_attach": 0,
-                       "dual_target_power_candidates": 0}
+                       "dual_target_power_candidates": 0,
+                       # v3: 棋盘重排候选计数 / 不可暂停阶段智能体选择被自动
+                       # 结算的计数（禁止静默 default_pick；见 _record_auto_resolved）
+                       "move_minion_candidates": 0,
+                       "agent_choice_autoresolved": 0,
+                       "agent_choice_autoresolved_end_recruit_phase": 0,
+                       "agent_choice_autoresolved_opponent_phase": 0,
+                       "agent_choice_autoresolved_game_over": 0,
+                       "agent_choice_autoresolved_auto_choice_config": 0}
         self._errors: List[str] = []
+        #: v3: 本局不可暂停阶段被自动结算的智能体选择明细（纯数据，info 暴露）
+        self._auto_resolved_choices: List[Dict[str, Any]] = []
         self._engine_error: Optional[str] = None
         self._was_truncated = False
         self._closed = False
@@ -289,6 +299,7 @@ class BattlegroundsEnv:
         self._rank_by_hero = {}
         self._elimination_order = []
         self._errors = []
+        self._auto_resolved_choices = []
         self._turn_stats = _TurnStats()
         self._done = False
         self._was_truncated = False
@@ -557,7 +568,7 @@ class BattlegroundsEnv:
         """统一终止出口：置 done、清残余选择、game_over 观测、标准 info。"""
         self._done = True
         self._was_truncated = bool(truncated)
-        self._drain_all_choices()
+        self._drain_all_choices(where="game_over")
         self._obs = self._observe(phase=PHASE_GAME_OVER)
         info = self._make_info(combat=combat, terminated_reason=reason)
         info["agent_rank"] = int(self._agent_rank())
@@ -634,6 +645,8 @@ class BattlegroundsEnv:
             elif kind == ActionKind.PLAY_SPELL.value:
                 if cand.tgt_zone:
                     stats["play_spell_targeted"] += 1
+            elif kind == ActionKind.MOVE_MINION.value:
+                stats["move_minion_candidates"] += 1
 
     def _progress_fingerprint(self) -> Tuple:
         """招募期内"关键状态"指纹（用于检测无进展动作）。
@@ -731,13 +744,63 @@ class BattlegroundsEnv:
     # 内部：PendingChoice 结算
     # ══════════════════════════════════════════════════════════════
 
+    def _snapshot_agent_choices(self, where: str) -> List[Dict[str, Any]]:
+        """记录「**即将**被自动结算」的智能体选择（v3 可见性，不改行为）。
+
+        不可暂停阶段（EoT/淘汰/对手招募/终局清理）的 PendingChoice 无法暴露成
+        ``phase="choice"``；旧实现直接 `default_pick_index` 结算且无任何痕迹。
+        本函数在结算前快照：``kind/turn/n_options/picked``，由
+        :meth:`_record_auto_resolved` 累计进 ``stats``/``info``/``_errors``。
+        """
+        game = self.game
+        agent = self._agent
+        recs: List[Dict[str, Any]] = []
+        if game is None or agent is None:
+            return recs
+        for choice in list(getattr(game, "pending_choices", []) or []):
+            if getattr(choice, "owner", None) is not agent:
+                continue
+            options = list(getattr(choice, "options", ()) or ())
+            try:
+                picked = int(driver.default_pick_index(choice, game)) \
+                    if options else 0
+            except Exception:                             # noqa: BLE001
+                picked = 0
+            recs.append({
+                "where": str(where),
+                "kind": str(getattr(choice, "kind", "")),
+                "turn": int(getattr(game, "turn", 0)),
+                "n_options": len(options),
+                "picked": int(picked),
+            })
+        return recs
+
+    def _record_auto_resolved(self, rec: Dict[str, Any]) -> None:
+        """累计一次「智能体选择被自动结算」：stats + 明细 + 日志（不静默）。"""
+        rec = dict(rec)
+        where = str(rec.get("where", "") or "auto")
+        self._stats["agent_choice_autoresolved"] = int(
+            self._stats.get("agent_choice_autoresolved", 0)) + 1
+        key = f"agent_choice_autoresolved_{where}"
+        self._stats[key] = int(self._stats.get(key, 0)) + 1
+        if len(self._auto_resolved_choices) < 64:         # 明细有界，避免膨胀
+            self._auto_resolved_choices.append(rec)
+        if len(self._errors) < 200:                       # 日志有界
+            self._errors.append(
+                "auto_choice:{}:kind={}:picked={}/{}:turn={}".format(
+                    where, rec.get("kind", ""), rec.get("picked", -1),
+                    rec.get("n_options", 0), rec.get("turn", -1)))
+
     def _drain_choices(self) -> Any:
         """结算选择：非智能体的自动；智能体的按 ``auto_choice`` 决定。"""
         game = self.game
         if not game.pending_choices:
             return None
         policy_fn = None
+        auto_recs: List[Dict[str, Any]] = []
         if self.config.auto_choice:
+            # 显式 opt-in 的自动选择也留痕（不再"看起来像策略决策"）
+            auto_recs = self._snapshot_agent_choices("auto_choice_config")
             policy_fn = lambda choice: driver.default_pick_index(choice, game)
         errors: List[str] = []
         pending = driver.resolve_pending_choices(
@@ -745,18 +808,27 @@ class BattlegroundsEnv:
         if errors:
             self._errors.extend(errors)
             self._stats["choice_errors"] += len(errors)
+        for rec in auto_recs:
+            self._record_auto_resolved(rec)
         return pending
 
-    def _drain_all_choices(self) -> None:
-        """自动结算**全部**选择（含智能体）——用于不可暂停的阶段。"""
+    def _drain_all_choices(self, *, where: str = "auto") -> None:
+        """自动结算**全部**选择（含智能体）——用于不可暂停的阶段。
+
+        ``where``: 结算场景标签（写入统计/日志），如 ``end_recruit_phase`` /
+        ``opponent_phase`` / ``game_over``。
+        """
         game = self.game
         if not game.pending_choices:
             return
+        records = self._snapshot_agent_choices(where)
         errors: List[str] = []
         driver.resolve_pending_choices(game, None, None, errors=errors)
         if errors:
             self._errors.extend(errors)
             self._stats["choice_errors"] += len(errors)
+        for rec in records:
+            self._record_auto_resolved(rec)
 
     # ══════════════════════════════════════════════════════════════
     # 内部：事件回调
@@ -835,7 +907,7 @@ class BattlegroundsEnv:
                     self._errors.append(
                         f"opponent_rejected:{result.kind}:{result.error}")
                     break
-                self._drain_all_choices()
+                self._drain_all_choices(where="opponent_phase")
                 zones = driver.collect_zones(game, hero)
 
     # ══════════════════════════════════════════════════════════════
@@ -861,7 +933,8 @@ class BattlegroundsEnv:
             return int(game.turn) > turn_before
 
         old = game.pending_choices
-        queue = driver.ChoiceQueue(game, hold_fn=_hold, errors=errors)
+        queue = driver.ChoiceQueue(game, hold_fn=_hold, errors=errors,
+                                   agent=agent)
         game.pending_choices = queue
         engine_error = None
         try:
@@ -873,6 +946,12 @@ class BattlegroundsEnv:
             leftovers = list(queue)
             game.pending_choices = old
             old.extend(leftovers)
+        # v3: 不可暂停阶段（EoT/战斗/淘汰）被自动结算的智能体选择留痕，
+        # 不再静默 default_pick（见 _record_auto_resolved）。
+        for rec in queue.auto_resolved_agent_choices:
+            rec = dict(rec)
+            rec["where"] = "end_recruit_phase"
+            self._record_auto_resolved(rec)
         if errors:
             self._errors.extend(errors)
             self._stats["choice_errors"] += len(errors)
@@ -997,6 +1076,12 @@ class BattlegroundsEnv:
             "phase": phase,
             "engine_errors": int(self._stats["engine_errors"]),
             "choice_errors": int(self._stats["choice_errors"]),
+            # v3: 不可暂停阶段被自动结算的智能体选择（不静默，见
+            # _snapshot_agent_choices/_record_auto_resolved）
+            "agent_choice_autoresolved": int(
+                self._stats.get("agent_choice_autoresolved", 0)),
+            "auto_resolved_choices": [dict(r)
+                                      for r in self._auto_resolved_choices],
         }
         # 观测 v2: info["obs_extra"] 复用当前 obs.extra（同源、不重复构建）。
         # 保留该键兼容旧消费方；新代码优先读 obs.extra / obs.get_extra()。

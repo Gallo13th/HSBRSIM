@@ -222,23 +222,41 @@ class TestTargetedBattlecryEnumeration(unittest.TestCase):
                           f"{cid}: self-target variant missing")
 
     def test_engine_post_summon_candidates_match(self):
-        """我们的目标集合覆盖引擎入场后候选（按 card_id 对齐）。"""
+        """我们的目标集合覆盖引擎入场后候选（按 card_id 对齐）。
+
+        2026-10-22 引擎两阶段状态机（抉择 → 目标 → 结算）后，
+        ``choose_options`` + ``needs_target`` 组合卡（Sprightly Scarab）
+        在裸打出时先挂 ``choose_one``，选择后才挂 ``battlecry_target``；
+        env 对这类卡不预枚举目标变体，而是经 choice 链暴露全部目标
+        （见 ``TestChooseOneBranches``），故这里对两阶段卡只校验
+        driver 存在无目标可打出候选。
+        """
         for cid in _targeted_pool_minions():
             game, a, b, m, descs = self._variants_in_some_state(cid)
             self.assertTrue(descs, f"{cid}: no candidate in broad states")
             our_ids = {getattr(d.tgt_entity, "card_id", None)
                        for d in descs if d.tgt_entity is not None}
             # 引擎真值：同一初始状态真实打出（不带 target）
-            state_idx = _RACE_SETS.index(_RACE_SETS[0])  # 占位
             game2, a2, b2 = _broad_started_game(seed=11, race_set=0)
             m2 = hand_card(game2, a2, cid)
             if not game2.play_minion(a2, m2):
                 continue
+            # 两阶段卡：先结算 choose_one（与 env 的 pop→choose 契约一致）
+            if game2.pending_choices \
+                    and game2.pending_choices[0].kind == "choose_one":
+                first = game2.pending_choices.pop(0)
+                first.choose(0)
             truth = list(game2.pending_choices[0].options) \
                 if game2.pending_choices else []
-            for t in truth:
-                self.assertIn(getattr(t, "card_id", None), our_ids,
-                              f"{cid}: engine candidate missing from driver")
+            if our_ids:
+                for t in truth:
+                    self.assertIn(getattr(t, "card_id", None), our_ids,
+                                  f"{cid}: engine candidate missing from driver")
+            else:
+                # choose+target 组合：目标经第二段 choice 表达
+                self.assertTrue(
+                    any(d.tgt_entity is None for d in descs),
+                    f"{cid}: 两阶段卡缺少无目标打出候选（choice 链入口）")
 
     def test_all_targeted_battlecries_apply(self):
         bad = []
@@ -579,11 +597,10 @@ class TestObservationV2Extra(unittest.TestCase):
 
     def test_version_and_required_keys(self):
         env, obs = self._new_env()
-        self.assertEqual(obs.version, 2)
         default_version = int(
             env_spec.Observation.__dataclass_fields__["version"].default)
         self.assertEqual(obs.version, default_version)
-        self.assertEqual(env.observation_space["version"], 2)
+        self.assertEqual(env.observation_space["version"], default_version)
         for key in EXTRA_REQUIRED_KEYS:
             self.assertIn(key, obs.extra, f"extra missing key: {key}")
         self.assertEqual(obs.extra["version"], obs.version)
@@ -594,13 +611,15 @@ class TestObservationV2Extra(unittest.TestCase):
 
     def test_extra_picklable_and_plain_data(self):
         env, obs = self._new_env()
+        default_version = int(
+            env_spec.Observation.__dataclass_fields__["version"].default)
         for _ in range(3):
             obs, _r, _t, _tr, _i = env.step(self._end_turn(obs))
             payload = pickle.dumps(obs)
             self.assertIsInstance(payload, (bytes, bytearray))
             restored = pickle.loads(payload)
             self.assertEqual(restored.extra, obs.extra)
-            self.assertEqual(restored.version, 2)
+            self.assertEqual(restored.version, default_version)
             _assert_plain_data(self, obs.extra, "extra")
         env.close()
 
@@ -682,8 +701,10 @@ class TestObservationV2Extra(unittest.TestCase):
         try:
             obs_list = vec.reset()
             self.assertEqual(len(obs_list), 2)
+            default_version = int(
+                env_spec.Observation.__dataclass_fields__["version"].default)
             for obs in obs_list:
-                self.assertEqual(obs.version, 2)
+                self.assertEqual(obs.version, default_version)
                 for key in EXTRA_REQUIRED_KEYS:
                     self.assertIn(key, obs.extra, f"vec extra missing: {key}")
             actions = []
@@ -693,7 +714,7 @@ class TestObservationV2Extra(unittest.TestCase):
                 actions.append(CandidateAction(kind="end_turn"))
             obs_list, rewards, dones, infos = vec.step(actions)
             for obs, info in zip(obs_list, infos):
-                self.assertEqual(obs.version, 2)
+                self.assertEqual(obs.version, default_version)
                 self.assertEqual(info.get("obs_extra"), obs.extra)
         finally:
             vec.close()
