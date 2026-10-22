@@ -87,7 +87,15 @@ python tools/version_sync.py --apply --yes
   - 每次 click/drag 后截图到 `runs/live/<run>/screenshots/actions/`
   - 同回合 2 次 no-effect → `diagnostics/` 5 帧 + state
   - 每回合 settled 截图/JSON；内存读取走子进程防崩
-- 当前 run：`runs/live/clickbot_every/`（约 678 动作，95 no-effect；turn 1–15 多局循环）
+- 当前 run：`runs/live/live_20261022_2330_bot37_final/`（真实自动进入/英雄选择/新动作验证；
+  20min 超时，1 局完成，actions=298；新动作 use_dark_gift/freeze/hero_power 各 1 次）
+- 8h 审计/修复（2026-10-22 23:07 →）：
+  - env：move_minion、Dark Gift gift_id 观测、EoT auto-resolve 留痕（commit b4a12db）；
+  - engine：饰品 offer REGISTRY 闸、choose+target 两阶段、法术 CHOOSE_BOTH（7372b6f）；
+  - cards：choose_one 36/36、10 base 抉择、6 英雄技能、11 DEFERRED（ed765c3）；
+  - 回归：hsrl2/tests 4800 passed/6 skipped；tests 622 passed/2 skipped；
+    verify_all --fast 4/4；smoke 8 局 crashes=0。
+
 - 待补 live 操作（P0/P1）：英雄技能、冻结、主动结束回合、目标法术稳定命中、三连/发现确认、开始战斗页识别。
 
 ## 7. 已知限制
