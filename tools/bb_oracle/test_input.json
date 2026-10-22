@@ -1,0 +1,26 @@
+{
+  "turn": 4,
+  "iterations": 3000,
+  "threads": 1,
+  "time_limit_ms": 20000,
+  "player": {
+    "health": 43,
+    "tier": 2,
+    "minions": [
+      {
+        "card_id": "BG26_135",
+        "atk": 3,
+        "health": 1,
+        "keywords": ["taunt", "divine_shield", "windfury"]
+      }
+    ]
+  },
+  "opponent": {
+    "health": 36,
+    "tier": 2,
+    "minions": [
+      {"card_id": "BG35_814", "atk": 3, "health": 6,
+       "keywords": ["taunt"]}
+    ]
+  }
+}

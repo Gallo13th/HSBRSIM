@@ -1,0 +1,290 @@
+{
+  "version": 1,
+  "window": {
+    "titles": [
+      "炉石传说",
+      "Hearthstone"
+    ],
+    "process": "Hearthstone.exe",
+    "expected_rect": [
+      -7,
+      0,
+      1929,
+      1048
+    ],
+    "foreground_retries": 5,
+    "restore_delay_s": 0.25,
+    "use_client_rect": true
+  },
+  "paths": {
+    "power_log": "C:\\Program Files (x86)\\Hearthstone\\Logs\\Power.log",
+    "hdt_log_dir": "%APPDATA%\\HearthstoneDeckTracker\\Logs",
+    "runs_dir": "runs/live",
+    "battle_net": "C:\\Program Files (x86)\\Battle.net\\Battle.net.exe"
+  },
+  "flow": {
+    "blind": false,
+    "poll_interval_s": 0.25,
+    "max_games": 5,
+    "max_runtime_s": 7200.0,
+    "game_timeout_s": 2400.0,
+    "client_gone_s": 20.0,
+    "restart_client": true,
+    "restart_timeout_s": 180.0,
+    "max_game_over_retries": 8,
+    "archive_power_log": true,
+    "combat_wait_s": 40.0,
+    "recruit_min_s": 1.0,
+    "max_actions_per_tick": 14,
+    "blind_game_duration_s": 900.0,
+    "blind_turn_s": 20.0,
+    "buy_all_shop": true,
+    "buy_to_hand": true,
+    "play_hand_minions": true,
+    "buy_count": 7,
+    "play_count": 7,
+    "use_hero_power": false,
+    "hero_option_index": 0,
+    "end_turn_use_key": false,
+    "send_end_turn": false,
+    "end_turn_key": "E",
+    "pause_vk": 123,
+    "pause_poll_s": 0.1,
+    "simulate_when_unavailable": true,
+    "memory_poll_s": 0.5,
+    "dry_run_max_actions": 40,
+    "dry_run_max_seconds": 20.0
+  },
+  "delays": {
+    "after_click_s": 0.5,
+    "after_drag_s": 0.35,
+    "drag_duration_s": 0.35,
+    "after_key_s": 0.3,
+    "hero_select_wait_s": 1.5,
+    "between_buys_s": 0.25,
+    "end_turn_wait_s": 1.0,
+    "choice_wait_s": 0.6,
+    "menu_retry_s": 5.0,
+    "after_game_wait_s": 8.0,
+    "screenshot_settle_s": 0.2
+  },
+  "coords": {
+    "points": {
+      "menu_battlegrounds": [
+        0.4995,
+        0.3922
+      ],
+      "menu_back": [
+        0.035,
+        0.035
+      ],
+      "splash_click": [
+        0.5,
+        0.5
+      ],
+      "lobby_play": [
+        0.7172,
+        0.8028
+      ],
+      "lobby_back": [
+        0.781,
+        0.923
+      ],
+      "lobby_play_again": [
+        0.7172,
+        0.8028
+      ],
+      "result_continue": [
+        0.5393,
+        0.8492
+      ],
+      "result_continue2": [
+        0.5,
+        0.86
+      ],
+      "result_center": [
+        0.5,
+        0.5
+      ],
+      "end_turn": [
+        0.7917,
+        0.441
+      ],
+      "hero_power": [
+        0.592,
+        0.79
+      ],
+      "hero_confirm": [
+        0.5,
+        0.879
+      ],
+      "choice_confirm": [
+        0.5,
+        0.69
+      ],
+      "error_dismiss": [
+        0.5,
+        0.85
+      ]
+    },
+    "groups": {
+      "shop": [
+        [
+          0.2953,
+          0.356
+        ],
+        [
+          0.3635,
+          0.356
+        ],
+        [
+          0.4318,
+          0.356
+        ],
+        [
+          0.5,
+          0.356
+        ],
+        [
+          0.5682,
+          0.356
+        ],
+        [
+          0.6365,
+          0.356
+        ],
+        [
+          0.7047,
+          0.356
+        ]
+      ],
+      "board": [
+        [
+          0.2953,
+          0.552
+        ],
+        [
+          0.3635,
+          0.552
+        ],
+        [
+          0.4318,
+          0.552
+        ],
+        [
+          0.5,
+          0.552
+        ],
+        [
+          0.5682,
+          0.552
+        ],
+        [
+          0.6365,
+          0.552
+        ],
+        [
+          0.7047,
+          0.552
+        ]
+      ],
+      "hand": [
+        [
+          0.2422,
+          0.852
+        ],
+        [
+          0.2995,
+          0.852
+        ],
+        [
+          0.3568,
+          0.852
+        ],
+        [
+          0.4141,
+          0.852
+        ],
+        [
+          0.4714,
+          0.852
+        ],
+        [
+          0.5286,
+          0.852
+        ],
+        [
+          0.5859,
+          0.852
+        ],
+        [
+          0.6432,
+          0.852
+        ],
+        [
+          0.7005,
+          0.852
+        ],
+        [
+          0.7578,
+          0.852
+        ]
+      ],
+      "hero_options": [
+        [
+          0.25,
+          0.436
+        ],
+        [
+          0.4115,
+          0.436
+        ],
+        [
+          0.5766,
+          0.436
+        ],
+        [
+          0.7344,
+          0.436
+        ]
+      ],
+      "choice_options": [
+        [
+          0.3,
+          0.38
+        ],
+        [
+          0.44,
+          0.38
+        ],
+        [
+          0.58,
+          0.38
+        ],
+        [
+          0.72,
+          0.38
+        ]
+      ]
+    },
+    "layout": {
+      "shop_y": 0.24,
+      "shop_spacing": 0.068229,
+      "board_y": 0.55,
+      "board_spacing": 0.068229,
+      "hand_y": 0.93,
+      "hand_spacing": 0.057292,
+      "hand_center_x": 0.48,
+      "center_x": 0.5
+    }
+  },
+  "safety": {
+    "dry_run_default": true,
+    "require_live_flag": true,
+    "max_actions_per_turn": 40,
+    "max_consecutive_errors": 5,
+    "screenshot_on_error": true,
+    "allow_focus_steal": true,
+    "min_action_interval_s": 0.15
+  }
+}

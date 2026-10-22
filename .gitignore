@@ -1,0 +1,40 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+runs/
+checkpoints/
+.pt
+*.pth
+*.ckpt
+*.npz
+*.jsonl
+.venv/
+
+# 隔离工作区（数据迁移/修复演练/版本预演；保留在磁盘但不入库）
+tmp_*/
+tmp_version_sync/
+
+# 逆向分析大件（XML/程序集/REA 运行时；入库会膨胀，报告与哈希保留在 reversed/*.json|md）
+reversed/hsdata_*/
+reversed/data_255130*/
+reversed/net/
+reversed/net_extractor/
+reversed/net_lists/
+reversed/rea/node/
+reversed/rea/rea-install/
+reversed/rea/npm-cache/
+reversed/rizling_latest/*.zip
+
+# 打包/下载产物
+AgenticAssistant/
+*.log
+*.zip
+
+# ��������/���ع���
+*.pkl
+tools/agent_plugin/bin/
+tools/agent_plugin/obj/
+tools/_bepinex_x64/
+*.log
+

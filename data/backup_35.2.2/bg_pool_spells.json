@@ -1,0 +1,712 @@
+[
+  {
+    "id": "BG28_168",
+    "dbf_id": 109230,
+    "name": "Shiny Ring",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_169",
+    "dbf_id": 109232,
+    "name": "Azerite Empowerment",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 6,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_500",
+    "dbf_id": 103785,
+    "name": "Armor Stash",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_503",
+    "dbf_id": 103791,
+    "name": "Fortify",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 1,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_504",
+    "dbf_id": 103793,
+    "name": "Recruit a Trainee",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 1,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_507",
+    "dbf_id": 103796,
+    "name": "Sacred Gift",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 7,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_512",
+    "dbf_id": 104502,
+    "name": "Enchanted Lasso",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 1,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_518",
+    "dbf_id": 105664,
+    "name": "Chef's Choice",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 2,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_519",
+    "dbf_id": 105665,
+    "name": "Fleeting Vigor",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_520",
+    "dbf_id": 105667,
+    "name": "Tricky Trousers",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_521",
+    "dbf_id": 105669,
+    "name": "Planar Telescope",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_571",
+    "dbf_id": 104559,
+    "name": "Hasty Excavation",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 2,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_573",
+    "dbf_id": 104560,
+    "name": "Upper Hand",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_601",
+    "dbf_id": 110400,
+    "name": "Cloning Conch",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_603",
+    "dbf_id": 110401,
+    "name": "Boon of Beetles",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_604",
+    "dbf_id": 110412,
+    "name": "Butchering",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_606",
+    "dbf_id": 110406,
+    "name": "Spitescale Special",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_607",
+    "dbf_id": 110407,
+    "name": "Corrupted Cupcakes",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_698",
+    "dbf_id": 110642,
+    "name": "Gem Confiscation",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_800",
+    "dbf_id": 103779,
+    "name": "Careful Investment",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_805",
+    "dbf_id": 104029,
+    "name": "Strike Oil",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 2,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_810",
+    "dbf_id": 104436,
+    "name": "Tavern Coin",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 1,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_825",
+    "dbf_id": 104445,
+    "name": "Defender's Rites",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_827",
+    "dbf_id": 104446,
+    "name": "Leaf Through the Pages",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 2,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_830",
+    "dbf_id": 104448,
+    "name": "Golden Touch",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_838",
+    "dbf_id": 104601,
+    "name": "Perfect Vision",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 6,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_845",
+    "dbf_id": 104472,
+    "name": "Natural Blessing",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_849",
+    "dbf_id": 104494,
+    "name": "Saloon's Finest",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_882",
+    "dbf_id": 105265,
+    "name": "Contracted Corpse",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_884",
+    "dbf_id": 105267,
+    "name": "Overconfidence",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_886",
+    "dbf_id": 105276,
+    "name": "Staff of Enrichment",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_888",
+    "dbf_id": 105271,
+    "name": "Misplaced Tea Set",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_897",
+    "dbf_id": 105752,
+    "name": "Tavern Dish Banana",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 1,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_966",
+    "dbf_id": 105903,
+    "name": "Them Apples",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 1,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG28_GIL_836",
+    "dbf_id": 105264,
+    "name": "Hired Headhunter",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG30_802",
+    "dbf_id": 113902,
+    "name": "Knockoff Wisdomball",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 6,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG30_804",
+    "dbf_id": 113901,
+    "name": "Robust Evolution",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG31_242",
+    "dbf_id": 117671,
+    "name": "Bargain Bundle",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG31_243",
+    "dbf_id": 119470,
+    "name": "Portal in a Fountain",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG31_244",
+    "dbf_id": 119471,
+    "name": "Portal in a Crystal",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG31_819",
+    "dbf_id": 117670,
+    "name": "Temperature Shift",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG31_881",
+    "dbf_id": 117573,
+    "name": "Time Management",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG31_889",
+    "dbf_id": 119599,
+    "name": "Sharing is Caring",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 7,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG31_896",
+    "dbf_id": 119718,
+    "name": "Hallowed Ritual",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 7,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG32_815",
+    "dbf_id": 120900,
+    "name": "Shifting Tide",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG33_101",
+    "dbf_id": 122864,
+    "name": "A New Sprout",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 1,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG33_811",
+    "dbf_id": 122182,
+    "name": "Healthy Bounty",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG33_812",
+    "dbf_id": 122183,
+    "name": "Hostile Bounty",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG33_813",
+    "dbf_id": 122184,
+    "name": "Selfish Bounty",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG33_814",
+    "dbf_id": 122185,
+    "name": "Friendly Bounty",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG33_815",
+    "dbf_id": 122186,
+    "name": "Wealthy Bounty",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG33_817",
+    "dbf_id": 122899,
+    "name": "Sanctify",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG33_899",
+    "dbf_id": 122862,
+    "name": "Mounting Avalanche",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 3,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG34_272",
+    "dbf_id": 130527,
+    "name": "Menagerie Tableware",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 7,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG34_330",
+    "dbf_id": 127288,
+    "name": "Search Through Time",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 2,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG34_444",
+    "dbf_id": 126909,
+    "name": "Easterly Winds",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG34_888",
+    "dbf_id": 126957,
+    "name": "Tomb Turning",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG34_889",
+    "dbf_id": 127503,
+    "name": "Brood of Nozdormu",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG34_990",
+    "dbf_id": 127506,
+    "name": "Wave of Gold",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG35_149",
+    "dbf_id": 131218,
+    "name": "Deepwater Clan",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG35_910",
+    "dbf_id": 130310,
+    "name": "Conflagration",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG35_911",
+    "dbf_id": 130311,
+    "name": "Arcane Absorption",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG35_912",
+    "dbf_id": 130312,
+    "name": "Eonar's Favor",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG35_922",
+    "dbf_id": 130713,
+    "name": "Queen's Command",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG35_951",
+    "dbf_id": 131152,
+    "name": "Might of Stormwind",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 2,
+    "is_pool_spell": true
+  },
+  {
+    "id": "BG35_952",
+    "dbf_id": 131153,
+    "name": "Back to Back",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 4,
+    "is_pool_spell": true
+  },
+  {
+    "id": "EBG_Spell_014",
+    "dbf_id": 100596,
+    "name": "Pointy Arrow",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 1,
+    "is_pool_spell": true
+  },
+  {
+    "id": "EBG_Spell_017",
+    "dbf_id": 100601,
+    "name": "Eyes of the Earth Mother",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 6,
+    "is_pool_spell": true
+  },
+  {
+    "id": "EBG_Spell_032",
+    "dbf_id": 100899,
+    "name": "Channel the Devourer",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "EBG_Spell_037",
+    "dbf_id": 100910,
+    "name": "Unmasked Identity",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 5,
+    "is_pool_spell": true
+  },
+  {
+    "id": "EBG_Spell_038",
+    "dbf_id": 100911,
+    "name": "Lost Staff of Hamuul",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 42,
+    "tech_level": 6,
+    "is_pool_spell": true
+  }
+]

@@ -1,0 +1,2259 @@
+{
+  "matched": {
+    "BG30_MagicItem_303": {
+      "name": "Automaton Portrait",
+      "template": "SoCSummonScript",
+      "reason": "SoC summon when space",
+      "text": "Start of Combat: When you have space, summon an Ancestral Automaton."
+    },
+    "BG30_MagicItem_403": {
+      "name": "Ironforge Anvil",
+      "template": "SoCBuffAll1x1Script",
+      "reason": "SoC buff all (default)",
+      "text": "Start of Combat: Triple the stats of your minions with no type."
+    },
+    "BG30_MagicItem_407": {
+      "name": "Ship in a Bottle",
+      "template": "SoCSummonScript",
+      "reason": "SoC summon when space",
+      "text": "Start of Combat: Summon and get a random Pirate. It attacks immediately."
+    },
+    "BG30_MagicItem_541": {
+      "name": "Nether Pendant",
+      "template": "AuraStatsScript",
+      "reason": "Aura +2/+2",
+      "text": "Minions in the Tavern have +2/+2. Improves every 3 times your hero takes damage   outside combat. (3 left!)"
+    },
+    "BG30_MagicItem_542": {
+      "name": "Emerald Dreamcatcher",
+      "template": "SoCBuffTribeScript",
+      "reason": "SoC buff Dragon",
+      "text": "Start of Combat: Set your Dragons' Attack to the highest in your warband."
+    },
+    "BG30_MagicItem_545": {
+      "name": "Fridge Magnet",
+      "template": "AvengeGetRandomMagneticScript",
+      "reason": "Avenge(3) get magnetic",
+      "text": "Avenge (3): Get a random Magnetic minion."
+    },
+    "BG30_MagicItem_700": {
+      "name": "Deathly Phylactery",
+      "template": "DRDoubleScript",
+      "reason": "DR double",
+      "text": "Discover a Deathrattle minion. Your first Deathrattle each combat triggers an extra time."
+    },
+    "BG30_MagicItem_804": {
+      "name": "Ancient Wishbone",
+      "template": "HeroPowerDoubleScript",
+      "reason": "HP double",
+      "text": "Your Hero Power triggers twice."
+    },
+    "BG30_MagicItem_847": {
+      "name": "Goblin Wallet",
+      "template": "EoTImproveGoldCapScript",
+      "reason": "EoT max gold +1",
+      "text": "At the end of each turn, increase your maximum Gold by 1."
+    },
+    "BG30_MagicItem_864": {
+      "name": "Gilnean Thorned Rose",
+      "template": "AvengeBuffAllPermanentScript",
+      "reason": "Avenge(3) buff all perm +3/+3",
+      "text": "Avenge (3): Give your minions +3/+3 permanently and deal 1 damage to them."
+    },
+    "BG30_MagicItem_880": {
+      "name": "Feral Talisman",
+      "template": "AuraStatsScript",
+      "reason": "Aura +2/+1",
+      "text": "Your minions have +2/+1."
+    },
+    "BG30_MagicItem_880t": {
+      "name": "Feral Talisman",
+      "template": "AuraStatsScript",
+      "reason": "Aura +8/+5",
+      "text": "Your minions have +8/+5."
+    },
+    "BG30_MagicItem_970t": {
+      "name": "Valorous Medallion",
+      "template": "SoCBuffAll6x6Script",
+      "reason": "SoC buff all +6/+6",
+      "text": "Start of Combat: Give your minions +6/+6."
+    },
+    "BG30_MagicItem_972": {
+      "name": "Karazhan Chess Set",
+      "template": "SoCSummonScript",
+      "reason": "SoC summon when space",
+      "text": "Start of Combat: Summon a copy of your left-most minion."
+    },
+    "BG30_MagicItem_984": {
+      "name": "Charging Staff",
+      "template": "EoTBuffDivineShieldScript",
+      "reason": "EoT buff DS +3/+0",
+      "text": "At the end of each turn, give your minions with Divine Shield +3 Attack."
+    },
+    "BG30_MagicItem_989": {
+      "name": "Artisanal Urn",
+      "template": "AuraStatsTribeScript",
+      "reason": "Aura Undead",
+      "text": "Your Undead have +3 Attack."
+    },
+    "BG30_MagicItem_989t": {
+      "name": "Artisanal Urn",
+      "template": "AuraStatsTribeScript",
+      "reason": "Aura Undead",
+      "text": "Your Undead have +10 Attack."
+    },
+    "BG30_MagicItem_995": {
+      "name": "Bronze Timepiece",
+      "template": "SoCBuffAll1x1Script",
+      "reason": "SoC buff all (default)",
+      "text": "Start of Combat: Give each of your minions Health equal to half its Attack."
+    },
+    "BG30_MagicItem_996": {
+      "name": "Bob's Tip Jar",
+      "template": "GainGold4Script",
+      "reason": "Gain 4 Gold",
+      "text": "Gain 4 Gold. Increase your maximum Gold by 4."
+    },
+    "BG30_MagicItem_998": {
+      "name": "Bob-blehead",
+      "template": "GainGold2Script",
+      "reason": "Gain 2 Gold",
+      "text": "Gain 2 Gold. The Tavern no longer offers cards from Tier 1 or Tier 2."
+    },
+    "BG32_MagicItem_231": {
+      "name": "Gilded Anchor",
+      "template": "EoTBuffGoldenScript",
+      "reason": "EoT buff golden",
+      "text": "At the end of each turn, give your Golden minions +3/+3."
+    },
+    "BG32_MagicItem_271": {
+      "name": "Ornate Clock",
+      "template": "GainGold3Script",
+      "reason": "Gain 3 Gold",
+      "text": "Gain 3 Gold. Buy your Greater Trinket next turn instead of Turn 9."
+    },
+    "BG32_MagicItem_276": {
+      "name": "Enigmatic Headstone",
+      "template": "EoTBuffTribeScript",
+      "reason": "EoT buff Undead",
+      "text": "At the end of each turn, your Undead have +2 Attack this game (wherever they are) ."
+    },
+    "BG32_MagicItem_360": {
+      "name": "Baleful Incense",
+      "template": "SoCGiveLeftRightMostKeywordScript",
+      "reason": "SoC L/R most REBORN",
+      "text": "Start of Combat: Give your left- and right-most Undead Reborn ."
+    },
+    "BG32_MagicItem_416": {
+      "name": "War Drum",
+      "template": "BCDoubleScript",
+      "reason": "BC double",
+      "text": "One Battlecry each turn triggers two extra times. (1 left!)"
+    },
+    "BG32_MagicItem_860": {
+      "name": "Beetle Band",
+      "template": "AvengeSummonScript",
+      "reason": "Avenge(5) summon",
+      "text": "Avenge (5): Summon a 2/2 Beetle. Give it Taunt ."
+    },
+    "BG32_MagicItem_860t": {
+      "name": "Beetle Band",
+      "template": "AvengeSummonScript",
+      "reason": "Avenge(6) summon",
+      "text": "Avenge (6): Summon two 2/2 Beetles. Give them Taunt ."
+    },
+    "BG32_MagicItem_864": {
+      "name": "Bird Feeder",
+      "template": "AvengeBuffAllScript",
+      "reason": "Avenge(2) buff all +1/+1",
+      "text": "Avenge (2): Give your minions +1/+1."
+    },
+    "BG32_MagicItem_904": {
+      "name": "Hogwash Basin",
+      "template": "SoCBuffAll1x1Script",
+      "reason": "SoC buff all (default)",
+      "text": "Start of Combat: This plays 3 Blood Gems on all your minions."
+    },
+    "BG32_MagicItem_934": {
+      "name": "Dazzling Dagger",
+      "template": "AuraStatsScript",
+      "reason": "Aura +1/+0",
+      "text": "Your minions have +1 Attack. (Improved by every 4 spells you've cast this game!)"
+    },
+    "BG32_MagicItem_960": {
+      "name": "Crocheted Sungill",
+      "template": "SoCSummonScript",
+      "reason": "SoC summon when space",
+      "text": "Start of Combat: Give the highest-Health minion from your hand +4/+4. When you have space, summon it for this combat onl"
+    },
+    "BG35_MagicItem_701": {
+      "name": "Fang Anklet",
+      "template": "SoCSummonScript",
+      "reason": "SoC summon when space",
+      "text": "Start of Combat: Your Beasts have +1/+1 this combat. After you summon a Beast, improve this permanently."
+    },
+    "BG35_MagicItem_714": {
+      "name": "Powder Keg",
+      "template": "SoCSummonScript",
+      "reason": "SoC summon when space",
+      "text": "Start of Combat: Give 2 friendly Pirates \" Deathrattle: Summon a 1/1 Sky Pirate and give it this minion's Attack. It att"
+    },
+    "BG35_MagicItem_754": {
+      "name": "Dramaloc Sticker",
+      "template": "SoCBuffTribeScript",
+      "reason": "SoC buff Murloc",
+      "text": "Start of Combat: Give your Murlocs the Attack of the highest-Attack minion in your hand."
+    },
+    "BG35_MagicItem_921": {
+      "name": "Cowrie Necklace",
+      "template": "SpellCostReductionScript",
+      "reason": "Cost reduction",
+      "text": "Tavern spells that give stats cost (2) less."
+    }
+  },
+  "unmatched": {
+    "BG30_MagicItem_301": {
+      "name": "Eternal Portrait",
+      "reason": "SoC unclassified: Get an Eternal Knight. Start of Combat: Give your Eternal Knights Taunt and Rebo",
+      "text": "Get an Eternal Knight. Start of Combat: Give your Eternal Knights Taunt and Reborn .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_310": {
+      "name": "Rivendare Portrait",
+      "reason": "SoC unclassified: Get a Titus Rivendare. Start of Combat: Double the Health of your Titus Rivendar",
+      "text": "Get a Titus Rivendare. Start of Combat: Double the Health of your Titus Rivendares.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_402": {
+      "name": "Conductor Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_406": {
+      "name": "Butcher's Sickle",
+      "reason": "no match: Get a Butchering. At the start of each turn, get another.",
+      "text": "Get a Butchering. At the start of each turn, get another.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_410": {
+      "name": "Quilligraphy Set",
+      "reason": "Avenge unclassified: Avenge (4): Your Blood Gems give an extra +1 Health this game.",
+      "text": "Avenge (4): Your Blood Gems give an extra +1 Health this game.",
+      "avenge": 1,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_410t2": {
+      "name": "Quilligraphy Set",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": 1,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_411": {
+      "name": "Hoggy Bank",
+      "reason": "SoC unclassified: Start of Combat: Give your Quilboar \" Deathrattle: Get 2 Blood Gems .\"",
+      "text": "Start of Combat: Give your Quilboar \" Deathrattle: Get 2 Blood Gems .\"",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_414": {
+      "name": "Kodo Leather Pouch",
+      "reason": "no match: After you buy a card, give two random friendly minions +2/+1.",
+      "text": "After you buy a card, give two random friendly minions +2/+1.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_414t": {
+      "name": "Kodo Leather Pouch",
+      "reason": "no match: After you buy a card, give two random friendly minions +4/+4.",
+      "text": "After you buy a card, give two random friendly minions +4/+4.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_416": {
+      "name": "Token of the Old Gods",
+      "reason": "no match: Spellcraft: Choose a minion. Then choose a minion from a Tier higher to transfor",
+      "text": "Spellcraft: Choose a minion. Then choose a minion from a Tier higher to transform it into.",
+      "avenge": null,
+      "spellcraft_id": 112813
+    },
+    "BG30_MagicItem_418": {
+      "name": "Bronzebeard Portrait",
+      "reason": "no match: Get a Brann Bronzebeard and a random Battlecry minion. Your Brann Bronzebeards a",
+      "text": "Get a Brann Bronzebeard and a random Battlecry minion. Your Brann Bronzebeards are both Murlocs and Dragons.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_419": {
+      "name": "Exquisite Dishware",
+      "reason": "EoT unclassified: At the end of each turn, get a random minion of each different type you control.",
+      "text": "At the end of each turn, get a random minion of each different type you control.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_420": {
+      "name": "Book of Medivh",
+      "reason": "no match: Discover a Tavern spell. At the start of each turn, Discover another.",
+      "text": "Discover a Tavern spell. At the start of each turn, Discover another.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_420t": {
+      "name": "Book of Medivh",
+      "reason": "no match: Discover 2 Tavern spells. At the start of each turn, Discover 2 more.",
+      "text": "Discover 2 Tavern spells. At the start of each turn, Discover 2 more.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_422": {
+      "name": "Lorewalker Scroll",
+      "reason": "AfterCast unclassified: Whenever you cast a spell on a minion, give it +2/+2.",
+      "text": "Whenever you cast a spell on a minion, give it +2/+2.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_422t": {
+      "name": "Lorewalker Scroll",
+      "reason": "AfterCast unclassified: Whenever you cast a spell on a minion, give it +8/+8.",
+      "text": "Whenever you cast a spell on a minion, give it +8/+8.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_423": {
+      "name": "Innkeeper's Stein",
+      "reason": "no match: The Tavern offers an extra minion of a higher Tier whenever it is Refreshed .",
+      "text": "The Tavern offers an extra minion of a higher Tier whenever it is Refreshed .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_425": {
+      "name": "Azeroth Model Globe",
+      "reason": "no match: At the start of every two turns, gain 2 Gold and Discover a Tier 6 minion. (2 tu",
+      "text": "At the start of every two turns, gain 2 Gold and Discover a Tier 6 minion. (2 turns left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_426": {
+      "name": "Colorful Compass",
+      "reason": "no match: Get a random {0}. At the start of each turn, get another.",
+      "text": "Get a random {0}. At the start of each turn, get another.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_426t": {
+      "name": "Colorful Compass",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_427": {
+      "name": "Tiger Carving",
+      "reason": "no match: Whenever a friendly minion takes damage, give a random friendly minion +2 Attack",
+      "text": "Whenever a friendly minion takes damage, give a random friendly minion +2 Attack permanently.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_427t": {
+      "name": "Tiger Carving",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_429": {
+      "name": "Demonblood Gourd",
+      "reason": "no match: Spellcraft: Choose a friendly minion. It consumes a random minion in the Tavern ",
+      "text": "Spellcraft: Choose a friendly minion. It consumes a random minion in the Tavern to gain its stats.",
+      "avenge": null,
+      "spellcraft_id": 112401
+    },
+    "BG30_MagicItem_430": {
+      "name": "Rockin' Music Box",
+      "reason": "no match: Get a random Battlecry minion. At the start of each turn, get another.",
+      "text": "Get a random Battlecry minion. At the start of each turn, get another.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_431": {
+      "name": "Azerite Portrait",
+      "reason": "no match: Get a Living Azerite. Your Living Azerites also give stats to friendly Elemental",
+      "text": "Get a Living Azerite. Your Living Azerites also give stats to friendly Elementals.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_432": {
+      "name": "Belcher Portrait",
+      "reason": "no match: Get an Operatic Belcher. Whenever a friendly minion loses Venomous , it gains +4",
+      "text": "Get an Operatic Belcher. Whenever a friendly minion loses Venomous , it gains +4/+4 permanently.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_432t": {
+      "name": "Belcher Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_433": {
+      "name": "Alliance Keychain",
+      "reason": "no match: The first time a friendly minion dies each combat, give its maximum stats to a r",
+      "text": "The first time a friendly minion dies each combat, give its maximum stats to a random friendly minion.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_433t": {
+      "name": "Alliance Keychain",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_434": {
+      "name": "Replica Cathedral",
+      "reason": "no match: Your first spell each turn casts an extra time.",
+      "text": "Your first spell each turn casts an extra time.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_435": {
+      "name": "Goldenizer Supply",
+      "reason": "no match: At the end of every 3 turns, get a Goldenizer. (3 turns left!)",
+      "text": "At the end of every 3 turns, get a Goldenizer. (3 turns left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_437": {
+      "name": "Staff of the Scourge",
+      "reason": "Avenge unclassified: Avenge (5): Give a random friendly Undead Reborn .",
+      "text": "Avenge (5): Give a random friendly Undead Reborn .",
+      "avenge": 1,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_438t": {
+      "name": "Mug of the Sire",
+      "reason": "no match: Whenever you would summon a minion that doesn't fit in your warband, give your m",
+      "text": "Whenever you would summon a minion that doesn't fit in your warband, give your minions +5 Attack.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_439": {
+      "name": "Designer Eyepatch",
+      "reason": "no match: You only need 2 copies of a Pirate to make it Golden.",
+      "text": "You only need 2 copies of a Pirate to make it Golden.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_440": {
+      "name": "Boom Controller",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_441": {
+      "name": "Tinyfin Onesie",
+      "reason": "SoC unclassified: Start of Combat: Your left-most minion gains the stats of the highest-Health min",
+      "text": "Start of Combat: Your left-most minion gains the stats of the highest-Health minion in your hand.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_442": {
+      "name": "Blood Golem Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_540": {
+      "name": "Slamma Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_543": {
+      "name": "Devourer Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_544": {
+      "name": "Nomi Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_544t": {
+      "name": "Nomi Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_546": {
+      "name": "Jar o' Gems",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_547": {
+      "name": "Comfy Coffin",
+      "reason": "AfterCast unclassified: After you cast a Tavern spell, your Undead have +1 Attack this game (wherever th",
+      "text": "After you cast a Tavern spell, your Undead have +1 Attack this game (wherever they are) .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_547t": {
+      "name": "Comfy Coffin",
+      "reason": "AfterCast unclassified: After you cast a Tavern spell, your Undead have +2 Attack this game (wherever th",
+      "text": "After you cast a Tavern spell, your Undead have +2 Attack this game (wherever they are) .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_548": {
+      "name": "Glowscale Portrait",
+      "reason": "AfterCast unclassified: Get a Timewarped Glowscale. After you cast a Spellcraft spell, give your minions",
+      "text": "Get a Timewarped Glowscale. After you cast a Spellcraft spell, give your minions with Divine Shield +3/+3.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_555": {
+      "name": "Surprise Portrait",
+      "reason": "no match: Get an Elemental of Surprise. (More appear when you least expect them...)",
+      "text": "Get an Elemental of Surprise. (More appear when you least expect them...)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_701": {
+      "name": "The Eye of Sargeras",
+      "reason": "no match: Every fourth card you buy costs Health instead of Gold. (3 left!)",
+      "text": "Every fourth card you buy costs Health instead of Gold. (3 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_702": {
+      "name": "Primalfin Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_703": {
+      "name": "Mystery Cube",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_705": {
+      "name": "Bartend-o-Tron's Oilcan",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_706": {
+      "name": "Reflective Pendant",
+      "reason": "no match: Get a plain copy of a random friendly minion. At the start of each turn, repeat ",
+      "text": "Get a plain copy of a random friendly minion. At the start of each turn, repeat this.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_707": {
+      "name": "Tickatus Sticker",
+      "reason": "no match: Discover a Tier 3 Darkmoon Prize. At the start of every three turns, repeat this",
+      "text": "Discover a Tier 3 Darkmoon Prize. At the start of every three turns, repeat this. (3 turns left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_709": {
+      "name": "Electromagnetic Device",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_709t": {
+      "name": "Electromagnetic Device",
+      "reason": "no match: Discover 2 Magnetic Mechs. Whenever a friendly minion is Magnetized , give it +4",
+      "text": "Discover 2 Magnetic Mechs. Whenever a friendly minion is Magnetized , give it +4/+4.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_710": {
+      "name": "Fungalmancer Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_711": {
+      "name": "Marine Signet",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_713": {
+      "name": "Bleeding Heart",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_714": {
+      "name": "Precious Pearl",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": 117945
+    },
+    "BG30_MagicItem_777": {
+      "name": "Goose Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_803": {
+      "name": "Kaboom Bot Portrait",
+      "reason": "no match: Get a Kaboom Bot. Your Kaboom Bots' Deathrattles deal 10 extra damage.",
+      "text": "Get a Kaboom Bot. Your Kaboom Bots' Deathrattles deal 10 extra damage.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_821": {
+      "name": "Fish Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_821t2": {
+      "name": "Fishy Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_822": {
+      "name": "Twin Sky Lanterns",
+      "reason": "no match: When you have space, summon a copy of the first minion you summon each combat.",
+      "text": "When you have space, summon a copy of the first minion you summon each combat.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_822t2": {
+      "name": "Twin Sky Lanterns",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_825": {
+      "name": "Smuggler Portrait",
+      "reason": "no match: Get a Whelp Smuggler. Set its stats to 12/12. Your Whelp Smugglers are Dragons.",
+      "text": "Get a Whelp Smuggler. Set its stats to 12/12. Your Whelp Smugglers are Dragons.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_828": {
+      "name": "Shaker Portrait",
+      "reason": "no match: Get a Zesty Shaker. Your Zesty Shakers give an extra copy of the spell.",
+      "text": "Get a Zesty Shaker. Your Zesty Shakers give an extra copy of the spell.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_841": {
+      "name": "Glowing Gauntlet",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_843t": {
+      "name": "Horde Keychain",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_868": {
+      "name": "Rewinder Portrait",
+      "reason": "no match: Get a Soul Rewinder and a Wrath Weaver. Your Soul Rewinders also gain Attack.",
+      "text": "Get a Soul Rewinder and a Wrath Weaver. Your Soul Rewinders also gain Attack.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_869": {
+      "name": "Felblood Portrait",
+      "reason": "no match: Get a Slimy Felblood. Your Fiery and Slimy Felbloods give Attack and Health.",
+      "text": "Get a Slimy Felblood. Your Fiery and Slimy Felbloods give Attack and Health.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_876": {
+      "name": "Manipulator Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_879": {
+      "name": "Dalaran Cheese Wheel",
+      "reason": "no match: Minions in the Tavern have +1/+1. Improves every 4 times you Refresh . (4 left!)",
+      "text": "Minions in the Tavern have +1/+1. Improves every 4 times you Refresh . (4 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_879t": {
+      "name": "Dalaran Cheese Wheel",
+      "reason": "no match: Minions in the Tavern have +2/+2. Improves every 4 times you Refresh . (4 left!)",
+      "text": "Minions in the Tavern have +2/+2. Improves every 4 times you Refresh . (4 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_886": {
+      "name": "Reinforced Shield",
+      "reason": "no match: Whenever you summon a minion, give it Divine Shield . (5 times per combat.)",
+      "text": "Whenever you summon a minion, give it Divine Shield . (5 times per combat.)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_888": {
+      "name": "Souvenir Stand",
+      "reason": "no match: When you buy a Greater Trinket , this transforms into a copy of it.",
+      "text": "When you buy a Greater Trinket , this transforms into a copy of it.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_891": {
+      "name": "Trip Vouchers",
+      "reason": "no match: In 2 turns, choose a Greater Trinket to buy and replace this. (2 turns left!)",
+      "text": "In 2 turns, choose a Greater Trinket to buy and replace this. (2 turns left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_900": {
+      "name": "Dragonwing Glider",
+      "reason": "no match: Whenever you play a card, give a friendly Dragon +3/+1.",
+      "text": "Whenever you play a card, give a friendly Dragon +3/+1.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_900t": {
+      "name": "Dragonwing Glider",
+      "reason": "no match: Whenever you play a card, give a friendly Dragon +6/+4.",
+      "text": "Whenever you play a card, give a friendly Dragon +6/+4.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_902": {
+      "name": "Holy Mallet",
+      "reason": "SoC unclassified: Start of Combat: Give your left and right-most minions Divine Shield .",
+      "text": "Start of Combat: Give your left and right-most minions Divine Shield .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_910": {
+      "name": "Mechagon Adapter",
+      "reason": "no match: After a friendly Mech loses Divine Shield , give it Divine Shield . (3 times per",
+      "text": "After a friendly Mech loses Divine Shield , give it Divine Shield . (3 times per combat.)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_914": {
+      "name": "Nerglish Phrasebook",
+      "reason": "no match: After you play a minion, give the left-most minion in your hand +3/+2.",
+      "text": "After you play a minion, give the left-most minion in your hand +3/+2.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_914t": {
+      "name": "Nerglish Phrasebook",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_916": {
+      "name": "Essence of Dreams",
+      "reason": "no match: Get 2 copies of Dreamer's Embrace. At the start of each turn, get 1 more.",
+      "text": "Get 2 copies of Dreamer's Embrace. At the start of each turn, get 1 more.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_917": {
+      "name": "Rusty Trident",
+      "reason": "SoC unclassified: Start of Combat: Give your Naga \" Deathrattle: Get a random Spellcraft spell.\"",
+      "text": "Start of Combat: Give your Naga \" Deathrattle: Get a random Spellcraft spell.\"",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_918": {
+      "name": "Promo Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_919": {
+      "name": "Nazjatar Postcard",
+      "reason": "no match: After you play a Naga, get a random Spellcraft spell.",
+      "text": "After you play a Naga, get a random Spellcraft spell.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_920": {
+      "name": "Spitescale Sushi Roll",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_921": {
+      "name": "Flagbearer Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_923": {
+      "name": "Elementium Chest",
+      "reason": "no match: Each combat, after 2 friendly Pirates attack, gain 1 Gold next turn. (2 left!)",
+      "text": "Each combat, after 2 friendly Pirates attack, gain 1 Gold next turn. (2 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_924": {
+      "name": "Booty Bay Brew",
+      "reason": "no match: Whenever you spend Gold, give a friendly Pirate +3/+2.",
+      "text": "Whenever you spend Gold, give a friendly Pirate +3/+2.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_924t": {
+      "name": "Booty Bay Brew",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_925": {
+      "name": "Ceremonial Sword",
+      "reason": "no match: Whenever a friendly minion attacks, give it +4 Attack.",
+      "text": "Whenever a friendly minion attacks, give it +4 Attack.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_930": {
+      "name": "Burgling Claw",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_931": {
+      "name": "Lucky Tabby",
+      "reason": "no match: After 6 friendly minions die, get a random Beast. (6 left!)",
+      "text": "After 6 friendly minions die, get a random Beast. (6 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_942": {
+      "name": "Mecha-Jaraxxus Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_943": {
+      "name": "Surveyor Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_944": {
+      "name": "Redeemer Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_951": {
+      "name": "Lava Lamp",
+      "reason": "no match: After you sell 5 minions, get a random Elemental. (5 left!)",
+      "text": "After you sell 5 minions, get a random Elemental. (5 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_952": {
+      "name": "Jarred Frostling",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_962": {
+      "name": "Training Certificate",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_970": {
+      "name": "Valorous Medallion",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_971": {
+      "name": "Enforcer Portrait",
+      "reason": "no match: Get a Lightfang Enforcer. Your Lightfang Enforcers have all minion types.",
+      "text": "Get a Lightfang Enforcer. Your Lightfang Enforcers have all minion types.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_978": {
+      "name": "Blingtron's Sunglasses",
+      "reason": "no match: After you summon a Mech in combat, give a friendly Mech Divine Shield .",
+      "text": "After you summon a Mech in combat, give a friendly Mech Divine Shield .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_979": {
+      "name": "Primordial Terrarium",
+      "reason": "no match: After you play an Elemental, your next Tavern spell costs (1) less.",
+      "text": "After you play an Elemental, your next Tavern spell costs (1) less.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_981": {
+      "name": "The Eye of Dalaran",
+      "reason": "no match: Whenever a friendly minion with no type dies, get a random Tavern spell.",
+      "text": "Whenever a friendly minion with no type dies, get a random Tavern spell.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_982": {
+      "name": "Shaman Prayer Beads",
+      "reason": "no match: After you buy 2 Battlecry minions, get a random Battlecry minion. (2 left!)",
+      "text": "After you buy 2 Battlecry minions, get a random Battlecry minion. (2 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_984t": {
+      "name": "Charging Staff",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_986": {
+      "name": "Peacebloom Candle",
+      "reason": "no match: The first 3 Tavern spells you buy each turn are free. (3 left!)",
+      "text": "The first 3 Tavern spells you buy each turn are free. (3 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_987": {
+      "name": "Balladist Portrait",
+      "reason": "no match: Get a Lovesick Balladist. At the start of each turn, get another. Your Lovesick ",
+      "text": "Get a Lovesick Balladist. At the start of each turn, get another. Your Lovesick   Balladists also give Attack.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_988": {
+      "name": "Great Boar Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_988t": {
+      "name": "Great Boar Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_991": {
+      "name": "Felbat Portrait",
+      "reason": "no match: Get a Famished Felbat. The Tavern always has 7 cards.",
+      "text": "Get a Famished Felbat. The Tavern always has 7 cards.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_992": {
+      "name": "Darnassus Pie",
+      "reason": "no match: Minions in the Tavern have +1/+1 for each minion you've sold this turn.",
+      "text": "Minions in the Tavern have +1/+1 for each minion you've sold this turn.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_992t": {
+      "name": "Darnassus Pie",
+      "reason": "no match: Minions in the Tavern have +2/+2 for each minion you've sold this turn.",
+      "text": "Minions in the Tavern have +2/+2 for each minion you've sold this turn.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_993": {
+      "name": "Pagle's Fishing Rod",
+      "reason": "no match: Get a random Tier 7 minion. At the start of each turn, get another.",
+      "text": "Get a random Tier 7 minion. At the start of each turn, get another.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_994": {
+      "name": "Yogg-Tastic Pastry",
+      "reason": "no match: Spin the Wheel of Yogg-Saron. At the start of each turn, spin it again.",
+      "text": "Spin the Wheel of Yogg-Saron. At the start of each turn, spin it again.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_MagicItem_999": {
+      "name": "Fancy Spellbook",
+      "reason": "no match: After you spend 7 Gold, cast Shiny Ring. (7 Gold left!)",
+      "text": "After you spend 7 Gold, cast Shiny Ring. (7 Gold left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_Trinket_1st": {
+      "name": "Lesser Trinket",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG30_Trinket_2nd": {
+      "name": "Greater Trinket",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG31_MagicItem_903": {
+      "name": "Wisdomball Supply",
+      "reason": "no match: Get a Knockoff Wisdomball. At the start of each turn, repeat this.",
+      "text": "Get a Knockoff Wisdomball. At the start of each turn, repeat this.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_111": {
+      "name": "Toxic Stinger",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_170": {
+      "name": "Spell-powered Wrench",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_171": {
+      "name": "Divine Signet",
+      "reason": "no match: After a friendly minion loses Divine Shield , get a random Tavern spell. (4 time",
+      "text": "After a friendly minion loses Divine Shield , get a random Tavern spell. (4 times per combat.)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_172": {
+      "name": "Boom's Monster Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_179": {
+      "name": "Drakkari Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_200": {
+      "name": "All-Purpose Kibble",
+      "reason": "no match: Whenever a friendly Beast attacks, give it +2 Attack and permanently improve thi",
+      "text": "Whenever a friendly Beast attacks, give it +2 Attack and permanently improve this.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_204": {
+      "name": "Kel'Thuzad Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_205": {
+      "name": "Maw Caster Portrait",
+      "reason": "no match: Get a Maw Caster. Whenever you destroy a minion outside combat, get a 3-Gold Coi",
+      "text": "Get a Maw Caster. Whenever you destroy a minion outside combat, get a 3-Gold Coin Pouch.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_230": {
+      "name": "Extravagant Scale",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_231t": {
+      "name": "Gilded Anchor",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_232": {
+      "name": "Shark Cannon",
+      "reason": "no match: After you spend 10 Gold, give your Pirates +1/+1 and improve this. (10 Gold left",
+      "text": "After you spend 10 Gold, give your Pirates +1/+1 and improve this. (10 Gold left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_270": {
+      "name": "Wicked Tome",
+      "reason": "Avenge unclassified: Avenge (3): Your Tavern spells give an extra +1 Attack this game.",
+      "text": "Avenge (3): Your Tavern spells give an extra +1 Attack this game.",
+      "avenge": 1,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_270t": {
+      "name": "Wicked Tome",
+      "reason": "Avenge unclassified: Avenge (4): Your Tavern spells give an extra +1/+1 this game.",
+      "text": "Avenge (4): Your Tavern spells give an extra +1/+1 this game.",
+      "avenge": 1,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_274": {
+      "name": "Bristlebach Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_278": {
+      "name": "Reusable Batteries",
+      "reason": "no match: The first time you buy a minion each turn, get a Magnetic Satellite with its sta",
+      "text": "The first time you buy a minion each turn, get a Magnetic Satellite with its stats.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_279": {
+      "name": "Tough Tusk Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_280": {
+      "name": "Eclectic Shrine",
+      "reason": "SoC unclassified: Start of Combat: Give a friendly minion of each different type +3/+2. Improve th",
+      "text": "Start of Combat: Give a friendly minion of each different type +3/+2. Improve this permanently.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_281": {
+      "name": "Wizard's Pipe",
+      "reason": "AfterCast unclassified: Whenever you cast a Tavern spell, give your minions with no type +4/+4.",
+      "text": "Whenever you cast a Tavern spell, give your minions with no type +4/+4.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_282": {
+      "name": "Turbocharged Drill",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_283": {
+      "name": "Czarina Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_284": {
+      "name": "Aggem Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_286": {
+      "name": "Lavish Cape",
+      "reason": "no match: Cast a random Tavern spell for each different friendly minion type. At the start",
+      "text": "Cast a random Tavern spell for each different friendly minion type. At the start of each turn, repeat this.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_300": {
+      "name": "Putricide Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_301": {
+      "name": "Bassgill Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_304": {
+      "name": "Horn of Summoning",
+      "reason": "no match: Get six different Tier 1 minions.",
+      "text": "Get six different Tier 1 minions.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_306": {
+      "name": "Herald Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_350": {
+      "name": "Splinter of Aurum",
+      "reason": "no match: When you have 15 Gold, get a random Golden Tier 5 minion. (Once per game.)",
+      "text": "When you have 15 Gold, get a random Golden Tier 5 minion. (Once per game.)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_361": {
+      "name": "Portable Factory",
+      "reason": "no match: Discover a Tier 4 minion with a type. At the start of each turn, get another cop",
+      "text": "Discover a Tier 4 minion with a type. At the start of each turn, get another copy of it.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_361t": {
+      "name": "Portable Factory",
+      "reason": "no match: Discover a Tier 5 minion with a type. At the start of each turn, get another cop",
+      "text": "Discover a Tier 5 minion with a type. At the start of each turn, get another copy of it.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_362": {
+      "name": "Innkeeper's Hearth",
+      "reason": "no match: Discover a minion of your Tier. Set its stats to 12/12.",
+      "text": "Discover a minion of your Tier. Set its stats to 12/12.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_362t": {
+      "name": "Innkeeper's Hearth",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_363": {
+      "name": "Faerie Dragon Scale",
+      "reason": "no match: Whenever a friendly Dragon attacks, give it Divine Shield . (3 times per combat.",
+      "text": "Whenever a friendly Dragon attacks, give it Divine Shield . (3 times per combat.)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_364": {
+      "name": "Poet Portrait",
+      "reason": "no match: Get a Timewarped Poet.",
+      "text": "Get a Timewarped Poet.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_365": {
+      "name": "Valdrakken Wind Chimes",
+      "reason": "SoC unclassified: Your Start of Combat effects trigger an extra time.",
+      "text": "Your Start of Combat effects trigger an extra time.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_366": {
+      "name": "Guiding Candle",
+      "reason": "no match: Your first two Refreshes each turn contain only Tier 6 cards. (2 left!)",
+      "text": "Your first two Refreshes each turn contain only Tier 6 cards. (2 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_367": {
+      "name": "Ghastly Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_400": {
+      "name": "Shrine of Evolution",
+      "reason": "no match: Transform all your minions into random Tier 4 minions.",
+      "text": "Transform all your minions into random Tier 4 minions.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_415": {
+      "name": "Battle Horn",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": 1,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_417": {
+      "name": "Tarecgosa Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_419": {
+      "name": "Yu'lon Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_428": {
+      "name": "Worn Treasure Map",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_700": {
+      "name": "Marvelous Mushroom",
+      "reason": "no match: Your Tavern spells give an extra +1/+1. At the start of each turn, improve this.",
+      "text": "Your Tavern spells give an extra +1/+1. At the start of each turn, improve this.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_801": {
+      "name": "Heart of the Forest",
+      "reason": "AfterCast unclassified: Your Tavern spells give an extra +1/+1. After you cast 5 Tavern spells, improve ",
+      "text": "Your Tavern spells give an extra +1/+1. After you cast 5 Tavern spells, improve this. (5 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_801t": {
+      "name": "Heart of the Forest",
+      "reason": "AfterCast unclassified: Your Tavern spells give an extra +1/+1. After you cast 5 Tavern spells from hand",
+      "text": "Your Tavern spells give an extra +1/+1. After you cast 5 Tavern spells from hand, improve this. (5 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_802": {
+      "name": "Fountain Pen",
+      "reason": "no match: Your Elementals that give stats grant an extra +2/+1.",
+      "text": "Your Elementals that give stats grant an extra +2/+1.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_802t": {
+      "name": "Fountain Pen",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_803": {
+      "name": "Macaw Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_804": {
+      "name": "Selfless Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_806": {
+      "name": "Battlecruiser Portrait",
+      "reason": "no match: Get an 12/12 Battlecruiser. Whenever the Tavern is Refreshed , add a Battlecruis",
+      "text": "Get an 12/12 Battlecruiser. Whenever the Tavern is Refreshed , add a Battlecruiser Upgrade to it.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_807": {
+      "name": "Curator Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_808": {
+      "name": "Bloodbound Earrings",
+      "reason": "AfterCast unclassified: After you cast 5 spells, this plays a Blood Gem on all your minions. (5 left!)",
+      "text": "After you cast 5 spells, this plays a Blood Gem on all your minions. (5 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_808t": {
+      "name": "Bloodbound Earrings",
+      "reason": "AfterCast unclassified: After you cast 5 spells, this plays two Blood Gems on all your minions. (5 left!",
+      "text": "After you cast 5 spells, this plays two Blood Gems on all your minions. (5 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_809": {
+      "name": "Gem Donation",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_817": {
+      "name": "Rendle Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_820": {
+      "name": "Impulsive Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_821": {
+      "name": "Pilgrimp Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_822": {
+      "name": "Bazaar Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_823": {
+      "name": "Wax Imprinter",
+      "reason": "no match: Gain 2 Gold and take 2 damage. At the start of each turn, repeat this (if possib",
+      "text": "Gain 2 Gold and take 2 damage. At the start of each turn, repeat this (if possible) .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_824": {
+      "name": "Implicator Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_830": {
+      "name": "Felemental Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_831": {
+      "name": "Sellemental Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_832": {
+      "name": "Windfall Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_832t": {
+      "name": "Windfall Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_844": {
+      "name": "Sacrificial Altar",
+      "reason": "no match: Remove all your minions. Gain 3 Gold for each removed.",
+      "text": "Remove all your minions. Gain 3 Gold for each removed.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_858": {
+      "name": "Explorer's Binoculars",
+      "reason": "no match: Get three random Tier 4 minions.",
+      "text": "Get three random Tier 4 minions.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_862": {
+      "name": "Unholy Sanctum",
+      "reason": "no match: After you trigger a Deathrattle , give your right-most minion +2/+2 permanently.",
+      "text": "After you trigger a Deathrattle , give your right-most minion +2/+2 permanently.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_862t": {
+      "name": "Unholy Sanctum",
+      "reason": "no match: After you trigger a Deathrattle , give your right-most minion +6/+4 permanently.",
+      "text": "After you trigger a Deathrattle , give your right-most minion +6/+4 permanently.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_864t": {
+      "name": "Bird Feeder",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": 1,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_887": {
+      "name": "Shadowy Elixir",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_888": {
+      "name": "Recycling Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_890": {
+      "name": "Cliffdiver Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_891": {
+      "name": "Finley's Helmet",
+      "reason": "no match: After the Tavern is Refreshed , give Murlocs in it +5/+5 and a random Bonus Keyw",
+      "text": "After the Tavern is Refreshed , give Murlocs in it +5/+5 and a random Bonus Keyword .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_892": {
+      "name": "Vibrant Bubble",
+      "reason": "no match: Spellcraft: Give a Murloc a random Bonus Keyword .",
+      "text": "Spellcraft: Give a Murloc a random Bonus Keyword .",
+      "avenge": null,
+      "spellcraft_id": 121139
+    },
+    "BG32_MagicItem_893": {
+      "name": "Bluegill Flippers",
+      "reason": "AfterCast unclassified: After you cast a Tavern spell, give the left-most minion in your hand +4/+4.",
+      "text": "After you cast a Tavern spell, give the left-most minion in your hand +4/+4.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_894": {
+      "name": "Blessing Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_901": {
+      "name": "Gold-plated Compass",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_902": {
+      "name": "Statue of Hir'eek",
+      "reason": "no match: After 2 minions in the Tavern are consumed, get a random Tavern spell. (2 left!)",
+      "text": "After 2 minions in the Tavern are consumed, get a random Tavern spell. (2 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_906": {
+      "name": "Artanis Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_907": {
+      "name": "S'Thara Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_920": {
+      "name": "Thaumaturgist Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_922": {
+      "name": "Charming Panpipes",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_925": {
+      "name": "Hackerfin Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_926": {
+      "name": "Morgl Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_930": {
+      "name": "Archaic Scroll",
+      "reason": "AfterCast unclassified: After you cast 6 spells, get a random Naga. (6 left!)",
+      "text": "After you cast 6 spells, get a random Naga. (6 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_931": {
+      "name": "Azsharan Statuette",
+      "reason": "no match: Get 3 random Spellcraft spells. At the start of each turn, get 3 more.",
+      "text": "Get 3 random Spellcraft spells. At the start of each turn, get 3 more.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_932": {
+      "name": "Vash'jir Anemone",
+      "reason": "SoC unclassified: Start of Combat: Give your Naga +1 Health. (Improved by every 4 spells you've ca",
+      "text": "Start of Combat: Give your Naga +1 Health. (Improved by every 4 spells you've cast this game!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_933": {
+      "name": "Weary Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_935": {
+      "name": "Lubber Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_944": {
+      "name": "Empowerment Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_950": {
+      "name": "Gritty Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_951": {
+      "name": "Gold Pendant",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_953": {
+      "name": "Goldgrubber Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_954": {
+      "name": "Auric Offering",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_957": {
+      "name": "Grifter Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG32_MagicItem_998": {
+      "name": "Behemoth Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_150": {
+      "name": "Cursed Crystal",
+      "reason": "no match: After the Tavern is Refreshed , give its minions +2/+2 this turn.",
+      "text": "After the Tavern is Refreshed , give its minions +2/+2 this turn.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_151": {
+      "name": "Defiler Portrait",
+      "reason": "no match: Get a Woodland Defiler. Fodders in the Tavern have +2/+2.",
+      "text": "Get a Woodland Defiler. Fodders in the Tavern have +2/+2.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_151t": {
+      "name": "Defiler Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_152": {
+      "name": "Demonic Tapestry",
+      "reason": "no match: After you Refresh 3 times, the highest-Tier minion in the Tavern costs Health in",
+      "text": "After you Refresh 3 times, the highest-Tier minion in the Tavern costs Health instead of Gold to buy. (3 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_154": {
+      "name": "Ur'zul Sticker",
+      "reason": "no match: After you play a Demon, another friendly Demon consumes a minion in the Tavern t",
+      "text": "After you play a Demon, another friendly Demon consumes a minion in the Tavern to gain its stats.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_155": {
+      "name": "Felburned Ledger",
+      "reason": "no match: After your hero takes damage, your Tavern spells give an extra +1/+1 this turn.",
+      "text": "After your hero takes damage, your Tavern spells give an extra +1/+1 this turn.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_156": {
+      "name": "Flaming Portrait",
+      "reason": "no match: Get a Flaming Enforcer. Whenever your Flaming Enforcers trigger, also give the s",
+      "text": "Get a Flaming Enforcer. Whenever your Flaming Enforcers trigger, also give the stats to their neighbors.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_300": {
+      "name": "Copper Coil",
+      "reason": "no match: Whenever you Magnetize a minion, give it +1/+1 and improve this.",
+      "text": "Whenever you Magnetize a minion, give it +1/+1 and improve this.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_300t": {
+      "name": "Copper Coil",
+      "reason": "no match: Whenever you Magnetize a minion, give it +3/+3 and improve this.",
+      "text": "Whenever you Magnetize a minion, give it +3/+3 and improve this.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_301": {
+      "name": "Scraper Sticker",
+      "reason": "no match: Get a random Magnetic Mech. At the start of each turn, get another.",
+      "text": "Get a random Magnetic Mech. At the start of each turn, get another.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_302": {
+      "name": "Stormcoil Sticker",
+      "reason": "no match: After 7 friendly minions die, get a random Mech. (7 left!)",
+      "text": "After 7 friendly minions die, get a random Mech. (7 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_303": {
+      "name": "Skipper Portrait",
+      "reason": "no match: Get a Timewarped Skipper.",
+      "text": "Get a Timewarped Skipper.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_305": {
+      "name": "Conch Portrait",
+      "reason": "no match: Get a Cloning Conch. At the start of every 2 turns, repeat this. (2 turns left!)",
+      "text": "Get a Cloning Conch. At the start of every 2 turns, repeat this. (2 turns left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_306": {
+      "name": "Jailer Sticker",
+      "reason": "no match: Spellcraft: Destroy a friendly Undead to get a random Undead.",
+      "text": "Spellcraft: Destroy a friendly Undead to get a random Undead.",
+      "avenge": null,
+      "spellcraft_id": 131136
+    },
+    "BG35_MagicItem_309": {
+      "name": "Errgl Sticker",
+      "reason": "no match: Get a Mama Mrrglton or a Papa Mrrglton. At the start of each turn, repeat this.",
+      "text": "Get a Mama Mrrglton or a Papa Mrrglton. At the start of each turn, repeat this.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_310": {
+      "name": "Radio Star Portrait",
+      "reason": "no match: Get a Timewarped Radio Star. Give it Reborn .",
+      "text": "Get a Timewarped Radio Star. Give it Reborn .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_430": {
+      "name": "Scrapsmith Portrait",
+      "reason": "no match: Get a Bristlemane Scrapsmith. After a friendly minion with Taunt dies, play a pe",
+      "text": "Get a Bristlemane Scrapsmith. After a friendly minion with Taunt dies, play a permanent Blood Gem on your Scrapsmiths.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_431t": {
+      "name": "Thornspike Pauldron",
+      "reason": "no match: After you trigger a Deathrattle , your Blood Gems give an extra +2/+1 until next",
+      "text": "After you trigger a Deathrattle , your Blood Gems give an extra +2/+1 until next combat.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_432": {
+      "name": "Blood Amulet",
+      "reason": "no match: After you trigger a Deathrattle , this plays a permanent Blood Gem on 3 random f",
+      "text": "After you trigger a Deathrattle , this plays a permanent Blood Gem on 3 random friendly minions.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_434": {
+      "name": "Jewelry Box",
+      "reason": "no match: Get 2 Blood Gems that give a Quilboar Taunt , Divine Shield , or Reborn . At the",
+      "text": "Get 2 Blood Gems that give a Quilboar Taunt , Divine Shield , or Reborn . At the start of each turn, repeat this.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_700": {
+      "name": "Wildfeather Duster",
+      "reason": "no match: After you summon 6 Beasts, get a random Beast. (6 left!)",
+      "text": "After you summon 6 Beasts, get a random Beast. (6 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_702": {
+      "name": "Stegodon Portrait",
+      "reason": "SoC unclassified: Get a Stomping Stegodon. Start of Combat: Give your two left-most Beasts Divine ",
+      "text": "Get a Stomping Stegodon. Start of Combat: Give your two left-most Beasts Divine Shield .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_710": {
+      "name": "Miniature Ship",
+      "reason": "AfterCast unclassified: After you cast a Tavern spell, give your Pirates +2/+2.",
+      "text": "After you cast a Tavern spell, give your Pirates +2/+2.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_711": {
+      "name": "Protective Ring",
+      "reason": "SoC unclassified: Start of Combat: Give 4 random friendly Pirates Divine Shield .",
+      "text": "Start of Combat: Give 4 random friendly Pirates Divine Shield .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_712": {
+      "name": "Privateer Portrait",
+      "reason": "no match: Get a Proud Privateer and 2 random Bounties . At the start of each turn, get ano",
+      "text": "Get a Proud Privateer and 2 random Bounties . At the start of each turn, get another 2 Bounties .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_713": {
+      "name": "Trusty Crowbar",
+      "reason": "no match: Whenever you get a Pirate, give your left-most minion +12/+12.",
+      "text": "Whenever you get a Pirate, give your left-most minion +12/+12.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_733": {
+      "name": "Jailer Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": 131134
+    },
+    "BG35_MagicItem_741": {
+      "name": "Beatboxer Portrait",
+      "reason": "no match: Get a Polarizing Beatboxer and 1 random Magnetic Mech.",
+      "text": "Get a Polarizing Beatboxer and 1 random Magnetic Mech.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_742": {
+      "name": "Accord-o-Tron Portrait",
+      "reason": "EoT unclassified: At the end of each turn, Magnetize an Accord-o-Tron to your left- and right-most",
+      "text": "At the end of each turn, Magnetize an Accord-o-Tron to your left- and right-most Mechs.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_743": {
+      "name": "Electrode Attractor",
+      "reason": "no match: Magnetic Mechs cost (2). The Tavern offers an extra one whenever it is Refreshed",
+      "text": "Magnetic Mechs cost (2). The Tavern offers an extra one whenever it is Refreshed .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_750": {
+      "name": "Magicfin Sticker",
+      "reason": "no match: After you buy a Tavern spell, get a 1/1 Murloc and teach it that spell. (2 times",
+      "text": "After you buy a Tavern spell, get a 1/1 Murloc and teach it that spell. (2 times per turn.)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_752": {
+      "name": "Young Murk-Eye Sticker",
+      "reason": "EoT unclassified: At the end of each turn, trigger all friendly Battlecries .",
+      "text": "At the end of each turn, trigger all friendly Battlecries .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_753": {
+      "name": "Murky Sticker",
+      "reason": "EoT unclassified: At the end of each turn, give your two left-most minions +1/+1. (Improved by you",
+      "text": "At the end of each turn, give your two left-most minions +1/+1. (Improved by your Battlecries triggered this game!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_801": {
+      "name": "Sous Chef Sticker",
+      "reason": "no match: You can use your Hero Power an extra time each turn. After you use your Hero Pow",
+      "text": "You can use your Hero Power an extra time each turn. After you use your Hero Power, gain (1) Gold.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_812": {
+      "name": "Corrupted Tome",
+      "reason": "no match: Get a Triple Prize. Whenever you would get a Triple Reward, get a Triple Prize i",
+      "text": "Get a Triple Prize. Whenever you would get a Triple Reward, get a Triple Prize instead.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_815": {
+      "name": "Magician's Top Hat",
+      "reason": "no match: Get two minions each from Tiers 1, 2, and 3.",
+      "text": "Get two minions each from Tiers 1, 2, and 3.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_816": {
+      "name": "Orb of the Unknown",
+      "reason": "no match: Get a random Lesser Trinket .",
+      "text": "Get a random Lesser Trinket .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_817": {
+      "name": "Lens Case",
+      "reason": "no match: Get a Duplicating Lens. At the start of every 2 turns, repeat this. (2 turns lef",
+      "text": "Get a Duplicating Lens. At the start of every 2 turns, repeat this. (2 turns left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_820": {
+      "name": "Safety Patch",
+      "reason": "no match: Cast Ice Block. Gain 5 Gold.",
+      "text": "Cast Ice Block. Gain 5 Gold.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_821": {
+      "name": "Kaleidoscope",
+      "reason": "no match: Discover a Tier 7 minion. Lock it in your hand for 2 |4 (turn, turns).",
+      "text": "Discover a Tier 7 minion. Lock it in your hand for 2 |4 (turn, turns).",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_821t": {
+      "name": "Kaleidoscope",
+      "reason": "no match: Discover a Golden Tier 7 minion. Lock it in your hand for 2 |4 (turn, turns).",
+      "text": "Discover a Golden Tier 7 minion. Lock it in your hand for 2 |4 (turn, turns).",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_840": {
+      "name": "Chromatic Tear",
+      "reason": "no match: Get all 5 Chromadrakes .",
+      "text": "Get all 5 Chromadrakes .",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_840t": {
+      "name": "Chromatic Tear",
+      "reason": "no match: Get 2 random Chromadrakes. After you play 7 Battlecry minions, repeat this. (7 l",
+      "text": "Get 2 random Chromadrakes. After you play 7 Battlecry minions, repeat this. (7 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_842": {
+      "name": "Egg of the Endtimes Portrait",
+      "reason": "no match: Get 2 Eggs of the Endtimes.",
+      "text": "Get 2 Eggs of the Endtimes.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_848t": {
+      "name": "Egg of the Endtimes Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_849": {
+      "name": "Cloud Serpent Horn",
+      "reason": "Avenge unclassified: Avenge (3): Give the Attack of your right-most minion to another friendly Dragon",
+      "text": "Avenge (3): Give the Attack of your right-most minion to another friendly Dragon.",
+      "avenge": 1,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_850": {
+      "name": "Pocket Cyclone",
+      "reason": "no match: Cast Easterly Winds twice. At the start of each turn, cast it again.",
+      "text": "Cast Easterly Winds twice. At the start of each turn, cast it again.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_850t": {
+      "name": "Pocket Cyclone",
+      "reason": "no match: Cast Easterly Winds four times. At the start of each turn, cast it twice more.",
+      "text": "Cast Easterly Winds four times. At the start of each turn, cast it twice more.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_851": {
+      "name": "Water Wheel",
+      "reason": "no match: After you play an Elemental, get a random Tavern spell. (Twice per turn.)",
+      "text": "After you play an Elemental, get a random Tavern spell. (Twice per turn.)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_852": {
+      "name": "Lightning in a Bottle",
+      "reason": "no match: After the Tavern is Refreshed , give the stats of its highest-Attack minion to i",
+      "text": "After the Tavern is Refreshed , give the stats of its highest-Attack minion to its lowest.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_861": {
+      "name": "Baller Portrait",
+      "reason": "no match: Get a Temperature Shift. After you play 8 Elementals, repeat this. (8 left!)",
+      "text": "Get a Temperature Shift. After you play 8 Elementals, repeat this. (8 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_862": {
+      "name": "Upstart Embers",
+      "reason": "no match: After the Tavern is Refreshed , double the stats of its highest-Health minion.",
+      "text": "After the Tavern is Refreshed , double the stats of its highest-Health minion.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_863": {
+      "name": "Avalanche Sticker",
+      "reason": "no match: Get a Mounting Avalanche. After you sell 5 minions, repeat this. (5 left!)",
+      "text": "Get a Mounting Avalanche. After you sell 5 minions, repeat this. (5 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_870": {
+      "name": "Leapfrogger Portrait",
+      "reason": "no match: Get a Timewarped Leapfrogger.",
+      "text": "Get a Timewarped Leapfrogger.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_871": {
+      "name": "Mama Bear Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_872": {
+      "name": "Ophidian Staff",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": 130909
+    },
+    "BG35_MagicItem_890": {
+      "name": "Sunken Anchor",
+      "reason": "no match: Get 2 random Bounties . At the start of each turn, repeat this.",
+      "text": "Get 2 random Bounties . At the start of each turn, repeat this.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_920": {
+      "name": "Bubble Crown",
+      "reason": "AfterCast unclassified: Once you cast 10 spells, your Tavern spells give an extra +5/+5. (10 left!)",
+      "text": "Once you cast 10 spells, your Tavern spells give an extra +5/+5. (10 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_922": {
+      "name": "Tide Raiser Portrait",
+      "reason": "AfterCast unclassified: Get a Tide Raiser. After you cast a spell in combat, get a copy of the spell. (3",
+      "text": "Get a Tide Raiser. After you cast a spell in combat, get a copy of the spell. (3 times per combat.)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_923": {
+      "name": "Bewitched Ribbon",
+      "reason": "AfterCast unclassified: Whenever you cast a spell, give your minions +1/+1 permanently. (+3/+2 while in ",
+      "text": "Whenever you cast a spell, give your minions +1/+1 permanently. (+3/+2 while in combat!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_924": {
+      "name": "Groundbreaker Portrait",
+      "reason": "no match: Get a Groundbreaker. Your Groundbreakers also give stats to the minion to their ",
+      "text": "Get a Groundbreaker. Your Groundbreakers also give stats to the minion to their left.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_925": {
+      "name": "Coral Spear",
+      "reason": "AfterCast unclassified: Whenever you cast a Spellcraft spell, cast Might of Stormwind.",
+      "text": "Whenever you cast a Spellcraft spell, cast Might of Stormwind.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_930": {
+      "name": "Warband Whistle",
+      "reason": "no match: Gain a free Refresh that contains plain copies of minions in your warband.",
+      "text": "Gain a free Refresh that contains plain copies of minions in your warband.",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_931": {
+      "name": "Transcribing Typewriter",
+      "reason": "no match: Get an extra copy of the next 2 minions you buy. (2 left!)",
+      "text": "Get an extra copy of the next 2 minions you buy. (2 left!)",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BG35_MagicItem_931t": {
+      "name": "Transcribing Typewriter",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BGDUO_MagicItem_001": {
+      "name": "Common Thread",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BGDUO_MagicItem_002": {
+      "name": "Cho'gall Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BGDUO_MagicItem_003": {
+      "name": "Summoning Sphere",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BGDUO_MagicItem_004": {
+      "name": "Charm of Generosity",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BGDUO_MagicItem_005": {
+      "name": "Bottle Sticker",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BGDUO_MagicItem_006": {
+      "name": "Magic Road Sign",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BGDUO_MagicItem_007": {
+      "name": "Orc-estra Portrait",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BGDUO_MagicItem_008": {
+      "name": "Moveout Box",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BGDUO_MagicItem_009": {
+      "name": "Investment Contract",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BGDUO_MagicItem_010": {
+      "name": "Empowered Mirror",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    },
+    "BGDUO_MagicItem_010t": {
+      "name": "Empowered Mirror",
+      "reason": "empty_text",
+      "text": "",
+      "avenge": null,
+      "spellcraft_id": null
+    }
+  },
+  "summary": {
+    "total": 326,
+    "matched": 35,
+    "unmatched": 291,
+    "coverage": "10.7%"
+  }
+}

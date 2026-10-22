@@ -1,0 +1,53 @@
+{
+  "patch": "37.0.0.255130",
+  "total_bg_cards": 3534,
+  "pool_minions": {
+    "count": 273,
+    "by_tier": {
+      "1": 25,
+      "2": 37,
+      "3": 45,
+      "4": 62,
+      "5": 56,
+      "6": 35,
+      "7": 13
+    },
+    "by_race": {
+      "ABERRATION": 25,
+      "ALL": 4,
+      "BEAST": 21,
+      "DEMON": 20,
+      "DRAGON": 21,
+      "ELEMENTAL": 21,
+      "MECHANICAL": 23,
+      "MURLOC": 22,
+      "NAGA": 21,
+      "NONE": 24,
+      "PIRATE": 24,
+      "QUILBOAR": 25,
+      "UNDEAD": 22
+    },
+    "with_activate": 23
+  },
+  "pool_spells": {
+    "count": 76,
+    "by_tier": {
+      "1": 8,
+      "2": 7,
+      "3": 16,
+      "4": 18,
+      "5": 18,
+      "6": 5,
+      "7": 4
+    }
+  },
+  "dark_gifts": 47,
+  "heroes": {
+    "count": 118
+  },
+  "hero_powers": 165,
+  "tavern_spells": 205,
+  "quest_rewards": 73,
+  "anomalies": 108,
+  "trinkets": 409
+}

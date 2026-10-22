@@ -1,0 +1,67 @@
+{
+  "game_id": "cli_20260604_145955",
+  "hero_id": "BG20_HERO_100",
+  "hero_name": "洛卡拉",
+  "seed": 0,
+  "active_tribes": [],
+  "placement": 8,
+  "final_health": 28,
+  "final_tier": 1,
+  "turns": [
+    {
+      "turn": 1,
+      "health": 30,
+      "armor": 0,
+      "tavern_tier": 1,
+      "gold": 0,
+      "board": [
+        {
+          "card_id": "BG31_330",
+          "atk": 2,
+          "health": 1,
+          "max_health": 1,
+          "race": "INVALID",
+          "is_golden": true,
+          "taunt": false,
+          "divine_shield": false,
+          "poisonous": false,
+          "venomous": false,
+          "reborn": false,
+          "windfury": false,
+          "cleave": false,
+          "position": 0
+        }
+      ],
+      "trinkets": [],
+      "hero_power_used": false
+    },
+    {
+      "turn": 2,
+      "health": 28,
+      "armor": 0,
+      "tavern_tier": 1,
+      "gold": 4,
+      "board": [
+        {
+          "card_id": "BG31_330",
+          "atk": 2,
+          "health": 1,
+          "max_health": 1,
+          "race": "INVALID",
+          "is_golden": true,
+          "taunt": false,
+          "divine_shield": false,
+          "poisonous": false,
+          "venomous": false,
+          "reborn": false,
+          "windfury": false,
+          "cleave": false,
+          "position": 0
+        }
+      ],
+      "trinkets": [],
+      "hero_power_used": false
+    }
+  ],
+  "anomaly_id": null
+}

@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BobsBuddy offline oracle input",
+  "type": "object",
+  "required": ["player", "opponent"],
+  "properties": {
+    "turn": {"type": ["integer", "null"], "minimum": 1},
+    "iterations": {"type": "integer", "minimum": 1, "default": 1000},
+    "threads": {"type": "integer", "minimum": 1, "default": 1},
+    "time_limit_ms": {"type": "integer", "minimum": 1, "default": 20000},
+    "available_races": {
+      "type": ["array", "null"],
+      "description": "当前 oracle 未映射 Race enum，存在时记录 ignored",
+      "items": {"type": "string"}
+    },
+    "player": {"$ref": "#/definitions/side"},
+    "opponent": {"$ref": "#/definitions/side"}
+  },
+  "definitions": {
+    "side": {
+      "type": "object",
+      "required": ["minions"],
+      "properties": {
+        "health": {"type": "integer", "default": 30},
+        "tier": {"type": "integer", "minimum": 1, "maximum": 7},
+        "minions": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/minion"}
+        },
+        "hero_powers": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {"type": "string"},
+              {"type": "object", "properties": {
+                "card_id": {"type": "string"},
+                "data": {"type": "integer"}
+              }, "required": ["card_id"]}
+            ]
+          }
+        },
+        "friendly_deity_sigil": {"oneOf": [
+            {"type": "string"}, {"$ref": "#/definitions/minion"}, {"type": "null"}
+          ], "description": "BB Player.FriendlyDeitySigil（签名卡/实体）"},
+        "trinkets": {"type": ["array", "null"], "description": "暂不支持，记录 ignored"},
+        "quests": {"type": ["array", "null"], "description": "暂不支持，记录 ignored"}
+      }
+    },
+    "minion": {
+      "type": "object",
+      "required": ["card_id"],
+      "properties": {
+        "card_id": {"type": "string"},
+        "atk": {"type": "integer"},
+        "health": {"type": "integer"},
+        "golden": {"type": "boolean", "default": false},
+        "tier": {"type": "integer"},
+        "keywords": {
+          "type": "array",
+          "items": {"enum": [
+            "taunt", "divine_shield", "windfury", "mega_windfury",
+            "cleave", "poisonous", "venomous", "reborn", "stealth",
+            "cannot_attack"
+          ]}
+        },
+        "is_deity": {"type": "boolean", "default": false,
+                      "description": "BB Minion.IsDeity（Deity 隐藏实体）"},
+        "script_data": {
+          "type": "object",
+          "description": "官方 ScriptDataNum1..4；键可为 1..4 或 ScriptDataNum1",
+          "additionalProperties": {"type": "integer"}
+        }
+      }
+    }
+  }
+}

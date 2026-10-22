@@ -1,0 +1,595 @@
+[
+  {
+    "id": "BG24_Reward_107",
+    "dbf_id": 89449,
+    "name": "Snicker Snacks",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]At the end of your turn,\n2 friendly minions\ntrigger their <b>Battlecries</b>."
+  },
+  {
+    "id": "BG24_Reward_109",
+    "dbf_id": 89473,
+    "name": "Stolen Gold",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]<b>Start of Combat:</b>\nMake your left and right-\nmost minions Golden."
+  },
+  {
+    "id": "BG24_Reward_111",
+    "dbf_id": 89481,
+    "name": "Evil Twin",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "<b>Start of Combat:</b> Summon a copy of your highest-Health minion."
+  },
+  {
+    "id": "BG24_Reward_113",
+    "dbf_id": 89483,
+    "name": "Ritual Dagger",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]After a friendly\n<b>Deathrattle</b> minion dies,\ngive it +5/+5 permanently."
+  },
+  {
+    "id": "BG24_Reward_115",
+    "dbf_id": 89947,
+    "name": "Theotar's Parasol",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]At the end of your turn,\ngive your right-most\nminion <b>Stealth</b> until next\nturn and +8 Health."
+  },
+  {
+    "id": "BG24_Reward_123",
+    "dbf_id": 90861,
+    "name": "Exquisite Conch",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Your first <b>Battlecry</b> each turn triggers 2 extra times."
+  },
+  {
+    "id": "BG24_Reward_125",
+    "dbf_id": 90865,
+    "name": "The Smoking Gun",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Your minions have\n+4 Attack."
+  },
+  {
+    "id": "BG24_Reward_128",
+    "dbf_id": 90914,
+    "name": "Mirror Shield",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]After the Tavern is\n<b>Refreshed</b>, give a random\nminion in it +6/+6 and\n<b>Divine Shield</b>."
+  },
+  {
+    "id": "BG24_Reward_129",
+    "dbf_id": 90916,
+    "name": "Secret Sinstone",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]After you <b>Discover</b> a card,\nget an extra copy of it."
+  },
+  {
+    "id": "BG24_Reward_130",
+    "dbf_id": 90917,
+    "name": "Ghastly Mask",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Get a copy of '{0}'. Your end of turn effects trigger an extra time."
+  },
+  {
+    "id": "BG24_Reward_131",
+    "dbf_id": 92542,
+    "name": "Red Hand",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "At the start of each turn, give a minion in your hand +12/+12."
+  },
+  {
+    "id": "BG24_Reward_134",
+    "dbf_id": 92551,
+    "name": "The Friends Along the Way",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "At the start of each turn, get 2 random {0}."
+  },
+  {
+    "id": "BG24_Reward_135",
+    "dbf_id": 92563,
+    "name": "Yogg-tastic Tasties",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "At the start of each turn, spin the Wheel of Yogg-Saron."
+  },
+  {
+    "id": "BG24_Reward_136",
+    "dbf_id": 93069,
+    "name": "Tiny Henchmen",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]At the end of your turn,\ngive +3/+3 to 3 friendly\nminions of Tier 3 or lower."
+  },
+  {
+    "id": "BG24_Reward_138",
+    "dbf_id": 93074,
+    "name": "Victim's Specter",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x] After each combat, get\na plain copy of the last\nfriendly minion that died."
+  },
+  {
+    "id": "BG24_Reward_305",
+    "dbf_id": 89645,
+    "name": "Anima Bribe",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "After you sell a minion, give its stats to a minion in the Tavern."
+  },
+  {
+    "id": "BG24_Reward_306",
+    "dbf_id": 89650,
+    "name": "Cooked Book",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "After you buy a minion, give it +{0}/+{1} and improve this."
+  },
+  {
+    "id": "BG24_Reward_308",
+    "dbf_id": 90435,
+    "name": "Teal Tiger Sapphire",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]Minions in the Tavern\nhave +1/+1 for each time\nit was <b>Refreshed</b> this turn."
+  },
+  {
+    "id": "BG24_Reward_309",
+    "dbf_id": 90437,
+    "name": "Devils in the Details",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]At the end of your turn, your\nleft and right-most minions\nconsume a minion in the\nTavern to gain its stats."
+  },
+  {
+    "id": "BG24_Reward_310",
+    "dbf_id": 91980,
+    "name": "Partner in Crime",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]Get your Golden <b>Buddy</b>."
+  },
+  {
+    "id": "BG24_Reward_311",
+    "dbf_id": 91992,
+    "name": "Another Hidden Body",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]<b>Discover</b> a minion\nof your Tier. <i>(Can be\nearned endlessly!)</i>"
+  },
+  {
+    "id": "BG24_Reward_312",
+    "dbf_id": 92552,
+    "name": "Staff of Origination",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "<b>Start of Combat:</b> Give\nyour minions +12/+12."
+  },
+  {
+    "id": "BG24_Reward_313",
+    "dbf_id": 92554,
+    "name": "Wondrous Wisdomball",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Occasionally gives helpful <b>Refreshes</b>."
+  },
+  {
+    "id": "BG24_Reward_321",
+    "dbf_id": 95149,
+    "name": "Alter Ego",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]Even-Tier minions in\nthe Tavern have +7/+7.\n<i>(Swaps to Odd next turn!)</i>"
+  },
+  {
+    "id": "BG24_Reward_321t",
+    "dbf_id": 96137,
+    "name": "Alter Ego",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]Odd-Tier minions in\nthe Tavern have +7/+7.\n<i>(Swaps to Even next turn!)</i>"
+  },
+  {
+    "id": "BG24_Reward_331",
+    "dbf_id": 95631,
+    "name": "Menagerie Mayhem",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]At the end of your turn,\ngive your minions +1/+1\n for each different\nfriendly minion type."
+  },
+  {
+    "id": "BG24_Reward_350",
+    "dbf_id": 95867,
+    "name": "Pilfered Lamps",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "You only need 2 copies of a minion to make it Golden."
+  },
+  {
+    "id": "BG24_Reward_361",
+    "dbf_id": 97442,
+    "name": "Hidden Treasure Vault",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "At the start of each turn, gain @ Gold. <i>(Improves each turn!)</i>"
+  },
+  {
+    "id": "BG24_Reward_362",
+    "dbf_id": 97445,
+    "name": "Essence of Zerus",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]At the end of your turn,\nget a Shifter Zerus\nwhich transforms\ninto random minions."
+  },
+  {
+    "id": "BG24_Reward_363",
+    "dbf_id": 97485,
+    "name": "Ethereal Evidence",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "At the start of every turn, choose from 2 new Rewards."
+  },
+  {
+    "id": "BG24_Reward_364",
+    "dbf_id": 97597,
+    "name": "Volatile Venom",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]Your minions have +7/+7.\nAfter they attack,\nthey die. Horribly."
+  },
+  {
+    "id": "BG24_Reward_708",
+    "dbf_id": 97118,
+    "name": "Blood Goblet",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]At the end of your turn,\ngive your right-most\nminion Attack equal to\nyour missing Health."
+  },
+  {
+    "id": "BG24_Reward_712",
+    "dbf_id": 97452,
+    "name": "Sinfall Medallion",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]After you play a minion,\ngive 2 other friendly\nminions of its Tier +4/+4."
+  },
+  {
+    "id": "BG24_Reward_715",
+    "dbf_id": 97658,
+    "name": "Enhance-a-matic",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]At the start of each turn,\nget an Enhanced Part\nthat gives +5/+5 and\na random bonus."
+  },
+  {
+    "id": "BG24_Reward_718",
+    "dbf_id": 97966,
+    "name": "Kidnap Sack",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "<b>Spellcraft:</b> Choose a non-Golden card. Move it to your hand.",
+    "spellcraft_id": 97967
+  },
+  {
+    "id": "BG24_Reward_719",
+    "dbf_id": 97756,
+    "name": "The Golden Hammer",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "<b>Spellcraft:</b> Make a friendly minion Golden until next turn.",
+    "spellcraft_id": 97754
+  },
+  {
+    "id": "BG27_Anomaly_555t",
+    "dbf_id": 106440,
+    "name": "No Place Like Holmes",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Guess which minion your next opponent had last combat."
+  },
+  {
+    "id": "BG27_Reward_502",
+    "dbf_id": 104697,
+    "name": "Boom Squad",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "<b>Avenge (3):</b> Deal 10 damage to the highest-Health enemy minion.",
+    "avenge": true
+  },
+  {
+    "id": "BG27_Reward_503",
+    "dbf_id": 104703,
+    "name": "Invigorating Conch",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]When you buy a minion,\ngive its stats to a random\nfriendly minion."
+  },
+  {
+    "id": "BG27_Reward_504",
+    "dbf_id": 104724,
+    "name": "Timeline Acceleration",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]At the start of each turn,\nget two Accelerators that\ntransform a minion into\none from a Tier higher."
+  },
+  {
+    "id": "BG27_Reward_802",
+    "dbf_id": 104673,
+    "name": "Gilnean War Horn",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Get a copy of '{0}'. Your <b>Battlecries</b> trigger an extra time."
+  },
+  {
+    "id": "BG27_Reward_803",
+    "dbf_id": 104670,
+    "name": "Turbulent Tombs",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Get a copy of '{0}'. Your <b>Deathrattles</b> trigger an extra time."
+  },
+  {
+    "id": "BG27_Reward_804",
+    "dbf_id": 104675,
+    "name": "Sturdy Shard",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]At the end of your turn,\ngive your minions without\n<b>Taunt</b> +1/+2 for each\nfriendly <b>Taunt</b> minion."
+  },
+  {
+    "id": "BG27_Reward_806",
+    "dbf_id": 104677,
+    "name": "Doppelganger's Locket",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]After each combat, <b>Discover</b> a\nnon-Golden minion from your\nlast opponent's_warband.\nIt keeps enchantments."
+  },
+  {
+    "id": "BG27_Reward_810",
+    "dbf_id": 104701,
+    "name": "Map of the Unknown",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]After you play a minion of\na type you don’t control,\ngive a friendly minion\nof each type +2/+2."
+  },
+  {
+    "id": "BG27_Reward_811",
+    "dbf_id": 104818,
+    "name": "Bloodsoaked Tome",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Minions in the Tavern cost 2 Gold."
+  },
+  {
+    "id": "BG27_Reward_812",
+    "dbf_id": 104821,
+    "name": "Scepter of Guidance",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "The Tavern always offers 2 {0} whenever it is <b>Refreshed</b>."
+  },
+  {
+    "id": "BG27_Reward_815",
+    "dbf_id": 104842,
+    "name": "Endless Blood Moon",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Your <b>Blood Gems</b> give an extra +1/+1.\nAt the start of each turn, get two <b>Blood Gems</b>."
+  },
+  {
+    "id": "BG28_Reward_500",
+    "dbf_id": 110298,
+    "name": "Beyond the Mirage",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Tavern spells\ncost (1) less."
+  },
+  {
+    "id": "BG28_Reward_501",
+    "dbf_id": 110299,
+    "name": "Temporal Tampering",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Your Tavern spells cast an extra time."
+  },
+  {
+    "id": "BG28_Reward_502",
+    "dbf_id": 110300,
+    "name": "Splitting Scroll",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]Whenever you buy a\nTavern spell that costs\n(3) or more, get an\nextra copy of it."
+  },
+  {
+    "id": "BG28_Reward_504",
+    "dbf_id": 110303,
+    "name": "Cycle of Energy",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "<b>Avenge (3):</b> Get a random Tavern spell.",
+    "avenge": true
+  },
+  {
+    "id": "BG28_Reward_505",
+    "dbf_id": 110304,
+    "name": "Tumbling Disaster",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]Whenever you summon a\nminion in combat, give it\n+@/+@. <b>Avenge (4):</b>\nImprove this permanently.",
+    "avenge": true,
+    "avenge_target": 1
+  },
+  {
+    "id": "BG28_Reward_506",
+    "dbf_id": 110305,
+    "name": "Double-Headed Reward",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "The first time you buy a card each turn, get an extra copy of it."
+  },
+  {
+    "id": "BG28_Reward_508",
+    "dbf_id": 110308,
+    "name": "Gift of the Golden Kobold",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "After you <b>Refresh</b> 5 times, make the highest-Tier minion in the Tavern Golden. <i>(@ left!)</i>"
+  },
+  {
+    "id": "BG28_Reward_509",
+    "dbf_id": 110309,
+    "name": "Smelting Chamber",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]At the start of each turn,\nmake a friendly Tier @\nminion Golden and\nimprove this."
+  },
+  {
+    "id": "BG28_Reward_510",
+    "dbf_id": 110310,
+    "name": "Secret Culprit",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Get a copy of '{0}' from Tier 7."
+  },
+  {
+    "id": "BG28_Reward_513",
+    "dbf_id": 110325,
+    "name": "Open Auditions",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "At the start of each turn, <b>Discover</b> a <b>Buddy</b>."
+  },
+  {
+    "id": "BG28_Reward_514",
+    "dbf_id": 110343,
+    "name": "Untamed Sorcery",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "At the start of each turn, cast 5 random Tavern spells."
+  },
+  {
+    "id": "BG28_Reward_515",
+    "dbf_id": 110345,
+    "name": "Stash of the Scribe",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "At the start of each turn, get 3 random Tavern spells."
+  },
+  {
+    "id": "BG28_Reward_518",
+    "dbf_id": 110551,
+    "name": "Stable Amalgamation",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "<b>Avenge (7):</b> When you have space, summon a 50/50 Amalgam.",
+    "avenge": true
+  },
+  {
+    "id": "BG33_Reward_003",
+    "dbf_id": 122826,
+    "name": "Righteous Charge",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]<b>Start of Combat:</b> Your\n left-most minion gains\n<b>Divine Shield</b> and attacks\nimmediately."
+  },
+  {
+    "id": "BG33_Reward_004",
+    "dbf_id": 122015,
+    "name": "Grim Freshener",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "<b>Avenge (2):</b> Gain a free <b>Refresh</b>.",
+    "avenge": true
+  },
+  {
+    "id": "BG33_Reward_006",
+    "dbf_id": 122820,
+    "name": "Rushing Winds",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "<b>Spellcraft:</b> Give a minion <b>Windfury</b> and <b>Divine Shield</b>.",
+    "spellcraft_id": 123601
+  },
+  {
+    "id": "BG33_Reward_010",
+    "dbf_id": 122822,
+    "name": "Norgannon's Reward",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]Unlock Tier 7 this game.\nAt the start of your next\nturn only, upgrade the\nTavern."
+  },
+  {
+    "id": "BG33_Reward_011",
+    "dbf_id": 122825,
+    "name": "Magicfin Relic",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "At the start of each turn, get a 1/1 Murloc. <b>Discover</b> a Tavern spell to teach it."
+  },
+  {
+    "id": "BG33_Reward_012",
+    "dbf_id": 121945,
+    "name": "Untold Riches",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Get a 5-Gold Coin Pouch. Increase your maximum Gold by 5."
+  },
+  {
+    "id": "BG33_Reward_013",
+    "dbf_id": 121943,
+    "name": "Golden Forge",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "[x]At the start of each turn,\nmake the highest-Tier\nminion in the Tavern\nGolden."
+  },
+  {
+    "id": "BG33_Reward_014",
+    "dbf_id": 122013,
+    "name": "Quaint Boutique",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "At the start of your next turn, gain 4 Gold and choose a Lesser <b>Trinket</b> to buy."
+  },
+  {
+    "id": "BG33_Reward_015",
+    "dbf_id": 122014,
+    "name": "Jumbo Warehouse",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "At the start of your next turn, gain 4 Gold and choose a Greater <b>Trinket</b> to buy."
+  },
+  {
+    "id": "BG33_Reward_017",
+    "dbf_id": 122924,
+    "name": "Cosmic Reward",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "<b>Discover</b> a second\nHero Power."
+  },
+  {
+    "id": "BG33_Reward_020",
+    "dbf_id": 121335,
+    "name": "Perpetual Incantation",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Your Tavern spells give an extra +{3}/+{1}. <i>(+2/+1 can be earned endlessly!)</i>"
+  },
+  {
+    "id": "BG33_Reward_021",
+    "dbf_id": 122905,
+    "name": "Rallying Cry",
+    "card_set": 1453,
+    "card_type": 40,
+    "text": "Get a copy of '{0}'. Your <b>Rallies</b> trigger an extra time."
+  }
+]

@@ -1,0 +1,521 @@
+[
+  {
+    "id": "BG24_Reward_107",
+    "dbf_id": 89449,
+    "name": "Snicker Snacks",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_109",
+    "dbf_id": 89473,
+    "name": "Stolen Gold",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_111",
+    "dbf_id": 89481,
+    "name": "Evil Twin",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_113",
+    "dbf_id": 89483,
+    "name": "Ritual Dagger",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_115",
+    "dbf_id": 89947,
+    "name": "Theotar's Parasol",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_123",
+    "dbf_id": 90861,
+    "name": "Exquisite Conch",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_125",
+    "dbf_id": 90865,
+    "name": "The Smoking Gun",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_128",
+    "dbf_id": 90914,
+    "name": "Mirror Shield",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_129",
+    "dbf_id": 90916,
+    "name": "Secret Sinstone",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_130",
+    "dbf_id": 90917,
+    "name": "Ghastly Mask",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_131",
+    "dbf_id": 92542,
+    "name": "Red Hand",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_134",
+    "dbf_id": 92551,
+    "name": "The Friends Along the Way",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_135",
+    "dbf_id": 92563,
+    "name": "Yogg-tastic Tasties",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_136",
+    "dbf_id": 93069,
+    "name": "Tiny Henchmen",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_138",
+    "dbf_id": 93074,
+    "name": "Victim's Specter",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_305",
+    "dbf_id": 89645,
+    "name": "Anima Bribe",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_306",
+    "dbf_id": 89650,
+    "name": "Cooked Book",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_308",
+    "dbf_id": 90435,
+    "name": "Teal Tiger Sapphire",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_309",
+    "dbf_id": 90437,
+    "name": "Devils in the Details",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_310",
+    "dbf_id": 91980,
+    "name": "Partner in Crime",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_311",
+    "dbf_id": 91992,
+    "name": "Another Hidden Body",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_312",
+    "dbf_id": 92552,
+    "name": "Staff of Origination",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_313",
+    "dbf_id": 92554,
+    "name": "Wondrous Wisdomball",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_321",
+    "dbf_id": 95149,
+    "name": "Alter Ego",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_321t",
+    "dbf_id": 96137,
+    "name": "Alter Ego",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_331",
+    "dbf_id": 95631,
+    "name": "Menagerie Mayhem",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_350",
+    "dbf_id": 95867,
+    "name": "Pilfered Lamps",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_361",
+    "dbf_id": 97442,
+    "name": "Hidden Treasure Vault",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_362",
+    "dbf_id": 97445,
+    "name": "Essence of Zerus",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_363",
+    "dbf_id": 97485,
+    "name": "Ethereal Evidence",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_364",
+    "dbf_id": 97597,
+    "name": "Volatile Venom",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_708",
+    "dbf_id": 97118,
+    "name": "Blood Goblet",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_712",
+    "dbf_id": 97452,
+    "name": "Sinfall Medallion",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_715",
+    "dbf_id": 97658,
+    "name": "Enhance-a-matic",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG24_Reward_718",
+    "dbf_id": 97966,
+    "name": "Kidnap Sack",
+    "card_set": 1453,
+    "card_type": 40,
+    "spellcraft_id": 97967
+  },
+  {
+    "id": "BG24_Reward_719",
+    "dbf_id": 97756,
+    "name": "The Golden Hammer",
+    "card_set": 1453,
+    "card_type": 40,
+    "spellcraft_id": 97754
+  },
+  {
+    "id": "BG27_Anomaly_555t",
+    "dbf_id": 106440,
+    "name": "No Place Like Holmes",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG27_Reward_502",
+    "dbf_id": 104697,
+    "name": "Boom Squad",
+    "card_set": 1453,
+    "card_type": 40,
+    "avenge": 1
+  },
+  {
+    "id": "BG27_Reward_503",
+    "dbf_id": 104703,
+    "name": "Invigorating Conch",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG27_Reward_504",
+    "dbf_id": 104724,
+    "name": "Timeline Acceleration",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG27_Reward_802",
+    "dbf_id": 104673,
+    "name": "Gilnean War Horn",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG27_Reward_803",
+    "dbf_id": 104670,
+    "name": "Turbulent Tombs",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG27_Reward_804",
+    "dbf_id": 104675,
+    "name": "Sturdy Shard",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG27_Reward_806",
+    "dbf_id": 104677,
+    "name": "Doppelganger's Locket",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG27_Reward_810",
+    "dbf_id": 104701,
+    "name": "Map of the Unknown",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG27_Reward_811",
+    "dbf_id": 104818,
+    "name": "Bloodsoaked Tome",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG27_Reward_812",
+    "dbf_id": 104821,
+    "name": "Scepter of Guidance",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG27_Reward_815",
+    "dbf_id": 104842,
+    "name": "Endless Blood Moon",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG28_Reward_500",
+    "dbf_id": 110298,
+    "name": "Beyond the Mirage",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG28_Reward_501",
+    "dbf_id": 110299,
+    "name": "Temporal Tampering",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG28_Reward_502",
+    "dbf_id": 110300,
+    "name": "Splitting Scroll",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG28_Reward_504",
+    "dbf_id": 110303,
+    "name": "Cycle of Energy",
+    "card_set": 1453,
+    "card_type": 40,
+    "avenge": 1
+  },
+  {
+    "id": "BG28_Reward_505",
+    "dbf_id": 110304,
+    "name": "Tumbling Disaster",
+    "card_set": 1453,
+    "card_type": 40,
+    "avenge": 1
+  },
+  {
+    "id": "BG28_Reward_506",
+    "dbf_id": 110305,
+    "name": "Double-Headed Reward",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG28_Reward_508",
+    "dbf_id": 110308,
+    "name": "Gift of the Golden Kobold",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG28_Reward_509",
+    "dbf_id": 110309,
+    "name": "Smelting Chamber",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG28_Reward_510",
+    "dbf_id": 110310,
+    "name": "Secret Culprit",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG28_Reward_513",
+    "dbf_id": 110325,
+    "name": "Open Auditions",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG28_Reward_514",
+    "dbf_id": 110343,
+    "name": "Untamed Sorcery",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG28_Reward_515",
+    "dbf_id": 110345,
+    "name": "Stash of the Scribe",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG28_Reward_518",
+    "dbf_id": 110551,
+    "name": "Stable Amalgamation",
+    "card_set": 1453,
+    "card_type": 40,
+    "avenge": 1
+  },
+  {
+    "id": "BG33_Reward_003",
+    "dbf_id": 122826,
+    "name": "Righteous Charge",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG33_Reward_004",
+    "dbf_id": 122015,
+    "name": "Grim Freshener",
+    "card_set": 1453,
+    "card_type": 40,
+    "avenge": 1
+  },
+  {
+    "id": "BG33_Reward_006",
+    "dbf_id": 122820,
+    "name": "Rushing Winds",
+    "card_set": 1453,
+    "card_type": 40,
+    "spellcraft_id": 123601
+  },
+  {
+    "id": "BG33_Reward_010",
+    "dbf_id": 122822,
+    "name": "Norgannon's Reward",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG33_Reward_011",
+    "dbf_id": 122825,
+    "name": "Magicfin Relic",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG33_Reward_012",
+    "dbf_id": 121945,
+    "name": "Untold Riches",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG33_Reward_013",
+    "dbf_id": 121943,
+    "name": "Golden Forge",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG33_Reward_014",
+    "dbf_id": 122013,
+    "name": "Quaint Boutique",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG33_Reward_015",
+    "dbf_id": 122014,
+    "name": "Jumbo Warehouse",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG33_Reward_017",
+    "dbf_id": 122924,
+    "name": "Cosmic Reward",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG33_Reward_020",
+    "dbf_id": 121335,
+    "name": "Perpetual Incantation",
+    "card_set": 1453,
+    "card_type": 40
+  },
+  {
+    "id": "BG33_Reward_021",
+    "dbf_id": 122905,
+    "name": "Rallying Cry",
+    "card_set": 1453,
+    "card_type": 40
+  }
+]
