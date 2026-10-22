@@ -87,13 +87,21 @@ class ClickBot:
     _refresh_failed_turn: int = -1
     _refresh_count_turn: int = 0
     _turn_started_at: float = 0.0
+    _diag_turn: int = -1
+    _no_effect_turn: int = -1
+    _no_effect_count: int = 0
+    _last_board_count: int = -1
+    _board_drop_count: int = 0
 
     def __post_init__(self):
         self.out_dir = Path(self.out_dir)
         self.out_dir.mkdir(parents=True, exist_ok=True)
         (self.out_dir / "screenshots").mkdir(exist_ok=True)
+        (self.out_dir / "diagnostics").mkdir(exist_ok=True)
         self._rec = open(self.out_dir / "actions.jsonl", "a", encoding="utf-8")
         self.failed: Set[str] = set()
+        self._fail_counts: Dict[str, int] = {}
+        self._diag_keys: Set[str] = set()
         self._connect()
 
     # ------------------------------------------------------------ window/input
@@ -241,7 +249,40 @@ class ClickBot:
                 return True
         return False
 
+    def _diagnostic_burst(self, key: str, st: Dict[str, Any], note: str) -> None:
+        """连续无变化时密集截图：前后帧 + 状态，便于异步复盘。"""
+        import re
+        safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", key)[:40]
+        d = self.out_dir / "diagnostics" / (
+            f"{datetime.now().strftime('%H%M%S')}_{safe}")
+        d.mkdir(parents=True, exist_ok=True)
+        frames = []
+        states = []
+        for i in range(5):
+            frames.append(self.screenshot(f"diag_{safe}_{i}"))
+            states.append(self.state())
+            time.sleep(0.30)
+        (d / "meta.json").write_text(json.dumps(
+            {"key": key, "note": note, "frames": frames, "states": states},
+            ensure_ascii=False, indent=1), encoding="utf-8")
+        self.log(kind="repeat_failure_diag", key=key, note=note,
+                 dir=str(d), frames=frames)
+
     def _fail(self, key: str, st: Dict[str, Any], note: str) -> None:
+        turn = int(st.get("turn") or 0)
+        if self._no_effect_turn != turn:
+            self._no_effect_turn = turn
+            self._no_effect_count = 0
+        self._no_effect_count += 1
+        if self._no_effect_count >= 2 and self._diag_turn != turn:
+            self._diag_turn = turn
+            self._diagnostic_burst(f"turn{turn}_noeffect{self._no_effect_count}",
+                                   st, note)
+        count = self._fail_counts.get(key, 0) + 1
+        self._fail_counts[key] = count
+        if count >= 2 and key not in self._diag_keys:
+            self._diag_keys.add(key)
+            self._diagnostic_burst(key, st, note)
         if key in self.failed:
             return
         self.failed.add(key)
@@ -380,7 +421,9 @@ class ClickBot:
                 continue
             play_vals.append(self._minion_score(m) if m.get("kind") == "minion" else 30.0)
         best_play = max(play_vals, default=0.0)
-        sell = 30.0 if len(board) >= 7 and hand else 0.0
+        hand_full = len(hand) >= 10
+        sell = (100.0 if hand_full and len(board) >= 7
+                else (30.0 if len(board) >= 7 and hand else 0.0))
         upgrade = 130.0 if legal.get("upgrade") and gold == 0 else (70.0 if legal.get("upgrade") else 0.0)
         refresh = 0.0
         if legal.get("refresh") and gold >= 1:
@@ -393,7 +436,7 @@ class ClickBot:
                 refresh += 10.0
             # 搜索预算：同一回合每多刷一次，期望收益递减
             refresh -= 30.0 * self._refresh_count_turn
-        return {"buy": 80.0 + best_buy, "play": 60.0 + best_play,
+        return {"buy": 0.0 if hand_full else 80.0 + best_buy, "play": 60.0 + best_play,
                 "sell": sell, "upgrade": upgrade, "refresh": refresh}
 
     def refresh_shop(self, st: Dict[str, Any]) -> bool:
@@ -580,6 +623,8 @@ class ClickBot:
                     self.failed.clear()
                     self._refresh_count_turn = 0
                     self._turn_started_at = time.time()
+                    self._last_board_count = -1
+                    self._board_drop_count = 0
                     time.sleep(0.8)
                 self.log(kind="state", phase=phase, turn=turn,
                          gold=st.get("gold"), board=len(st.get("board") or []),
@@ -614,6 +659,17 @@ class ClickBot:
                     time.sleep(0.3)
                     continue
                 if phase == "recruit":
+                    bc = len(st.get("board") or [])
+                    if not (st.get("shop") or []) and self._last_board_count > bc >= 0:
+                        self._board_drop_count += 1
+                    elif st.get("shop"):
+                        self._board_drop_count = 0
+                    self._last_board_count = bc
+                    if self._board_drop_count >= 2:
+                        self.log(kind="combat_wait", board=bc,
+                                 shop=len(st.get("shop") or []))
+                        time.sleep(1.5)
+                        continue
                     # 过滤战斗/切回合脏帧，避免按错误长度算坐标
                     if (len(st.get("shop") or []) > 7 or len(st.get("board") or []) > 7
                             or len(st.get("hand") or []) > 10):
@@ -659,6 +715,9 @@ class ClickBot:
                         self.fail_streak = 0
                         continue
                     self.fail_streak += 1
+                    if self.fail_streak >= 3 and self._diag_turn != turn:
+                        self._diag_turn = turn
+                        self._diagnostic_burst(f"turn{turn}_streak", st, "no_action_streak")
                     if self.fail_streak >= 3 and time.time() - self._turn_started_at > 5:
                         self.settle_screenshot(st, turn)
                     time.sleep(min(2.0, 0.4 + 0.3 * self.fail_streak))
