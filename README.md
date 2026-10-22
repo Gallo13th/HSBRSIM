@@ -126,6 +126,8 @@ BC：320 局教师示范 / 30,300 样本；验证集动作准确率 **85.6%**（
 - `docs/LIVE_AUTOMATION_PROTOCOL.md` — 实时自动化/截图/采集/热修/协作协议
 - `docs/LIVE_TO_SIM_GAP.md` — Live 操作 → 模拟器补全差距表
 - `docs/AUDIT_LIVE_TO_SIM.md` — Live 截图/文档/代码审计与机制缺口
+- `docs/AUDIT_ENV_ACTIONS.md` — env 动作/观测覆盖审计
+- `docs/AUDIT_ENGINE_MECHANICS.md` — 引擎/卡牌机制审计
 - `docs/schemas/live_action.schema.json` — 动作日志 JSON Schema
 - `docs/ENGINE_NOTES.md` — 引擎修改记录（F-01…F-05）
 - `AGENTS.md` — 协作与验收约定
