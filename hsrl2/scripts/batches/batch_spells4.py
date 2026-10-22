@@ -1,20 +1,25 @@
 """批次 spells4 — 池法术 13 张（作业单 2026-08-21，Choose One 密集）。
 
-覆盖 12 张 OK + 1 张 DEFERRED:
+覆盖 12 张 OK（BG31_892 Fandral's Fortune 已由 batch_unfreeze 注册）:
   OK: BG31_881 Time Management / BG31_886 Forest's Bounty /
       BG31_889 Sharing is Caring / BG31_890 Boundless Potential /
       BG31_896 Hallowed Ritual / BG32_815 Shifting Tide /
       BG33_101 A New Sprout / BG33_811 Healthy Bounty /
       BG33_812 Hostile Bounty / BG33_813 Selfish Bounty /
       BG33_814 Friendly Bounty / BG33_815 Wealthy Bounty
-  DEFERRED: BG31_892 Fandral's Fortune（both_options 打出路径引擎缺口）
+  2026-10-22: BG31_881/886/890 的 Choose One 协议从"自建 PendingChoice"
+  迁移到引擎 `choose_options` 两阶段协议（G-C4）；旧 `_queue_choose_one`
+  删除；三张均支持 CHOOSE_BOTH 双效分支。
 
 共性裁定:
-  - **法术 Choose One 协议（本批自建）**: play_spell 无 choose_options
-    分流（仅 play_minion 有，game.py:387）→ on_play 手动 append
-    PendingChoice(kind="choose_one", options=[key,...])，resolve 按
-    key 分支执行（SOP 经验库 PendingChoice 建模先例）。分支 Buff 数值
-    各自独立取 num。
+  - **法术 Choose One 协议（2026-10-22 迁移到引擎两阶段协议，G-C4）**:
+    脚本声明 `choose_options`，引擎 `play_spell` 挂
+    PendingChoice(kind="choose_one") 并把选定 key 经 ctx["choose"] 传入
+    on_play；与 `needs_target` 组合时按「抉择 → 目标 → 施放」串行。
+    旧实现（on_play 手动 append PendingChoice 的 `_queue_choose_one`）
+    已删除——该协议不响应 CHOOSE_BOTH 光环/实体 tag（Fandral's
+    Fortune 恒双效卡），且与引擎金色/目标组合语义分裂。
+    "both"（CHOOSE_BOTH）→ 两分支并联。
   - **酒馆法术 buff 出口**: 对随从的增益一律经
     actions.racefx.tavern_spell_buff 构造（"Your Tavern spells give an
     extra +X" 修饰叠加，racefx 模块契约）。
@@ -35,15 +40,17 @@
     先例——统计棋盘种族（排除 NONE/ALL）、并列取板序首个
     （max+插入序）; 无任何有类型随从 → 不限族 GetRandomMinion。
 
-引擎缺口（报告主线）:
-  1. play_spell 不支持 choose_options 声明协议（play_minion 有）——
-     本批以手动 PendingChoice 自建，主线接线后可迁移。
+引擎缺口（历史记录，2026-10-22 状态）:
+  1. ~~play_spell 不支持 choose_options 声明协议~~ **已收口**（引擎
+     两阶段状态机；本批 BG31_881/886/890 已迁移）。
   2. Discover Action 只覆盖随从（resolve 固定 create_minion）——
      "Discover a Tavern spell" 需法术版发现，本批自建
      DiscoverTavernSpellOfTier（批内 Action，batch_deathrattle
      自定义 Action 先例）。
-  3. both_options 声明协议未实现（game.py:386 仅注释承诺）——
-     Fandral's Fortune / Thorned Trailblazer BG31_327 共同依赖。
+  3. ~~both_options 声明协议未实现~~ **已收口**：CHOOSE_BOTH 双效由
+     引擎在 play_minion/play_spell 分流（英雄 tag / 棋盘光环 / 实体
+     tag），脚本只需处理 ctx["choose"]=="both"；Fandral's Fortune
+     BG31_892 已由 batch_unfreeze 注册（实体 tag 路径）。
 """
 
 from __future__ import annotations
@@ -56,17 +63,6 @@ from hsrl2.queue import Action
 from hsrl2.tags import Race
 
 _NAGA_RACES = (Race.NAGA, Race.ALL)      # ALL 视为所有种族 (RULES §6.18)
-
-
-def _queue_choose_one(game, hero, options, resolve):
-    """法术 Choose One: 手动入队 PendingChoice(kind="choose_one")。
-
-    options: ((key, label), ...)；resolve(key) 分支执行（数值在分支
-    内经 game.db.get(source.card_id).num() 取回）。
-    """
-    game.pending_choices.append(PendingChoice(
-        hero, [k for k, _ in options], "choose_one",
-        resolve_callback=resolve))
 
 
 # ═══════════════ 批内自定义 Action ═══════════════
@@ -162,45 +158,45 @@ class TimeManagementScript:
     start of your next turn, give
     your minions +{0}/+{1} twice.
 
-    Formal spec:
-      1. on_play: 入队 choose_one PendingChoice（"now"/"later"）
+    Formal spec (2026-10-22 迁移引擎两阶段协议，G-C4):
+      1. choose_options 声明 → 引擎 play_spell 挂 choose_one；ctx
+         ["choose"] 进 on_play（"now"/"later"）。
       2. "now": 每个存活友方随从立即经 tavern_spell_buff 获得
-         +num(0)/+num(1)
+         +num(0)/num(1)
       3. "later": ScheduleNextTurn + GiveBoardBuffNextTurn——下一
          招募阶段开始（_begin_recruit_for，金币重置后）对当时全部
-         存活友方随从施加 times=2 次 +num(0)/+num(1)（目标延迟
+         存活友方随从施加 times=2 次 +num(0)/num(1)（目标延迟
          求值，见该 Action docstring）
-      4. 空棋盘: "now" 落空 / "later" 延迟落空（真实游戏行为）
+      4. "both"（CHOOSE_BOTH 光环/实体 tag）→ 两分支并联。
+      5. 空棋盘: "now" 落空 / "later" 延迟落空（真实游戏行为）
 
     Test: test_batch_spells4.py — now 分支全体 +num(0)/num(1);
     later 分支当回合无变化、end_recruit_phase 后下回合全体
-    +2×num(0)/num(1) 且后买入随从同样获益
+    +2×num(0)/num(1) 且后买入随从同样获益；both 双效
 
     Params: {0}=2 {1}=2（times=2 为 "twice" 文本字面量）
     """
 
+    choose_options = [
+        ("now", "Give your minions +{0}/+{1}"),
+        ("later", "At the start of your next turn, give twice"),
+    ]
+
     @staticmethod
     def on_play(source, game, ctx):
         hero = source.controller
-        if hero is None:
+        key = (ctx or {}).get("choose")
+        if hero is None or key is None:
             return None
         d = game.db.get(source.card_id)
-
-        def resolve(key):
-            if key == "now":
-                game.run_actions([tavern_spell_buff(m, d.num(0), d.num(1))
-                                  for m in hero.living_minions()])
-            elif key == "later":
-                game.run_actions(ScheduleNextTurn(
-                    hero, GiveBoardBuffNextTurn(
-                        hero, source.card_id, times=2)))
-
-        _queue_choose_one(
-            game, hero,
-            (("now", "Give your minions +{0}/+{1}"),
-             ("later", "At the start of your next turn, twice")),
-            resolve)
-        return None
+        out = []
+        if key in ("now", "both"):
+            out += [tavern_spell_buff(m, d.num(0), d.num(1))
+                    for m in hero.living_minions()]
+        if key in ("later", "both"):
+            out.append(ScheduleNextTurn(
+                hero, GiveBoardBuffNextTurn(hero, source.card_id, times=2)))
+        return out or None
 
 
 # ════════════════ BG31_886 Forest's Bounty ════════════════
@@ -211,52 +207,48 @@ class ForestsBountyScript:
     Natural language: <b>Choose One</b> - Give a
     minion +{0}/+{1} twice; or Give your minions +{2}/{3}.
 
-    Formal spec:
-      1. needs_target=True（"Give a minion" 定向——play_spell 的
-         spell_target PendingChoice 分流，无候选时 target=None
-         落空但法术照常消耗）
-      2. on_play（ctx["target"] 已定）: 入队 choose_one
-         PendingChoice（"single"/"all"）
-      3. "single": target 获得 2 次独立 tavern_spell_buff
+    Formal spec (2026-10-22 迁移引擎两阶段协议，G-C4):
+      1. choose_options + needs_target 声明 → 引擎 play_spell 按
+         「抉择 → 目标 → 施放」串行挂两个 PendingChoice；
+         ctx={"choose": key, "target": pick} 进 on_play。
+      2. "single": target 获得 2 次独立 tavern_spell_buff
          (+num(0)/+num(1))——"twice" = 两次独立施加（TAVERN_SPELL_
          EXTRA 修饰按次叠加）; target=None → 落空
-      4. "all": 每个存活友方随从 tavern_spell_buff(+num(2)/+num(3))
+      3. "all": 每个存活友方随从 tavern_spell_buff(+num(2)/+num(3))
+      4. "both"（CHOOSE_BOTH 光环/实体 tag）→ 两分支并联（single
+         分支需要 target——引擎两阶段协议保证二者同时到达）。
+      5. 空棋盘: 无目标候选 → 施放层直接落空（法术照常消耗）。
 
     Test: test_batch_spells4.py — single 分支目标 2×num(0)/num(1);
-    all 分支全体 +num(2)/num(3); 目标选择与分支选择两级
-    PendingChoice 流; 空棋盘施放 single 落空
+    all 分支全体 +num(2)/num(3); 抉择与目标两级 PendingChoice 流;
+    空棋盘施放落空; both 双效
 
     Params: {0}=6 {1}=6 {2}=2 {3}=2（times=2 为 "twice" 文本字面量）
     """
 
+    choose_options = [
+        ("single", "Give a minion +{0}/+{1} twice"),
+        ("all", "Give your minions +{2}/{3}"),
+    ]
     needs_target = True
 
     @staticmethod
     def on_play(source, game, ctx):
         hero = source.controller
-        if hero is None:
+        c = ctx or {}
+        key = c.get("choose")
+        target = c.get("target")
+        if hero is None or key is None:
             return None
-        target = (ctx or {}).get("target")
         d = game.db.get(source.card_id)
-
-        def resolve(key):
-            if key == "single":
-                if target is None:
-                    return
-                game.run_actions(
-                    [tavern_spell_buff(target, d.num(0), d.num(1))
-                     for _ in range(2)])
-            elif key == "all":
-                game.run_actions(
-                    [tavern_spell_buff(m, d.num(2), d.num(3))
-                     for m in hero.living_minions()])
-
-        _queue_choose_one(
-            game, hero,
-            (("single", "Give a minion +{0}/+{1} twice"),
-             ("all", "Give your minions +{2}/{3}")),
-            resolve)
-        return None
+        out = []
+        if key in ("single", "both") and target is not None:
+            out += [tavern_spell_buff(target, d.num(0), d.num(1))
+                    for _ in range(2)]
+        if key in ("all", "both"):
+            out += [tavern_spell_buff(m, d.num(2), d.num(3))
+                    for m in hero.living_minions()]
+        return out or None
 
 
 # ════════════════ BG31_889 Sharing is Caring ════════════════
@@ -334,8 +326,9 @@ class BoundlessPotentialScript:
     minion of your Tier; or a
     Tavern spell of your Tier.
 
-    Formal spec:
-      1. on_play: 入队 choose_one PendingChoice（"minion"/"spell"）
+    Formal spec (2026-10-22 迁移引擎两阶段协议，G-C4):
+      1. choose_options 声明 → 引擎 play_spell 挂 choose_one；ctx
+         ["choose"] 进 on_play（"minion"/"spell"）。
       2. "minion": Discover(hero, min_tier=max_tier=hero.tavern_tier
          （施放时酒馆等级）)——池感知三选一，选中占 minion_pool
       3. "spell": DiscoverTavernSpellOfTier(hero, tavern_tier)——
@@ -343,7 +336,8 @@ class BoundlessPotentialScript:
          候选 = pool_spells 中 tech_level==tier 且 spell_pool 有
          剩余，三选一，选中 spell_pool.acquire 占池 +
          create_spell 进手牌
-      4. tier=1（初始）时法术分支候选含全部 T1 池法术; 无候选分支
+      4. "both"（CHOOSE_BOTH 光环/实体 tag）→ 两个发现并联。
+      5. tier=1（初始）时法术分支候选含全部 T1 池法术; 无候选分支
          落空（真实游戏行为）
 
     Test: test_batch_spells4.py — minion 分支发现项全部 == 英雄
@@ -353,26 +347,24 @@ class BoundlessPotentialScript:
     Params: 无数值参数（tier 取 hero.tavern_tier 运行时值）
     """
 
+    choose_options = [
+        ("minion", "Discover a minion of your Tier"),
+        ("spell", "Discover a Tavern spell of your Tier"),
+    ]
+
     @staticmethod
     def on_play(source, game, ctx):
         hero = source.controller
-        if hero is None:
+        key = (ctx or {}).get("choose")
+        if hero is None or key is None:
             return None
-
-        def resolve(key):
-            tier = hero.tavern_tier
-            if key == "minion":
-                game.run_actions(Discover(hero, min_tier=tier,
-                                          max_tier=tier))
-            elif key == "spell":
-                game.run_actions(DiscoverTavernSpellOfTier(hero, tier))
-
-        _queue_choose_one(
-            game, hero,
-            (("minion", "Discover a minion of your Tier"),
-             ("spell", "Discover a Tavern spell of your Tier")),
-            resolve)
-        return None
+        tier = hero.tavern_tier
+        out = []
+        if key in ("minion", "both"):
+            out.append(Discover(hero, min_tier=tier, max_tier=tier))
+        if key in ("spell", "both"):
+            out.append(DiscoverTavernSpellOfTier(hero, tier))
+        return out or None
 
 
 # ════════════════ BG31_892 Fandral's Fortune ════════════════
@@ -383,17 +375,11 @@ class FandralsFortuneScript:
     Natural language: <b>Discover</b> a <b>Choose One</b> card. It has
     both effects combined.
 
-    Status: DEFERRED — requires both_options 打出路径
-
-    Dependency: "It has both effects combined" 需要被发现的 Choose One
-    卡在**后续打出**时双分支全发——game.py:386 注释承诺的
-    "脚本层声明 both_options 处理" 未实现（play_minion/play_spell
-    均只走单 key 分流），Thorned Trailblazer（BG31_327，
-    "One Choose One card each turn has both effects combined"）同样
-    依赖且未注册。无标记机制（hero 属性/tag）可复用——grep 确认
-    both_options 全仓仅此一处注释。近似的"发现后二选一照旧"是
-    简化实现，禁止。候选集（Discover 部分）可复用 batch_rally2 的
-    CHOOSE_ONE_MINION_IDS ∪ CHOOSE_ONE_SPELL_IDS（漂移守护已备）。
+    Status: **历史占位类（未注册，保留台账）**——2026-08-22 已由
+    `batch_unfreeze.FandralsFortuneScript` 注册实现：CHOOSE_BOTH 实体
+    tag + 引擎双效分流（`play_minion`/`play_spell` 读实体 tag，2026-10-22
+    G-C3 收口），本占位类仅用于锁住"旧类仍为 no-op"的历史断言
+    （`test_batch_spells4.py::test_fandral_unfrozen_by_batch_unfreeze`）。
 
     Params: 无数值参数
     """
@@ -678,8 +664,8 @@ _REGISTRATIONS = [
     ("BG33_814", FriendlyBountyScript),
     ("BG33_815", WealthyBountyScript),
 ]
-# DEFERRED 未注册: BG31_892 Fandral's Fortune（both_options 打出
-# 路径引擎缺口，与 BG31_327 Thorned Trailblazer 同依赖）
+# BG31_892 Fandral's Fortune 由 batch_unfreeze 注册（实体 CHOOSE_BOTH
+# tag + 引擎双效分流，2026-10-22 G-C3 收口）；本文件仅保留历史占位类。
 
 
 def register() -> list[str]:

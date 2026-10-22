@@ -18,6 +18,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from hsrl2.db import CardDB
+from hsrl2.scripts.choose_one_authority import (
+    choose_one_data_flag_ids,
+    choose_one_flag_drift,
+    choose_one_ids,
+)
 from hsrl2.scripts.registry import REGISTRY
 
 
@@ -53,7 +59,14 @@ def main() -> int:
         raise SystemExit("bg_cards.json 不是 list")
     by_id = {c["id"]: c for c in cards if isinstance(c, dict) and c.get("id")}
 
-    choose = [i for i, c in by_id.items() if c.get("choose_one")]
+    # Choose One 权威口径（G-C5，2026-10-22）: 数据 `choose_one` 字段是
+    # 生成器文本兜底（9 误报/3 漏报）——审计一律走统一判定函数
+    # `hsrl2/scripts/choose_one_authority.py`（标题正则 ∩ 非 Spellcraft
+    # 宿主；= CardDefs CHOOSE_ONE tag 实测集）。数据标志仅作为漂移对照。
+    db = CardDB.load(ROOT / "data")
+    choose = sorted(choose_one_ids(db))
+    flagged = sorted(choose_one_data_flag_ids(db))
+    false_positives, misses = choose_one_flag_drift(db)
     activate = [i for i, c in by_id.items() if c.get("activate")]
     dark = [i for i, c in by_id.items() if c.get("dark_gift")]
     battlecry = [i for i, c in by_id.items() if c.get("battlecry")]
@@ -75,6 +88,11 @@ def main() -> int:
             "cards": len(choose),
             "scripts": len(choose_scripts),
             "missing": choose_missing,
+            "authority": "hsrl2/scripts/choose_one_authority.py"
+                         " (title regex ∩ non-Spellcraft host)",
+            "data_flag_cards": len(flagged),
+            "data_flag_false_positives": sorted(false_positives),
+            "data_flag_misses": sorted(misses),
         },
         "activate": {
             "cards": len(activate),

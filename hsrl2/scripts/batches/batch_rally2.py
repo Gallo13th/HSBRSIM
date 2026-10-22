@@ -38,6 +38,10 @@ from hsrl2.actions.bloodgem import (
 from hsrl2.actions.discover import _pool_candidates
 from hsrl2.actions.racefx import tavern_spell_buff
 from hsrl2.events import AFTER_ATTACK, Listener
+from hsrl2.scripts.choose_one_authority import (
+    pool_choose_one_minion_ids,
+    pool_choose_one_spell_ids,
+)
 from hsrl2.tags import GameTag, Race, Zone
 
 # 身份标识常量（card id 非数值——bloodgem.BLOOD_GEM_VARIANTS 先例）
@@ -57,25 +61,11 @@ CHROMADRAKE_IDS = (
     "BG34_638t",   # Red Chromadrake
 )
 
-# Choose One 池卡全集（引擎缺口: 生成器未导出 CHOOSE_ONE 标签 →
-# 硬编码 + 漂移守护测试对照 XML CHOOSE_ONE ∩ 池标志）。
-# "card" 通名涵盖随从与法术（Glass of Perspective BG36_MagicItem_303
-# 同文先例）。金色版不参与（"a random Choose One card" 基础卡语义）。
-CHOOSE_ONE_MINION_IDS = frozenset({
-    "BG27_084",   # Sprightly Scarab
-    "BG30_123",   # Fearless Foodie
-    "BG31_320",   # Crater Miner
-    "BG32_237",   # Intrepid Botanist
-    "BG36_330",   # Sly Infiltrator
-    "BG36_332",   # Snare Trapper
-    "BG36_341",   # Veteran Brigand
-})
-CHOOSE_ONE_SPELL_IDS = frozenset({
-    "BG31_880",   # Alliance Flag
-    "BG31_881",   # Time Management
-    "BG31_886",   # Forest's Bounty
-    "BG31_890",   # Boundless Potential
-})
+# "random Choose One card" 候选域（G-C5）: 权威判定 = 标题正则 ∩
+# 非 Spellcraft 宿主，见 `hsrl2/scripts/choose_one_authority.py`。
+# 旧版此处硬编码 7 随从 + 4 法术清单（数据 choose_one 标志误报/漏报
+# → 人工核对），2026-10-22 起统一走权威函数（运行时按 game.db 计算，
+# 数据升级零漂移）。
 
 
 def _rally_target(ctx):
@@ -1017,17 +1007,20 @@ class BrambleTunnelerScript:
       1. rally: 从 Choose One 池卡全集随机 Get times 张进手牌——
          "card" 通名涵盖随从与法术（Glass of Perspective
          BG36_MagicItem_303 同文先例）:
-         候选 = CHOOSE_ONE_MINION_IDS ∩ 池可用（_pool_candidates 语义:
-         available>0 + active_races）∪ CHOOSE_ONE_SPELL_IDS ∩
-         spell_pool 可用; 候选均匀单选
+         候选 = 权威判定 ∩ 池可用（`choose_one_authority.
+         pool_choose_one_minion_ids` ∩ minion `_pool_candidates` 语义:
+         available>0 + active_races ∪ `pool_choose_one_spell_ids` ∩
+         spell_pool 可用）; 候选均匀单选
       2. 占池: 随从 minion_pool.acquire + create_minion; 法术
          spell_pool.acquire（1 份）+ create_spell; 均
          pending_hand_add 满手排队（RULES §2.3/§3.3）
       3. times 次独立选取（金色 "2 random"——每次重新评估候选: 法术
          池单份被取后第二次不再出现，随从池多副本可重复同 card_id）
       4. 无候选（两池 Choose One 全耗尽）→ 该次落空
-      5. 引擎缺口（报告主线）: 生成器未导出 CHOOSE_ONE 标签 →
-         CHOOSE_ONE_*_IDS 硬编码 + 漂移守护测试对照 XML
+      5. Choose One 判定（G-C5，2026-10-22 收口）: 统一走
+         `hsrl2/scripts/choose_one_authority.py`（标题正则 ∩ 非
+         Spellcraft 宿主）——旧硬编码清单/数据文本兜底标志均已弃用，
+         数据升级零漂移（漂移守卫见 test_choose_one_authority.py）。
 
     Test: test_batch_rally2.py — 攻击后手牌 +1 张 Choose One 卡且占池
     （随从/法术两路径）/ 两池耗尽落空 / 漂移守护 / 金色 2 张
@@ -1044,10 +1037,12 @@ class BrambleTunnelerScript:
         if hero is None:
             return None
         avail_minions = set(_pool_candidates(game))
+        choose_minions = pool_choose_one_minion_ids(game.db)
+        choose_spells = pool_choose_one_spell_ids(game.db)
         for _ in range(source.scripts.times):
-            minion_cands = [cid for cid in CHOOSE_ONE_MINION_IDS
+            minion_cands = [cid for cid in choose_minions
                             if cid in avail_minions]
-            spell_cands = [cid for cid in CHOOSE_ONE_SPELL_IDS
+            spell_cands = [cid for cid in choose_spells
                            if game.spell_pool.available(cid) > 0]
             cands = minion_cands + spell_cands
             if not cands:

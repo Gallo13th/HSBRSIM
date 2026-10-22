@@ -183,7 +183,7 @@ from hsrl2.game import GameStateError, PendingChoice
 from hsrl2.minion import Minion
 from hsrl2.spell import Spell
 from hsrl2.spellcraft import grant_spellcraft_spell
-from hsrl2.tags import GameTag, Race
+from hsrl2.tags import GameTag, Race, Zone
 
 import hsrl2.constants as C
 
@@ -566,6 +566,42 @@ class FloatingCandleSetSpellScript:
 # ══════════════════ BG36_MagicItem_211 Lovely Locket ══════════════════
 
 
+def _recast_choose_one(game, hero, source_spell, script, target, keys):
+    """Choose One 法术的"复制再施放"（效果施法语义 + 抉择窗）。
+
+    `Game.cast_spell_effect` 只传 `ctx={"target": ...}`（效果施法无
+    抉择协议——Choose One 法术迁移到引擎 choose_options 后暴露的
+    引擎缺口）。本卡为副本补一个 `choose_one` PendingChoice，选定 key
+    后直接调脚本 on_play：
+      - 效果施法语义: 不广播 card_played / tavern_spell_cast、不动池、
+        不计 TAVERN_SPELLS_CAST（与 cast_spell_effect 一致）
+      - 清理: 副本实体 zone=REMOVED；重入闸由调用方在 resolve 期间
+        保持（spell_resolved 再触发本饰品 → 递归防护）
+    """
+    recast = game.create_spell(source_spell.card_id, controller=hero)
+    recast.scripts = script
+    src_uuid = getattr(source_spell, "spellcraft_source_uuid", None)
+    if src_uuid is not None:
+        recast.spellcraft_source_uuid = src_uuid
+    game.events.fire(game, "spell_resolving", spell=recast,
+                     target=target, cast_no=1)
+
+    def resolve(key) -> None:
+        game._lovely_locket_recast = True
+        try:
+            result = script.on_play(recast, game,
+                                    {"target": target, "choose": key})
+            game.run_actions(result)
+            game.events.fire(game, "spell_resolved", spell=recast,
+                             target=target, cast_no=1)
+        finally:
+            game._lovely_locket_recast = False
+        recast.zone = Zone.REMOVED
+
+    game.pending_choices.append(PendingChoice(
+        hero, list(keys), "choose_one", resolve_callback=resolve))
+
+
 class LovelyLocketScript:
     """
     Natural language: [x]After you cast a spell on
@@ -644,13 +680,23 @@ class LovelyLocketScript:
             if not others:
                 return
             pick = g.rng.choice(others, label="lovely_locket")
+            choose_options = list(getattr(cls, "choose_options", None) or ())
             g._lovely_locket_recast = True
             try:
                 # source= 原始法术实体 → 重施放继承 spellcraft_source_uuid，
                 # 使"permanent Spellcraft"（920/933）在效果施法路径同样生效
                 # （ENGINE_BACKLOG #26，2026-09-14 第二十四轮）
-                g.cast_spell_effect(_h, spell.card_id, target=pick,
-                                    source=spell)
+                # Choose One 法术: `cast_spell_effect` 无 choose 通道
+                # （效果施法无抉择协议，2026-10-22 迁移后暴露）→ 副本
+                # 再施放时为玩家补一个 choose_one 窗：选定 key 后直接
+                # 调 on_play（效果施法语义: 不广播 card_played/
+                # tavern_spell_cast、不动池）。
+                if choose_options:
+                    _recast_choose_one(g, _h, spell, cls, pick,
+                                       [k for k, _ in choose_options])
+                else:
+                    g.cast_spell_effect(_h, spell.card_id, target=pick,
+                                        source=spell)
             finally:
                 g._lovely_locket_recast = False
 
@@ -897,13 +943,14 @@ class GlassOfPerspectiveScript:
 
     @staticmethod
     def _grant(game, h) -> bool:
-        from hsrl2.scripts.batches.batch_rally2 import (
-            CHOOSE_ONE_MINION_IDS, CHOOSE_ONE_SPELL_IDS)
+        from hsrl2.scripts.choose_one_authority import (
+            pool_choose_one_minion_ids, pool_choose_one_spell_ids)
         avail = set(_pool_candidates(game))
-        minion_cands = [cid for cid in sorted(CHOOSE_ONE_MINION_IDS)
-                        if cid in avail]
-        spell_cands = [cid for cid in sorted(CHOOSE_ONE_SPELL_IDS)
-                       if game.spell_pool.available(cid) > 0]
+        minion_cands = [cid for cid in sorted(
+            pool_choose_one_minion_ids(game.db)) if cid in avail]
+        spell_cands = [cid for cid in sorted(
+            pool_choose_one_spell_ids(game.db))
+            if game.spell_pool.available(cid) > 0]
         cands = minion_cands + spell_cands
         if not cands:
             return False

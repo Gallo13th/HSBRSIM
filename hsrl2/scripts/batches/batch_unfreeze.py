@@ -27,9 +27,10 @@ DEFERRED 段）均未注册——本批注册即接管，占位类待主线清�
   BG21_015 Tarecgosa / BG32_236 Aureate Laureate / BG31_892 Fandral's
   Fortune / BG28_698 Gem Confiscation: 无模板参数
 
-Choose One 候选集与 batch_rally2 Bramble Tunneler 同一定义（数据
-choose_one 标志含 BG31_327 Trailblazer 噪声——该卡是 Choose One 光环
-而非 Choose One 卡，人工核对清单排除）。
+Choose One 候选集（Fandral's Fortune）统一走权威判定
+`hsrl2/scripts/choose_one_authority.py`（标题正则 ∩ 非 Spellcraft
+宿主；G-C5，2026-10-22 收口）——旧人工核对清单/数据文本兜底标志均已
+弃用，数据升级零漂移。
 """
 
 from __future__ import annotations
@@ -40,28 +41,15 @@ from hsrl2.events import Listener
 from hsrl2.game import GameStateError, PendingChoice
 from hsrl2.minion import Minion
 from hsrl2.queue import Action
+from hsrl2.scripts.choose_one_authority import (
+    is_choose_one_def,
+    pool_choose_one_minion_ids,
+    pool_choose_one_spell_ids,
+)
 from hsrl2.tags import GameTag, Race, Zone
 
 # Golem token（wiki Related cards + bg_cards.json 双核实; 非池卡）
 _TOKEN_BLOOD_GOLEM = "BG30_MagicItem_442t"
-
-# Choose One 池卡全集（batch_rally2 Bramble Tunneler 同款人工核对清单;
-# 数据 choose_one 标志对 BG31_327 误标——其为双效光环卡，排除）
-CHOOSE_ONE_MINION_IDS = frozenset({
-    "BG27_084",   # Sprightly Scarab
-    "BG30_123",   # Fearless Foodie
-    "BG31_320",   # Crater Miner
-    "BG32_237",   # Intrepid Botanist
-    "BG36_330",   # Sly Infiltrator
-    "BG36_332",   # Snare Trapper
-    "BG36_341",   # Veteran Brigand
-})
-CHOOSE_ONE_SPELL_IDS = frozenset({
-    "BG31_880",   # Alliance Flag
-    "BG31_881",   # Time Management
-    "BG31_886",   # Forest's Bounty
-    "BG31_890",   # Boundless Potential
-})
 
 
 def _board_neighbors(target) -> list:
@@ -367,99 +355,27 @@ class CageyConjurerScript:
 # ══════════════════ 5. BG31_892 Fandral's Fortune ══════════════════
 
 
-class _CombinedChooseOneProxy:
-    """被发现的 Choose One **法术**实体的 per-entity 脚本代理。
-
-    引擎 play_spell 的双效分流只扫描棋盘 CHOOSE_BOTH 光环、不读
-    法术实体 tag（引擎缺口）——代理隐藏 choose_options 阻止引擎
-    入队单选 PendingChoice（双效卡不应有选择窗），其余属性
-    （needs_target 等）透传原脚本; on_play 行为由
-    set_script_override 的双效闭包接管。
-    """
-
-    def __init__(self, base_script) -> None:
-        self._base = base_script
-        self.choose_options = None
-        self.needs_target = getattr(base_script, "needs_target", False)
-
-    def __getattr__(self, name):
-        # deepcopy/序列化重建期 `_base` 尚未写入 → 直接 getattr(self,
-        # "_base") 会再次进入 __getattr__ 无限递归（RecursionError，
-        # 压测 seed base 5000 命中）。用 object.__getattribute__ 取，
-        # 缺失时抛 AttributeError（deepcopy 协议据此正确重建）。
-        base = object.__getattribute__(self, "_base")
-        return getattr(base, name)
-
-    def __deepcopy__(self, memo):
-        import copy as _copy
-        new = object.__new__(type(self))
-        memo[id(self)] = new
-        new._base = _copy.deepcopy(self._base, memo)
-        new.choose_options = self.choose_options
-        new.needs_target = self.needs_target
-        return new
-
-
 def _mark_combined_effects(entity, game) -> None:
-    """给被发现的 Choose One 卡实体挂"恒双效"。
+    """给被发现的 Choose One 卡实体挂"恒双效"（实体级 CHOOSE_BOTH tag）。
 
-    资格判定以 **CardDef.choose_one 关键词**为权威（法术 Choose One
-    脚本无 choose_options 类属性——batch_spells4 _queue_choose_one
-    自队模式; 随从脚本才有）。
+    2026-10-22 收口（AUDIT G-C3/G-C4）: 引擎 `play_minion`/
+    `play_spell` 现在直接消费**实体自带** CHOOSE_BOTH tag（跳过抉择、
+    传 choose="both"），且全部选择协议脚本均已声明 `choose_options`
+    并处理 "both" 分支：
+      - 随从: batch_choose_one / batch_misc / batch_choose_one_base
+      - 法术: batch_spells3（Alliance Flag）/ batch_spells4（Time
+        Management / Forest's Bounty / Boundless Potential）——2026-10-22
+        从自建 PendingChoice 协议迁移
+    → 本函数只需置 tag；旧引擎缺口期用于绕行的 per-entity proxy
+    （`_CombinedChooseOneProxy`）与"抽干选择队列"override 已删除。
 
-    - Minion: 引擎 play_minion 已消费实体 CHOOSE_BOTH tag（跳过
-      选择直接 choose="both"）→ tag + battlecry override（依次以
-      每个 choose key 调原脚本分支——随从 Choose One 脚本按
-      ctx["choose"] 直接分派; 金色由引擎触发 2 次 × 双分支 =
-      金色总额，每次值由原脚本 _per_trigger_def 保证）; 未注册
-      脚本的 Choose One 随从仅置 tag（其 battlecry 缺口由注册
-      审计跟踪，本函数不越权）
-    - Spell: override 调一次原 on_play 后把其入队的选择**抽干**，
-      对每个 key 直接调脚本的 resolve 闭包（双分支全结算、无
-      选择窗; scripts 代理隐藏 choose_options 防引擎层提示，
-      needs_target 透传——定向 Choose One 法术的目标选择仍由
-      引擎正常产生）
+    资格判定走权威判定函数 `is_choose_one_def`（G-C5: 标题正则 ∩ 非
+    Spellcraft 宿主）；未注册脚本的抉择卡仅置 tag（缺口由注册审计跟踪）。
     """
     d = game.db.get(entity.card_id)
-    if d is None or "choose_one" not in d.keywords:
+    if not is_choose_one_def(d):
         return
-    base = entity.scripts
     entity.set(GameTag.CHOOSE_BOTH, True)
-    if isinstance(entity, Minion):
-        if base is None or not getattr(base, "choose_options", None):
-            return
-
-        def combined(src, g, c):
-            ctx = dict(c or {})
-            outs = []
-            for key, _label in (getattr(base, "choose_options", None)
-                                or []):
-                ctx["choose"] = key
-                result = base.battlecry(src, g, dict(ctx))
-                if result is None:
-                    continue
-                outs.extend(result if isinstance(result, list)
-                            else [result])
-            return outs or None
-
-        entity.set_script_override("battlecry", combined)
-    else:
-        if base is None:
-            return
-        entity.scripts = _CombinedChooseOneProxy(base)
-
-        def combined_spell(src, g, c):
-            before = list(g.pending_choices)
-            result = base.on_play(src, g, dict(c or {}))
-            for pc in [pc for pc in g.pending_choices
-                       if pc not in before]:
-                g.pending_choices.remove(pc)
-                for key in list(pc.options):
-                    if pc.resolve_callback is not None:
-                        pc.resolve_callback(key)
-            return result
-
-        entity.set_script_override("on_play", combined_spell)
 
 
 class FandralsFortuneScript:
@@ -468,25 +384,24 @@ class FandralsFortuneScript:
     It has both effects combined.
 
     Formal spec:
-      1. on_play: 候选 = Choose One 池卡（minion: CHOOSE_ONE_MINION_
-         IDS ∩ 池可用/active_races（_pool_candidates 语义）; spell:
-         CHOOSE_ONE_SPELL_IDS ∩ spell_pool 可用; 清单与 batch_rally2
-         Bramble Tunneler 同源——数据 choose_one 标志对 BG31_327
-         光环卡误标，人工清单排除）→ rng.sample 3 选项入队
-         PendingChoice(kind="discover_choose_one"，kind 以 discover
-         前缀保证 card_discovered 事件照常 fire——Hooktusk 联动）
+      1. on_play: 候选 = Choose One 池卡（minion: 权威判定 ∩ 池可用/
+         active_races（_pool_candidates 语义）; spell: 权威判定 ∩
+         spell_pool 可用; 统一走 `hsrl2/scripts/choose_one_authority.py`
+         ——G-C5，数据文本兜底标志的 9 误报/3 漏报不再影响候选集）
+         → rng.sample 3 选项入队 PendingChoice(kind="discover_choose_one"，
+         kind 以 discover 前缀保证 card_discovered 事件照常 fire——
+         Hooktusk 联动）
       2. resolve（池感知）: minion → minion_pool.acquire →
          create_minion → set(CHOOSE_BOTH) + _mark_combined_effects →
          pending_hand_add; spell → spell_pool.acquire → create_spell
          → 同标记（满手排队 P6）
-      3. "It has both effects combined" = 实体级恒双效: 被发现卡
-         打出时跳过二选一、两个分支都结算（per-entity override——
-         随从: 逐 key 调 battlecry; 法术: 抽干脚本自队的选择、
-         逐 key 调 resolve 闭包; 已注册 Choose One 脚本无需自带
-         both 分支）
+      3. "It has both effects combined" = 实体级恒双效: 被发现卡打出
+         时引擎读到实体 CHOOSE_BOTH tag → 跳过抉择、直接以
+         choose="both" 调脚本（脚本自带 both 分支两分支并联；定向
+         分支的目标选择由引擎两阶段协议正常产生）。
       4. AMBIGUOUS（备案）: 定向分支的 target 聚合无官方证据
-         （双分支各自入队目标选择 vs 单目标双效）——取各自独立
-         结算（分支自洽，值语义不变）
+         （双分支各自入队目标选择 vs 单目标双效）——引擎两阶段协议
+         为"单目标 + both 双分支"（分支自洽，值语义不变）
       5. 三连排除: 被发现的基础版参与正常三连（合成的新金色实体
          不带 conferred 标记——三连掉 Fandral 属性，官方直觉一致）
 
@@ -503,9 +418,11 @@ class FandralsFortuneScript:
         if hero is None:
             return None
         from hsrl2.actions.discover import _pool_candidates
+        choose_minions = pool_choose_one_minion_ids(game.db)
+        choose_spells = pool_choose_one_spell_ids(game.db)
         minion_cands = [cid for cid in _pool_candidates(game)
-                        if cid in CHOOSE_ONE_MINION_IDS]
-        spell_cands = [cid for cid in CHOOSE_ONE_SPELL_IDS
+                        if cid in choose_minions]
+        spell_cands = [cid for cid in choose_spells
                        if game.spell_pool.available(cid) > 0]
         cands = minion_cands + spell_cands
         if not cands:
@@ -516,7 +433,7 @@ class FandralsFortuneScript:
         # 未选项——旧实现 resolve 才 acquire，同回合并发发现崩溃
         options = []
         for cid in drawn:
-            if cid in CHOOSE_ONE_MINION_IDS:
+            if cid in choose_minions:
                 if game.minion_pool.acquire(cid):
                     options.append(cid)
             elif game.spell_pool.acquire(cid):
@@ -532,11 +449,11 @@ class FandralsFortuneScript:
             for cid in options:
                 if cid == pick_id:
                     continue
-                if cid in CHOOSE_ONE_MINION_IDS:
+                if cid in choose_minions:
                     game.minion_pool.release(cid, 1)
                 else:
                     game.spell_pool.release(cid)
-            if pick_id in CHOOSE_ONE_MINION_IDS:
+            if pick_id in choose_minions:
                 card = game.create_minion(pick_id, controller=hero)
             else:
                 card = game.create_spell(pick_id, controller=hero)

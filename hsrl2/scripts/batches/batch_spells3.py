@@ -529,56 +529,51 @@ class AllianceFlagScript:
     Natural language: <b>Choose One - </b>Give a minion +{0}/+{1}; or
     +{2}/+{3}.
 
-    Formal spec:
-      1. needs_target=True: play_spell 产生 PendingChoice(kind=
-         "spell_target")，选定目标后 on_play 以 ctx["target"] 触发
-         （引擎缺口: play_spell 无 Choose One 协议——目标先于分支，
-         官方 UI 分支先于目标; 两层玩家决策均队列化，顺序无引擎可
-         观测差异）
-      2. on_play: 手动产生 PendingChoice(kind="choose_one", options=
-         ["atk_first", "health_first"])——引擎通用件（play_minion 的
-         choose_one 同 kind）
-      3. 选定: "atk_first" → tavern_spell_buff(target, num(0), num(1));
+    Formal spec (2026-10-22 迁移到引擎两阶段协议，G-C4):
+      1. choose_options 声明 → 引擎 `play_spell` 挂
+         PendingChoice(kind="choose_one")；与 needs_target 组合时按
+         「抉择 → 目标 → 施放」两阶段串行（`hsrl2/game.py`）。
+      2. 选定 key + ctx["target"] 进 on_play:
+         "atk_first" → tavern_spell_buff(target, num(0), num(1));
          "health_first" → tavern_spell_buff(target, num(2), num(3))
-         （统一出口，TAVERN_SPELL_EXTRA_* 联动）
-      4. 无目标（空棋盘落空路径）→ 不产生分支选择
+         （统一出口，TAVERN_SPELL_EXTRA_* 联动）。
+      3. "both"（CHOOSE_BOTH 光环/308 饰品/实体 tag——Fandral's
+         Fortune 发现的恒双效卡）→ 两分支并联。
+      4. 无目标（空棋盘落空路径）→ 施放层不进入 on_play（引擎语义）。
 
-    Test: test_batch_spells3.py — 目标选择 → choose_one 二选一 →
-    分支 A +num(0)/num(1) / 分支 B +num(2)/num(3)
+    Test: test_batch_spells3.py — 抉择 → 目标两级选择流 / 分支 A
+    +num(0)/num(1) / 分支 B +num(2)/num(3) / both 双效
 
     Params: {0}=3 {1}=1 {2}=1 {3}=3（36.2.2 基线）
     """
 
-    needs_target = True
-
     _OPT_ATK = "atk_first"        # +{0}/+{1}（攻分量大）
     _OPT_HEALTH = "health_first"  # +{2}/+{3}（血分量大）
+
+    choose_options = [
+        (_OPT_ATK, "Give a minion +{0}/+{1}"),
+        (_OPT_HEALTH, "Give a minion +{2}/+{3}"),
+    ]
+    needs_target = True
 
     @staticmethod
     def on_play(source, game, ctx):
         target = _spell_target(ctx)
         hero = source.controller
-        if target is None or hero is None:
+        key = (ctx or {}).get("choose")
+        if target is None or hero is None or key is None:
             return None
         d = game.db.get(source.card_id)
         vals = (d.num(0), d.num(1), d.num(2), d.num(3))
         if any(v is None for v in vals):
             raise GameStateError(
                 f"{source.card_id}: missing num(0..3) template params")
-
-        def resolve(key: str) -> None:
-            if key == AllianceFlagScript._OPT_ATK:
-                game.run_actions(tavern_spell_buff(target, vals[0], vals[1]))
-            elif key == AllianceFlagScript._OPT_HEALTH:
-                game.run_actions(tavern_spell_buff(target, vals[2], vals[3]))
-
-        game.pending_choices.append(PendingChoice(
-            hero,
-            [AllianceFlagScript._OPT_ATK, AllianceFlagScript._OPT_HEALTH],
-            "choose_one",
-            resolve_callback=resolve,
-        ))
-        return None
+        out = []
+        if key in (AllianceFlagScript._OPT_ATK, "both"):
+            out.append(tavern_spell_buff(target, vals[0], vals[1]))
+        if key in (AllianceFlagScript._OPT_HEALTH, "both"):
+            out.append(tavern_spell_buff(target, vals[2], vals[3]))
+        return out or None
 
 
 # ══════════════════ OUT_OF_SCOPE（Duos-only，不注册） ══════════════════

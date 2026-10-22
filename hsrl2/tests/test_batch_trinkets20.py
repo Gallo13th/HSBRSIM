@@ -577,7 +577,13 @@ class TestLovelyLocket(unittest.TestCase):
         self.assertEqual(len(seen), 1)
 
     def test_recast_of_choose_one_spell_enqueues_second_choice(self):
-        """Choose One 法术（BG31_880）再施放 → 再入队一个 choose_one。"""
+        """Choose One 法术（BG31_880）复制再施放 → 副本补一个 choose_one 窗。
+
+        2026-10-22 迁移引擎两阶段协议: 原法术打出的抉择窗先结算；
+        `spell_resolved` 后 Locket 以效果施法语义再施放副本，副本
+        同样需要抉择 → 第二个 choose_one 窗（由 Locket 侧补协议，
+        `cast_spell_effect` 无 choose 通道）。
+        """
         g = make_game(2117)
         a, b = g.heroes
         bind(g, a, self.TID)
@@ -585,9 +591,12 @@ class TestLovelyLocket(unittest.TestCase):
         m2 = put(g, a, QUILBOAR_T2)
         self._cast(g, a, "BG31_880", m1)
         kinds = [c.kind for c in g.pending_choices]
-        self.assertEqual(kinds, ["choose_one", "choose_one"])
-        while g.pending_choices:
-            g.pending_choices.pop(0).choose(0)
+        self.assertEqual(kinds, ["choose_one"])
+        g.pending_choices.pop(0).choose(0)      # 原法术分支
+        # 再施放副本的抉择窗
+        kinds = [c.kind for c in g.pending_choices]
+        self.assertEqual(kinds, ["choose_one"])
+        g.pending_choices.pop(0).choose(0)
         d = get_db().get("BG31_880")
         self.assertEqual(m1.atk, get_db().get(QUILBOAR_T1).atk + d.num(0))
         self.assertEqual(m2.atk, get_db().get(QUILBOAR_T2).atk + d.num(0))
@@ -969,9 +978,12 @@ class TestGlassOfPerspective(unittest.TestCase):
     TID = GLASS
 
     def _sets(self):
-        from hsrl2.scripts.batches.batch_rally2 import (
-            CHOOSE_ONE_MINION_IDS, CHOOSE_ONE_SPELL_IDS)
-        return CHOOSE_ONE_MINION_IDS, CHOOSE_ONE_SPELL_IDS
+        """Choose One 池卡 id 集——权威判定函数（G-C5 统一实现）。"""
+        from hsrl2.scripts.choose_one_authority import (
+            pool_choose_one_minion_ids, pool_choose_one_spell_ids)
+        db = get_db()
+        return (pool_choose_one_minion_ids(db),
+                pool_choose_one_spell_ids(db))
 
     def test_bind_grants_choose_one_card_from_sets(self):
         g = make_game(3031)
