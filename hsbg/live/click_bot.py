@@ -39,9 +39,9 @@ CHOICE_Y = 0.45
 CHOICE_SPACING = 0.14
 CHOICE_CONFIRM = (0.50, 0.70)
 BOB_PORTRAIT = (0.50, 0.14)       # 拖随从到这里卖出
-UPGRADE_BTN = (0.3875, 0.733)     # 酒馆升级按钮
-REFRESH_BTN = (0.594, 0.733)      # 刷新按钮
-REFRESH_POINTS = [(0.142, 0.872)]
+UPGRADE_BTN = (0.394, 0.145)      # 酒馆升级按钮（顶部左侧）
+REFRESH_BTN = (0.60, 0.18)        # 刷新按钮（顶部右侧）
+REFRESH_POINTS = [(0.60, 0.18)]
 SHOP_Y = 0.34
 SHOP_SPACING = 0.077
 BOARD_Y = 0.52
@@ -316,8 +316,6 @@ class ClickBot:
         if self._refresh_turn == int(st.get("turn") or 0):
             return False
         if not ((st.get("legal") or {}).get("refresh")):
-            return False
-        if not (st.get("shop") or []):
             return False
         gold0 = int(st.get("gold") or 0)
         shop0 = tuple(m.get("card") for m in (st.get("shop") or []))
