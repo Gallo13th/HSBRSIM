@@ -30,6 +30,8 @@ from hsbg.rl.gym_wrapper import (
 
 ENV_KEYS = {
     "entity_card", "entity_num", "entity_mask", "entity_zone", "entity_pos",
+    # 观测 v3：choice 选项第二 id（gift_id/reward_id）词表下标
+    "entity_secondary",
     "global", "cand_kind", "cand_num", "cand_src", "cand_tgt", "cand_mask",
 }
 

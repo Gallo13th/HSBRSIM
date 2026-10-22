@@ -27,17 +27,19 @@
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from hsbg.env.spec import NUM_ACTION_KINDS, PLAYER_MAX
+from hsbg.env.spec import NUM_ACTION_KINDS, PLAYER_MAX, Observation
 from hsbg.policy.encoder import (
     CAND_FEATURE_OFFSET,
+    CAND_NUM_DIM,
     ENCODER_DIMS,
     MAX_ZONE_SLOTS,
     NUM_ENTITIES,
@@ -47,10 +49,28 @@ from hsbg.policy.encoder import (
     CardVocab,
 )
 
-#: checkpoint 格式版本（结构不兼容时 +1）
-CHECKPOINT_FORMAT_VERSION = 1
+#: checkpoint 格式版本（结构/观测 schema 不兼容时 +1）
+#: * 1：观测 v1/v2（12 种动作、cand_num 38 维）
+#: * 2：观测 v3（13 种动作含 MOVE_MINION、cand_num 39 维、
+#:   ``entity_secondary`` 编码 pending_choice_options.secondary_id）；
+#:   见 ``docs/POLICY_OBS_V3.md``
+CHECKPOINT_FORMAT_VERSION = 2
+#: 构建 checkpoint 时的观测 schema 版本（写进 payload 用于兼容性检查）
+OBS_SCHEMA_VERSION = int(Observation.version)
 #: 掩码 logit 的下界（有限值，避免 -inf 造成 NaN 梯度）
 MASKED_LOGIT = -1e9
+
+
+class CheckpointCompatibilityError(ValueError):
+    """checkpoint 与当前观测/网络 schema 不兼容（需要迁移或重训）。
+
+    典型场景：观测 v2 时代（``Observation.version == 2``）训练出的 ckpt 只有
+    12 种动作 kind / 38 维候选特征，而观测 v3 追加了 ``MOVE_MINION``（13 种 /
+    39 维）。直接加载会**静默**把 move_minion 当成 choose 且 one-hot 列错位，
+    因此这里显式拒绝；迁移入口见 :func:`migrate_legacy_checkpoint` 与
+    :meth:`EntityTransformerPolicy.load` 的 ``allow_legacy=True``。
+    """
+
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -133,7 +153,88 @@ class PolicyConfig:
             cand_num_dim=self.cand_num_dim,
             candidate_max=self.candidate_max,
             num_zones=self.num_zones,
+            num_action_kinds=self.num_action_kinds,
         )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# checkpoint 兼容性检查 / 旧 ckpt 迁移
+# ══════════════════════════════════════════════════════════════════════
+
+#: 不随观测 v2→v3 变化的编码尺寸；迁移时必须与当前一致
+_STABLE_ENCODER_DIMS: Dict[str, int] = {
+    "num_entities": NUM_ENTITIES,
+    "entity_num_dim": ENCODER_DIMS.entity_num_dim,
+    "global_dim": ENCODER_DIMS.global_dim,
+    "candidate_max": ENCODER_DIMS.candidate_max,
+    "num_zones": ENCODER_DIMS.num_zones,
+    "num_card_types": ENCODER_DIMS.num_card_types,
+}
+
+
+def checkpoint_incompatibilities(payload: Dict[str, Any]) -> List[str]:
+    """返回 ckpt 与当前代码不兼容的原因列表（空列表 = 可直接加载）。"""
+    reasons: List[str] = []
+    if not isinstance(payload, dict):
+        return ["payload 不是 dict"]
+    fmt = int(payload.get("format_version", 1) or 1)
+    if fmt < CHECKPOINT_FORMAT_VERSION:
+        reasons.append(
+            f"format_version={fmt}（当前 {CHECKPOINT_FORMAT_VERSION}）"
+        )
+    obs_version = payload.get("obs_version")
+    if obs_version is None:
+        reasons.append("缺少 obs_version 字段（观测 v2 时代保存的 ckpt）")
+    elif int(obs_version) != OBS_SCHEMA_VERSION:
+        reasons.append(
+            f"obs_version={obs_version}（当前 {OBS_SCHEMA_VERSION}）"
+        )
+    cfg = payload.get("policy_config") or {}
+    dims = payload.get("encoder_dims") or {}
+    cfg_kinds = int(cfg.get("num_action_kinds", NUM_ACTION_KINDS))
+    cfg_cand = int(cfg.get("cand_num_dim", CAND_NUM_DIM))
+    if cfg_kinds != NUM_ACTION_KINDS:
+        reasons.append(
+            f"policy_config.num_action_kinds={cfg_kinds}（当前 {NUM_ACTION_KINDS}："
+            "观测 v3 新增 MOVE_MINION）"
+        )
+    if cfg_cand != CAND_NUM_DIM:
+        reasons.append(
+            f"policy_config.cand_num_dim={cfg_cand}（当前 {CAND_NUM_DIM}："
+            "kind one-hot 12→13）"
+        )
+    dims_kinds = dims.get("num_action_kinds")
+    if dims_kinds is not None and int(dims_kinds) != NUM_ACTION_KINDS:
+        reasons.append(
+            f"encoder_dims.num_action_kinds={dims_kinds}（当前 {NUM_ACTION_KINDS}）"
+        )
+    dims_cand = dims.get("cand_num_dim")
+    if dims_cand is not None and int(dims_cand) != CAND_NUM_DIM:
+        reasons.append(
+            f"encoder_dims.cand_num_dim={dims_cand}（当前 {CAND_NUM_DIM}）"
+        )
+    return reasons
+
+
+def _legacy_error_message(path: Path, reasons: Sequence[str]) -> str:
+    bullet = "".join(f"  - {r}\n" for r in reasons)
+    return (
+        f"{path} 是旧观测（v2）时代的策略 checkpoint，与当前观测 v3 不兼容：\n"
+        f"{bullet}"
+        "观测 v3 变更（详见 docs/POLICY_OBS_V3.md）：\n"
+        "  * ActionKind 追加 MOVE_MINION（12→13 类，既有索引不变）；\n"
+        "  * 候选特征 cand_num 由 38 维变为 39 维（kind one-hot 变宽）；\n"
+        "  * 旧 ckpt 的 kind_emb 只有 12 行、cand_num_mlp 输入只有 38 维，\n"
+        "    直接加载会静默把 move_minion 当成 choose 且特征列错位。\n"
+        "处理方式（任选其一）：\n"
+        "  1) 推荐：用观测 v3 重新训练/续训（旧策略没有走位能力）；\n"
+        "  2) 迁移旧权重（保留除 MOVE_MINION 外全部参数）：\n"
+        "       from hsbg.policy.model import migrate_legacy_checkpoint\n"
+        "       migrate_legacy_checkpoint('OLD.pt', 'NEW.pt')\n"
+        "     或 EntityTransformerPolicy.load(path, allow_legacy=True)\n"
+        "     （内存迁移：kind_emb 新增行用旧行均值初始化，cand_num_mlp 新增\n"
+        "     kind 列权重置 0；MOVE_MINION 仍需继续训练才可信）。"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -240,6 +341,15 @@ class EntityTransformerPolicy(nn.Module):
             + self.zone_emb(zone)
             + self.pos_emb(pos)
         )
+        # v3：choice 选项的第二 id（Dark Gift 的 gift_id / 任务 offer 的
+        # reward_id）复用卡牌 embedding。第二 id 与主 id 的取值域不相交
+        # （gift/reward id 不会作为实体主 card_id 出现），因此共享词表/权重
+        # 不会与主 id 语义冲突，也不新增参数、不破坏旧 ckpt 的 state_dict。
+        # 缺失该 key（旧编码数据）或为 0（无第二 id）时 padding 行为零向量。
+        secondary = batch.get("entity_secondary")
+        if secondary is not None:
+            sec = secondary.long().clamp(0, cfg.vocab_size - 1)
+            ent = ent + self.card_emb(sec)
         # padding 实体输入置零（mask 之外不参与 attention，但表示要干净）
         ent = ent * mask.unsqueeze(-1)
         cls = self.cls_token.expand(card.shape[0], -1, -1) + self.global_mlp(
@@ -428,6 +538,9 @@ class EntityTransformerPolicy(nn.Module):
         payload = {
             "format": "hsbg.policy.EntityTransformerPolicy",
             "format_version": CHECKPOINT_FORMAT_VERSION,
+            # 观测 schema 版本（加载时校验；旧 ckpt 缺这个 key）
+            "obs_version": OBS_SCHEMA_VERSION,
+            "num_action_kinds": NUM_ACTION_KINDS,
             "policy_config": self.config.to_dict(),
             "encoder_dims": self.encoder_dims.as_dict(),
             "vocab": self.vocab.to_dict() if self.vocab is not None else None,
@@ -443,11 +556,54 @@ class EntityTransformerPolicy(nn.Module):
         cls,
         path: Union[str, Path],
         map_location: Union[str, torch.device] = "cpu",
+        *,
+        allow_legacy: Optional[bool] = None,
     ) -> "EntityTransformerPolicy":
+        """加载 checkpoint。
+
+        旧观测（v2）ckpt 的兼容策略（``allow_legacy``）：
+
+        * ``None``（默认）：**自动内存迁移 + UserWarning**（警告含迁移说明与
+          命令）。旧产物（如 ``runs/bc/official_320/policy_bc.pt``）仍可直接
+          评测/续训，但不会静默——每次加载都会提示"MOVE_MINION 未经训练"；
+        * ``False``：严格模式，直接抛 :class:`CheckpointCompatibilityError`
+          （CI/新训练入口建议用；避免误用迁移后的旧权重）；
+        * ``True``：静默内存迁移（供 :func:`migrate_legacy_checkpoint` 等显式
+          迁移流程使用）。
+
+        迁移只对齐"动作种类/候选特征维度"的结构变化（见
+        :meth:`_migrate_legacy_payload`）；结构差异更大时无条件拒绝。
+        """
         path = Path(path)
         payload = torch.load(path, map_location=map_location, weights_only=False)
         if not isinstance(payload, dict) or "policy_config" not in payload:
             raise ValueError(f"{path} 不是有效的策略 checkpoint")
+        raw_obs_version = payload.get("obs_version")
+        if raw_obs_version is not None and int(raw_obs_version) > OBS_SCHEMA_VERSION:
+            raise CheckpointCompatibilityError(
+                f"{path} 的 obs_version={raw_obs_version} 比当前代码支持的 "
+                f"{OBS_SCHEMA_VERSION} 更新（无法降级加载，请更新代码）"
+            )
+        reasons = checkpoint_incompatibilities(payload)
+        migrated = bool(reasons)
+        if migrated:
+            if allow_legacy is False:
+                raise CheckpointCompatibilityError(
+                    _legacy_error_message(path, reasons)
+                )
+            if allow_legacy is None:
+                warnings.warn(
+                    f"{path} 是旧观测（v2）时代的策略 checkpoint，已自动做内存"
+                    "迁移后加载（不落盘）：" + "；".join(reasons) + "。"
+                    "迁移规则：kind_emb 新增 MOVE_MINION 行=旧行均值、"
+                    "cand_num_mlp 新 kind 列权重=0，其余权重保留；"
+                    "MOVE_MINION 未经训练，建议继续训练后再用于评测。"
+                    "详见 docs/POLICY_OBS_V3.md；严格报错用 "
+                    "allow_legacy=False，落盘迁移用 migrate_legacy_checkpoint()。",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            payload = cls._migrate_legacy_payload(path, payload)
         cfg = PolicyConfig.from_dict(payload["policy_config"])
         policy = cls(cfg)
         policy.load_state_dict(payload["state_dict"])
@@ -456,9 +612,114 @@ class EntityTransformerPolicy(nn.Module):
         if payload.get("encoder_dims"):
             policy.encoder_dims = EncoderDims.from_dict(payload["encoder_dims"])
         policy.meta = dict(payload.get("meta") or {})
+        if migrated:
+            policy.meta["legacy_migrated"] = True
         policy.checkpoint_path = str(path)
         policy.eval()
         return policy
+
+    @classmethod
+    def _migrate_legacy_payload(
+        cls,
+        path: Path,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """观测 v2 ckpt → v3 结构的内存迁移（不落盘）。
+
+        * ``kind_emb.weight``：``[12, d]`` → ``[13, d]``，新增 MOVE_MINION 行
+          用旧 12 行均值初始化（尺度与旧行一致，初始行为接近"平均动作"）；
+        * ``cand_num_mlp.0.weight``：``[d, 38]`` → ``[d, 39]``，kind one-hot
+          列变宽一位——新 MOVE_MINION 列权重置 0，其后 26 维特征列原样右移；
+        * 其余参数原样保留（state_dict 中新增的参数保持随机初始化）。
+        """
+        cfg_in = dict(payload.get("policy_config") or {})
+        dims_in = dict(payload.get("encoder_dims") or {})
+        state_in = dict(payload.get("state_dict") or {})
+        kind_old = state_in.get("kind_emb.weight")
+        cand_w = state_in.get("cand_num_mlp.0.weight")
+        if kind_old is None or kind_old.ndim != 2:
+            raise CheckpointCompatibilityError(
+                f"迁移失败：{path} 缺少 kind_emb.weight，无法自动迁移"
+            )
+        if cand_w is None or cand_w.ndim != 2:
+            raise CheckpointCompatibilityError(
+                f"迁移失败：{path} 缺少 cand_num_mlp.0.weight，无法自动迁移"
+            )
+        old_kinds = int(kind_old.shape[0])
+        old_cand = int(cand_w.shape[1])
+        tail = CAND_NUM_DIM - NUM_ACTION_KINDS
+        if old_cand - old_kinds != tail:
+            raise CheckpointCompatibilityError(
+                f"迁移失败：{path} 的 cand_num_dim={old_cand} 与 "
+                f"num_action_kinds={old_kinds} 不符合 v2 布局（差值应为 {tail}）"
+            )
+        # 其它编码尺寸必须与当前代码一致，否则不是"仅 v2→v3 升级"
+        for key, expected in _STABLE_ENCODER_DIMS.items():
+            got = dims_in.get(key, cfg_in.get(key))
+            if got is not None and int(got) != int(expected):
+                raise CheckpointCompatibilityError(
+                    f"迁移失败：{path} 的 {key}={got} 与当前 {expected} 不一致"
+                    "（差异不止观测 v2→v3，请重新训练）"
+                )
+        new_cfg_dict = dict(cfg_in)
+        new_cfg_dict["num_action_kinds"] = NUM_ACTION_KINDS
+        new_cfg_dict["cand_num_dim"] = CAND_NUM_DIM
+        new_cfg = PolicyConfig.from_dict(new_cfg_dict)
+        policy = cls(new_cfg)
+        new_state = policy.state_dict()
+        merged: Dict[str, torch.Tensor] = {}
+        for key, target in new_state.items():
+            old = state_in.get(key)
+            if old is None:
+                merged[key] = target  # 新增参数：保持初始化
+                continue
+            if tuple(old.shape) == tuple(target.shape):
+                merged[key] = old
+                continue
+            if key == "kind_emb.weight":
+                fixed = target.clone()
+                rows = min(int(old.shape[0]), int(target.shape[0]))
+                fixed[:rows] = old[:rows]
+                if rows < target.shape[0]:
+                    # 新增 kind 用旧行均值初始化（不要 N(0,1) 随机，避免初始偏向）
+                    fixed[rows:] = old.mean(dim=0)
+                merged[key] = fixed
+                continue
+            if key == "cand_num_mlp.0.weight":
+                fixed = target.clone()
+                fixed[:, :old_kinds] = old[:, :old_kinds]
+                fixed[:, old_kinds:NUM_ACTION_KINDS] = 0.0
+                fixed[:, NUM_ACTION_KINDS:NUM_ACTION_KINDS + tail] = old[:, old_kinds:]
+                merged[key] = fixed
+                continue
+            raise CheckpointCompatibilityError(
+                f"迁移失败：{path} 的 {key} 形状 {tuple(old.shape)} 无法自动对齐到 "
+                f"{tuple(target.shape)}（结构差异不止观测 v2→v3，请重新训练）"
+            )
+        policy.load_state_dict(merged)
+        meta_out = dict(payload.get("meta") or {})
+        meta_out["legacy_migration"] = {
+            "source": str(path),
+            "from_format_version": int(payload.get("format_version", 1) or 1),
+            "from_obs_version": payload.get("obs_version"),
+            "from_num_action_kinds": old_kinds,
+            "from_cand_num_dim": old_cand,
+            "note": (
+                "kind_emb 新增行=旧行均值；cand_num_mlp 新 kind 列=0；"
+                "MOVE_MINION 未经训练，需继续训练才可信。"
+            ),
+        }
+        return {
+            "format": "hsbg.policy.EntityTransformerPolicy",
+            "format_version": CHECKPOINT_FORMAT_VERSION,
+            "obs_version": OBS_SCHEMA_VERSION,
+            "num_action_kinds": NUM_ACTION_KINDS,
+            "policy_config": policy.config.to_dict(),
+            "encoder_dims": policy.config.encoder_dims().as_dict(),
+            "vocab": payload.get("vocab"),
+            "state_dict": policy.state_dict(),
+            "meta": meta_out,
+        }
 
     def extra_repr(self) -> str:  # pragma: no cover - 调试
         return (
@@ -487,20 +748,62 @@ def build_policy(
     return policy
 
 
+def migrate_legacy_checkpoint(
+    path: Union[str, Path],
+    out_path: Optional[Union[str, Path]] = None,
+    *,
+    map_location: Union[str, torch.device] = "cpu",
+) -> Path:
+    """把观测 v2 时代的旧 ckpt 迁移成当前 checkpoint 格式（落盘）。
+
+    用法::
+
+        from hsbg.policy.model import migrate_legacy_checkpoint
+        new_path = migrate_legacy_checkpoint("runs/ppo/official_v3/policy_final.pt")
+
+    默认输出到同目录 ``<name>_obs_v3.pt``；迁移后可直接
+    ``load_policy_and_encoder(new_path)``（无需 ``allow_legacy``）。
+    迁移只恢复"除 MOVE_MINION 外"的旧权重，策略仍需继续训练。
+    """
+    path = Path(path)
+    legacy = EntityTransformerPolicy.load(
+        path, map_location=map_location, allow_legacy=True
+    )
+    out = (
+        Path(out_path)
+        if out_path is not None
+        else path.with_name(path.stem + "_obs_v3.pt")
+    )
+    # 保留旧 meta（含 legacy_migration 迁移记录，便于溯源）
+    return legacy.save(out, meta=dict(legacy.meta))
+
+
 def load_policy_and_encoder(
     path: Union[str, Path],
     map_location: Union[str, torch.device] = "cpu",
+    *,
+    allow_legacy: Optional[bool] = None,
 ) -> Tuple[EntityTransformerPolicy, ObservationEncoder]:
-    """加载 checkpoint 并重建配套编码器（评测/续训入口）。"""
-    policy = EntityTransformerPolicy.load(path, map_location=map_location)
+    """加载 checkpoint 并重建配套编码器（评测/续训入口）。
+
+    旧观测（v2）ckpt 默认"迁移 + 警告"（见 :meth:`EntityTransformerPolicy.load`）；
+    ``allow_legacy=False`` 严格报错，``True`` 静默迁移。
+    """
+    policy = EntityTransformerPolicy.load(
+        path, map_location=map_location, allow_legacy=allow_legacy
+    )
     return policy, policy.make_encoder()
 
 
 __all__ = [
     "PolicyConfig",
     "EntityTransformerPolicy",
+    "CheckpointCompatibilityError",
     "build_policy",
     "load_policy_and_encoder",
+    "migrate_legacy_checkpoint",
+    "checkpoint_incompatibilities",
     "CHECKPOINT_FORMAT_VERSION",
+    "OBS_SCHEMA_VERSION",
     "MASKED_LOGIT",
 ]

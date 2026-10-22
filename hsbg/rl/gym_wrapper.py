@@ -101,6 +101,9 @@ def build_observation_space(encoder=None) -> Any:
         "entity_mask": spaces.Box(0.0, 1.0, (E,), dtype=np.float32),
         "entity_zone": spaces.Box(0, int(dims.num_zones) - 1, (E,), dtype=np.int64),
         "entity_pos": spaces.Box(0, MAX_ZONE_SLOTS, (E,), dtype=np.int64),
+        # 观测 v3：choice 选项的第二 id（Dark Gift gift_id / 任务 reward_id）
+        # 词表下标；0 = 无。与 encoder.ENCODED_KEYS 保持逐字段一致。
+        "entity_secondary": spaces.Box(0, vocab_size - 1, (E,), dtype=np.int64),
         "global": spaces.Box(-20.0, 20.0, (int(dims.global_dim),),
                              dtype=np.float32),
         "cand_kind": spaces.Box(0, NUM_ACTION_KINDS - 1, (C,), dtype=np.int64),

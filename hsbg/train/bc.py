@@ -506,8 +506,12 @@ class BCTrainer:
         *,
         config: Optional[BCConfig] = None,
         device: Optional[str] = None,
+        allow_legacy: Optional[bool] = None,
     ) -> "BCTrainer":
-        policy = EntityTransformerPolicy.load(checkpoint_path, map_location="cpu")
+        """恢复 BC 训练器（旧观测 v2 ckpt 默认迁移+警告；详情见 docs/POLICY_OBS_V3.md）。"""
+        policy = EntityTransformerPolicy.load(
+            checkpoint_path, map_location="cpu", allow_legacy=allow_legacy
+        )
         encoder = policy.make_encoder()
         if config is None:
             config = BCConfig.from_dict((policy.meta or {}).get("bc_config") or {})

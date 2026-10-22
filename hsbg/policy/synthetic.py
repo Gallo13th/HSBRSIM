@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -60,6 +60,13 @@ FAKE_CARD_IDS: Tuple[str, ...] = tuple(
     + [f"FAKE_POWER_{i:03d}" for i in range(8)]
     + [f"FAKE_TRINKET_{i:03d}" for i in range(8)]
     + [f"FAKE_QUEST_{i:03d}" for i in range(4)]
+)
+
+#: 合成数据的假"第二 id"（Dark Gift 的 gift_id / 任务 offer 的 reward_id；
+#: 观测 v3 ``extra["pending_choice_options"]`` 用）。测试若要验证词表命中，
+#: 需把它并入 ``CardVocab``（见 ``tests/test_policy_obs_v3.py``）。
+FAKE_SECONDARY_IDS: Tuple[str, ...] = tuple(
+    f"FAKE_GIFT_{i:03d}" for i in range(12)
 )
 
 _ALL_RACES: Tuple[str, ...] = tuple(r for r in RACES if r not in ("all", "none"))
@@ -179,7 +186,8 @@ def random_hero(
 # 候选动作
 # ══════════════════════════════════════════════════════════════════════
 
-#: 合成候选的动作类型清单（覆盖全部 12 种，choose 仅在 choice 阶段用）
+#: 合成候选的动作类型清单（覆盖 spec 里全部 ActionKind，含 v3 MOVE_MINION；
+#: choose 仅在 choice 阶段用）
 _MOCK_KINDS: Tuple[str, ...] = tuple(k.value for k in ActionKind)
 
 
@@ -249,6 +257,15 @@ def random_candidates(
         elif kind == "activate" and n_board:
             out.append(CandidateAction(kind=kind, src_zone=ZONE_BOARD,
                                        src_slot=int(rng.integers(0, n_board)), cost=cost))
+        elif kind == "move_minion" and n_board >= 2:
+            # v3：src=被移动随从，position=目标槽位（0..n_board-1）
+            out.append(CandidateAction(
+                kind=kind,
+                src_zone=ZONE_BOARD,
+                src_slot=int(rng.integers(0, n_board)),
+                position=int(rng.integers(0, n_board)),
+                cost=-1,
+            ))
         elif kind == "choose":
             if n_choice:
                 out.append(CandidateAction(kind=kind, option=int(rng.integers(0, n_choice))))
@@ -270,13 +287,19 @@ def random_observation(
     rng: np.random.Generator,
     *,
     card_ids: Optional[Sequence[str]] = None,
+    secondary_ids: Optional[Sequence[str]] = None,
     num_players: int = PLAYER_MAX,
     choice_prob: float = 0.12,
     turn: Optional[int] = None,
     include_hero: bool = True,
     candidate_count: Optional[int] = None,
 ) -> Observation:
-    """生成一条随机但结构合法的 ``Observation``。"""
+    """生成一条随机但结构合法的 ``Observation``。
+
+    ``secondary_ids``：选择步 ``extra["pending_choice_options"]`` 的第二 id
+    取值池（默认 :data:`FAKE_SECONDARY_IDS`）；传入词表里已知的 id 才能让
+    ``entity_secondary`` 编码成非 ``<UNK>`` 下标。
+    """
     turn = int(turn) if turn is not None else int(rng.integers(1, 16))
     is_choice = rng.random() < choice_prob
     board = random_entities(rng, ZONE_BOARD, BOARD_MAX, card_ids=card_ids)
@@ -292,6 +315,7 @@ def random_observation(
     total_players = num_players
 
     pending: Optional[PendingChoice] = None
+    extra: Dict[str, Any] = {}
     if is_choice:
         n_opt = int(rng.integers(2, CHOICE_OPTION_MAX + 1))
         options = tuple(
@@ -303,9 +327,26 @@ def random_observation(
             for_agent=True,
             prompt="mock choice",
         )
+        # v3：结构化选项元数据（与 options 下标对齐；10% 模拟无第二 id）
+        pool = list(secondary_ids) if secondary_ids else list(FAKE_SECONDARY_IDS)
+        meta: List[Dict[str, Any]] = []
+        for i, tok in enumerate(options):
+            sid: Optional[str] = None
+            if pool and rng.random() >= 0.1:
+                sid = str(pool[int(rng.integers(0, len(pool)))])
+            meta.append({
+                "index": i,
+                "card_id": tok.card_id,
+                "secondary_id": sid,
+                "label": None,
+                "name": tok.name,
+                "secondary_name": None,
+                "cost": -1,
+            })
+        extra["pending_choice_options"] = meta
 
     obs = Observation(
-        version=1,
+        version=Observation.version,
         turn=turn,
         phase=PHASE_CHOICE if pending is not None else PHASE_RECRUIT,
         hero=random_hero(rng, card_ids=card_ids) if include_hero else None,
@@ -321,6 +362,7 @@ def random_observation(
         rank=int(rng.integers(1, max(alive_count, 1) + 1)),
         pending_choice=pending,
         candidates=(),
+        extra=extra,
         log="",
     )
     cands = random_candidates(rng, obs, count=candidate_count)
@@ -346,6 +388,8 @@ TEACHER_KIND_PREFERENCE = {
     "use_dark_gift": 0.5,
     "freeze": 0.3,
     "end_turn": 0.2,
+    # v3 走位：弱偏好（不改变场攻，只在同分时略优）
+    "move_minion": 0.1,
 }
 
 

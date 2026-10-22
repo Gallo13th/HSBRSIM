@@ -24,6 +24,7 @@ from hsbg.policy.encoder import (
     ObservationEncoder,
     collect_card_ids,
     entity_index,
+    secondary_ids_from_extra,
     stack_encoded,
     to_torch,
 )
@@ -32,10 +33,14 @@ from hsbg.policy.encoder import (
 _LAZY_MODEL_EXPORTS = {
     "PolicyConfig",
     "EntityTransformerPolicy",
+    "CheckpointCompatibilityError",
     "build_policy",
     "load_policy_and_encoder",
+    "migrate_legacy_checkpoint",
+    "checkpoint_incompatibilities",
     "MASKED_LOGIT",
     "CHECKPOINT_FORMAT_VERSION",
+    "OBS_SCHEMA_VERSION",
 }
 
 __all__ = [
@@ -49,13 +54,16 @@ __all__ = [
     "GLOBAL_DIM",
     "CAND_NUM_DIM",
     "collect_card_ids",
+    "secondary_ids_from_extra",
     "entity_index",
     "stack_encoded",
     "to_torch",
     "PolicyConfig",
     "EntityTransformerPolicy",
+    "CheckpointCompatibilityError",
     "build_policy",
     "load_policy_and_encoder",
+    "migrate_legacy_checkpoint",
 ]
 
 
