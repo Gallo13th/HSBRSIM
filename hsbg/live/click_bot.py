@@ -740,6 +740,9 @@ class ClickBot:
 
 
 def main() -> int:
+    import faulthandler
+    faulthandler.enable()
+    faulthandler.dump_traceback_later(30, repeat=True)
     ap = argparse.ArgumentParser()
     ap.add_argument("--out-dir", default="runs/live/clickbot_auto")
     ap.add_argument("--games", type=int, default=0, help="0=无限")
