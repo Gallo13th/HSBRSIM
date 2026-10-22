@@ -123,6 +123,9 @@ BC：320 局教师示范 / 30,300 样本；验证集动作准确率 **85.6%**（
 - `docs/EVAL_REPORT.md` — 策略评测报告（100 局固定种子 + 名次分布图）
 - `docs/RL_INTERFACE.md` — RL 接口层（Policy/EnvLike 协议、Gym 包装、JSONL 采集器、并发与确定性）
 - `docs/REAL_GAME_BRIDGE.md` — 真实对局数据桥（Power.log / AgenticAssistant）
+- `docs/LIVE_AUTOMATION_PROTOCOL.md` — 实时自动化/截图/采集/热修/协作协议
+- `docs/LIVE_TO_SIM_GAP.md` — Live 操作 → 模拟器补全差距表
+- `docs/schemas/live_action.schema.json` — 动作日志 JSON Schema
 - `docs/ENGINE_NOTES.md` — 引擎修改记录（F-01…F-05）
 - `AGENTS.md` — 协作与验收约定
 

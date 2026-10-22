@@ -75,7 +75,19 @@ python tools/version_sync.py --apply --yes
   - 产物 `runs/demo_full_puct_final/{episode.json,README.md}`，README 含**每回合 8 座位场面 + 最终名次**；
   - 结果：search 拿到第 1/2/3 名（P3 冠军、P0 亚军、P2 季军），BC 最好第 4。零 invalid / engine error。
 
-## 6. 已知限制
+## 6. Live 自动化
+
+- 协议：[docs/LIVE_AUTOMATION_PROTOCOL.md](docs/LIVE_AUTOMATION_PROTOCOL.md)
+- 差距表：[docs/LIVE_TO_SIM_GAP.md](docs/LIVE_TO_SIM_GAP.md)
+- 动作 schema：[docs/schemas/live_action.schema.json](docs/schemas/live_action.schema.json)
+- 采集：`python hsbg/live/click_bot.py --games 0 --max-seconds 0`
+  - 每次 click/drag 后截图到 `runs/live/<run>/screenshots/actions/`
+  - 同回合 2 次 no-effect → `diagnostics/` 5 帧 + state
+  - 每回合 settled 截图/JSON；内存读取走子进程防崩
+- 当前 run：`runs/live/clickbot_every/`（约 678 动作，95 no-effect；turn 1–15 多局循环）
+- 待补 live 操作（P0/P1）：英雄技能、冻结、主动结束回合、目标法术稳定命中、三连/发现确认、开始战斗页识别。
+
+## 7. 已知限制
 
 - `hsdata/CardDefs.xml` 超过 GitHub 建议的 50MB（<100MB 限制，但建议后续切 Git LFS）；
 - `runs/` 下的模型 checkpoint / 数据集 / 评测结果不入库，需要按上面命令重新生成；

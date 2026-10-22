@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hsagent.local/schemas/live_action.schema.json",
+  "title": "LiveActionRecord",
+  "description": "One line of runs/live/<run>/actions.jsonl",
+  "type": "object",
+  "required": ["ts", "actions", "kind"],
+  "properties": {
+    "ts": {"type": "string", "format": "date-time"},
+    "actions": {"type": "integer", "minimum": 0},
+    "kind": {
+      "type": "string",
+      "enum": [
+        "state", "decision", "click", "drag", "no_effect",
+        "repeat_failure_diag", "turn_settled", "combat_wait",
+        "game_over", "game_unavailable", "foreground_failed",
+        "state_reader_failed", "state_reader_error", "launcher"
+      ]
+    },
+    "note": {"type": "string"},
+    "fx": {"type": "number"},
+    "fy": {"type": "number"},
+    "a": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+    "b": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+    "phase": {"type": "string"},
+    "turn": {"type": "integer"},
+    "gold": {"type": ["integer", "null"]},
+    "board": {"type": "array"},
+    "hand": {"type": "array"},
+    "shop": {"type": "array"},
+    "choices": {"type": "array"},
+    "scores": {
+      "type": "object",
+      "additionalProperties": {"type": "number"}
+    },
+    "screenshot": {"type": "string"},
+    "key": {"type": "string"},
+    "dir": {"type": "string"},
+    "frames": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

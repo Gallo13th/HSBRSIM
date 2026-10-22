@@ -14,8 +14,8 @@ C:\HSagent\
 │   ├── actions/           # 引擎 Action 原语
 │   ├── scripts/           # 卡牌/英雄/饰品/异变效果脚本 + REGISTRY
 │   └── tests/             # 引擎回归测试（禁止为了新功能改红）
-├── data/                  # 引擎卡牌数据 JSON（S14 / patch 36.2.2 基线）
-├── hsdata/CardDefs.xml    # 原始 CardDefs（数值唯一权威）
+├── data/                  # 引擎卡牌数据 JSON（37.0.0.255130 基线）
+├── hsdata/                # 可选：原始 CardDefs（不入库，按 docs/DATA_REBUILD.md 重建）
 ├── hsbg/                  # ★ 本项目新增代码
 │   ├── env/               # RL 环境（spec 契约 / 观测 / 动作 / 对局循环 / 向量化）
 │   ├── agents/            # 脚本对手 / 启发式教师
@@ -58,6 +58,9 @@ python tools/smoke_random_games.py --games 8 --seed 2000   # 全对局压测
 ## 3. 核心约定
 
 - **语言**：代码注释/文档用中文；标识符用英文。
+- **实时对局自动化**：改动 `hsbg/live/**` 前先读
+  `docs/LIVE_AUTOMATION_PROTOCOL.md`；新发现缺操作必须登记到
+  `docs/LIVE_TO_SIM_GAP.md`，附截图/actions.jsonl 证据，不能只口头描述。
 - **编码**：所有文件 UTF-8（`open(..., encoding="utf-8")`）；不要用系统默认编码。
 - **确定性**：环境行为必须由 `seed` 完全决定（引擎 RNG = `game.rng`）。
   训练可复现性依赖这一点。
@@ -77,7 +80,7 @@ python tools/smoke_random_games.py --games 8 --seed 2000   # 全对局压测
 
 | 角色 | 写范围 |
 |------|--------|
-| Lead | `hsbg/env/spec.py`、`hsbg/paths.py`、`docs/`、`tests/test_integration.py`、`scripts/`、根配置 |
+| Lead | `hsbg/env/spec.py`、`hsbg/paths.py`、`hsbg/live/**`、`docs/`、`tests/test_integration.py`、`tests/test_live*`、`scripts/`、根配置 |
 | engine-analyst | `docs/ENGINE_API.md`、`docs/ENGINE_RL_READINESS.md`、`tools/probe_*.py` |
 | env-builder | `hsbg/env/**`、`tests/test_env_*.py`、`hsbg/agents/**`、`tests/test_agents_*.py` |
 | policy-builder | `hsbg/policy/**`、`hsbg/train/**`、`tests/test_policy_*.py`、`scripts/train_*.py` |
@@ -87,10 +90,9 @@ python tools/smoke_random_games.py --games 8 --seed 2000   # 全对局压测
 
 ## 5. 数据现状（已知缺口）
 
-- 引擎卡池数据基线 **S14 / patch 36.2.2**；线上游戏为 **36.6.3**（见
-  `docs/REAL_GAME_BRIDGE.md`）。新卡/数值差异属于已知问题，不阻塞 RL 管线；
-  但**不要**把"数据旧"当成环境 bug 去改引擎。
-- `data/` 是生成产物；更新应走 `tools/generate_bg_data.py` + `hsdata/CardDefs.xml`。
+- 引擎卡池数据基线 **37.0.0.255130**；原始 `CardDefs.xml` 不入库，重建流程见
+  `docs/DATA_REBUILD.md`（`tools/generate_bg_data.py` / `tools/version_sync.py`）。
+- 新卡/数值差异属于已知问题，不阻塞 RL 管线；但**不要**把"数据旧"当成环境 bug 去改引擎。
 
 ## 6. 验收门槛
 
