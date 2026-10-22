@@ -35,7 +35,7 @@ from hsbg.live.wininput import Win32Backend, find_hearthstone_window
 START = (0.759, 0.778)
 HERO_OPTIONS = [(0.22, 0.44), (0.36, 0.44), (0.50, 0.44), (0.64, 0.44)]
 HERO_CONFIRM = (0.50, 0.71)
-CHOICE_Y = 0.39
+CHOICE_Y = 0.45
 CHOICE_SPACING = 0.14
 CHOICE_CONFIRM = (0.50, 0.70)
 SHOP_Y = 0.34
@@ -74,6 +74,7 @@ class ClickBot:
     _seen_game_over: bool = False
     _unavailable: int = 0
     _last_lobby_click: float = 0.0
+    _overlay_turn: int = -1
 
     def __post_init__(self):
         self.out_dir = Path(self.out_dir)
@@ -201,6 +202,17 @@ class ClickBot:
                 return True
         return False
 
+    def _click_overlay(self, st: Dict[str, Any]) -> bool:
+        """Fallback for visible non-memory overlays (Choose One / spell pages)."""
+        before = self._sig(st)
+        for pt in ((0.44, 0.47), (0.56, 0.47), (0.50, 0.55)):
+            self.click(*pt, note="overlay_click")
+            time.sleep(0.45)
+            now = self.state()
+            if self._sig(now) != before:
+                return True
+        return False
+
     def _fail(self, key: str, st: Dict[str, Any], note: str) -> None:
         if key in self.failed:
             return
@@ -266,7 +278,9 @@ class ClickBot:
             key = f"buy:{item.get('eid')}:{item.get('card')}"
             if key in self.failed:
                 continue
-            if int(item.get("cost") or 3) > gold or i >= len(pts):
+            cost = item.get("cost")
+            cost = 3 if cost is None else int(cost)
+            if cost > gold or i >= len(pts):
                 continue
             before = self._sig(st)
             self.drag(pts[i], (HAND_CENTER, HAND_Y), duration=0.42,
@@ -281,27 +295,40 @@ class ClickBot:
         hand = st.get("hand") or []
         board = st.get("board") or []
         legal_play = (st.get("legal") or {}).get("play") or {}
-        if not hand or len(board) >= 7:
+        if not hand:
             return False
         hand_pts = self._hand_pts(len(hand))
         board_pts = _center(max(1, len(board) + 1), BOARD_SPACING, BOARD_Y)
         for idx, m in enumerate(hand):
-            if m.get("kind") != "minion":
+            kind = str(m.get("kind") or "")
+            if kind not in ("minion", "spell"):
+                continue
+            if kind == "minion" and len(board) >= 7:
                 continue
             key = f"play:{m.get('eid')}:{m.get('card')}"
             if key in self.failed:
                 continue
-            # legal_play keys may be hand indices; accept if present or absent
-            if legal_play and str(idx) not in legal_play:
+            entry = legal_play.get(str(idx))
+            if legal_play and entry is None:
                 continue
+            # targeted spells/minions are skipped for now (need target click)
+            if isinstance(entry, dict):
+                use = entry.get("use") or {}
+                if use.get("targets"):
+                    continue
             before = self._sig(st)
-            self.drag(hand_pts[idx],
-                      board_pts[min(len(board), len(board_pts) - 1)],
-                      duration=0.42, note=f"play:{m.get('card')}")
+            if kind == "spell":
+                # 无目标法术：拖到棋盘中央施放
+                self.drag(hand_pts[idx], (0.50, 0.52), duration=0.42,
+                          note=f"cast:{m.get('card')}")
+            else:
+                self.drag(hand_pts[idx],
+                          board_pts[min(len(board), len(board_pts) - 1)],
+                          duration=0.42, note=f"play:{m.get('card')}")
             if self._changed(before):
                 self.turn_actions += 1
                 return True
-            self._fail(key, st, "上阵后状态未变化")
+            self._fail(key, st, "打出后状态未变化")
         return False
 
     # ------------------------------------------------------------ main loop
@@ -389,6 +416,9 @@ class ClickBot:
                         self.fail_streak = 0
                         continue
                     self.fail_streak += 1
+                    if self.fail_streak >= 2 and self._overlay_turn != turn:
+                        self._overlay_turn = turn
+                        self._click_overlay(st)
                     time.sleep(min(2.0, 0.4 + 0.3 * self.fail_streak))
                     continue
                 time.sleep(0.5)
