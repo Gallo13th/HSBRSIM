@@ -71,6 +71,8 @@ class ClickBot:
     max_seconds: float = 0.0       # 0 = infinite
     auto_launch: bool = True
     safe_state: bool = True
+    action_shots: bool = True
+    _shot_seq: int = 0
     actions: int = 0
     errors: int = 0
     turn_actions: int = 0
@@ -159,7 +161,7 @@ class ClickBot:
         self._rec.write(json.dumps(kw, ensure_ascii=False) + "\n")
         self._rec.flush()
 
-    def screenshot(self, tag: str) -> Optional[str]:
+    def screenshot(self, tag: str, subdir: Optional[str] = None) -> Optional[str]:
         try:
             from PIL import ImageGrab
             self._focus()
@@ -167,12 +169,24 @@ class ClickBot:
             if w is None or not w.client_rect:
                 return None
             l, t, r, b = w.client_rect
-            path = self.out_dir / "screenshots" / (
-                f"{datetime.now().strftime('%H%M%S')}_{tag}.png")
+            base = self.out_dir / "screenshots"
+            if subdir:
+                base = base / subdir
+                base.mkdir(parents=True, exist_ok=True)
+            path = base / f"{datetime.now().strftime('%H%M%S')}_{tag}.png"
             ImageGrab.grab(bbox=(l, t, r, b)).save(path)
             return str(path)
         except Exception:
             return None
+
+    def _action_shot(self, kind: str, note: str) -> None:
+        if not self.action_shots:
+            return
+        self._shot_seq += 1
+        safe = "".join(c if c.isalnum() or c in "_.-" else "_"
+                       for c in note)[:50]
+        tag = f"a{self._shot_seq:04d}_{kind}_{safe}"
+        self.screenshot(tag, subdir="actions")
 
     def _focus(self) -> bool:
         try:
@@ -205,6 +219,7 @@ class ClickBot:
         self.backend.click(*self._pt(fx, fy))
         self.actions += 1
         self.log(kind="click", fx=fx, fy=fy, note=note)
+        self._action_shot("click", note)
 
     def drag(self, a: Tuple[float, float], b: Tuple[float, float],
              duration: float = 0.40, note: str = "") -> None:
@@ -215,6 +230,7 @@ class ClickBot:
         self.backend.drag([self._pt(*a), self._pt(*b)], duration=duration)
         self.actions += 1
         self.log(kind="drag", a=a, b=b, note=note)
+        self._action_shot("drag", note)
 
     def state(self) -> Dict[str, Any]:
         if self.safe_state:
@@ -787,12 +803,15 @@ def main() -> int:
     ap.add_argument("--auto-launch", action="store_true", default=True)
     ap.add_argument("--direct-state", action="store_true",
                     help="直接在进程内读内存（快但可能被 bgcontroller access violation 带崩）")
+    ap.add_argument("--no-action-shots", action="store_true",
+                    help="关闭每次操作的截图")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     bot = ClickBot(Path(args.out_dir), dry_run=args.dry_run,
                    max_actions_per_turn=args.max_actions_per_turn,
                    games=args.games, max_seconds=args.max_seconds,
-                   auto_launch=args.auto_launch, safe_state=not args.direct_state)
+                   auto_launch=args.auto_launch, safe_state=not args.direct_state,
+                   action_shots=not args.no_action_shots)
     res = bot.run()
     print(json.dumps(res, ensure_ascii=False))
     return 0
