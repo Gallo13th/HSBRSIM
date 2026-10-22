@@ -49,7 +49,31 @@ python scripts/eval_warband_value.py --data runs/warband_value/pairs_eval.npz --
 - 没有 tracked 文件包含 BattleTag / 账号 / 玩家名 / 本机用户名（已用 `git grep` 全仓扫描）；
 - 远程只同步了当前干净快照（orphan commit），未推送本地历史中的旧大文件；旧远端历史保存在分支 `archive-remote-2026-10-22`。
 
-## 4. 已知限制
+## 4. 数据重建（hsdata 不入库）
+
+官方 `hsdata/CardDefs.xml` 不再入库（约 82MB）；运行所需的 `data/bg_*.json` 已入库。
+需要升级/重建数据时按 [docs/DATA_REBUILD.md](docs/DATA_REBUILD.md)：
+
+```powershell
+# 1) 下载 HearthSim/hsdata tag 255130 的 CardDefs.xml 到 hsdata/
+# 2) 生成
+python tools/generate_bg_data.py --dry-run
+python tools/generate_bg_data.py
+# 3) 或走一键流水线
+python tools/version_sync.py --dry-run
+python tools/version_sync.py --apply --yes
+```
+
+## 5. 演示
+
+- 阵容级展示：`scripts/demo_warband_4search_vs_4bc.py`
+  - 4 个 PUCT/search 阵容 vs 4 个 BC checkpoint 阵容；
+  - 产物 `runs/demo_warband_4search_vs_4bc/{showcase.json,README.md}`；
+  - 结果：quarter 3:1 search 胜，final search-0 胜。
+- 全 8 座回合制对局脚本：`scripts/demo_4search_vs_4bc.py`（实验性；当前 env 是单智能体接口，
+  搜索座位接入仍需多策略 env 支持）。
+
+## 6. 已知限制
 
 - `hsdata/CardDefs.xml` 超过 GitHub 建议的 50MB（<100MB 限制，但建议后续切 Git LFS）；
 - `runs/` 下的模型 checkpoint / 数据集 / 评测结果不入库，需要按上面命令重新生成；

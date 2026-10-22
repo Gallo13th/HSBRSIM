@@ -38,3 +38,6 @@ tools/agent_plugin/obj/
 tools/_bepinex_x64/
 *.log
 
+
+# 官方原始 CardDefs 不入库，按 docs/DATA_REBUILD.md 重建
+hsdata/
