@@ -8,7 +8,9 @@
 | 文档 | 用途 |
 |---|---|
 | [docs/LIVE_AUTOMATION_PROTOCOL.md](docs/LIVE_AUTOMATION_PROTOCOL.md) | 实时对局自动化（改 `hsbg/live/**` 必读） |
-| [docs/LIVE_COLLAB_SECTION.md](docs/LIVE_COLLAB_SECTION.md) | Live 协作章节片段（待 Lead 合并进 `LIVE_AUTOMATION_PROTOCOL.md` §10） |
+| [docs/LIVE_COLLAB_SECTION.md](docs/LIVE_COLLAB_SECTION.md) | Live 协作章节（已合并进 `LIVE_AUTOMATION_PROTOCOL.md` §10，保留为历史片段） |
+| [docs/POLICY_OBS_V3.md](docs/POLICY_OBS_V3.md) | obs v3/MOVE_MINION/旧 checkpoint 迁移（改 policy/训练必读） |
+| [docs/8H_FINAL_REPORT.md](docs/8H_FINAL_REPORT.md) | 8h 自主工作最终报告（2026-10-23 07:00） |
 | [docs/AUDIT_PROTOCOL.md](docs/AUDIT_PROTOCOL.md) | 审计协议：输入/证据等级 E0–E4/gap schema/复现命令/回归门槛/8h 节奏 |
 | [docs/MULTI_AGENT_RULES.md](docs/MULTI_AGENT_RULES.md) | 多智能体协作：写范围/任务板 claim/消息格式/handoff/超时/冲突/Lead 职责 |
 | [docs/AUDIT_CONSISTENCY.md](docs/AUDIT_CONSISTENCY.md) | 三篇审计的口径/冲突/重复/编号映射登记 |
