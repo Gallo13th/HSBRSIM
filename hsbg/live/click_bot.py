@@ -38,6 +38,9 @@ HERO_CONFIRM = (0.50, 0.71)
 CHOICE_Y = 0.45
 CHOICE_SPACING = 0.14
 CHOICE_CONFIRM = (0.50, 0.70)
+BOB_PORTRAIT = (0.50, 0.14)       # 拖随从到这里卖出
+UPGRADE_BTN = (0.3875, 0.733)     # 酒馆升级按钮
+REFRESH_BTN = (0.594, 0.733)      # 刷新按钮
 SHOP_Y = 0.34
 SHOP_SPACING = 0.077
 BOARD_Y = 0.52
@@ -59,7 +62,7 @@ def _center(n: int, spacing: float, y: float, cx: float = 0.5) -> List[Tuple[flo
 class ClickBot:
     out_dir: Path
     dry_run: bool = False
-    max_actions_per_turn: int = 15
+    max_actions_per_turn: int = 30
     games: int = 0                 # 0 = infinite
     max_seconds: float = 0.0       # 0 = infinite
     auto_launch: bool = True
@@ -75,6 +78,8 @@ class ClickBot:
     _unavailable: int = 0
     _last_lobby_click: float = 0.0
     _overlay_turn: int = -1
+    _settled_turn: int = -1
+    _upgrade_turn: int = -1
 
     def __post_init__(self):
         self.out_dir = Path(self.out_dir)
@@ -229,19 +234,17 @@ class ClickBot:
     # ------------------------------------------------------------ actions
     def do_choice(self, st: Dict[str, Any]) -> bool:
         choices = st.get("choices") or []
-        if not choices:
+        if not choices or "choice" in self.failed:
             return False
         pts = _center(len(choices), 0.20 if len(choices) <= 3 else 0.14, CHOICE_Y)
         for idx, pt in enumerate(pts):
             before = self._sig(st)
             self.click(*pt, note=f"choice[{idx}]:{choices[idx].get('card')}")
-            time.sleep(0.35)
+            time.sleep(0.45)
             now = self.state()
-            if self._sig(now) != before and not (now.get("choices") or []):
+            if not (now.get("choices") or []):
                 return True
-            self.click(*CHOICE_CONFIRM, note="choice_confirm")
-            time.sleep(0.30)
-            if not ((self.state().get("choices")) or []):
+            if self._sig(now) != before:
                 return True
         self._fail("choice", st, "choices 未消失")
         return False
@@ -266,6 +269,59 @@ class ClickBot:
 
     def _hand_pts(self, n: int):
         return _center(n, HAND_SPACING, HAND_Y, HAND_CENTER)
+
+    def sell_board(self, st: Dict[str, Any]) -> bool:
+        """棋盘满且有手牌时，卖最弱随从腾格子（拖到 Bob 头像）。"""
+        board = st.get("board") or []
+        hand = st.get("hand") or []
+        if not board or not hand or len(board) < 7:
+            return False
+        pts = _center(len(board), BOARD_SPACING, BOARD_Y)
+        idx = min(range(len(board)),
+                  key=lambda i: int(board[i].get("atk") or 0) + int(board[i].get("hp") or 0))
+        key = f"sell:{board[idx].get('eid')}:{board[idx].get('card')}"
+        if key in self.failed:
+            return False
+        before = self._sig(st)
+        self.drag(pts[idx], BOB_PORTRAIT, duration=0.45,
+                  note=f"sell:{board[idx].get('card')}")
+        if self._changed(before):
+            self.turn_actions += 1
+            return True
+        self._fail(key, st, "卖出后状态未变化")
+        return False
+
+    def upgrade_tavern(self, st: Dict[str, Any]) -> bool:
+        """尝试升级；0 费升级/legal.upgrade 缺失时也点一次验证。"""
+        legal = bool((st.get("legal") or {}).get("upgrade"))
+        if not legal and int(st.get("gold") or 0) > 0:
+            return False
+        tier_before = st.get("tier")
+        before = self._sig(st)
+        self.click(*UPGRADE_BTN, note="upgrade")
+        time.sleep(0.6)
+        now = self.state()
+        if now.get("tier") != tier_before:
+            self.turn_actions += 1
+            return True
+        if self._sig(now) != before and int(now.get("gold") or 0) < int(st.get("gold") or 0):
+            self.turn_actions += 1
+            return True
+        return False
+
+    def settle_screenshot(self, st: Dict[str, Any], turn: int) -> None:
+        """每回合操作做完后截图 + 落盘状态，供异步复盘。"""
+        if turn <= 0 or self._settled_turn == turn:
+            return
+        self._settled_turn = turn
+        shot = self.screenshot(f"turn{turn:02d}_settled")
+        path = self.out_dir / "settled" / f"turn_{turn:02d}.json"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps({"state": st, "screenshot": shot},
+                                   ensure_ascii=False, indent=1), encoding="utf-8")
+        self.log(kind="turn_settled", turn=turn, screenshot=shot,
+                 gold=st.get("gold"), board=[m.get("card") for m in (st.get("board") or [])],
+                 hand=[m.get("card") for m in (st.get("hand") or [])])
 
     def buy_shop(self, st: Dict[str, Any]) -> bool:
         shop = st.get("shop") or []
@@ -407,6 +463,7 @@ class ClickBot:
                     continue
                 if phase == "recruit":
                     if self.turn_actions >= self.max_actions_per_turn:
+                        self.settle_screenshot(st, turn)
                         time.sleep(0.5)
                         continue
                     if self.buy_shop(st):
@@ -415,10 +472,19 @@ class ClickBot:
                     if self.play_hand(st):
                         self.fail_streak = 0
                         continue
+                    if self.sell_board(st):
+                        self.fail_streak = 0
+                        continue
+                    if self._upgrade_turn != turn and self.upgrade_tavern(st):
+                        self._upgrade_turn = turn
+                        self.fail_streak = 0
+                        continue
                     self.fail_streak += 1
                     if self.fail_streak >= 2 and self._overlay_turn != turn:
                         self._overlay_turn = turn
                         self._click_overlay(st)
+                    if self.fail_streak >= 3:
+                        self.settle_screenshot(st, turn)
                     time.sleep(min(2.0, 0.4 + 0.3 * self.fail_streak))
                     continue
                 time.sleep(0.5)
@@ -443,7 +509,7 @@ def main() -> int:
     ap.add_argument("--out-dir", default="runs/live/clickbot_auto")
     ap.add_argument("--games", type=int, default=0, help="0=无限")
     ap.add_argument("--max-seconds", type=float, default=0)
-    ap.add_argument("--max-actions-per-turn", type=int, default=15)
+    ap.add_argument("--max-actions-per-turn", type=int, default=30)
     ap.add_argument("--auto-launch", action="store_true", default=True)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
