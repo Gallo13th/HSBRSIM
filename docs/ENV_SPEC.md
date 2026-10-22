@@ -13,6 +13,15 @@
 >   智能体选择**不再静默**：`info["agent_choice_autoresolved"]` /
 >   `info["auto_resolved_choices"]` / `stats` 计数 / `_errors` 日志三重标记。
 >   全部为**向后兼容的新增**（既有字段/语义不变）。
+> - **v3.1**（2026-10-23，P1）：choose 路径统一走引擎原子入口
+>   `Game.take_choice(index, owner=)`（owner/队列原子，不再手写 pop+choose）；
+>   选择结算回调抛错（`resolution_error`/failed 终态）不再被当成普通非法动作
+>   丢弃：`ApplyResult.failed/choice_kind/choice_index/resolution_error`、
+>   `info["choice_failed"]`/`info["resolution_error"]`/
+>   `info["choice_resolution_errors"]`/`info["choice_failures"]` 与
+>   `stats["choice_resolution_errors"]`/`agent_choice_autoresolved_failed`
+>   全链路留痕，并刷新观测（不返回仍显示已消费选择的旧 obs）。
+>   同时给出「EoT/淘汰/对手期能否暂停」探测结论（见 §3）。
 
 ---
 
@@ -145,18 +154,55 @@ races, keywords, golden, entity_id, name`。
 - 观测无需新字段：`board` 元组顺序即槽位，`extra["board_states"][].zone_position`
   同步反映新顺序。
 
-**不可暂停阶段的选择（v3 可见性）**：`end_recruit_phase` 内（EoT/战斗/淘汰/
-对手招募/终局清理）产生的智能体 `PendingChoice` 仍按既有契约自动结算（引擎
-同步阶段不能暂停）；但 v3 起**不再静默**：
+**选择结算契约（v3.1，P1）**：所有 choose 路径统一调用引擎原子入口
+`Game.take_choice(index, owner=)`（`Game` 侧契约：owner 不符/空队列**不 pop**；
+pop 后结算抛错 → 选择标记 `failed + resolution_error`，终态不可重试）。
+
+- 交互式 choose（`env.step`）：越界/owner 不符在 take_choice 前被拦截（队列
+  不消费）→ `info["invalid"]=True`、`action_error_type=GameStateError`；
+  结算回调抛错 → `ApplyResult.failed=True`，env 返回
+  `info["invalid"]=True` + `info["choice_failed"]=True` +
+  `info["resolution_error"]={kind,index,error_type,error,resolution_error}`，
+  并**刷新观测**（失败选择已消费；若还有嵌套/后续选择则继续暴露为
+  `phase="choice"`），对局可继续（不会卡死）。
+  > 注意：该分支虽仍按"非法动作"给惩罚/计数，但选择已被引擎消费（failed
+  > 终态），所以状态**已推进**且观测必须刷新——与"普通非法动作不推进状态"
+  > 语义不同（`failed`/`resolution_error` 是区分标志）。
+- 自动结算（对手招募/EoT/淘汰/终局清理/`auto_choice=True`）：失败记录进
+  `info["choice_resolution_errors"]`、`info["choice_failures"]`、
+  `stats["choice_resolution_errors"]`、`agent_choice_autoresolved_failed`
+  与 `env._errors`（`choice_failed:<where>:...`）。
+
+**不可暂停阶段的选择（v3 可见性 + v3.1 探测结论）**：`end_recruit_phase` 内
+（EoT/战斗/淘汰）产生的智能体 `PendingChoice` 仍按既有契约自动结算；v3 起
+**不再静默**：
 
 - `info["agent_choice_autoresolved"]`：本局累计自动结算的智能体选择数；
-- `info["auto_resolved_choices"]`：最近明细（≤64 条，纯数据）；
+- `info["auto_resolved_choices"]`：最近明细（≤64 条，纯数据；结算失败的
+  记录带 `failed/error_type/error`）；
 - `stats["agent_choice_autoresolved"]` + 按场景细分
   `agent_choice_autoresolved_{end_recruit_phase,opponent_phase,game_over,
   auto_choice_config}`（`obs.extra["env_stats"]` 可见）；
 - `env._errors` 追加 `auto_choice:<where>:kind=...:picked=i/n:turn=T`（有界）；
 - **新回合开始后**产生的智能体选择（任务/饰品三选一）仍会保留为
   `phase="choice"` 决策步（ChoiceQueue `hold_fn` 契约不变）。
+
+**可暂停性探测（2026-10-23）**——结论与依据（回归：
+`tests/test_env_choice_contract.py::test_probe_*`）：
+
+1. **EoT / 淘汰 / 战斗：不可暂停。** `Game.end_recruit_phase` 是普通同步方法
+   （非 generator/coroutine，无 `resume/continue` 入口，源码无 `yield/await`）。
+   选择是在该方法调用栈内部由 `ChoiceQueue.append` 就地结算的；若在 append
+   中抛异常"挂起"，会中止 `end_recruit_phase` 的后续步骤（战斗/淘汰/下一回合
+   开始不完整），引擎没有续跑状态可恢复 → 只能当场结算 + 留痕。
+2. **对手招募期：技术上可行但当前不实现（设计债，P2）。** 该阶段由 env 自己的
+   `_drive_opponents` 循环驱动，可以保留智能体选择并中断；但 `_end_turn_step`
+   目前是单 step 完成「驱动对手 → end_recruit_phase」的原子流程，要暂停必须
+   改成**跨 step 的 end_turn 续跑状态机**（step 语义/奖励/终止契约扩展），且会
+   改变"选择创建时刻 vs 结算时刻"的时序（可能影响后续对手动作与战斗）。
+   当前统一 auto-resolve 并记入 `where="opponent_phase"` 的诊断。
+3. **战斗期选择：按 live 语义自动结算**（战斗中玩家无决策），仍留痕。
+4. 新回合开始后的（任务/饰品）选择可 hold → 作为 `phase="choice"` 决策步。
 
 **非法动作**：环境中永远不应出现非法候选；若调用方传入非候选动作，
 环境返回不推进状态、`reward=invalid_action`、`info["invalid"]=True`。
@@ -245,7 +291,10 @@ episode_steps / alive_count`。
 - `info` 必须含：`turn, rank, health, alive_count, combat, wrong_action,
   terminated_reason, seed, episode_steps`；v3 起另含
   `agent_choice_autoresolved` / `auto_resolved_choices`（不可暂停阶段自动
-  结算的智能体选择，见 §3）。
+  结算的智能体选择）；v3.1 起另含 `choice_resolution_errors` /
+  `agent_choice_autoresolved_failed` / `choice_failures`（累计）与
+  `choice_failed` / `resolution_error`（本步 choose 结算失败时）——见 §3。
+- `obs.extra["env_stats"]` 同步包含上述 stats 计数（与 info 同源）。
 
 ## 6. 对手与教师
 

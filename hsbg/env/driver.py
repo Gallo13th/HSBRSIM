@@ -210,12 +210,34 @@ class ActionDescriptor:
 
 @dataclass
 class ApplyResult:
-    """动作应用结果（成功/失败原因，绝不抛异常）。"""
+    """动作应用结果（成功/失败原因，绝不抛异常）。
+
+    P1（take_choice 接入）新增 ``failed``/``choice_*``/``resolution_error``：
+    当 ``choose`` 的结算回调抛错时，引擎 ``Game.take_choice`` 已把该选择
+    消费并标记 ``failed``（终态、不可重试）；环境据此把失败状态上报到
+    info/stats/_errors，而不是简单当作普通非法动作丢弃。
+    """
 
     success: bool
     kind: str = ""
     error: str = ""
     error_type: str = ""
+    #: 是否为「选择已消费但结算失败」（区别于"动作非法/未生效"）
+    failed: bool = False
+    #: 失败选择的信息（仅 failed=True 时有意义）
+    choice_kind: str = ""
+    choice_index: int = -1
+    resolution_error: str = ""
+
+
+class _ChoiceFailed(Exception):
+    """内部信号：``take_choice`` 已消费选择，但结算回调抛错（failed 终态）。"""
+
+    def __init__(self, cause: BaseException, choice: Any, index: int):
+        super().__init__(f"{type(cause).__name__}: {cause}")
+        self.cause = cause
+        self.choice = choice
+        self.index = int(index)
 
 
 @dataclass
@@ -1012,16 +1034,33 @@ def _apply_move_minion(game: Game, hero: Hero,
 
 
 def _apply_choose(game: Game, hero: Hero, desc: ActionDescriptor) -> bool:
+    """结算智能体的队首 PendingChoice（G-P1 原子入口 ``Game.take_choice``）。
+
+    契约（docs/ENGINE_API.md §5.2）：
+      - 先做**不消费**的前置校验（队列非空 / owner 是智能体 / option 越界），
+        失败抛 ``GameStateError`` 且队列不变；
+      - 通过后调用 ``game.take_choice(option, owner=hero)`` 原子 pop+choose；
+      - 结算回调抛错 → 引擎已消费并标记 ``failed``（终态不可重试），
+        转成 ``_ChoiceFailed`` 让 ``apply_action`` 携带 ``failed`` 状态上报。
+    """
     if not game.pending_choices:
         raise GameStateError("choose: no pending choice")
     choice = game.pending_choices[0]
     if getattr(choice, "owner", None) is not hero:
         raise GameStateError("choose: front pending choice is not mine")
     if not 0 <= desc.option < len(choice.options):
+        # 越界不消费选择（take_choice 会先 pop 后进入 choose 的越界检查）
         raise GameStateError(f"choose: option {desc.option} out of range")
-    # 契约: choose 只结算不出队 → 由本函数 pop（ENV_SPEC / AGENTS §3）
-    game.pending_choices.pop(0)
-    choice.choose(desc.option)
+    try:
+        game.take_choice(int(desc.option), owner=hero)
+    except GameStateError:
+        if bool(getattr(choice, "failed", False)):
+            cause = getattr(choice, "resolution_error", None) or \
+                GameStateError("choice resolution failed")
+            raise _ChoiceFailed(cause, choice, desc.option) from cause
+        raise
+    except Exception as exc:                              # noqa: BLE001
+        raise _ChoiceFailed(exc, choice, desc.option) from exc
     return True
 
 
@@ -1088,6 +1127,15 @@ def apply_action(game: Game, hero: Hero,
     except GameStateError as exc:
         return ApplyResult(success=False, kind=kind, error=str(exc),
                            error_type="GameStateError")
+    except _ChoiceFailed as exc:
+        # 选择已被 take_choice 消费并标记 failed（终态）；状态半更新，
+        # 环境层必须记录 resolution_error 并刷新观测（见 game_env.step）。
+        return ApplyResult(
+            success=False, kind=kind, error=str(exc),
+            error_type=type(exc.cause).__name__, failed=True,
+            choice_kind=str(getattr(exc.choice, "kind", "")),
+            choice_index=int(exc.index),
+            resolution_error=f"{type(exc.cause).__name__}: {exc.cause}")
     except Exception as exc:                              # noqa: BLE001
         # 环境层必须吞掉一切异常：训练进程不得因单次动作崩溃。
         return ApplyResult(success=False, kind=kind,
@@ -1163,8 +1211,10 @@ def resolve_pending_choices(
         policy_fn: Optional[Any] = None,
         *,
         cap: int = 400,
-        errors: Optional[List[str]] = None) -> Optional[PendingChoice]:
-    """结算 ``game.pending_choices``（FIFO: 弹出 → choose → 已弹出）。
+        errors: Optional[List[str]] = None,
+        failed: Optional[List[Dict[str, Any]]] = None,
+        agent: Optional[Any] = None) -> Optional[PendingChoice]:
+    """结算 ``game.pending_choices``（FIFO：``Game.take_choice`` 原子 pop+choose）。
 
     参数
     ----
@@ -1179,6 +1229,13 @@ def resolve_pending_choices(
         可选回调，签名 ``(choice) -> int``。
     errors:
         可选列表；被捕获的结算异常消息追加于此（环境层计数用）。
+    failed:
+        可选列表；每次**选择已被消费但结算抛错**时追加结构化记录
+        ``{kind, owner_is_agent, index, error_type, error, failed}``
+        （P1：env 据此把 resolution_error/failed 上报 info/stats/_errors）。
+    agent:
+        可选：仅用于失败诊断时判定 ``owner_is_agent``（``hero=None`` 的全量
+        自动结算路径也据此区分智能体/对手的选择，不影响结算策略）。
 
     返回：仍待该英雄决策的队首选择（没有则 ``None``）。
     """
@@ -1189,19 +1246,35 @@ def resolve_pending_choices(
         is_agent = hero is not None and owner is hero
         if is_agent and policy_fn is None:
             return choice
-        game.pending_choices.pop(0)
-        n += 1
         try:
             if is_agent and policy_fn is not None:
                 idx = int(policy_fn(choice))
             else:
-                idx = default_pick_index(choice, game)
-            if not 0 <= idx < len(choice.options):
-                idx = 0
-            choice.choose(idx)
+                idx = int(default_pick_index(choice, game))
+        except Exception:                                 # noqa: BLE001
+            idx = 0
+        if not 0 <= idx < len(choice.options):
+            idx = 0
+        try:
+            # G-P1 原子入口：owner 校验 + pop + choose 一体化
+            game.take_choice(idx, owner=owner)
         except Exception as exc:                          # noqa: BLE001
+            rec = {
+                "kind": str(getattr(choice, "kind", "")),
+                "owner_is_agent": bool(agent is not None and owner is agent),
+                "index": int(idx),
+                "turn": int(getattr(game, "turn", 0)),
+                "n_options": len(choice.options),
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                "failed": bool(getattr(choice, "failed", False)),
+            }
             if errors is not None:
-                errors.append(f"{type(exc).__name__}: {exc}")
+                errors.append(
+                    f"{rec['kind']}:{rec['error_type']}: {rec['error']}")
+            if failed is not None:
+                failed.append(rec)
+        n += 1
     return None
 
 
@@ -1224,7 +1297,8 @@ class ChoiceQueue(list):
     def __init__(self, game: Game, *, picker: Any = None,
                  hold_fn: Any = None, cap: int = 2000,
                  errors: Optional[List[str]] = None,
-                 agent: Any = None):
+                 agent: Any = None,
+                 failed: Optional[List[Dict[str, Any]]] = None):
         super().__init__()
         self._game = game
         self._picker = picker or (lambda c: default_pick_index(c, game))
@@ -1232,10 +1306,12 @@ class ChoiceQueue(list):
         self._cap = cap
         self._errors = errors if errors is not None else []
         self._agent = agent
+        self._failed = failed if failed is not None else []
         self._busy = False
         self.drained = 0
         #: 本阶段被**自动结算**的智能体选择（v3：不可暂停阶段的可见标记，
         #: 环境层据此累计 ``agent_choice_autoresolved`` / info 日志，禁止静默）。
+        #: P1: 结算失败的记录带 ``failed/error_type/error``。
         self.auto_resolved_agent_choices: List[Dict[str, Any]] = []
 
     # list 的 append 是引擎唯一写入点；这里「入队即结算」
@@ -1254,25 +1330,55 @@ class ChoiceQueue(list):
             head = self[0]
             if self._hold_fn is not None and self._hold_fn(head):
                 return
-            self.pop(0)
-            self.drained += 1
             is_agent_choice = (self._agent is not None
                                and getattr(head, "owner", None) is self._agent)
+            kind = str(getattr(head, "kind", ""))
             try:
                 idx = int(self._picker(head))
-                if not 0 <= idx < len(head.options):
-                    idx = 0
-                if is_agent_choice:
-                    # v3: 记录"不可暂停阶段被自动结算的智能体选择"（不静默）。
-                    self.auto_resolved_agent_choices.append({
-                        "kind": str(getattr(head, "kind", "")),
-                        "turn": int(getattr(self._game, "turn", 0)),
-                        "n_options": len(head.options),
-                        "picked": int(idx),
-                    })
-                head.choose(idx)
+            except Exception:                             # noqa: BLE001
+                idx = 0
+            if not 0 <= idx < len(head.options):
+                idx = 0
+            try:
+                # G-P1 原子入口：owner 校验 + pop + choose 一体化
+                self._game.take_choice(idx, owner=getattr(head, "owner", None))
             except Exception as exc:                      # noqa: BLE001
-                self._errors.append(f"{type(exc).__name__}: {exc}")
+                consumed = (len(self) == 0 or self[0] is not head)
+                if consumed:
+                    self.drained += 1
+                rec = {
+                    "kind": kind,
+                    "turn": int(getattr(self._game, "turn", 0)),
+                    "n_options": len(head.options),
+                    "picked": int(idx),
+                    "owner_is_agent": bool(is_agent_choice),
+                    "failed": bool(getattr(head, "failed", False)),
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                }
+                self._failed.append(rec)
+                self._errors.append(f"{kind}:{type(exc).__name__}: {exc}")
+                if is_agent_choice:
+                    self.auto_resolved_agent_choices.append(rec)
+                if not consumed:
+                    # 未消费（理论上仅 owner 不符，队首仍是它）→ 停止，
+                    # 避免死循环；记录显式错误。
+                    self._errors.append(
+                        f"{kind}:take_choice did not consume front choice; "
+                        f"abort drain")
+                    return
+                continue
+            self.drained += 1
+            if is_agent_choice:
+                # v3: 记录"不可暂停阶段被自动结算的智能体选择"（不静默）。
+                self.auto_resolved_agent_choices.append({
+                    "kind": kind,
+                    "turn": int(getattr(self._game, "turn", 0)),
+                    "n_options": len(head.options),
+                    "picked": int(idx),
+                    "owner_is_agent": True,
+                    "failed": False,
+                })
 
 
 # 兼容别名：测试/工具里按枚举语义命名
