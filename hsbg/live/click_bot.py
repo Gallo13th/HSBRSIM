@@ -42,6 +42,7 @@ BOB_PORTRAIT = (0.50, 0.14)       # 拖随从到这里卖出
 UPGRADE_BTN = (0.394, 0.145)      # 酒馆升级按钮（顶部左侧）
 REFRESH_BTN = (0.60, 0.18)        # 刷新按钮（顶部右侧）
 REFRESH_POINTS = [(0.60, 0.18)]
+START_COMBAT = (0.81, 0.46)      # 战斗前“开始战斗”按钮
 SHOP_Y = 0.34
 SHOP_SPACING = 0.087
 SHOP_CENTER = 0.555
@@ -342,9 +343,12 @@ class ClickBot:
         return False
 
     def do_hero(self, st: Dict[str, Any]) -> bool:
-        # 已选完/只剩等待其他玩家时不再重复点
+        # 已选完/只剩等待其他玩家时：屏幕可能已进入“开始战斗”确认页
         if len(st.get("choices") or []) < 4:
-            return False
+            before = self._sig(st)
+            self.click(*START_COMBAT, note="start_combat")
+            time.sleep(0.6)
+            return self._sig(self.state()) != before
         # 可能弹出“英雄栏位锁定”确认框，先点取消
         self.click(0.56, 0.58, note="hero_locked_cancel")
         time.sleep(0.25)
@@ -565,7 +569,15 @@ class ClickBot:
                     else:
                         dest = (0.50, 0.52)
                     # 目标法术：先点手牌选中，再点目标随从
-                    self.click(hand_pts[idx], note=f"select:{m.get('card')}")
+                    # 目标法术优先拖拽到目标（更接近正常操作）
+                    self.drag(hand_pts[idx], dest, duration=0.50,
+                              note=f"dragcast:{m.get('card')}->{zone}[{ti}]")
+                    time.sleep(0.45)
+                    if self._sig(self.state()) != before:
+                        self.turn_actions += 1
+                        return True
+                    # 拖拽失败再尝试点选手牌 + 点目标
+                    self.click(*hand_pts[idx], note=f"select:{m.get('card')}")
                     time.sleep(0.30)
                     # 先点目标，失败再依次尝试其它随从位置（坐标校准误差兜底）
                     cand_pts = [dest]
