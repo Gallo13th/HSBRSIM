@@ -859,3 +859,14 @@ python -m pytest hsrl2/tests -q   # 本轮未执行（任务要求只读审计�
 `docs/reference_old/` 为历史权威参考（引擎行为以 `hsrl2` 实测为准）；
 部分 AMBIGUOUS 项（Dark Gift 权重/窗口并列规则、靶向目标域、多目标选择顺序）
 沿用脚本既有裁定，本审计未重新裁决。
+
+---
+
+## 8. 8h 实施状态（2026-10-23 00:10）
+
+- **G-R1 已修**：`_gate_trinket_picks` 在 offer 采样后按 REGISTRY 确定性替换无脚本项（`hsrl2/game.py`）；测试 `test_engine_choose_target.py`。
+- **G-C1 已修**：play_minion/play_spell 两阶段（choose→target→结算）；实卡 Sprightly/Foodie 测试通过。
+- **G-C3 已修**：play_spell 读取法术实体 `CHOOSE_BOTH` tag。
+- **G-C5 已修**：`hsrl2/scripts/choose_one_authority.py` 统一判定；audit choose_one 36 卡/36 脚本 missing=[]。
+- **G-H1 部分**：6 个主技能落地（Drest'agath/Kith'ix/Loh/Guff/Genn/Denathrius）；11 个保持未注册，blocker 见 `docs/ENGINE_SUBSYSTEM_GAPS.md`。
+- 最终门禁（card builder 收尾后）：hsrl2/tests 4800 passed/6 skipped；tests 622 passed/2 skipped；verify_all --fast 4/4；smoke 8 局 crashes=0。

@@ -15,6 +15,14 @@
 - 2026-10-22 23:35：C05 裁决：三连奖励/发现确认 live 侧维持 **P0**（真实对局必须处理，
   否则奖励卡丢失）；C06 裁决：法术实体 `CHOOSE_BOTH` 引擎侧维持 **P1**，
   live Choose One 协议仍 P0。新增 L26 = EoT/淘汰/对手期选择 auto-pick P0。
+- 2026-10-23 00:10：8h 实施状态：
+  - L20 move/reorder **fixed**（env `MOVE_MINION` + 测试，commit b4a12db）；
+  - L17 Dark Gift gift_id **fixed 观测**（`extra.pending_choice_options`）；
+  - L22 饰品 offer 过滤 **fixed**（engine `_gate_trinket_picks`）；
+  - L23 Choose One 组合/双效 **fixed**（engine 两阶段 + 36/36 脚本）；
+  - L15 Choose One 覆盖 **fixed**（36 卡/36 脚本，authority 判定）；
+  - L21 英雄技能 **partial**（6 新技能落地，11 DEFERRED 见 ENGINE_SUBSYSTEM_GAPS）；
+  - L24 PendingChoice **partial**（EoT auto-resolve 仅留痕，未可决策）。
 
 ## 1. 最近一轮观测摘要
 
@@ -156,3 +164,24 @@
 ---
 
 相关：[LIVE_AUTOMATION_PROTOCOL.md](LIVE_AUTOMATION_PROTOCOL.md)
+
+## 7. 8h 实施状态（2026-10-23 00:30）
+
+| ID | 状态 | 证据 |
+|---|---|---|
+| L01 冻结 | **verified**（live） | `runs/live/recon/act_01_freeze.png`；run5 exercised freeze |
+| L02 英雄技能 | **verified**（live） | `runs/live/recon/act_02/03`；run5 exercised hero_power |
+| L03 主动结束回合 | **partial** | 单人局无按钮 → `end_turn:auto_timer`，不谎报 |
+| L04 三连/发现确认 | partial | live choice 已处理；三连样本仍少 |
+| L05/L20 换位 | **fixed**（env） | `ActionKind.MOVE_MINION` + 17 tests（b4a12db） |
+| L06 目标法术 | partial | 三段式实现 + run4 截图；run5 无样本 |
+| L08/L16 英雄选择 | **fixed/verified** | 点解锁卡→确认 (0.500,0.789)，run3/run5 实机 |
+| L15 Choose One | **fixed** | choose_one 36 卡/36 脚本 missing=[]（ed765c3） |
+| L17 Dark Gift live | **verified** | run3 `use_dark_gift=1`；env gift_id 可观测 |
+| L18 英雄技能 live | **verified** | run3/run5 |
+| L19 Activate live | **code ready, no live sample** | 单测；5 局未随机到 Activate 随从 |
+| L21 英雄技能脚本 | **partial** | 6 实装 / 11 DEFERRED（ENGINE_SUBSYSTEM_GAPS） |
+| L22 饰品 offer | **fixed** | `_gate_trinket_picks` + 测试 |
+| L23 Choose One 组合/双效 | **fixed** | 引擎两阶段 + Sprightly/Foodie/880 测试 |
+| L24 PendingChoice | partial | EoT 留痕；幂等/回滚 P1 进行中 |
+| L26 EoT auto-pick | partial | info/stats/errors 留痕，未可决策 |

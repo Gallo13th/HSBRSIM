@@ -555,3 +555,13 @@ move 动作**（`ActionKind.MOVE_MINION`）。优先级按 `docs/AUDIT_CONSISTEN
   cross-scope 红（`tests/test_rollout.py::test_rollout_fast_opponents`，由并行 card-script
   改动 `batch_rally2.CHOOSE_ONE_MINION_IDS` 重命名导致，已按门禁纪律上报 Lead 不越 scope 修）。
   本文其余「建议」仍是后续 P1/P2 backlog，不代表已实现。
+
+---
+
+## 8. 8h 实施状态（2026-10-23 00:10）
+
+- **P0-1 换位/重排 已修**：`ActionKind.MOVE_MINION` + driver 相邻交换枚举/任意槽 apply + 17 测试（commit b4a12db）；Observation.version 3。
+- **P0-2 Dark Gift gift_id 已可观测**：choice 步 `extra["pending_choice_options"]` 含 `card_id/secondary_id/label/cost`，7 测试。
+- **P0-3 EoT 选择仅留痕**：`info["agent_choice_autoresolved"]`/stats/_errors，未改为可决策（P1-6）。
+- `pytest tests` 622 passed/2 skipped；engine 4800 passed/6 skipped；verify_all --fast 4/4。
+- 遗留：move 依赖引擎私有 `_update_positions`，建议补公开 `Game.move_minion`；policy encoder 未消费 pending_choice_options。
