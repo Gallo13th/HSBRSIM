@@ -192,6 +192,8 @@ class MultiSeatEnv(BattlegroundsEnv):
                                 break
                     if not retried:
                         break
+                if str(getattr(desc, "kind", "")) == "end_turn":
+                    break
                 self._drain_all_choices()
                 zones = driver.collect_zones(game, hero)
 
@@ -222,6 +224,7 @@ def main() -> int:
                          seed=args.seed + i) for i in range(4)]
     bc = [BCSeat(f"P{i}", args.bc_checkpoint) for i in range(4, 8)]
     env.set_seat_policies(search + bc)
+    all_heroes = list(env._all_heroes)
     agent = SearchAgent(search[0])
 
     snapshots: List[Dict[str, Any]] = []
@@ -245,14 +248,28 @@ def main() -> int:
                      "health": int(getattr(h, "health", 0) or 0),
                      "tier": int(getattr(h, "tavern_tier", 0) or 0),
                      "board": board_snapshot(h)}
-                    for i, h in enumerate(env._all_heroes)
+                    for i, h in enumerate(all_heroes)
                 ],
             })
 
-    last_seats = snapshots[-1]["seats"] if snapshots else []
-    final = [{"seat": s["seat"], "policy": s["policy"],
-              "alive": s["alive"], "health": s["health"],
-              "board": s["board"]} for s in last_seats]
+    last_by_seat: Dict[str, Dict[str, Any]] = {}
+    for snap in snapshots:
+        for s in snap["seats"]:
+            last_by_seat[s["seat"]] = s
+    alive_count = sum(1 for h in all_heroes if bool(getattr(h, "is_alive", False)))
+    final = []
+    for i, h in enumerate(all_heroes):
+        seat = f"P{i}"
+        last = last_by_seat.get(seat, {})
+        rank = int(env._rank_by_hero.get(id(h), 0) or 0)
+        if rank <= 0:
+            rank = alive_count if bool(getattr(h, "is_alive", False)) else last.get("rank", 0)
+        final.append({"seat": seat,
+                      "policy": "search" if i < 4 else "BC",
+                      "alive": bool(getattr(h, "is_alive", False)),
+                      "health": int(getattr(h, "health", 0) or 0),
+                      "rank": rank,
+                      "board": last.get("board", board_snapshot(h))})
     summary = {"seed": args.seed, "turns": int(getattr(env.game, "turn", 0)),
                "steps": steps, "wall_s": round(time.time() - t0, 1),
                "sims": args.sims, "width": args.width,
