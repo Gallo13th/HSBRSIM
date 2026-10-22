@@ -426,12 +426,14 @@ class TestTemperatureShift(unittest.TestCase):
 
 
 class TestAllianceFlag(unittest.TestCase):
-    """BG31_880 — Choose One: Give a minion +{0}/+{1}; or +{2}/+{3}."""
+    """BG31_880 — Choose One: Give a minion +{0}/+{1}; or +{2}/+{3}。"""
 
     def _play_targeted(self, game, hero, m):
         s = add_spell(game, hero, "BG31_880")
+        # 引擎两阶段协议（2026-10-22 G-C4 迁移）: 抉择 → 目标 → 施放；
+        # 显式 target 传入时抉择后直接结算（不产生目标窗）。
         self.assertTrue(game.play_spell(hero, s, target=m))
-        pc = game.pending_choices[-1]
+        pc = game.pending_choices.pop(0)
         self.assertEqual(pc.kind, "choose_one")
         return pc
 
@@ -455,12 +457,34 @@ class TestAllianceFlag(unittest.TestCase):
         self.assertEqual(m.atk, 1 + d.num(2))
         self.assertEqual(m.max_health, 1 + d.num(3))
 
+    def test_choose_then_target_two_phase(self):
+        """未显式 target: 抉择 → 目标两级 PendingChoice 流。"""
+        game = make_game(seed=73)
+        a = game.heroes[0]
+        d = get_db().get("BG31_880")
+        m = put(game, make_minion("T", 2, 2), a)
+        s = add_spell(game, a, "BG31_880")
+        self.assertTrue(game.play_spell(a, s))
+        pc = game.pending_choices.pop(0)
+        self.assertEqual(pc.kind, "choose_one")
+        pc.choose(0)                       # 抉择 "atk_first"
+        pc2 = game.pending_choices.pop(0)
+        self.assertEqual(pc2.kind, "spell_target")
+        pc2.choose(pc2.options.index(m))
+        self.assertEqual(m.atk, 2 + d.num(0))
+        self.assertEqual(m.max_health, 2 + d.num(1))
+
     def test_no_target_no_branch_choice(self):
         game = make_game(seed=72)
         a = game.heroes[0]
         s = add_spell(game, a, "BG31_880")
         self.assertTrue(game.play_spell(a, s))       # 空板 → 落空消耗
-        self.assertEqual(len(game.pending_choices), 0)
+        # 抉择窗仍产生（引擎先挂 choose_one）；选定后无目标候选 →
+        # 效果落空、无目标窗
+        pc = game.pending_choices.pop(0)
+        self.assertEqual(pc.kind, "choose_one")
+        pc.choose(0)
+        self.assertEqual(game.pending_choices, [])
 
 
 if __name__ == "__main__":

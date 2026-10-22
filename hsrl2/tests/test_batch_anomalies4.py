@@ -52,7 +52,9 @@ DEFERRED_IDS = (
     # BG35_Anomaly_002/_002t 迁出（batch_anomalies5 已实现）
     # BG35_Anomaly_007/_008 及其技能 _007t/_008t 迁出（batch_anomalies6
     # 已实现——副本条款 + 第二技能槽饰品表示，RULES §7.4.3/§9.5）
-    "BG27_Anomaly_822", "BG31_Anomaly_106", "BG35_HERO_001p",
+    # BG35_HERO_001p King of Duality 迁出（2026-10-22
+    #   batch_hero_powers_37x 已实现并注册）
+    "BG27_Anomaly_822", "BG31_Anomaly_106",
 )
 
 
@@ -279,28 +281,28 @@ class TestCosmicDuality(unittest.TestCase):
             self.assertNotIn(g.hero_power_def(c.owner).id, c.options)
 
     def test_pick_assigns_slot_and_second_power_is_usable(self):
-        # seed 9: A 的选项含 BG28_HERO_801p（Hollidae: "Get a random
-        # Tavern spell."）——用真实技能验证"可用 + 次数独立"
+        # 候选池 = 已注册技能全集（seed 只决定抽样内容）。D2 过滤后
+        # 不再依赖固定 seed 命中特定技能 → 动态挑一个**主动**技能
+        # （有 hero_power 钩子且非 passive）验证"可用 + 次数独立"。
         g = game_with("BG31_Anomaly_123", seed=SEED_HOLLIDAE)
         a, b = g.heroes
         c = take_choice(g, "discover_hero_power", owner=a)
-        # 候选池已过滤为已注册技能 → 任选一个**主动**技能即可验证"可用"
-        # （D2 修复后不再依赖固定 seed 命中特定技能）
         for pid in c.options:                       # D2: 全部已注册
             self.assertIsNotNone(REGISTRY.get(pid), pid)
-        HOLLIDAE_POWER = c.options[0]
-        c.choose(0)
-        self.assertEqual(a._second_power_id, HOLLIDAE_POWER)
+        pick = next(
+            pid for pid in c.options
+            if getattr(REGISTRY[pid], "hero_power", None) is not None
+            and not getattr(REGISTRY[pid], "passive", False))
+        c.choose(c.options.index(pick))
+        self.assertEqual(a._second_power_id, pick)
         self.assertEqual(g.hero_power_ids(a),
-                         [g.hero_power_def(a).id, HOLLIDAE_POWER])
-        # 主技能仍可用（第二槽不影响主技能次数）——选中技能自身的可用性
-        # 由引擎 TestHeroPowerSlots 与该技能所属批的测试覆盖
+                         [g.hero_power_def(a).id, pick])
+        # 主技能与第二槽技能次数独立: 各用一次都成功，各自用尽后拒绝
         a.gold = 50
-        self.assertTrue(g.use_hero_power(a))
-        # 使用第二技能**不**消耗主技能本回合次数（各自独立）
-        self.assertTrue(g.use_hero_power(a))
-        # 第二技能本回合已用尽
-        self.assertFalse(g.use_hero_power(a, power_id=HOLLIDAE_POWER))
+        main_id = g.hero_power_def(a).id
+        self.assertTrue(g.use_hero_power(a, power_id=main_id))
+        self.assertTrue(g.use_hero_power(a, power_id=pick))
+        self.assertFalse(g.use_hero_power(a, power_id=pick))
         # owner 隔离: B 未选择 → 无第二槽
         self.assertIsNone(b._second_power_id)
         self.assertEqual(len(g.hero_power_ids(b)), 1)

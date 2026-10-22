@@ -138,7 +138,11 @@ class TestTimeManagement(unittest.TestCase):
 
 
 class TestForestsBounty(unittest.TestCase):
-    """BG31_886 — Choose One 定向: 单体 ×2 或全体 +{2}/{3}。"""
+    """BG31_886 — Choose One 定向: 单体 ×2 或全体 +{2}/{3}。
+
+    2026-10-22 迁移引擎两阶段协议（G-C4）后顺序为**抉择 → 目标 → 施放**
+    （旧自建协议为 目标 → 抉择）。
+    """
 
     def test_single_branch_two_applications(self):
         game = make_game(seed=1)
@@ -147,14 +151,14 @@ class TestForestsBounty(unittest.TestCase):
         other = summon_plain(game, a, make_minion("O", 7, 8))
         d = get_db().get("BG31_886")
         self.assertTrue(cast(game, a, "BG31_886"))
-        # 第一级: spell_target
-        pc = pop_choice(game, "spell_target")
-        self.assertIn(tgt, pc.options)
-        pc.choose(pc.options.index(tgt))
-        # 第二级: choose_one
+        # 第一级: choose_one
         pc = pop_choice(game, "choose_one")
         self.assertEqual(pc.options, ["single", "all"])
         pc.choose(0)
+        # 第二级: spell_target
+        pc = pop_choice(game, "spell_target")
+        self.assertIn(tgt, pc.options)
+        pc.choose(pc.options.index(tgt))
         self.assertEqual(tgt.atk, 2 + 2 * d.num(0))
         self.assertEqual(tgt.max_health, 3 + 2 * d.num(1))
         self.assertEqual(other.atk, 7)
@@ -167,8 +171,8 @@ class TestForestsBounty(unittest.TestCase):
         m2 = summon_plain(game, a, make_minion("M2", 4, 5))
         d = get_db().get("BG31_886")
         self.assertTrue(cast(game, a, "BG31_886"))
-        pop_choice(game, "spell_target").choose(0)
-        pop_choice(game, "choose_one").choose(1)
+        pop_choice(game, "choose_one").choose(1)     # "all"
+        pop_choice(game, "spell_target").choose(0)   # target 于 all 分支无意义
         self.assertEqual(m1.atk, 2 + d.num(2))
         self.assertEqual(m1.max_health, 3 + d.num(3))
         self.assertEqual(m2.atk, 4 + d.num(2))
@@ -178,7 +182,7 @@ class TestForestsBounty(unittest.TestCase):
         game = make_game(seed=3)
         a = game.heroes[0]
         self.assertTrue(cast(game, a, "BG31_886"))
-        # 无目标候选 → 不产生 spell_target 选择，直接 choose_one
+        # 抉择窗仍产生；无目标候选 → 选定后直接落空、无目标窗
         pc = pop_choice(game, "choose_one")
         pc.choose(0)      # single 无 target → 落空，不抛异常
         self.assertEqual(game.pending_choices, [])

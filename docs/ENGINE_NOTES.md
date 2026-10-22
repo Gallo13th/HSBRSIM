@@ -556,6 +556,28 @@ c=1 会给 health +4，与期望 +3 不符）；`test_batch_soc.py` 相关期望
 **影响面**：仅 Fire-forged Evoker SoC Buff；默认无该卡/未施法路径
 不变；不影响其它 SoC 卡。
 
+## F-20 Trinket offer 过滤 + Choose One/目标两阶段（2026-10-22 8h 审计）
+
+**文件**：`hsrl2/game.py`；测试 `hsrl2/tests/test_engine_choose_target.py`（18 例）。
+
+**动机**：审计发现 41/357 无脚本饰品仍可被 offer/购买（扣金空转）；
+`choose_options` 与 `needs_target` 互斥，抉择+定向卡永远到不了目标分支；
+法术实体 `CHOOSE_BOTH` 未读。
+
+**改动**：
+1. `_gate_trinket_picks`：trinket offer 采样后按 `REGISTRY` 确定性替换无脚本项，
+   不消耗 RNG；`grant_random_trinket` 暂未覆盖（记为 P1 gap）。
+2. `play_minion`/`play_spell`：先解析 choose，再解析 target，最后
+   `_run_play_effects`；`both` 跳过选择但仍走目标阶段。
+3. `play_spell` 双效判定增加 `spell.has(GameTag.CHOOSE_BOTH)`。
+
+**测试**：`pytest hsrl2/tests/test_engine_choose_target.py -q` 18 passed；
+引擎相关套件 0 failed（2 skipped）。
+
+**影响面**：饰品 offer 池变小（有脚本子集）；Choose One+目标卡行为改变；
+无脚本饰品不再能被购买（符合“宁缺勿错”）。RNG 行为保持：过滤在采样后替换。
+
+
 
 
 

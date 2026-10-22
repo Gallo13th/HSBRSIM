@@ -104,10 +104,11 @@ class TestRegistryState(unittest.TestCase):
     # （2026-09-02 作业单）——本批台账余下 6 项。
     # 跨批次维护: BG22_HERO_004p Varden 已由 batch_hero_remaining2 实现
     DEFERRED_IDS = (
-        "BG21_HERO_000p", "BG35_HERO_001p",
-        "BG20_HERO_202p", "BG33_HERO_001p_ALT",
-        "BG20_HERO_242p",
+        "BG21_HERO_000p",
+        "BG20_HERO_202p",
     )
+    # 2026-10-22 迁出（batch_hero_powers_37x 已实现并注册）:
+    # BG35_HERO_001p Genn / BG33_HERO_001p_ALT Loh / BG20_HERO_242p Guff
     LATER_IMPLEMENTED = ("BG22_HERO_004p",)
 
     def test_ok_registered_and_passive(self):

@@ -30,11 +30,12 @@ HERO_A = "BG20_HERO_103"
 REWARD_ID = "BG33_Reward_017"
 
 # 固定种子（探测已确认该 seed 下奖励 Discover 选项含目标技能）
-SEED_HOLLIDAE = 19       # 选项含 BG28_HERO_801p（active: 随机酒馆法术）
-SEED_GROWING = 50       # 37.0 英雄技能池扩容后重新探测: 选项含
-                        # BG32_HERO_002p（passive: Growing Collection）
-                        # （2026-09-13 修正: 原写的 19 实测不含该技能 →
-                        #   测试恒 skip、on_bind 接线零执行覆盖）
+# 2026-10-22 重探: batch_hero_powers_37x 新增 6 个已注册技能后候选池
+# 扩容 → 原 seed 19/50 抽样前移；新 seed 由探测脚本逐个扫描确定。
+SEED_HOLLIDAE = 12       # 选项含 BG28_HERO_801p（active: 随机酒馆法术）
+SEED_GROWING = 9        # 选项含 BG32_HERO_002p（passive: Growing
+                        # Collection——其 on_bind 的 T8 greater offer 为
+                        # 接线证据）
 
 HOLLIDAE_POWER = "BG28_HERO_801p"
 GROWING_POWER = "BG32_HERO_002p"

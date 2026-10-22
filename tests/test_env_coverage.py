@@ -156,6 +156,8 @@ class TestTargetedSpellEnumeration(unittest.TestCase):
         missing = []
         bad_apply = []
         for cid in cids:
+            script = REGISTRY.get(cid)
+            has_choose = bool(getattr(script, "choose_options", None))
             found = False
             for state_idx in range(len(_RACE_SETS)):
                 game, a, b = _broad_started_game(seed=7 + state_idx,
@@ -164,6 +166,12 @@ class TestTargetedSpellEnumeration(unittest.TestCase):
                 descs = [d for d in driver.enumerate_actions(game, a)
                          if d.kind == ActionKind.PLAY_SPELL.value
                          and d.src_entity is spell]
+                if has_choose:
+                    # Choose One + target 是两阶段：首步先 choose（无 target），
+                    # 选完分支后引擎再挂 spell_target；不能用单步 target 变体断言。
+                    if descs:
+                        found = True
+                    break
                 with_tgt = [d for d in descs if d.tgt_entity is not None]
                 if not with_tgt:
                     continue
@@ -181,6 +189,10 @@ class TestTargetedSpellEnumeration(unittest.TestCase):
         """有可寻址目标时不生成"无目标"回退（避免退化路径）。"""
         checked = 0
         for cid in _targeted_pool_spells():
+            script = REGISTRY.get(cid)
+            if getattr(script, "choose_options", None):
+                # 两阶段 Choose One 法术首步无 target，后续 choice 才进目标
+                continue
             for game, a, b in _broad_states():
                 spell = hand_spell(game, a, cid)
                 descs = [d for d in driver.enumerate_actions(game, a)

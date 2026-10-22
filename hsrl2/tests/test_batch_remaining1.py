@@ -40,9 +40,9 @@ CARD = "EBG_Spell_037"
 _PATCHWERK = "TB_BaconShop_HP_035"
 # 施放前的"当前技能"（Millhouse——主动/被动均与 Patchwerk 不同族）
 _CURRENT = "TB_BaconShop_HP_054"
-# seed 54: 候选含 Patchwerk（rng.sample 按 seed 确定性; 注意本卡
-# 会消耗一次共享 RNG 抽取，故其后同局抽取序列会前移）
-_PATCHWERK_SEED = 54
+# seed 45: 候选含 Patchwerk（2026-10-22 英雄技能池扩容后重新探测——
+# batch_hero_powers_37x 新增 6 个已注册技能使原 seed 54 抽样前移）
+_PATCHWERK_SEED = 45
 
 
 def get_db() -> CardDB:
@@ -118,9 +118,15 @@ class TestRegistryState(unittest.TestCase):
             self.assertNotIn(cid, REGISTRY, cid)
 
     def test_engine_blocked_hero_powers_stay_deferred(self):
-        """无来源卡 Triple Reward 档位 / rebind / 子系统阻塞项维持未注册。"""
-        for cid in ("BG20_HERO_242p", "BG33_HERO_001p_ALT",
-                    "BG20_HERO_202p", "BG31_HERO_801p", "TB_BaconShop_HP_101"):
+        """无来源卡 Triple Reward 档位 / rebind / 子系统阻塞项维持未注册。
+
+        2026-10-22 更新: Loh/Guff 的"无来源 Triple Reward"档位已由
+        `batch_hero_powers_37x` 按自然语言解读落定（档位 = 当前酒馆
+        等级，边界见该批 docstring）→ 移出本守卫；仍阻塞项保留。
+        """
+        for cid in ("BG20_HERO_202p", "BG20_HERO_283p",
+                    "BG31_HERO_801p", "BG31_HERO_811p",
+                    "BG34_HERO_000p", "TB_BaconShop_HP_101"):
             self.assertNotIn(cid, REGISTRY, cid)
 
     def test_no_number_portraits_stay_deferred(self):

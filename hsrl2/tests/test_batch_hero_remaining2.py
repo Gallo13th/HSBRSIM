@@ -41,16 +41,19 @@ OK_IDS = (
     "TB_BaconShop_HP_085", "TB_BaconShop_HP_702", "BG28_885",
 )
 DEFERRED_IDS = (
-    "BG20_HERO_202p", "BG20_HERO_242p", "BG20_HERO_283p",
+    "BG20_HERO_202p", "BG20_HERO_283p",
     "BG20_HERO_283p_t1", "BG20_HERO_283p_t2", "BG20_HERO_283p_t3",
     "BG20_HERO_201p2", "BG22_HERO_000p", "BG22_HERO_000p_t1",
     "BG22_HERO_000p_t2", "BG22_HERO_000p_t3", "BG22_HERO_000p_t4",
-    "BG24_HERO_100p", "BG25_HERO_100p", "BG31_HERO_801p",
+    "BG25_HERO_100p", "BG31_HERO_801p",
     "BG31_HERO_811p", "BG31_HERO_811p2", "BG31_HERO_811p3",
-    "BG33_HERO_001p_ALT", "BG34_HERO_000p", "BG34_HERO_004p",
-    "BG35_HERO_001p", "TB_BaconShop_HP_017", "TB_BaconShop_HP_020",
+    "BG34_HERO_000p", "BG34_HERO_004p",
+    "TB_BaconShop_HP_017", "TB_BaconShop_HP_020",
     "TB_BaconShop_HP_101", "TB_BaconShop_HP_106",
 )
+# 2026-10-22 迁出（batch_hero_powers_37x 已实现并注册）:
+# BG20_HERO_242p Guff / BG24_HERO_100p Denathrius /
+# BG33_HERO_001p_ALT Loh / BG35_HERO_001p Genn
 # "inspect and decide" 变体: 已由基础脚本处理 / 与基础同效 → 不注册
 VARIANT_NOT_REGISTERED = (
     "BG26_HERO_102p2", "BG28_HERO_400p2",
