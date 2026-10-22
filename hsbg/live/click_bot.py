@@ -69,6 +69,7 @@ class ClickBot:
     games: int = 0                 # 0 = infinite
     max_seconds: float = 0.0       # 0 = infinite
     auto_launch: bool = True
+    safe_state: bool = True
     actions: int = 0
     errors: int = 0
     turn_actions: int = 0
@@ -215,6 +216,29 @@ class ClickBot:
         self.log(kind="drag", a=a, b=b, note=note)
 
     def state(self) -> Dict[str, Any]:
+        if self.safe_state:
+            import tempfile
+            fd, path = tempfile.mkstemp(prefix="hs_state_", suffix=".json",
+                                        dir=str(self.out_dir))
+            import os
+            os.close(fd)
+            try:
+                proc = subprocess.run(
+                    [sys.executable, str(ROOT / "tools" / "live_state_mem.py"),
+                     "--sample", path],
+                    cwd=str(ROOT), capture_output=True, timeout=10)
+                if proc.returncode == 0:
+                    return json.loads(Path(path).read_text(encoding="utf-8"))
+                self.log(kind="state_reader_failed", code=proc.returncode)
+                return {}
+            except Exception as exc:  # noqa: BLE001
+                self.log(kind="state_reader_error", error=str(exc))
+                return {}
+            finally:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
         try:
             return read_memory_state() or {}
         except Exception:
@@ -749,12 +773,14 @@ def main() -> int:
     ap.add_argument("--max-seconds", type=float, default=0)
     ap.add_argument("--max-actions-per-turn", type=int, default=30)
     ap.add_argument("--auto-launch", action="store_true", default=True)
+    ap.add_argument("--direct-state", action="store_true",
+                    help="直接在进程内读内存（快但可能被 bgcontroller access violation 带崩）")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     bot = ClickBot(Path(args.out_dir), dry_run=args.dry_run,
                    max_actions_per_turn=args.max_actions_per_turn,
                    games=args.games, max_seconds=args.max_seconds,
-                   auto_launch=args.auto_launch)
+                   auto_launch=args.auto_launch, safe_state=not args.direct_state)
     res = bot.run()
     print(json.dumps(res, ensure_ascii=False))
     return 0
