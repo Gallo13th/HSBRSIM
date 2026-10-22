@@ -132,12 +132,12 @@ python -m pytest tests/test_live_clickbot.py -q -> 33 passed
 - `docs/POLICY_OBS_V3.md` + 19 测试；PPO mock 64 步 smoke 通过；旧 BC/PPO ckpt 迁移权重断言通过。
 - 影响：旧 checkpoint 不再静默错位；MOVE_MINION 需继续训练。
 
-### 8.3 Live P1（进行中）
+### 8.3 Live P1（完成）
 
 - ACTIVATE 实机样本已抓到（`live_20261023_0018_games3`）；
 - choose-one+target 首次实机成功（`live_20261023_0029_games3_fix`）；
 - 自动下一局/英雄选择实机；每动作截图/失败诊断；
-- 当前 `live_20261023_0034_games3_fix2` 3 局长跑收尾中；live 测试 31 passed。
+- task-8 三 run 完成：2 个完整 game_over + 2 个进行中局；live 测试 33 passed。
 
 ## 9. 最终门禁（2026-10-23 01:05）
 
