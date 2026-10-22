@@ -3,6 +3,19 @@
 > 目的：把 live bot 截图/日志里暴露的“真实客户端需要、但 bot 或模拟器缺失”的操作，
 > 变成可跟踪、可验收的补全项。每条 gap 必须能指到截图/动作/状态证据。
 
+## 0. 优先级变更日志
+
+- 2026-10-22 23:30：按 `docs/AUDIT_CONSISTENCY.md` C01 裁决，随从换位/重排
+  从 L05(P2)/L20(P1) 统一升为 **P0**：live 可操作、env 完全不可表达，
+  且 8h 窗口内 task-1 正在补 move 动作。
+- 2026-10-22 23:30：L15/L23 Choose One 口径以
+  `runs/audit/choose_one_matrix.json`（engine-mech-auditor 生成）为准，
+  不再直接复用 14/5/10 的粗分解。
+- 2026-10-22 23:30：Dark Gift 数量权威值 = 47（`data/bg_dark_gifts.json`）。
+- 2026-10-22 23:35：C05 裁决：三连奖励/发现确认 live 侧维持 **P0**（真实对局必须处理，
+  否则奖励卡丢失）；C06 裁决：法术实体 `CHOOSE_BOTH` 引擎侧维持 **P1**，
+  live Choose One 协议仍 P0。新增 L26 = EoT/淘汰/对手期选择 auto-pick P0。
+
 ## 1. 最近一轮观测摘要
 
 数据来源：`runs/live/clickbot_every/actions.jsonl`（约 678 个动作，26 个 settled，
@@ -54,7 +67,7 @@
 | L02 | 英雄技能（含目标） | 英雄技能按钮；`legal.powers` 未用 | 未实现 | `HERO_POWER` 已支持 | 读 `powers`，按技能目标点击；无目标直接点 | P0 |
 | L03 | 主动结束回合 | 目前等计时器；`legal.end` 未用 | 未实现 | `END_TURN` 已支持 | 无买/打/刷/升时点“结束回合”按钮 | P1 |
 | L04 | 三连奖励/发现确认 | 三连后 `choices`/弹层 | 部分 | `CHOOSE` / `USE_DARK_GIFT` | 统一 `choice` 处理：卡+确认+重试 | P0 |
-| L05 | 随从换位/重排 | 棋盘位置影响战斗 | 未实现 | 引擎 `position` 参数存在，env 候选少 | 增加 move 动作/拖拽重排；先记录 gap | P2 |
+| L05 | 随从换位/重排 | 棋盘位置影响战斗 | 未实现 | 引擎 `position` 参数存在，env 候选少 | 增加 move 动作/拖拽重排；先记录 gap | P0 |
 | L06 | 目标法术稳定命中 | `select/target/dragcast` 多次 no_effect | 弱 | `PLAY_SPELL` 支持 target | 目标坐标/高亮检测；失败时截 burst | P0 |
 | L07 | 饰品商店确认 | 选卡后需“确认” | 已实现 | `CHOOSE` | 保持；补自动化回归 | P1 |
 | L08 | 英雄选择后“开始战斗”页 | `start_combat` 90 次 | 兜底过多 | 无（UI 流程） | 只在截图/状态明确时点；加冷却 | P0 |
@@ -132,12 +145,13 @@
 | L17 | live Dark Gift 购买/三选一 | 本轮 `dark_gift=0`，47 张数据卡 | P0 |
 | L18 | live 英雄技能 | 本轮 `hero_power=0`，env 已支持 | P0 |
 | L19 | live Activate（发动） | 本轮 `activate=0`，50/52 脚本已有 | P1 |
-| L20 | env 无 move/reorder | 引擎有 `position`，env 无显式动作 | P1 |
+| L20 | env 无 move/reorder | 引擎有 `position`，env 无显式动作 | P0 |
 | L21 | 17/118 英雄主技能无脚本（含 37.0 新英雄），env 全量抽英雄 | `AUDIT_ENGINE_MECHANICS` G-H1 | P0 |
 | L22 | 饰品 offer 池未过 REGISTRY，41/357 无脚本饰品可买 | `game.py:5015-5017` G-R1 | P0 |
 | L23 | Choose One 组合/双效：choose+needs_target 互斥、法术实体 CHOOSE_BOTH 不读、旧脚本 both 静默 | G-C1/C2/C3 | P0 |
 | L24 | PendingChoice.choose 不出队/无幂等，resolve 抛错丢选择 | G-P1 | P1 |
 | L25 | 数据层无 target 元数据（99 needs_target / 46 target_candidates） | G-T1 | P1 |
+| L26 | EoT/淘汰/对手期选择被 default_pick_index 自动选 0 | AUDIT_ENV_ACTIONS 交互6 | P0 |
 
 ---
 

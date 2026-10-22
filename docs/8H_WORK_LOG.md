@@ -61,6 +61,32 @@
 - 发现 C01 换位优先级冲突 → L05/L20 升 P0（已写入 gap 表）。
 - C02 Dark Gift 43→47、C03 Choose One 对账、C08 ENV_SPEC 版本冲突已派单。
 
+### 23:40–23:55 里程碑
+
+- **env task-1 完成并提交**（`b4a12db`）：
+  - `ActionKind.MOVE_MINION`、Observation.version=3；
+  - Dark Gift `pending_choice_options`（gift_id/secondary_id 可观测）；
+  - EoT/淘汰/对手期 auto-resolve 留痕（info/stats/errors）；
+  - 24 条新测试通过；`pytest tests` 全绿。
+- **engine task-2 完成并提交**（`7372b6f`）：
+  - 饰品 offer REGISTRY 闸；choose+target 两阶段；法术实体 CHOOSE_BOTH；
+  - `test_engine_choose_target.py` 18 passed；F-20 已写入 ENGINE_NOTES。
+- **card task-3 完成并提交**（`ed765c3`）：
+  - `choose_one_authority.py`；36 卡/36 脚本 missing=[]；
+  - 10 base Choose One（17 def）；6 个 37.0 英雄技能落地，11 个 DEFERRED 有台账；
+  - `hsrl2/tests 4800 passed / 6 skipped`；`tests 622 passed / 2 skipped`；
+  - `verify_all --fast 4/4`；smoke 8 局 crashes=0。
+- **protocol/AGENTS** 已更新，待合并 LIVE_COLLAB_SECTION。
+- **live task-4**：
+  - 自动进入游戏实机跑通：`runs/live/live_20261022_2328_bot37_fix/`，
+    `start_game_ok phase=hero_select`；
+  - 英雄选择：点解锁卡→确认 (0.500,0.789) 实机跑通；
+  - FREEZE/HERO_POWER/USE_DARK_GIFT 实机验证；ACTIVATE 单测就绪无实机样本；
+  - END_TURN 单人局无按钮，记录 auto_timer；
+  - `tests/test_live_clickbot.py` 27 passed；
+  - 最终两局验证 `runs/live/live_20261022_2330_bot37_final/` 运行中。
+
+
 
 ## 3. 关键产物
 

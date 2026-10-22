@@ -3,12 +3,24 @@
 > 目标：把「炉石传说·酒馆战棋」做成可训练、可评估、可复现的智能体项目。
 > 三层：**模拟引擎** → **强化学习环境** → **策略与训练**。
 
+## 0. 文档索引（先读）
+
+| 文档 | 用途 |
+|---|---|
+| [docs/LIVE_AUTOMATION_PROTOCOL.md](docs/LIVE_AUTOMATION_PROTOCOL.md) | 实时对局自动化（改 `hsbg/live/**` 必读） |
+| [docs/LIVE_COLLAB_SECTION.md](docs/LIVE_COLLAB_SECTION.md) | Live 协作章节片段（待 Lead 合并进 `LIVE_AUTOMATION_PROTOCOL.md` §10） |
+| [docs/AUDIT_PROTOCOL.md](docs/AUDIT_PROTOCOL.md) | 审计协议：输入/证据等级 E0–E4/gap schema/复现命令/回归门槛/8h 节奏 |
+| [docs/MULTI_AGENT_RULES.md](docs/MULTI_AGENT_RULES.md) | 多智能体协作：写范围/任务板 claim/消息格式/handoff/超时/冲突/Lead 职责 |
+| [docs/AUDIT_CONSISTENCY.md](docs/AUDIT_CONSISTENCY.md) | 三篇审计的口径/冲突/重复/编号映射登记 |
+| [docs/LIVE_TO_SIM_GAP.md](docs/LIVE_TO_SIM_GAP.md) | Live → 模拟器缺口台账（带截图/actions 证据） |
+| [docs/ENV_SPEC.md](docs/ENV_SPEC.md) / [docs/ENGINE_API.md](docs/ENGINE_API.md) | 环境契约 / 引擎 API |
+
 ## 1. 仓库布局
 
 ```
 C:\HSagent\
-├── hsrl2/                 # 模拟引擎（vendored，机制精度权威；4164 项测试全绿）
-│   ├── game.py            # Game：招募回合 / 配对 / 战斗 / 淘汰（5204 行）
+├── hsrl2/                 # 模拟引擎（vendored，机制精度权威；回归测试全绿）
+│   ├── game.py            # Game：招募回合 / 配对 / 战斗 / 淘汰（约 5.7k 行）
 │   ├── hero.py minion.py entity.py tags.py
 │   ├── combat.py queue.py events.py pools.py db.py defs.py
 │   ├── actions/           # 引擎 Action 原语
@@ -46,10 +58,15 @@ C:\HSagent\
 
 ```powershell
 cd C:\HSagent
-python -m pytest hsrl2/tests -q          # 引擎回归（~28s，当前 4164 passed）
+python -m pytest hsrl2/tests -q          # 引擎回归（通过数以本次输出为准，不抄旧值）
 python -m pytest tests -q                # 本项目新增测试
 python tools/smoke_random_games.py --games 8 --seed 2000   # 全对局压测
+python scripts/verify_all.py --fast      # 一键快速门禁（约 1.5min）
+python scripts/verify_all.py             # 一键全量门禁（约 4-5min）
 ```
+
+> 测试函数/行数等基线不要写死在文档里（会漂移）；当前实测值见
+> `docs/AUDIT_CONSISTENCY.md` §2，门禁细则见 `docs/AUDIT_PROTOCOL.md` §8。
 
 依赖：`numpy`、`torch`（CUDA 可用，RTX 4060 Ti 16GB）、`pytest`。
 新增第三方依赖前先问 Lead。**禁止**引入 gym/stable-baselines3 作为硬依赖
@@ -61,6 +78,12 @@ python tools/smoke_random_games.py --games 8 --seed 2000   # 全对局压测
 - **实时对局自动化**：改动 `hsbg/live/**` 前先读
   `docs/LIVE_AUTOMATION_PROTOCOL.md`；新发现缺操作必须登记到
   `docs/LIVE_TO_SIM_GAP.md`，附截图/actions.jsonl 证据，不能只口头描述。
+- **审计**：任何"缺机制/缺动作/缺字段"的结论必须先读
+  `docs/AUDIT_PROTOCOL.md`（证据等级 E0–E4、gap schema、复现命令、回归门槛）；
+  审计结论/优先级冲突登记到 `docs/AUDIT_CONSISTENCY.md`，不要只在消息里说。
+- **多智能体协作**：并行写作/任务领取按 `docs/MULTI_AGENT_RULES.md`：
+  任务板 claim/complete 带 revision、同一文件禁止并行写、完成后必须给 Lead
+  四段消息（任务/证据/结论/下一步）。
 - **编码**：所有文件 UTF-8（`open(..., encoding="utf-8")`）；不要用系统默认编码。
 - **确定性**：环境行为必须由 `seed` 完全决定（引擎 RNG = `game.rng`）。
   训练可复现性依赖这一点。
@@ -76,17 +99,33 @@ python tools/smoke_random_games.py --games 8 --seed 2000   # 全对局压测
 
 ## 4. 并行开发与写权限（重要）
 
-多个 agent 共享同一工作目录，**只写自己 scope 内的文件**：
+多个 agent 共享同一工作目录，**只写自己 scope 内的文件**；同一文件同一时间只能有一个 writer。
+完整协作规则（任务板 claim/complete、handoff、消息格式、超时/冲突处理、Lead 汇总职责）见
+[docs/MULTI_AGENT_RULES.md](docs/MULTI_AGENT_RULES.md)。下表是仓库级唯一写范围源：
 
 | 角色 | 写范围 |
 |------|--------|
-| Lead | `hsbg/env/spec.py`、`hsbg/paths.py`、`hsbg/live/**`、`docs/`、`tests/test_integration.py`、`tests/test_live*`、`scripts/`、根配置 |
-| engine-analyst | `docs/ENGINE_API.md`、`docs/ENGINE_RL_READINESS.md`、`tools/probe_*.py` |
-| env-builder | `hsbg/env/**`、`tests/test_env_*.py`、`hsbg/agents/**`、`tests/test_agents_*.py` |
+| Lead | `hsbg/env/spec.py`、`hsbg/paths.py`、`docs/`（仲裁/合并）、`tests/test_integration.py`、`tests/test_live*`、`scripts/`、根配置、`git commit` |
+| protocol-writer | `docs/AUDIT_PROTOCOL.md`、`docs/MULTI_AGENT_RULES.md`、`docs/AUDIT_CONSISTENCY.md`、`docs/LIVE_COLLAB_SECTION.md`、`AGENTS.md`（仅链接/写权限/基线说明） |
+| live-automator | `hsbg/live/**`、`tests/test_live_*.py`、`docs/LIVE_AUTOMATION_PROTOCOL.md` |
+| live-analyst / live-gap-analyst | `runs/live/analysis/**`（只读代码/截图/日志；gap 建议写入 `docs/LIVE_TO_SIM_GAP.md` 需 Lead/owner 协调） |
+| env-builder / env-auditor | `hsbg/env/**`、`tests/test_env_*.py`、`hsbg/agents/**`、`tests/test_agents_*.py`、`docs/ENV_SPEC.md`、`docs/AUDIT_ENV_ACTIONS.md` |
+| engine-analyst / engine-mech-auditor | `docs/ENGINE_API.md`、`docs/ENGINE_RL_READINESS.md`、`docs/ENGINE_NOTES.md`、`docs/AUDIT_ENGINE_MECHANICS.md`、`tools/probe_*.py`、`hsrl2/tests/**` |
+| card-script-builder | `hsrl2/scripts/**`、`hsrl2/tests/test_batch_*`；`hsrl2/game.py` 等核心需 Lead 批准 |
 | policy-builder | `hsbg/policy/**`、`hsbg/train/**`、`tests/test_policy_*.py`、`scripts/train_*.py` |
 | bridge-analyst | `hsbg/bridge/**`、`tools/powerlog_*.py`、`tests/test_bridge_*.py`、`docs/REAL_GAME_BRIDGE.md` |
 
-遇到必须跨 scope 修改的情况：先读文件、改最小片段，并在回复里明确告知 Lead。
+规则：
+
+1. 遇到必须跨 scope 修改的情况：先读文件、改最小片段，并在回复里明确告知 Lead 与原 owner。
+2. `hsrl2/game.py` / `combat.py` / `queue.py` / `tags.py`、`data/**`、根配置、依赖清单：
+   只有 Lead 批准后才能改，且先写失败测试。
+3. 代码生成器、格式化器、批量重写脚本视为写操作，需独占文件并先告知。
+4. 禁止 `git checkout -- .` / `git reset --hard` / `git clean` / 批量格式化全仓；
+   未经 Lead 授权不得 `git commit`。
+5. 写前 30 秒内重新 `read` 目标文件；`FS_STALE_VERSION` 时 rebase 自己的最小改动后重试。
+6. 任务领取与完成一律走共享任务板（`team_task_*`，claim 带 `expected_revision`），
+   不抢占别人 `in_progress` 的任务；完成必须带证据（测试输出/文档路径/run_id）。
 
 ## 5. 数据现状（已知缺口）
 
@@ -101,8 +140,17 @@ python tools/smoke_random_games.py --games 8 --seed 2000   # 全对局压测
 python -m pytest hsrl2/tests -q      # 必须 0 failed
 python -m pytest tests -q            # 必须 0 failed
 python tools/smoke_random_games.py --games 4 --seed 7   # crashes=0
+python scripts/verify_all.py         # 推荐：一键全量门禁（= 上面 + env 校验 + 一致性 + 版本）
 ```
 环境/策略层额外要求：
 - 环境：同一 seed 两次 rollout 的观测/动作序列完全一致（确定性测试）。
 - 策略：`forward` 对随机 batch 输出形状正确、masked softmax 不含 NaN；
   短 PPO 冒烟能跑通并保存/加载 checkpoint。
+
+门禁纪律（完整矩阵见 [docs/AUDIT_PROTOCOL.md](docs/AUDIT_PROTOCOL.md) §8）：
+- 记录「命令 + 时间 + passed/failed/耗时」，**不要**把历史数字当基线；
+- 已知红只允许 `xfail(reason="<gap-id>")` 并登记 `docs/LIVE_TO_SIM_GAP.md`；
+  禁止为变绿而删测试、放宽断言或 `skip` 掩盖；
+- 纯文档改动：只需链接/路径自检，不要求跑 pytest，但不得改代码/测试；
+- 改 `hsbg/env/spec.py`（唯一契约）= 同步 `docs/ENV_SPEC.md` 并升 `Observation.version`；
+- baseline 变红且非本次改动引入：停止修复，记录并通知 Lead，不要顺手改别人 scope。
