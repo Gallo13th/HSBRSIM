@@ -185,3 +185,22 @@
 | L23 Choose One 组合/双效 | **fixed** | 引擎两阶段 + Sprightly/Foodie/880 测试 |
 | L24 PendingChoice | partial | EoT 留痕；幂等/回滚 P1 进行中 |
 | L26 EoT auto-pick | partial | info/stats/errors 留痕，未可决策 |
+
+## 8. task-8 多局验证补充（2026-10-23 01:00）
+
+证据：`runs/live/LIVE_AUTOMATION_EVIDENCE_2.md`；runs `0018_games3` / `0029_games3_fix` / `0034_games3_fix2`。
+
+| ID | 最终状态 | 证据 |
+|---|---|---|
+| L01 冻结 | **verified** | freeze 成功 3 次（每 run 1），shop[*].frozen 翻转 |
+| L02 英雄技能 | **verified**（任务4样本） | task-4 run 23:27；task-8 对局英雄无主动技能 |
+| L03 主动结束回合 | partial | 单人局无按钮 → `end_turn:auto_timer` |
+| L04 三连/5 选 | **open** | turn8 5 选弹层未标定；当前“隐藏”兜底 + `choice_layout_unknown` |
+| L06 目标法术 | **verified** | `0029`：`play_spell:BG31_880->board[0]` → choose_one → target → hand 3→2 |
+| L15 Choose One | **verified** | 36/36 脚本 + live choose-one 成功 |
+| L17 Dark Gift | **verified** | 3 次成功（choices=3→choose→手牌+1） |
+| L18 英雄技能 | verified | task-4 实机 |
+| L19 Activate | **verified** | 39 次点击 ≈19 次成功发动（`activate:BG36_345` + target） |
+| L26 EoT auto-pick | **open** | env 仍自动选 0；仅留痕 |
+
+no_effect：合计 9 / 约 1767 行日志；4 次为战斗过渡帧，其余集中在手牌 6+ 布局偏差。

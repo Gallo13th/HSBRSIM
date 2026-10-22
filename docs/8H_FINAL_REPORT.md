@@ -13,7 +13,7 @@
    - env：`MOVE_MINION`、Dark Gift `gift_id` 观测、EoT 自动结算留痕；Observation.version=3。
    - engine：饰品 offer 按 REGISTRY 过滤、Choose One+目标两阶段、法术实体 `CHOOSE_BOTH`。
    - cards：Choose One 36/36 脚本、10 base 抉择卡、6 个 37.0 英雄主技能、11 个 DEFERRED 台账。
-5. **门禁**：`hsrl2/tests` 4800 passed / 6 skipped；`tests` 622 passed / 2 skipped；`verify_all --fast` 4/4；smoke 8 局 crashes=0；live run5 `no_effect=0`。
+5. **门禁**：`hsrl2/tests` 4816 passed / 6 skipped；`tests` 663 passed / 2 skipped；`verify_all --fast` 4/4；smoke 8 局 crashes=0；live task-8 多局 no_effect 9/1767（4 次战斗过渡帧）。
 
 ### 关键指标
 
@@ -23,7 +23,7 @@
 | 自动开下一局 | **PASS** | `live_20261022_2330_bot37_final`：23:44:09 game_over → 23:45:20 `start_game_ok attempts=6` |
 | 英雄选择 | **PASS** | 点解锁英雄卡 → 确认 `(0.500,0.789)`；run3/run5 实机 |
 | Freeze/HP/Dark Gift | **PASS** | run3 summary `exercised={freeze:1, hero_power:1, use_dark_gift:1}` |
-| Activate live | 代码+单测，5 局无样本 | `tests/test_live_clickbot.py` |
+| Activate live | **PASS**（39 点击≈19 成功） | `runs/live/LIVE_AUTOMATION_EVIDENCE_2.md`；0018/0029/0034 |
 | PowerShell 门禁 | 4/4 | `scripts/verify_all.py --fast` |
 
 ## 1. 实时自动化
@@ -81,24 +81,24 @@
 |---|---|---|---|
 | env | move_minion、Dark Gift gift_id、EoT auto-resolve 留痕 | 24 新测试；tests 全绿 | `b4a12db` / `AUDIT_ENV_ACTIONS` §8 |
 | engine | 饰品 REGISTRY 闸、choose+target 两阶段、法术 CHOOSE_BOTH | `test_engine_choose_target` 18；engine 全绿 | `7372b6f` / `ENGINE_NOTES` F-20 |
-| cards | choose_one 36/36、10 base 抉择、6 英雄技能、11 DEFERRED | 4800 passed | `ed765c3` / `ENGINE_SUBSYSTEM_GAPS` |
-| live | 自动进入/英雄选择/5 新动作/每动作截图 | 27 passed | `runs/live/live_20261022_2359_bot37_v3/` |
+| cards | choose_one 36/36、10 base 抉择、6 英雄技能、11 DEFERRED | 4816 passed | `ed765c3` / `ENGINE_SUBSYSTEM_GAPS` |
+| live | 自动进入/英雄选择/5 新动作/每动作截图 | 33 passed | `runs/live/LIVE_AUTOMATION_EVIDENCE_2.md` |
 
 ## 4. 未完成/阻塞
 
 - 11 个英雄主技能保持未注册（缺子系统）：Nguyen/Raynor/Kerrigan/Murozond/Morchie/Akazamzarak/Silas/Tickatus/Cariel/Galewing/Putricide；见 `ENGINE_SUBSYSTEM_GAPS.md`。
-- ACTIVATE 无实机样本；END_TURN 单人无按钮；choose-one+target 未 live 成功结算；launcher 自动拉起游戏未在“游戏关闭”状态实机复验（启动函数本机曾成功）。
-- PendingChoice 幂等/回滚、EoT 选择可决策化、`grant_random_trinket` 随机授予过滤仍在 P1。
-- 旧 policy checkpoint 与 obs v3/新增 MOVE_MINION 不兼容；需重训/迁移（policy 适配进行中）。
+- LIVE：ACTIVATE 已实机验证（39 点击≈19 成功）；choose-one+target 已实机成功；END_TURN 单人无按钮只能 auto_timer；launcher 自动拉起游戏未在“游戏关闭”状态实机复验（启动函数本机曾成功）。
+- P1 已完成：PendingChoice 幂等/失败终态、grant_random_trinket 过滤、policy obs v3 迁移、env take_choice；EoT 选择仍只能 auto-resolve + 留痕（不可暂停，P2 状态机）。
+- 旧 policy checkpoint 与 obs v3/MOVE_MINION 通过迁移兼容，但 MOVE_MINION 需继续训练。
 
 ## 5. 回归结果
 
 ```text
-python -m pytest hsrl2/tests -q  -> 4800 passed, 6 skipped (35.7s)
-python -m pytest tests -q        -> 622 passed, 2 skipped (88.6s)
-python scripts/verify_all.py --fast -> 4/4 gates PASS (134.9s)
+python -m pytest hsrl2/tests -q  -> 4816 passed, 6 skipped (32.5s)
+python -m pytest tests -q        -> 663 passed, 2 skipped (87.2s)
+python scripts/verify_all.py --fast -> 4/4 gates PASS (140.2s)
 python tools/smoke_random_games.py --games 8 --seed 2000 -> 8/8, crashes=0
-python -m pytest tests/test_live_clickbot.py -q -> 27 passed
+python -m pytest tests/test_live_clickbot.py -q -> 33 passed
 ```
 
 ## 6. 风险与后续
@@ -114,3 +114,55 @@ python -m pytest tests/test_live_clickbot.py -q -> 27 passed
 - 复现审计：`python scripts/audit_mechanism_coverage.py --out runs/audit/mechanism_coverage.json`
 - live 证据：`runs/live/LIVE_AUTOMATION_EVIDENCE_20261022.md`、`runs/live/live_20261022_*`。
 - 8h 日志：`docs/8H_WORK_LOG.md`；提交：`git log --oneline`。
+
+## 8. P1 追加（00:00–01:00）
+
+### 8.1 Engine P1（commit 09095da）
+
+- `grant_random_trinket` 随机授予路径按 REGISTRY 过滤；测试 4 例。
+- `PendingChoice` 一次性：重复 choose 抛 `GameStateError`；resolve 抛错进入 `failed` 终态；
+  新增 `Game.take_choice()` 原子 API；测试 +12，`test_engine_choose_target` +4。
+- 修复 test_engine_gaps 的 REGISTRY 删除污染。
+- 门禁：hsrl2/tests 4816 passed / 6 skipped；tests 663 passed / 2 skipped；verify_all 4/4；smoke 8/8。
+
+### 8.2 Policy P1（commit 8bf8c5a）
+
+- encoder：action kind 动态 13、`entity_secondary`（Dark Gift gift_id/任务 reward_id）进编码；
+- checkpoint format 2，旧 obs v2 默认迁移+警告，`allow_legacy=False` 严格报错；
+- `docs/POLICY_OBS_V3.md` + 19 测试；PPO mock 64 步 smoke 通过；旧 BC/PPO ckpt 迁移权重断言通过。
+- 影响：旧 checkpoint 不再静默错位；MOVE_MINION 需继续训练。
+
+### 8.3 Live P1（进行中）
+
+- ACTIVATE 实机样本已抓到（`live_20261023_0018_games3`）；
+- choose-one+target 首次实机成功（`live_20261023_0029_games3_fix`）；
+- 自动下一局/英雄选择实机；每动作截图/失败诊断；
+- 当前 `live_20261023_0034_games3_fix2` 3 局长跑收尾中；live 测试 31 passed。
+
+## 9. 最终门禁（2026-10-23 01:05）
+
+| 命令 | 结果 | 耗时 |
+|---|---|---|
+| `python -m pytest hsrl2/tests -q` | **4816 passed, 6 skipped** | 32.5s |
+| `python -m pytest tests -q` | **663 passed, 2 skipped** | 87.2s |
+| `python scripts/verify_all.py --fast` | **4/4 gates PASS** | 140.2s |
+| `python tools/smoke_random_games.py --games 8 --seed 2000` | **8/8, crashes=0** | — |
+| `python -m pytest tests/test_live_clickbot.py -q` | 33 passed | 6.9s |
+| `python -m pytest tests/test_policy_obs_v3.py -q` | 19 passed | 2.6s |
+| `python -m pytest tests/test_env_choice_contract.py -q` | 15 passed | 0.5s |
+
+### task-8 live 多局证据
+
+- `runs/live/LIVE_AUTOMATION_EVIDENCE_2.md`；
+- `0018_games3`：完整 game1 → 自动 game2 → 英雄选择；**ACTIVATE 首个样本**；
+- `0029_games3_fix`：**choose-one+target 首次实机成功**（BG31_880 → choose_one → target board[0]）；
+- `0034_games3_fix2`：完整 game1 → 自动 game2；freeze1/buy11/play_minion20/play_spell11/activate4/choose3/sell18/reroll6/dark_gift1；game2 5 选弹层未标定，人工终止；
+- ACTIVATE：39 次点击约 19 次成功；freeze/DG 各 3 次成功；no_effect 合计 9 / 1767 行（4 次战斗过渡帧）；
+- live 修复：稳定帧验证、每牌每回合最多 2 次拖拽、stale choices guard、5+ 选隐藏兜底、activate 优先级 95、手牌 6+ fan 间距。
+
+### env P1（task-9）
+
+- `Game.take_choice` 接入 driver/choice 全链路；owner/空队列/越界不消费；
+- 结算回调失败 → failed 终态 + `info.choice_failed/resolution_error` + 刷新观测；
+- EoT/淘汰/对手期 auto-resolve 失败全部留痕；暂停能力探测：EoT/淘汰/战斗不可暂停（同步方法），对手招募期 P2 设计债；
+- 15 项新测试；ENV_SPEC v3.1。
