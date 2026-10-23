@@ -1,0 +1,2910 @@
+{
+ "created_at": "2026-10-23",
+ "turns": 15,
+ "rows": [
+  {
+   "seed": 1,
+   "turns": 15,
+   "width": 1,
+   "depth": 1,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG33_886",
+     "atk": 6,
+     "hp": 11,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 16,
+     "hp": 14,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_110",
+     "atk": 6,
+     "hp": 18,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_360",
+     "atk": 31,
+     "hp": 43,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 10,
+     "hp": 15,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_815",
+     "atk": 5,
+     "hp": 10,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 7,
+     "hp": 10,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 13.050586700439453,
+   "board_stats": 202,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 1125,
+   "elapsed_s": 43.16,
+   "pair_winrate": 0.8260869565217391
+  },
+  {
+   "seed": 2,
+   "turns": 15,
+   "width": 1,
+   "depth": 1,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 37,
+     "hp": 37,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_815",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_816",
+     "atk": 5,
+     "hp": 4,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 2,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 6,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 8.92348575592041,
+   "board_stats": 114,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 984,
+   "elapsed_s": 30.87,
+   "pair_winrate": 0.4434782608695652
+  },
+  {
+   "seed": 3,
+   "turns": 15,
+   "width": 1,
+   "depth": 1,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG36_200",
+     "atk": 7,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGFYM_002t",
+     "atk": 4,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_116",
+     "atk": 6,
+     "hp": 2,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 6,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_330",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 3.4389681816101074,
+   "board_stats": 57,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 32.92,
+   "pair_winrate": 0.1565217391304348
+  },
+  {
+   "seed": 1,
+   "turns": 15,
+   "width": 1,
+   "depth": 1,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG33_886",
+     "atk": 6,
+     "hp": 11,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 16,
+     "hp": 14,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_110",
+     "atk": 6,
+     "hp": 18,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_360",
+     "atk": 31,
+     "hp": 43,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 10,
+     "hp": 15,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_815",
+     "atk": 5,
+     "hp": 10,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 7,
+     "hp": 10,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 13.050586700439453,
+   "board_stats": 202,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 1125,
+   "elapsed_s": 48.06,
+   "pair_winrate": 0.8869565217391304
+  },
+  {
+   "seed": 2,
+   "turns": 15,
+   "width": 1,
+   "depth": 1,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 37,
+     "hp": 37,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_815",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_816",
+     "atk": 5,
+     "hp": 4,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 2,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 6,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 8.92348575592041,
+   "board_stats": 114,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 984,
+   "elapsed_s": 32.91,
+   "pair_winrate": 0.5130434782608695
+  },
+  {
+   "seed": 3,
+   "turns": 15,
+   "width": 1,
+   "depth": 1,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG36_200",
+     "atk": 7,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGFYM_002t",
+     "atk": 4,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_116",
+     "atk": 6,
+     "hp": 2,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 6,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_330",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 3.4389681816101074,
+   "board_stats": 57,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 35.42,
+   "pair_winrate": 0.14782608695652175
+  },
+  {
+   "seed": 1,
+   "turns": 15,
+   "width": 1,
+   "depth": 2,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG33_886",
+     "atk": 6,
+     "hp": 11,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 16,
+     "hp": 14,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_110",
+     "atk": 6,
+     "hp": 18,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_360",
+     "atk": 31,
+     "hp": 43,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 10,
+     "hp": 15,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_815",
+     "atk": 5,
+     "hp": 10,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 7,
+     "hp": 10,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 13.050586700439453,
+   "board_stats": 202,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 1125,
+   "elapsed_s": 85.11,
+   "pair_winrate": 0.8434782608695651
+  },
+  {
+   "seed": 2,
+   "turns": 15,
+   "width": 1,
+   "depth": 2,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 37,
+     "hp": 37,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_815",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_816",
+     "atk": 5,
+     "hp": 4,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 2,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 6,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 8.92348575592041,
+   "board_stats": 114,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 984,
+   "elapsed_s": 60.17,
+   "pair_winrate": 0.5304347826086957
+  },
+  {
+   "seed": 3,
+   "turns": 15,
+   "width": 1,
+   "depth": 2,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG36_200",
+     "atk": 7,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGFYM_002t",
+     "atk": 4,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_116",
+     "atk": 6,
+     "hp": 2,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 6,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_330",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 3.4389681816101074,
+   "board_stats": 57,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 64.29,
+   "pair_winrate": 0.16521739130434782
+  },
+  {
+   "seed": 1,
+   "turns": 15,
+   "width": 1,
+   "depth": 2,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG33_886",
+     "atk": 6,
+     "hp": 11,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 16,
+     "hp": 14,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_110",
+     "atk": 6,
+     "hp": 18,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_360",
+     "atk": 31,
+     "hp": 43,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 10,
+     "hp": 15,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_815",
+     "atk": 5,
+     "hp": 10,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 7,
+     "hp": 10,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 13.050586700439453,
+   "board_stats": 202,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 1125,
+   "elapsed_s": 88.04,
+   "pair_winrate": 0.8956521739130434
+  },
+  {
+   "seed": 2,
+   "turns": 15,
+   "width": 1,
+   "depth": 2,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 37,
+     "hp": 37,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_815",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_816",
+     "atk": 5,
+     "hp": 4,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 2,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 6,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 8.92348575592041,
+   "board_stats": 114,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 984,
+   "elapsed_s": 62.08,
+   "pair_winrate": 0.5217391304347826
+  },
+  {
+   "seed": 3,
+   "turns": 15,
+   "width": 1,
+   "depth": 2,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG36_200",
+     "atk": 7,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGFYM_002t",
+     "atk": 4,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_116",
+     "atk": 6,
+     "hp": 2,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 6,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_330",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 3.4389681816101074,
+   "board_stats": 57,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 66.62,
+   "pair_winrate": 0.19130434782608696
+  },
+  {
+   "seed": 1,
+   "turns": 15,
+   "width": 2,
+   "depth": 1,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG33_886",
+     "atk": 6,
+     "hp": 11,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 16,
+     "hp": 14,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_110",
+     "atk": 6,
+     "hp": 18,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_360",
+     "atk": 31,
+     "hp": 43,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 10,
+     "hp": 15,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_815",
+     "atk": 5,
+     "hp": 10,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 7,
+     "hp": 10,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 13.050586700439453,
+   "board_stats": 202,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 1125,
+   "elapsed_s": 46.82,
+   "pair_winrate": 0.8869565217391304
+  },
+  {
+   "seed": 2,
+   "turns": 15,
+   "width": 2,
+   "depth": 1,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 37,
+     "hp": 37,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_815",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_816",
+     "atk": 5,
+     "hp": 4,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 2,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 6,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 8.92348575592041,
+   "board_stats": 114,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 984,
+   "elapsed_s": 34.22,
+   "pair_winrate": 0.5565217391304348
+  },
+  {
+   "seed": 3,
+   "turns": 15,
+   "width": 2,
+   "depth": 1,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG36_200",
+     "atk": 7,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGFYM_002t",
+     "atk": 4,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_116",
+     "atk": 6,
+     "hp": 2,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 6,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_330",
+     "atk": 6,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 3.4389681816101074,
+   "board_stats": 57,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 35.68,
+   "pair_winrate": 0.23478260869565218
+  },
+  {
+   "seed": 1,
+   "turns": 15,
+   "width": 2,
+   "depth": 1,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG32_330",
+     "atk": 5,
+     "hp": 5,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG28_300",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 2,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_921",
+     "atk": 7,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100_G",
+     "atk": 4,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 0.33934375643730164,
+   "board_stats": 42,
+   "tier": 6,
+   "gold": 10,
+   "decisions": 1053,
+   "elapsed_s": 52.72,
+   "pair_winrate": 0.04347826086956521
+  },
+  {
+   "seed": 2,
+   "turns": 15,
+   "width": 2,
+   "depth": 1,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG31_815",
+     "atk": 48,
+     "hp": 48,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 14,
+     "hp": 14,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_816",
+     "atk": 17,
+     "hp": 16,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 17,
+     "hp": 17,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 14,
+     "hp": 13,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 14,
+     "hp": 14,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 15,
+     "hp": 14,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 13.549983978271484,
+   "board_stats": 275,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 984,
+   "elapsed_s": 40.06,
+   "pair_winrate": 1.0
+  },
+  {
+   "seed": 3,
+   "turns": 15,
+   "width": 2,
+   "depth": 1,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BGFYM_002t",
+     "atk": 6,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_200",
+     "atk": 11,
+     "hp": 8,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 8,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 8,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG34_170t3",
+     "atk": 10,
+     "hp": 4,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG36_116",
+     "atk": 8,
+     "hp": 2,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 8,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 5.837907314300537,
+   "board_stats": 80,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 986,
+   "elapsed_s": 39.19,
+   "pair_winrate": 0.3826086956521739
+  },
+  {
+   "seed": 1,
+   "turns": 15,
+   "width": 2,
+   "depth": 2,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG33_886",
+     "atk": 2,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_330",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "TB_BaconUps_156",
+     "atk": 9,
+     "hp": 10,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 2,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_013",
+     "atk": 1,
+     "hp": 4,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_013",
+     "atk": 1,
+     "hp": 4,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 2.607074499130249,
+   "board_stats": 48,
+   "tier": 2,
+   "gold": 10,
+   "decisions": 1053,
+   "elapsed_s": 133.0,
+   "pair_winrate": 0.1391304347826087
+  },
+  {
+   "seed": 2,
+   "turns": 15,
+   "width": 2,
+   "depth": 2,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG31_149_G",
+     "atk": 4,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_815",
+     "atk": 36,
+     "hp": 36,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 2,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_803",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 2,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 3,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 7.694356441497803,
+   "board_stats": 104,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 984,
+   "elapsed_s": 104.6,
+   "pair_winrate": 0.4956521739130434
+  },
+  {
+   "seed": 3,
+   "turns": 15,
+   "width": 2,
+   "depth": 2,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG25_001",
+     "atk": 4,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG21_015",
+     "atk": 35,
+     "hp": 33,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 8,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 4,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG26_146",
+     "atk": 11,
+     "hp": 7,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_110",
+     "atk": 9,
+     "hp": 8,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 5,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 10.265140533447266,
+   "board_stats": 136,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 111.69,
+   "pair_winrate": 0.6869565217391305
+  },
+  {
+   "seed": 1,
+   "turns": 15,
+   "width": 2,
+   "depth": 2,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG33_886",
+     "atk": 2,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_330",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 2,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_013",
+     "atk": 1,
+     "hp": 4,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "TB_BaconUps_156",
+     "atk": 6,
+     "hp": 12,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG25_013",
+     "atk": 1,
+     "hp": 4,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 2.32383131980896,
+   "board_stats": 47,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 1053,
+   "elapsed_s": 122.76,
+   "pair_winrate": 0.1391304347826087
+  },
+  {
+   "seed": 2,
+   "turns": 15,
+   "width": 2,
+   "depth": 2,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG31_149",
+     "atk": 2,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_815",
+     "atk": 37,
+     "hp": 38,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_236",
+     "atk": 2,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 4,
+     "hp": 5,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG33_886",
+     "atk": 3,
+     "hp": 5,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG31_803",
+     "atk": 2,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 3,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 8.258877754211426,
+   "board_stats": 111,
+   "tier": 6,
+   "gold": 2,
+   "decisions": 984,
+   "elapsed_s": 111.87,
+   "pair_winrate": 0.6434782608695652
+  },
+  {
+   "seed": 3,
+   "turns": 15,
+   "width": 2,
+   "depth": 2,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG36_100",
+     "atk": 1,
+     "hp": 3,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 39,
+     "hp": 39,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_342",
+     "atk": 16,
+     "hp": 17,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG28_300",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_344",
+     "atk": 4,
+     "hp": 4,
+     "keywords": [],
+     "tier": 6,
+     "golden": false
+    }
+   ],
+   "board_value": 9.885865211486816,
+   "board_stats": 134,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 981,
+   "elapsed_s": 118.67,
+   "pair_winrate": 0.6695652173913045
+  },
+  {
+   "seed": 4,
+   "turns": 15,
+   "width": 1,
+   "depth": 1,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG35_814",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG29_888",
+     "atk": 4,
+     "hp": 7,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_336",
+     "atk": 4,
+     "hp": 3,
+     "keywords": [],
+     "tier": 4,
+     "golden": false
+    },
+    {
+     "card": "BG25_011",
+     "atk": 3,
+     "hp": 5,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG31_803",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 3,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 0.6595199704170227,
+   "board_stats": 42,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 983,
+   "elapsed_s": 33.29,
+   "pair_winrate_unique": 0.14285714285714285,
+   "pair_winrate": 0.14285714285714285
+  },
+  {
+   "seed": 5,
+   "turns": 15,
+   "width": 1,
+   "depth": 1,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG34_170t2",
+     "atk": 4,
+     "hp": 17,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 36,
+     "hp": 41,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG29_611",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_013",
+     "atk": 2,
+     "hp": 5,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 9.171545028686523,
+   "board_stats": 119,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 31.13,
+   "pair_winrate_unique": 0.761904761904762,
+   "pair_winrate": 0.761904761904762
+  },
+  {
+   "seed": 4,
+   "turns": 15,
+   "width": 1,
+   "depth": 1,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG35_814",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG29_888",
+     "atk": 4,
+     "hp": 7,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_336",
+     "atk": 4,
+     "hp": 3,
+     "keywords": [],
+     "tier": 4,
+     "golden": false
+    },
+    {
+     "card": "BG25_011",
+     "atk": 3,
+     "hp": 5,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG31_803",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 3,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 0.6595199704170227,
+   "board_stats": 42,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 983,
+   "elapsed_s": 33.53,
+   "pair_winrate_unique": 0.14285714285714285,
+   "pair_winrate": 0.14285714285714285
+  },
+  {
+   "seed": 5,
+   "turns": 15,
+   "width": 1,
+   "depth": 1,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG34_170t2",
+     "atk": 4,
+     "hp": 17,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 36,
+     "hp": 41,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG29_611",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_013",
+     "atk": 2,
+     "hp": 5,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 9.171545028686523,
+   "board_stats": 119,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 33.52,
+   "pair_winrate_unique": 0.761904761904762,
+   "pair_winrate": 0.761904761904762
+  },
+  {
+   "seed": 4,
+   "turns": 15,
+   "width": 1,
+   "depth": 2,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG35_814",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG29_888",
+     "atk": 4,
+     "hp": 7,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_336",
+     "atk": 4,
+     "hp": 3,
+     "keywords": [],
+     "tier": 4,
+     "golden": false
+    },
+    {
+     "card": "BG25_011",
+     "atk": 3,
+     "hp": 5,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG31_803",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 3,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 0.6595199704170227,
+   "board_stats": 42,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 983,
+   "elapsed_s": 62.73,
+   "pair_winrate_unique": 0.14285714285714285,
+   "pair_winrate": 0.14285714285714285
+  },
+  {
+   "seed": 5,
+   "turns": 15,
+   "width": 1,
+   "depth": 2,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG34_170t2",
+     "atk": 4,
+     "hp": 17,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 36,
+     "hp": 41,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG29_611",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_013",
+     "atk": 2,
+     "hp": 5,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 9.171545028686523,
+   "board_stats": 119,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 60.43,
+   "pair_winrate_unique": 0.761904761904762,
+   "pair_winrate": 0.761904761904762
+  },
+  {
+   "seed": 4,
+   "turns": 15,
+   "width": 1,
+   "depth": 2,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG35_814",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG29_888",
+     "atk": 4,
+     "hp": 7,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_336",
+     "atk": 4,
+     "hp": 3,
+     "keywords": [],
+     "tier": 4,
+     "golden": false
+    },
+    {
+     "card": "BG25_011",
+     "atk": 3,
+     "hp": 5,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG31_803",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 3,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 0.6595199704170227,
+   "board_stats": 42,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 983,
+   "elapsed_s": 63.52,
+   "pair_winrate_unique": 0.14285714285714285,
+   "pair_winrate": 0.14285714285714285
+  },
+  {
+   "seed": 5,
+   "turns": 15,
+   "width": 1,
+   "depth": 2,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG34_170t2",
+     "atk": 4,
+     "hp": 17,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 36,
+     "hp": 41,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG29_611",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_013",
+     "atk": 2,
+     "hp": 5,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 9.171545028686523,
+   "board_stats": 119,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 62.94,
+   "pair_winrate_unique": 0.761904761904762,
+   "pair_winrate": 0.761904761904762
+  },
+  {
+   "seed": 4,
+   "turns": 15,
+   "width": 2,
+   "depth": 1,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG35_814",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG29_888",
+     "atk": 4,
+     "hp": 7,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_336",
+     "atk": 4,
+     "hp": 3,
+     "keywords": [],
+     "tier": 4,
+     "golden": false
+    },
+    {
+     "card": "BG25_011",
+     "atk": 3,
+     "hp": 5,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG31_803",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 3,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 0.6595199704170227,
+   "board_stats": 42,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 983,
+   "elapsed_s": 33.93,
+   "pair_winrate_unique": 0.14285714285714285,
+   "pair_winrate": 0.14285714285714285
+  },
+  {
+   "seed": 5,
+   "turns": 15,
+   "width": 2,
+   "depth": 1,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG34_170t2",
+     "atk": 4,
+     "hp": 17,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 36,
+     "hp": 41,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG29_611",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_001",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_013",
+     "atk": 2,
+     "hp": 5,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 9.171545028686523,
+   "board_stats": 119,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 33.7,
+   "pair_winrate_unique": 0.761904761904762,
+   "pair_winrate": 0.761904761904762
+  },
+  {
+   "seed": 4,
+   "turns": 15,
+   "width": 2,
+   "depth": 1,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG35_814",
+     "atk": 4,
+     "hp": 5,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 3,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG29_888",
+     "atk": 3,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG32_336",
+     "atk": 5,
+     "hp": 5,
+     "keywords": [],
+     "tier": 4,
+     "golden": false
+    },
+    {
+     "card": "BG29_300",
+     "atk": 5,
+     "hp": 10,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG31_803",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 2.4996302127838135,
+   "board_stats": 56,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 985,
+   "elapsed_s": 39.59,
+   "pair_winrate_unique": 0.2857142857142857,
+   "pair_winrate": 0.2857142857142857
+  },
+  {
+   "seed": 5,
+   "turns": 15,
+   "width": 2,
+   "depth": 1,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG34_170t2",
+     "atk": 1,
+     "hp": 9,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 35,
+     "hp": 37,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG34_170t2",
+     "atk": 3,
+     "hp": 11,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG29_611",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 4,
+     "hp": 7,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_013",
+     "atk": 2,
+     "hp": 5,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 9.080668449401855,
+   "board_stats": 119,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 37.77,
+   "pair_winrate_unique": 0.7142857142857143,
+   "pair_winrate": 0.7142857142857143
+  },
+  {
+   "seed": 4,
+   "turns": 15,
+   "width": 2,
+   "depth": 2,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BG36_520",
+     "atk": 3,
+     "hp": 2,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG31_149",
+     "atk": 35,
+     "hp": 36,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG26_146",
+     "atk": 5,
+     "hp": 5,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_200",
+     "atk": 3,
+     "hp": 6,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG29_300",
+     "atk": 2,
+     "hp": 6,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    }
+   ],
+   "board_value": 8.495307922363281,
+   "board_stats": 112,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 106.99,
+   "pair_winrate_unique": 0.5555555555555556,
+   "pair_winrate": 0.5555555555555556
+  },
+  {
+   "seed": 5,
+   "turns": 15,
+   "width": 2,
+   "depth": 2,
+   "horizon": 0,
+   "final_board": [
+    {
+     "card": "BGS_119",
+     "atk": 35,
+     "hp": 34,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 7,
+     "hp": 11,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_004",
+     "atk": 3,
+     "hp": 5,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG20_100",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BGS_004",
+     "atk": 5,
+     "hp": 7,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_110",
+     "atk": 2,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_013",
+     "atk": 1,
+     "hp": 4,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 9.524397850036621,
+   "board_stats": 120,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 982,
+   "elapsed_s": 104.03,
+   "pair_winrate_unique": 0.7301587301587302,
+   "pair_winrate": 0.7301587301587302
+  },
+  {
+   "seed": 4,
+   "turns": 15,
+   "width": 2,
+   "depth": 2,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG25_011",
+     "atk": 2,
+     "hp": 4,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG28_300",
+     "atk": 2,
+     "hp": 1,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG29_300",
+     "atk": 2,
+     "hp": 6,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG31_149",
+     "atk": 2,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG23_000",
+     "atk": 1,
+     "hp": 4,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_098",
+     "atk": 3,
+     "hp": 2,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": -1.1244897842407227,
+   "board_stats": 35,
+   "tier": 6,
+   "gold": 2,
+   "decisions": 984,
+   "elapsed_s": 113.91,
+   "pair_winrate_unique": 0.0,
+   "pair_winrate": 0.0
+  },
+  {
+   "seed": 5,
+   "turns": 15,
+   "width": 2,
+   "depth": 2,
+   "horizon": 1,
+   "final_board": [
+    {
+     "card": "BG24_715",
+     "atk": 1,
+     "hp": 1,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BGS_119",
+     "atk": 35,
+     "hp": 34,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG26_963",
+     "atk": 3,
+     "hp": 4,
+     "keywords": [],
+     "tier": 2,
+     "golden": false
+    },
+    {
+     "card": "BG36_345",
+     "atk": 3,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG36_110",
+     "atk": 2,
+     "hp": 3,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "BG25_013",
+     "atk": 1,
+     "hp": 4,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    },
+    {
+     "card": "TB_BaconUps_079",
+     "atk": 8,
+     "hp": 12,
+     "keywords": [],
+     "tier": 1,
+     "golden": false
+    }
+   ],
+   "board_value": 9.230813980102539,
+   "board_stats": 114,
+   "tier": 6,
+   "gold": 0,
+   "decisions": 983,
+   "elapsed_s": 111.93,
+   "pair_winrate_unique": 0.8095238095238095,
+   "pair_winrate": 0.8095238095238095
+  }
+ ],
+ "seeds": [
+  1,
+  2,
+  3,
+  4,
+  5
+ ],
+ "note": "merged 5-seed 8-config search benchmark"
+}
