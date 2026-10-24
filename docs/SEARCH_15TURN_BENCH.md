@@ -101,6 +101,7 @@ python scripts\analyze_search_15turn.py `
 
 - `runs/warband_value/model_60k/checkpoint.pt` 是本地训练产物（`.gitignore`），
   需要先按 `docs/WARBAND_VALUE_NETWORK.md` 训练或放置；
+  **2026-10-24 清理后该目录已删除**，见 [CLEANUP_20261024.md](CLEANUP_20261024.md)。
 - `runs/search_15turn_bench_full/` 也在 `.gitignore`；仓库内保留
   `docs/search_bench/15turn_results_5seed.json` 与 `15turn_analysis_5seed.md` 作为 5-seed 快照。
 - 这只是 **搜索策略基准**，不代表线上/8 人对局强度；8 人对局另有 `scripts/eval_turn_search.py`。

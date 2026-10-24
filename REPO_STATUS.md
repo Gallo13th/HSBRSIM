@@ -87,10 +87,11 @@ python tools/version_sync.py --apply --yes
   - 每次 click/drag 后截图到 `runs/live/<run>/screenshots/actions/`
   - 同回合 2 次 no-effect → `diagnostics/` 5 帧 + state
   - 每回合 settled 截图/JSON；内存读取走子进程防崩
-- 当前 live 证据：`runs/live/LIVE_AUTOMATION_EVIDENCE_2.md`（task-8 三 run 合并）：
+- live 证据（2026-10-24 清理前）：`runs/live/LIVE_AUTOMATION_EVIDENCE_2.md`（task-8 三 run 合并）：
   - 自动 game_over→下一局、英雄选择、ACTIVATE 19 次成功发动、freeze/DG 各 3 次、
     choose-one+target 成功、no_effect 9/1767（4 次战斗过渡帧）；
   - 单次 run 3 个完整 game_over 未达成（跨 run 2 完整 + 2 进行中）。
+  - 说明：`runs/` 已于 2026-10-24 清理，证据需按 `docs/CLEANUP_20261024.md` 重新采集。
 - 8h 审计/修复（2026-10-22 23:07 →）：
   - env：move_minion、Dark Gift gift_id 观测、take_choice/失败诊断（b4a12db/c9cb58d）；
   - engine：饰品 REGISTRY 闸、choose+target 两阶段、CHOOSE_BOTH、PendingChoice 一次性（7372b6f/09095da）；
