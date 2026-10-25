@@ -132,6 +132,7 @@ BC：320 局教师示范 / 30,300 样本；验证集动作准确率 **85.6%**（
 - `docs/MULTI_AGENT_RULES.md` — 多智能体任务板/写范围/handoff
 - `docs/POLICY_OBS_V3.md` — obs v3/MOVE_MINION/旧 checkpoint 迁移
 - `docs/SEARCH_15TURN_BENCH.md` — 15 回合单座搜索宽度/深度/跨回合预期基准
+- `docs/REFERENCE_PROJECTS.md` — 外部参考项目评估（HearthstoneLegendArriver：无模拟环境）
 - `docs/8H_FINAL_REPORT.md` — 8h 自主工作最终报告
 - `docs/schemas/live_action.schema.json` — 动作日志 JSON Schema
 - `docs/ENGINE_NOTES.md` — 引擎修改记录（F-01…F-05）
