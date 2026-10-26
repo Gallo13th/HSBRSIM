@@ -1,0 +1,27 @@
+# HSBRSIM 主引擎 Python 包（maturin 构建 PyO3 扩展）。安装：`cd rust && python3 -m pip install -e .`
+# 与上游 AutoTavern/pyproject.toml 的差异只有包名/模块名（taverngym -> hsbg_engine），
+# 构建参数（maturin manifest/extension-module）保持不变，见 rust/FORK.md。
+[build-system]
+requires = ["maturin>=1.15,<2"]
+build-backend = "maturin"
+
+[project]
+name = "hsbg-engine"
+version = "1.0.0"
+description = "HSbg Engine: a Hearthstone Battlegrounds solo-mode simulator with a reinforcement-learning interface (HSBRSIM fork of TavernGym, MIT)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.urls]
+Repository = "https://github.com/Gallo13th/HSBRSIM"
+
+[tool.maturin]
+manifest-path = "crates/hsbg-engine-py/Cargo.toml"
+python-source = "python"
+module-name = "hsbg_engine._core"
+features = ["pyo3/extension-module"]

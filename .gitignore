@@ -42,3 +42,12 @@ tools/_bepinex_x64/
 # 官方原始 CardDefs 不入库，按 docs/DATA_REBUILD.md 重建
 hsdata/
 reversed/
+
+# Rust vendored engine build artifacts (large; never committed)
+rust/target/
+rust/python/**/*.so
+rust/**/__pycache__/
+
+# macOS metadata
+.DS_Store
+rust/target/
