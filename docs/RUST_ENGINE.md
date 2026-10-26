@@ -441,6 +441,34 @@ python3 rust/bench_engine.py --games 1000 --e2e-games 20 --solo-games 100 \
 
 ---
 
+### 10.5 P4-M1：逐步 MCTS 搜索核（Rust，新增能力）
+
+用户 P4 决策“搜索换成 Rust”。实现见 `rust/crates/hsbg-engine/src/search.rs`
+（`lib.rs` 注册 `pub mod search;`）+ PyO3 `mcts_search`；**不改变引擎默认行为**。
+
+```python
+import hsbg_engine as E
+pi_b, action, root_value, visits = E.mcts_search(
+    game, seat, simulations=8, c_puct=1.5, temperature=1.0,
+    eval_fn=None, seed=0, dirichlet_alpha=0.3, dirichlet_epsilon=0.25)
+# pi_b: bytes(f32[245])；eval_fn(features_bytes, cards_bytes, mask_bytes, seat)
+#       -> (policy_bytes bytes(f32[245]), value: float)；None = uniform prior + value 0
+```
+
+- 只对 `seat` 的 245 动作建树（动作合法 mask 精确约束），其余座位由引擎 bot 在边内推进；
+  终局 utility = `1 - 2*(placement-1)/(n-1)`；PUCT + 根 Dirichlet + 温度采样，全部随机性由
+  `seed` 决定（同 seed 同 π/action，测试覆盖）。
+- `eval_fn` 每节点首次扩展调用一次（总调用 ≤ `simulations+1`）；回调传
+  `observe(seat)` 的 f32[3227] + i32[124] + u8[245] mask 原始字节，返回策略先验（Rust 侧
+  按 mask 兜底清零/归一化）与 value；回调异常转 `PyErr`。
+- 本机实测（M1/Apple Silicon，stub eval，1 局 8 座 sims=1）：0.31 s/局、2241 次 search、
+  平均 0.105 ms/search（p95 0.317 ms）；单次 search：sims=1 0.058 ms / sims=2 0.084 ms /
+  sims=4 0.106 ms（不含 NN 推理）。
+- 限制：搜索期间持 GIL（回调即 Python/NN 推理，无法同进程多线程并行）；暂无批量 eval/
+  异步调度与显式 chance 节点（对手量以 bot 确定性推进，RNG 在 `Game` clone 内折叠）；
+  π 为 245 全长，Python 侧仍需按 mask 校验/重归一。远程 1k 局管线只需
+  `cd rust && python3 -m pip install -e .` 重建。
+
 ## 9. 参考
 
 - **`rust/FORK.md`**：上游 commit/许可归因、重命名映射、fork 改动清单、数据替换与
