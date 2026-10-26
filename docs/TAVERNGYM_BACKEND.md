@@ -1,5 +1,7 @@
 # TavernGym 参照后端（AutoTavern Rust 引擎 → HSBRSIM EnvLike）
 
+> 2026-10-26 更新：本项目已停用 hsrl2；本适配器现在是**默认/主后端**，优先加载 AutoTavern fork 的 `hsbg_engine`。旧“可选参照 / 默认 hsrl2”描述已过时。
+
 > 状态：**可选/参照后端，已接入但默认不启用**（默认后端仍是 `hsrl2` 的
 > `hsbg.env.BattlegroundsEnv`）。
 > 代码：`hsbg/backends/`（`__init__.py` / `taverngym_env.py` / `benchmark.py`）；

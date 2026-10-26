@@ -56,7 +56,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", default="runs/ppo", help="输出目录（相对仓库根）")
     p.add_argument("--seed", type=int, default=0)
     # 环境
-    p.add_argument("--env", default="auto", choices=["auto", "mock", "real"],
+    p.add_argument("--env", default="rust", choices=["rust", "auto", "mock"],
                    help="auto=真 env 可用就用，否则 Mock")
     p.add_argument("--opponent", default="heuristic", help="真环境的对手策略名")
     # 优化

@@ -49,7 +49,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--baseline", default="heuristic", choices=["random", "heuristic", "none"],
                    help="对照基线（none=只评策略）")
     p.add_argument("--num-envs", type=int, default=2, help="并行环境数")
-    p.add_argument("--env", default="auto", choices=["auto", "mock", "real"])
+    p.add_argument("--env", default="rust", choices=["rust", "auto", "mock"])
     p.add_argument("--opponent", default="heuristic", help="真环境对手策略名")
     p.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda", "cuda:0", "cuda:1"])
     p.add_argument("--seed", type=int, default=0)

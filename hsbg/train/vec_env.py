@@ -343,21 +343,17 @@ def try_make_real_vec_env(
     env_kwargs: Optional[Dict[str, Any]] = None,
     **kwargs: Any,
 ) -> Optional[VecEnv]:
-    """尝试构造真环境 VecEnv；不可用返回 ``None``（不抛异常）。"""
+    """尝试构造 AutoTavern Rust 单环境 + SyncVecEnv；不可用返回 None。"""
     env_kwargs = dict(env_kwargs or {})
-    try:  # 1) 环境层自带向量化（见 docs/ENV_SPEC §8）
-        from hsbg.env.vec_env import VecEnv as RealVecEnv  # type: ignore
-
-        return RealVecEnv(num_envs=num_envs, env_kwargs=env_kwargs, seed=seed)
-    except Exception:
-        pass
-    try:  # 2) 单环境 + SyncVecEnv 兜底
-        from hsbg.env import BattlegroundsEnv  # type: ignore
+    try:
+        from hsbg.rl.envs import make_env
 
         seeds = [seed + i for i in range(num_envs)]
 
         def _factory(i: int) -> Any:
-            return BattlegroundsEnv(seed=seeds[i], **env_kwargs)
+            return make_env(
+                backend="rust", seed=seeds[i], env_kwargs=env_kwargs,
+            )
 
         return SyncVecEnv.from_factory(_factory, num_envs, seeds=seeds)
     except Exception:
@@ -372,16 +368,16 @@ def make_vec_env(
     env_kwargs: Optional[Dict[str, Any]] = None,
     mock_kwargs: Optional[Dict[str, Any]] = None,
 ) -> VecEnv:
-    """``mode``: ``auto``/``real`` → 真 env 优先；``mock`` → 合成环境。"""
-    mode = (mode or "auto").lower()
+    """``mode``: ``rust``/``auto``/``real`` → Rust env 优先；``mock`` → 合成环境。"""
+    mode = (mode or "rust").lower()
     if mode in ("mock", "synthetic"):
         return MockVecEnv(num_envs=num_envs, seed=seed, **(mock_kwargs or {}))
     env = try_make_real_vec_env(num_envs, seed=seed, env_kwargs=env_kwargs)
     if env is not None:
         return env
-    if mode == "real":
+    if mode in ("real", "rust", "hsbg_engine"):
         raise RuntimeError(
-            "真环境不可用（hsbg.env 尚未实现）。请改用 --env mock 或稍后重试。"
+            "AutoTavern Rust 环境不可用（hsbg_engine 未构建）。请构建 rust 或改用 --env mock。"
         )
     return MockVecEnv(num_envs=num_envs, seed=seed, **(mock_kwargs or {}))
 

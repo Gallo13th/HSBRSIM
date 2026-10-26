@@ -60,7 +60,7 @@ legacy 引擎 hsrl2（Python，37.0.0 全内容/真实对局桥）
 cd C:\HSagent
 
 # 1) 引擎回归（约 50s）
-python -m pytest hsrl2/tests -q
+python -m pytest tests -q
 
 # 2) 项目测试（环境/策略/桥接）
 python -m pytest tests -q
@@ -205,6 +205,7 @@ TavernGym 引擎裸吞吐 **275.5 games/s**（3.63 ms/局，15.4 回合）；端
 
 - `docs/AUTOTAVERN_UPGRADE.md` — **AutoTavern 借鉴升级总报告**（对比/设计/变更/证据/限制）
 - `docs/AUTOTAVERN_P2_KICKOFF.md` — **第二阶段总报告**（Rust 主引擎/37 数据/动作观测统一/性能/内容移植计划）
+- `docs/AUTOTAVERN_RL.md` — AutoTavern Rust 环境与 RL 训练（默认后端）
 - `docs/RUST_ENGINE.md` — Rust 主引擎 `hsbg_engine`（架构/安装/用法/与上游关系/基准）
 - `docs/DATA_37_MIGRATION.md` — 37.0.0→AutoTavern schema 数据管线与差分（compat 条目/字段覆盖/局限）
 - `docs/PORTING_37_PLAN.md` — 37.x 内容移植缺口/难度/分批计划 + 缺失操作清单（P1 must-have）

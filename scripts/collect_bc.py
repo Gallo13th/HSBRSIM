@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""收集行为克隆（BC）示范数据：用引擎级启发式教师打完整对局。
+"""收集行为克隆（BC）示范数据：用 AutoTavern Rust 环境 + 观测级启发式教师。
 
-与 `scripts/train_bc.py` 的区别：这里的教师是 `hsbg.agents.heuristic.HeuristicPolicy`
-（引擎感知、强度更高），逐动作记录 ``(Observation, 候选下标)`` 到
+与 `scripts/train_bc.py` 的区别：这里的教师是 `hsbg.rl.policies.HeuristicPolicy`
+（观测级、与 AutoTavern Rust 环境一致），逐动作记录 ``(Observation, 候选下标)`` 到
 ``BCDataset``（可直接被 ``hsbg.train.bc.BCTrainer.fit`` 消费），并对局结束时
 回填终局名次（用于可选价值监督）。
 
@@ -46,55 +46,35 @@ def _end_turn_index(obs) -> int:
 
 
 def play_episode(env, teacher, seed: int) -> Tuple[List, int, int]:
-    """跑一局，返回 ``(samples[(obs, idx)], rank, steps)``。
-
-    防御：
-    * 教师动作可能不在环境候选集（环境枚举比教师更保守）→ 不计样本，
-      若环境拒绝该动作则强制 end_turn，避免死循环；
-    * 单局步数硬上限（env.max_steps + 200），超限按 truncate 收尾。
-    """
+    """跑一局，返回 ``(samples[(obs, idx)], rank, steps)``。"""
     obs = env.reset(seed=seed)
     samples: List = []
     steps = 0
     info: dict = {}
-    max_steps = int(getattr(env.config, "max_steps", 4000)) + 200
+    max_steps = int(getattr(env, "max_steps", 4000)) + 200
     while True:
         steps += 1
         if not obs.candidates:
-            # 无候选（已终局/异常态）→ 收尾
             return samples, int(info.get("rank", 0) or 0), steps
-        if obs.phase == "choice":
-            opt = teacher.choose_option_index(obs)
-            action = CandidateAction(kind=ActionKind.CHOOSE.value, option=opt)
-        else:
-            desc = teacher.choose(env.game, env.agent_hero)
-            action = (CandidateAction(kind=ActionKind.END_TURN.value)
-                      if desc is None else desc.to_candidate())
-        idx = _find_index(obs, action)
-        if idx >= 0:
-            samples.append((obs, idx))
-        else:
-            # 教师越界动作：不记录，改为 end_turn 推进回合
-            action = obs.candidates[_end_turn_index(obs)]
-            idx = _find_index(obs, action)
-            if idx >= 0:
-                samples.append((obs, idx))
-        obs, _reward, terminated, truncated, info = env.step(action)
+        try:
+            idx = int(teacher.act(obs, deterministic=True))
+        except Exception:
+            idx = 0
+        if not (0 <= idx < len(obs.candidates)):
+            idx = _end_turn_index(obs)
+        samples.append((obs, idx))
+        obs, _reward, terminated, truncated, info = env.step(idx)
         if terminated or truncated:
-            rank = int(info.get("rank", 0) or 0)
-            return samples, rank, steps
+            return samples, int(info.get("rank", 0) or 0), steps
         if info.get("invalid") or info.get("wrong_action"):
-            # 环境拒绝且状态未推进：强制 end_turn（若仍非法则退出）
-            fallback = obs.candidates[_end_turn_index(obs)]
-            if fallback.signature() == action.signature():
+            fallback = _end_turn_index(obs)
+            if fallback == idx:
                 return samples, 0, steps
             obs, _reward, terminated, truncated, info = env.step(fallback)
             if terminated or truncated:
-                rank = int(info.get("rank", 0) or 0)
-                return samples, rank, steps
+                return samples, int(info.get("rank", 0) or 0), steps
         if steps >= max_steps:
             return samples, 0, steps
-
 
 @dataclass
 class _WorkerResult:
@@ -107,12 +87,12 @@ class _WorkerResult:
 
 def _worker(args) -> _WorkerResult:
     """多进程 worker（模块级函数，Windows spawn 安全）。"""
-    from hsbg.agents.heuristic import HeuristicPolicy
-    from hsbg.env import BattlegroundsEnv
+    from hsbg.rl.envs import make_env
+    from hsbg.rl.policies import HeuristicPolicy
 
     episodes, base_seed, num_players, opponent, max_turns = args
-    env = BattlegroundsEnv(num_players=num_players, opponent=opponent,
-                           seed=base_seed, max_turns=max_turns)
+    env = make_env(backend="rust", seed=base_seed, num_players=num_players,
+                   env_kwargs={"max_turns": max_turns})
     teacher = HeuristicPolicy()
     samples: List = []
     ranks: List[int] = []
@@ -128,11 +108,11 @@ def _worker(args) -> _WorkerResult:
 
 def collect_sequential(episodes: int, base_seed: int, num_players: int,
                        opponent: str, max_turns: int) -> _WorkerResult:
-    from hsbg.agents.heuristic import HeuristicPolicy
-    from hsbg.env import BattlegroundsEnv
+    from hsbg.rl.envs import make_env
+    from hsbg.rl.policies import HeuristicPolicy
 
-    env = BattlegroundsEnv(num_players=num_players, opponent=opponent,
-                           seed=base_seed, max_turns=max_turns)
+    env = make_env(backend="rust", seed=base_seed, num_players=num_players,
+                   env_kwargs={"max_turns": max_turns})
     teacher = HeuristicPolicy()
     samples: List = []
     ranks: List[int] = []
@@ -185,7 +165,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # 合并成 BCDataset
     from hsbg.train.bc import BCDataset
     ds = BCDataset(meta={
-        "teacher": "hsbg.agents.heuristic.HeuristicPolicy",
+        "teacher": "hsbg.rl.policies.HeuristicPolicy",
         "episodes": sum(r.episodes for r in results),
         "players": args.players,
         "opponent": args.opponent,

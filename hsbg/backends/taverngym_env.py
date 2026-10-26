@@ -114,9 +114,14 @@ from hsbg.env.spec import (
 )
 
 try:  # pragma: no cover - 依赖是否安装由调用方决定
-    import taverngym as _tg
+    # 本项目已放弃 hsrl2，主模拟器是 AutoTavern fork 的 Rust ``hsbg_engine``。
+    # 保留 taverngym fallback 仅用于读取上游参照实现。
+    import hsbg_engine as _tg
 except ImportError:  # pragma: no cover
-    _tg = None
+    try:
+        import taverngym as _tg
+    except ImportError:
+        _tg = None
 
 __all__ = [
     "BACKEND_NAME",
@@ -127,7 +132,7 @@ __all__ = [
 ]
 
 #: 后端名（写进 ``info["backend"]`` / JSONL header）
-BACKEND_NAME = "taverngym"
+BACKEND_NAME = "hsbg_engine"
 
 #: 安装提示（``taverngym_available()`` 为 False 时抛出）
 TAVERNGYM_INSTALL_HINT = (
@@ -760,6 +765,8 @@ class TavernGymEnv:
         self.num_players = n
         self.agent_index = int(agent_index)
         self.obs_source = str(obs_source)
+        if isinstance(reward, dict):
+            reward = RewardConfig(**reward)
         self.reward = reward if reward is not None else RewardConfig()
         self.max_steps = int(max_steps)
         self.max_turns = None if max_turns is None else int(max_turns)

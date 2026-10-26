@@ -55,7 +55,7 @@ class EvalSummary:
     result: EvalResult = field(default_factory=EvalResult)
     wall_seconds: float = 0.0
     workers: int = 1
-    backend: str = "auto"
+    backend: str = "rust"
     episode_seeds: List[int] = field(default_factory=list)
     errors: int = 0
     #: 评测配置（写 JSON 便于回归对比：seed/episodes/opponent/...）
@@ -281,14 +281,14 @@ def _check_policy_backend(policy: Any, backend: str) -> None:
     """
     if not policy_requires_engine(policy):
         return
-    backend_name = str(backend or "hsrl2").lower()
-    if backend_name in ("mock", "taverngym"):
+    backend_name = str(backend or "rust").lower()
+    if backend_name in ("mock", "rust", "hsbg_engine", "taverngym"):
         raise ValueError(
             "teacher 策略需要真实 hsrl2 环境（env.game/env.agent_hero），"
             f"backend={backend_name!r} 不支持。请用 backend='real'/'auto'/'hsrl2'，"
             "或改用 heuristic/random（观测级可移植策略）。"
         )
-    if backend_name in ("auto", "hsrl2") and not real_env_available():
+    if backend_name == "auto" and not real_env_available():
         raise ValueError(
             "teacher 策略需要真实环境，但当前真实环境不可用（hsbg.env 导入失败）。"
             "请检查环境层，或改用 heuristic/random。"
@@ -309,7 +309,7 @@ def evaluate(
     seeds: Optional[Sequence[int]] = None,
     num_players: int = 8,
     opponent: str = "heuristic",
-    backend: str = "auto",
+    backend: str = "rust",
     env_kwargs: Optional[Dict[str, Any]] = None,
     mock_kwargs: Optional[Dict[str, Any]] = None,
     max_steps_per_episode: int = 2000,
@@ -461,7 +461,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--workers", type=int, default=1, help="并行 worker 数")
     p.add_argument("--num-players", type=int, default=8)
     p.add_argument("--opponent", default="heuristic")
-    p.add_argument("--backend", default="auto", choices=list(BACKENDS))
+    p.add_argument("--backend", default="rust", choices=list(BACKENDS))
     p.add_argument("--max-steps-per-episode", type=int, default=2000)
     p.add_argument("--deterministic", action="store_true",
                    help="策略尽量贪心（默认关闭：随机策略保持采样）")

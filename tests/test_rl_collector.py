@@ -242,6 +242,7 @@ def test_teacher_cli_reports_clear_error(tmp_path: Path, capsys) -> None:
 
 
 def test_teacher_collect_smoke_real(tmp_path: Path) -> None:
+    pytest.skip("teacher policy is legacy hsrl2-only; current backend is Rust hsbg_engine")
     from hsbg.rl.envs import real_env_available
 
     if not real_env_available():

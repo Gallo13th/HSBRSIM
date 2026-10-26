@@ -9,6 +9,7 @@
 |---|---|
 | [docs/AUTOTAVERN_UPGRADE.md](docs/AUTOTAVERN_UPGRADE.md) | ★ AutoTavern 借鉴升级（第一阶段）总报告（双引擎/变更/证据/限制） |
 | [docs/AUTOTAVERN_P2_KICKOFF.md](docs/AUTOTAVERN_P2_KICKOFF.md) | ★★ 第二阶段总报告：Rust 主引擎/37 数据/动作观测统一/性能/内容移植（改引擎/数据/动作必读） |
+| [docs/AUTOTAVERN_RL.md](docs/AUTOTAVERN_RL.md) | ★ AutoTavern Rust 环境 + RL 训练/采集/评测（hsrl2 已停用） |
 | [docs/RUST_ENGINE.md](docs/RUST_ENGINE.md) / [rust/FORK.md](rust/FORK.md) | Rust 主引擎 `hsbg_engine` 架构/构建/用法 + fork 策略与改动台账 |
 | [docs/DATA_37_MIGRATION.md](docs/DATA_37_MIGRATION.md) | 37.0.0 → AutoTavern schema 数据管线（生成器/差分/compat 条目/局限） |
 | [docs/PORTING_37_PLAN.md](docs/PORTING_37_PLAN.md) | 37.x 内容移植缺口/难度/分批计划 + 缺失操作清单（P1 must-have 18 卡） |
@@ -38,7 +39,7 @@
 
 ```
 C:\HSagent\
-├── hsrl2/                 # legacy Python 引擎（P3 起冻结：只读参考/差分 oracle；回归全绿）
+├── hsrl2/                 # legacy Python 引擎（**已停用运行时**；只读参考/差分 oracle）
 │   ├── game.py            # Game：招募回合 / 配对 / 战斗 / 淘汰（约 5.7k 行）
 │   ├── hero.py minion.py entity.py tags.py
 │   ├── combat.py queue.py events.py pools.py db.py defs.py
@@ -54,7 +55,7 @@ C:\HSagent\
 │   └── FORK.md                 # 上游 commit/重命名/改动台账/数据替换步骤
 ├── hsbg/                  # ★ 本项目新增代码
 │   ├── env/               # RL 环境（spec 契约 / 观测 / 动作 / 对局循环 / 向量化 / snapshot / invariants）
-│   ├── backends/          # ★ TavernGym 参照后端（EnvLike 适配 + 基准；默认后端仍是 hsrl2）
+│   ├── backends/          # ★ AutoTavern Rust 主后端（EnvLike 适配；默认）
 │   ├── rl/                # Policy/EnvLike 协议、Gym 包装、JSONL 采集/评测、make_env 工厂
 │   ├── agents/            # 脚本对手 / 启发式教师
 │   ├── policy/            # 实体 Transformer 策略 + 价值头
@@ -70,9 +71,9 @@ C:\HSagent\
 └── runs/                  # 训练产物（git 忽略）
 ```
 
-**`hsrl2/` 是 vendored 引擎**：默认视为只读。确需修改时：
+**`hsrl2/` 是历史 vendored 引擎**：**不参与运行时/训练/评测**，只保留参考与差分。确需修改时：
 1. 先在 `hsrl2/tests/` 或 `tests/test_engine_fixes.py` 写失败测试；
-2. 改动必须保持 `python -m pytest hsrl2/tests -q` 全绿；
+2. 仅在明确需要历史差分时运行 legacy 测试；当前运行时门禁不依赖 hsrl2；
 3. 在 `docs/ENGINE_NOTES.md` 记录动机、规则依据、影响面；
 4. 只有 Lead 批准才能改 `game.py` / `combat.py` / `queue.py` / `tags.py` 等核心文件。
 
@@ -85,8 +86,8 @@ C:\HSagent\
 
 ```powershell
 cd C:\HSagent
-python -m pytest hsrl2/tests -q          # 引擎回归（通过数以本次输出为准，不抄旧值）
-python -m pytest tests -q                # 本项目新增测试（含 tests/conformance/；无 taverngym 时自动 skip）
+python -m pytest tests -q                # 项目测试（AutoTavern Rust 路径；旧 conformance 可 skip）
+cd rust && cargo test --release -p hsbg-engine   # Rust 主引擎回归
 python tools/smoke_random_games.py --games 8 --seed 2000   # 全对局压测
 python scripts/verify_all.py --fast      # 一键快速门禁（约 2min）
 python scripts/verify_all.py             # 一键全量门禁（约 4-6min；有 rust/ 时含 Rust build gate）
@@ -179,8 +180,9 @@ macOS/Linux 上用 `python3` 代替 `python`；平台专属用例按 `tests/conf
 
 任何改动合入前：
 ```powershell
-python -m pytest hsrl2/tests -q      # 必须 0 failed
-python -m pytest tests -q            # 必须 0 failed（taverngym 缺失时 conformance 自动 skip）
+python -m pytest tests -q            # 必须 0 failed
+python -m pytest tests/test_rl_api.py tests/test_rl_collector.py tests/test_rl_evaluate.py tests/test_rl_gym.py -q
+python scripts/train_ppo.py --env rust --total-steps 64 --num-envs 1 --n-steps 32 --out runs/ppo_gate
 python tools/smoke_random_games.py --games 4 --seed 7   # crashes=0
 python scripts/verify_all.py         # 推荐：一键全量门禁（引擎/项目/冒烟/环境验收/一致性/版本/
                                      # AutoTavern 跨引擎对拍/TavernBench 评分复现；缺 taverngym 的项 SKIP）
@@ -220,7 +222,7 @@ python scripts/validate_env.py --games 20 --check-invariants   # 结构不变量
   - 数据在 `rust/crates/hsbg-engine/data/cards.json`（编译期嵌入）；**只允许由
     `tools/p2_data/gen_carddb_37.py` 生成**，不得手改；替换后 `cd rust && python -m pip install -e .` 重建。
   - 版本上报由数据 `meta` 驱动（`game_version()/server_rules_version()`），不得硬编码。
-  - `hsrl2` 已 **冻结**（P3 起）：只读参考/差分 oracle/真实对局桥，**不再新增功能或内容**；
+  - `hsrl2` 已 **停用运行时**：只读参考/差分 oracle/真实对局桥，**不再新增功能或内容**；
     新机制/新卡一律进 `rust/`（AT fork）；`hsrl2` 回归与差分测试必须保持全绿。
 - **数据版本 = 37.0.0.255130（唯一）**；源数据在 `data/`，AutoTavern schema 产物在
   `data/p2/`（`cards_37.json` = 37 映射 + 36.6.3 compat 条目，保证脚本 registry 0 missing）。
