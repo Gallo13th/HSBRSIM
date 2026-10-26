@@ -4,13 +4,14 @@
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyAny, PyBytes};
 
 use hsbg_engine::actions::{Action, N_ACTIONS};
 use hsbg_engine::batch::{BatchEnv, SlotResult};
 use hsbg_engine::bot;
 use hsbg_engine::cards::db;
 use hsbg_engine::obs::{OBS_CARDS, OBS_FLOATS};
+use hsbg_engine::search::{SearchConfig, search as rust_search};
 use hsbg_engine::{Game, RulesConfig, SoloEnv};
 
 fn parse_config(config_json: Option<&str>) -> PyResult<RulesConfig> {
@@ -540,6 +541,114 @@ fn default_config_json() -> String {
     serde_json::to_string_pretty(&RulesConfig::default()).unwrap()
 }
 
+/// P4-M1：逐步 MCTS 搜索（Rust 核，PUCT）。
+///
+/// `eval_fn(features_bytes, cards_bytes, mask_bytes, seat) -> (policy_bytes, value)`：
+/// - `features_bytes` = `observe(seat)` 的 f32[3227] 小端字节；`cards_bytes` = i32[124]；
+/// - `mask_bytes` = u8[245] 合法动作 mask；
+/// - `policy_bytes` = f32[245] 先验（Rust 侧会按 mask 兜底清零/归一化）；
+/// - `value` = seat 视角期望 utility（终局名次口径）。
+///
+/// 返回 `(pi_bytes f32[245], action: int, root_value: float, visits: int)`。
+/// `eval_fn=None` 时使用 uniform prior + value=0（fallback，便于无 NN 冒烟）。
+/// 注意：搜索期间持有 GIL（回调是 Python/NN 推理）；批量评估/异步待 P4 后续。
+#[pyfunction]
+#[pyo3(signature = (game, seat, simulations=8, c_puct=1.5, temperature=1.0, eval_fn=None,
+                    seed=0, dirichlet_alpha=0.3, dirichlet_epsilon=0.25))]
+fn mcts_search<'py>(
+    py: Python<'py>,
+    game: &PyGame,
+    seat: usize,
+    simulations: u32,
+    c_puct: f32,
+    temperature: f32,
+    eval_fn: Option<Py<PyAny>>,
+    seed: u64,
+    dirichlet_alpha: f32,
+    dirichlet_epsilon: f32,
+) -> PyResult<(Bound<'py, PyBytes>, u16, f32, u32)> {
+    let start = game.g.clone();
+    if seat >= start.players.len() {
+        return Err(PyValueError::new_err(format!(
+            "seat {seat} out of range (0..{})",
+            start.players.len()
+        )));
+    }
+    let cfg = SearchConfig {
+        simulations,
+        c_puct,
+        temperature,
+        dirichlet_alpha,
+        dirichlet_epsilon,
+        seed,
+    };
+    // 回调异常：先记下，搜索结束后转成 Python 异常（search 的签名不收 Result）。
+    let err: std::cell::RefCell<Option<PyErr>> = std::cell::RefCell::new(None);
+    let result = rust_search(&start, seat, &cfg, |g: &Game, s: usize| {
+        if err.borrow().is_some() {
+            return (vec![1.0; N_ACTIONS], 0.0);
+        }
+        let Some(cb) = &eval_fn else {
+            return (vec![1.0; N_ACTIONS], 0.0);
+        };
+        match call_eval_fn(py, cb, g, s) {
+            Ok(x) => x,
+            Err(e) => {
+                *err.borrow_mut() = Some(e);
+                (vec![1.0; N_ACTIONS], 0.0)
+            }
+        }
+    });
+    if let Some(e) = err.into_inner() {
+        return Err(e);
+    }
+    let pi_bytes: Vec<u8> = result.pi.iter().flat_map(|x| x.to_le_bytes()).collect();
+    Ok((
+        PyBytes::new(py, &pi_bytes),
+        result.action,
+        result.root_value,
+        result.visits,
+    ))
+}
+
+/// 调用 Python eval 回调：传观测/mask 字节，解析 policy bytes + value。
+fn call_eval_fn(
+    py: Python<'_>,
+    cb: &Py<PyAny>,
+    g: &Game,
+    seat: usize,
+) -> PyResult<(Vec<f32>, f32)> {
+    let obs = hsbg_engine::obs::observe(g, seat);
+    let features: Vec<u8> = obs.floats.iter().flat_map(|x| x.to_le_bytes()).collect();
+    let cards: Vec<u8> = obs.cards.iter().flat_map(|x| x.to_le_bytes()).collect();
+    let mask: Vec<u8> = g.legal_mask(seat).iter().map(|b| *b as u8).collect();
+    let out = cb.call1(
+        py,
+        (
+            PyBytes::new(py, &features),
+            PyBytes::new(py, &cards),
+            PyBytes::new(py, &mask),
+            seat,
+        ),
+    )?;
+    let out = out.bind(py);
+    let (policy, value): (Bound<'_, PyBytes>, f32) = out.extract()?;
+    let raw = policy.as_bytes();
+    if raw.len() != N_ACTIONS * 4 {
+        return Err(PyValueError::new_err(format!(
+            "policy bytes must be f32[{}] ({} bytes), got {}",
+            N_ACTIONS,
+            N_ACTIONS * 4,
+            raw.len()
+        )));
+    }
+    let prior: Vec<f32> = raw
+        .chunks_exact(4)
+        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect();
+    Ok((prior, value))
+}
+
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("N_ACTIONS", N_ACTIONS)?;
@@ -561,5 +670,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(layout, m)?)?;
     m.add_function(wrap_pyfunction!(card_static, m)?)?;
     m.add_function(wrap_pyfunction!(catalog_json, m)?)?;
+    m.add_function(wrap_pyfunction!(mcts_search, m)?)?;
     Ok(())
 }

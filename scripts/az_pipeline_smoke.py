@@ -25,7 +25,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import hsbg_engine as E
-from hsbg.search.engine_mcts import MCTSConfig, search
+from hsbg.search.engine_mcts import MCTSConfig, search as py_search
 
 try:
     import torch
@@ -35,6 +35,34 @@ except Exception:  # noqa: BLE001
     torch = None
     F = None
     TORCH = False
+
+
+RUST_SEARCH = hasattr(E, "mcts_search")
+
+
+def rust_eval_adapter(evaluator):
+    def eval_fn(features_bytes, cards_bytes, mask_bytes, seat):
+        f = np.frombuffer(features_bytes, dtype="<f4")
+        c = np.frombuffer(cards_bytes, dtype="<i4")
+        m = np.frombuffer(mask_bytes, dtype=np.uint8).astype(bool)
+        policy, value = evaluator(f, c, m, seat)
+        return policy.astype(np.float32).tobytes(), float(value)
+    return eval_fn
+
+
+def decide(game, seat, evaluator, cfg, search_backend: str):
+    if search_backend == "rust":
+        pi_b, action, root_value, visits = E.mcts_search(
+            game, seat, simulations=cfg.simulations, c_puct=cfg.c_puct,
+            temperature=cfg.temperature, eval_fn=rust_eval_adapter(evaluator),
+            seed=cfg.seed, dirichlet_alpha=cfg.dirichlet_alpha,
+            dirichlet_epsilon=cfg.dirichlet_epsilon)
+        pi = np.frombuffer(pi_b, dtype="<f4").copy()
+        return pi, int(action), {"root_value": float(root_value), "visits": int(visits),
+                                 "search": "rust"}
+    pi, action, stats = py_search(game, seat, evaluator, cfg)
+    stats["search"] = "python"
+    return pi, action, stats
 
 
 def make_backend(name: str) -> str:
@@ -72,9 +100,15 @@ def save_net(net, backend: str, path: str, meta: dict):
 
 
 def collect(games: int, sims: int, seed: int, net, backend: str, device: str,
-            temperature: float = 1.0):
+            temperature: float = 1.0, search_backend: str = "auto", sample_stride: int = 1):
     evaluator = net_evaluator(net, backend, device)
+    if search_backend == "auto":
+        search_backend = "rust" if RUST_SEARCH else "python"
+    if search_backend == "rust" and not RUST_SEARCH:
+        raise RuntimeError("Rust mcts_search not available; rebuild hsbg_engine")
     cfg = MCTSConfig(simulations=sims, temperature=temperature, seed=seed)
+    total_visits = 0
+    decisions_by_seat = {}
     feats, cards, masks, pis, ranks, seats = [], [], [], [], [], []
     t0 = time.time()
     decisions = 0
@@ -100,9 +134,14 @@ def collect(games: int, sims: int, seed: int, net, backend: str, device: str,
                     action = 0 if mask[0] else int(legal[0])
                     pi = np.zeros(245, dtype=np.float32)
                     pi[action] = 1.0
+                    stats = {"visits": 0}
                 else:
-                    pi, action, _ = search(game, p, evaluator, cfg)
-                game_samples.append((p, f, c, mask, pi))
+                    pi, action, stats = decide(game, p, evaluator, cfg, search_backend)
+                total_visits += int(stats.get("visits", 0))
+                di = decisions_by_seat.get(p, 0)
+                decisions_by_seat[p] = di + 1
+                if sample_stride <= 1 or (di % sample_stride) == 0:
+                    game_samples.append((p, f, c, mask, pi))
                 game.step(p, action)
                 decisions += 1
                 acted = True
@@ -136,7 +175,10 @@ def collect(games: int, sims: int, seed: int, net, backend: str, device: str,
         "rank": np.asarray(ranks, dtype=np.uint8),
         "seat": np.asarray(seats, dtype=np.uint8),
     }
-    return data, dt, decisions
+    meta = {"search": search_backend, "games_per_s": games / max(dt, 1e-9),
+            "decisions": decisions, "samples": int(data["features"].shape[0]),
+            "total_visits": total_visits}
+    return data, dt, meta
 
 
 def train(net, backend: str, data, epochs: int, batch: int, lr: float, device: str):
@@ -235,6 +277,55 @@ def evaluate(net, backend: str, games: int, seed: int, device: str):
             "rank_counts": {int(k): int(v) for k, v in Counter(ranks).items()}}
 
 
+def evaluate_heuristic(games: int, seed: int):
+    """seat0 = 引擎 heuristic bot；其余 bot；平均名次基线。"""
+    ranks = []
+    for gi in range(games):
+        game = E.Game(seed=seed + 20_000 + gi)
+        guard = 0
+        while not game.is_over():
+            acted = False
+            for p in range(game.num_players):
+                if not game.needs_action(p):
+                    continue
+                if p == 0:
+                    game.step(0, int(game.bot_action(0)))
+                else:
+                    game.bot_play(p)
+                acted = True
+                guard += 1
+                if guard > 20000:
+                    raise RuntimeError("heuristic eval guard")
+            if not acted:
+                break
+        ranks.append(int(game.placements()[0]))
+    arr = np.asarray(ranks, dtype=np.float32)
+    return {"games": games, "mean_rank": float(arr.mean()),
+            "top4_rate": float((arr <= 4).mean()), "win_rate": float((arr == 1).mean())}
+
+
+def data_quality(net, backend: str, data, device: str, limit: int = 2000):
+    """在训练数据上评估 value 相关性 / policy top-1 与搜索 π 一致率。"""
+    evaluator = net_evaluator(net, backend, device)
+    n = len(data["rank"])
+    idx = np.linspace(0, n - 1, min(limit, n)).astype(np.int64)
+    values, utils, top1_ok, top1_n = [], [], 0, 0
+    for i in idx:
+        f = data["features"][i].astype(np.float32)
+        c = data["cards"][i]
+        m = data["masks"][i].astype(bool)
+        pi = data["pi"][i].astype(np.float32)
+        policy, value = evaluator(f, c, m, int(data["seat"][i]))
+        values.append(value)
+        utils.append(1.0 - 2.0 * (int(data["rank"][i]) - 1) / 7.0)
+        if pi.argmax() == policy.argmax():
+            top1_ok += 1
+        top1_n += 1
+    corr = float(np.corrcoef(values, utils)[0, 1]) if len(values) > 2 else 0.0
+    return {"samples": int(top1_n), "value_rank_corr": corr,
+            "policy_top1_agreement": top1_ok / max(top1_n, 1)}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--games", type=int, default=100)
@@ -242,11 +333,14 @@ def main():
     ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--batch", type=int, default=512)
     ap.add_argument("--lr", type=float, default=3e-4)
-    ap.add_argument("--eval-games", type=int, default=10)
+    ap.add_argument("--eval-games", type=int, default=100)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=str, default="runs/az_smoke")
     ap.add_argument("--device", type=str, default="cpu")
     ap.add_argument("--backend", type=str, default="auto", choices=["auto", "torch", "numpy"])
+    ap.add_argument("--search", type=str, default="auto", choices=["auto", "rust", "python"])
+    ap.add_argument("--sample-stride", type=int, default=1,
+                    help="每座位决策采样间隔（1=全采；>1 降低数据量）")
     args = ap.parse_args()
     backend = make_backend(args.backend)
 
@@ -258,7 +352,9 @@ def main():
 
     net = make_net(backend, args.device)
     t_start = time.time()
-    data, collect_s, decisions = collect(args.games, args.sims, args.seed, net, backend, args.device)
+    data, collect_s, collect_meta = collect(args.games, args.sims, args.seed, net, backend,
+                                            args.device, search_backend=args.search,
+                                            sample_stride=args.sample_stride)
     data_path = os.path.join(args.out, "data.npz")
     np.savez_compressed(data_path, **data)
     print(f"[data] {data['features'].shape[0]} samples -> {data_path} ({collect_s:.1f}s)",
@@ -274,6 +370,8 @@ def main():
     print(f"[ckpt] {ckpt}", flush=True)
 
     metrics = evaluate(net, backend, args.eval_games, args.seed, args.device)
+    heur = evaluate_heuristic(args.eval_games, args.seed)
+    quality = data_quality(net, backend, data, args.device)
     report = {
         "engine": {"game_version": E.game_version(), "cards": E.db_info()[0]},
         "backend": backend,
@@ -282,9 +380,14 @@ def main():
         "train_seconds": train_s,
         "total_seconds": time.time() - t_start,
         "samples": int(data["features"].shape[0]),
-        "decisions": int(decisions),
+        "decisions": int(collect_meta["decisions"]),
+        "search": collect_meta["search"],
+        "games_per_s": collect_meta["games_per_s"],
+        "total_visits": collect_meta["total_visits"],
         "train_log": logs,
         "eval": metrics,
+        "baseline_heuristic": heur,
+        "data_quality": quality,
     }
     with open(os.path.join(args.out, "report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
@@ -293,6 +396,8 @@ def main():
                                                        "total_seconds")}, ensure_ascii=False),
           flush=True)
     print("[eval]", json.dumps(metrics, ensure_ascii=False), flush=True)
+    print("[baseline]", json.dumps(heur, ensure_ascii=False), flush=True)
+    print("[quality]", json.dumps(quality, ensure_ascii=False), flush=True)
 
 
 if __name__ == "__main__":
