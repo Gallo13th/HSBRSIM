@@ -133,9 +133,14 @@ def main(argv=None) -> int:
         gates = [g for g in gates if g[0] != "taverngym_conformance"] + [
             g for g in gates if g[0] == "taverngym_conformance"]
     else:
-        # P2：Rust 主引擎（fork 自 AutoTavern）构建门禁；无 cargo 或无 rust/ 时 SKIP。
+        # P2/P3：Rust 主引擎（fork 自 AutoTavern）构建 + 测试门禁；
+        # 无 cargo 或无 rust/ 时 SKIP。
         gates.insert(0, ("rust_engine_build",
                          ["cargo", "build", "--release",
+                          "--manifest-path", "rust/Cargo.toml",
+                          "-p", "hsbg-engine"], 900))
+        gates.insert(1, ("rust_engine_test",
+                         ["cargo", "test", "--release",
                           "--manifest-path", "rust/Cargo.toml",
                           "-p", "hsbg-engine"], 900))
 
@@ -149,7 +154,7 @@ def main(argv=None) -> int:
                             "skip": True, "seconds": 0.0,
                             "tail": f"SKIPPED: optional dependency {dep} missing"})
             continue
-        if name == "rust_engine_build":
+        if name in ("rust_engine_build", "rust_engine_test"):
             cargo = _cargo_path()
             if cargo is None or not (ROOT / "rust" / "Cargo.toml").exists():
                 print(f"[SKIP] {name}  (无 cargo 或无 rust/Cargo.toml)")

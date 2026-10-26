@@ -35,7 +35,7 @@
 
 ```
 C:\HSagent\
-├── hsrl2/                 # 模拟引擎（vendored，机制精度权威；回归测试全绿）
+├── hsrl2/                 # legacy Python 引擎（P3 起冻结：只读参考/差分 oracle；回归全绿）
 │   ├── game.py            # Game：招募回合 / 配对 / 战斗 / 淘汰（约 5.7k 行）
 │   ├── hero.py minion.py entity.py tags.py
 │   ├── combat.py queue.py events.py pools.py db.py defs.py
@@ -44,7 +44,7 @@ C:\HSagent\
 │   └── tests/             # 引擎回归测试（禁止为了新功能改红）
 ├── data/                  # 引擎卡牌数据 JSON（37.0.0.255130 基线）
 ├── hsdata/                # 可选：原始 CardDefs（不入库，按 docs/DATA_REBUILD.md 重建）
-├── rust/                  # ★★ P2 主引擎：hsbg-engine（fork AutoTavern TavernGym，Rust+PyO3）
+├── rust/                  # ★★ 唯一主引擎（P3）：hsbg-engine（fork AutoTavern TavernGym，Rust+PyO3）
 │   ├── crates/hsbg-engine/     # 引擎 crate（数据在 data/cards.json，编译期嵌入）
 │   ├── crates/hsbg-engine-py/  # PyO3 绑定（Python 模块 hsbg_engine._core）
 │   ├── python/hsbg_engine/     # numpy 包装（Game/BattlegroundsEnv/BatchEnv）
@@ -217,7 +217,8 @@ python scripts/validate_env.py --games 20 --check-invariants   # 结构不变量
   - 数据在 `rust/crates/hsbg-engine/data/cards.json`（编译期嵌入）；**只允许由
     `tools/p2_data/gen_carddb_37.py` 生成**，不得手改；替换后 `cd rust && python -m pip install -e .` 重建。
   - 版本上报由数据 `meta` 驱动（`game_version()/server_rules_version()`），不得硬编码。
-  - `hsrl2` 降级为 **legacy/对照 oracle/真实对局桥**：不做新功能，但必须保持回归全绿。
+  - `hsrl2` 已 **冻结**（P3 起）：只读参考/差分 oracle/真实对局桥，**不再新增功能或内容**；
+    新机制/新卡一律进 `rust/`（AT fork）；`hsrl2` 回归与差分测试必须保持全绿。
 - **数据版本 = 37.0.0.255130（唯一）**；源数据在 `data/`，AutoTavern schema 产物在
   `data/p2/`（`cards_37.json` = 37 映射 + 36.6.3 compat 条目，保证脚本 registry 0 missing）。
   数值/卡面以 `data/`（官方 CardDefs 37.0.0）为准；不得用旧中文快照覆盖英文权威。

@@ -182,3 +182,27 @@ rizling 参考版本落后一个版本属正常 warning。
 - 5 条搜索测试依赖未入库的 `runs/` checkpoint、`tests/test_live_clickbot.py` 非 Windows
   模块级 skip —— 明细见 `docs/PORTABILITY.md`。
 - Rust 构建产物 `rust/target/` 与 `*.so` 已 gitignore，不入库。
+
+
+---
+
+## 9. 2026-10-26 第三阶段（P3）验收快照：AT 唯一主引擎 + 37 池内内容补完
+
+> 数据 37.0.0.255130；主引擎 `hsbg_engine`（AT fork）；hsrl2 冻结为 legacy/oracle。
+
+| 检查 | 命令 | 结果 |
+|---|---|---|
+| Rust 构建 | `cargo build --release --manifest-path rust/Cargo.toml -p hsbg-engine` | PASS（verify_all rust_engine_build gate） |
+| Rust 全量测试 | `cargo test --release -p hsbg-engine --no-fail-fast` | **39 套件 887 passed / 0 failed / 0 ignored** |
+| P3 内容测试 | `--test p3_cards_a` / `p3_cards_b` / `p3_systems` | 8/8、13/13、8/8 |
+| 池内覆盖门禁 | `python3 -m tools.p3_verify.run_all --skip-rebuild` | 池内随从 277 missing 0；池内法术 73 missing 0；P1 18 卡 missing 0 |
+| oracle 差分 | 同上 | 15 MATCH / 1 DEFERRED / 2 STRUCTURAL_OK / 0 FAIL |
+| 8 人 bot 冒烟 | `hsbg_engine` bot 驱动 ×20 seeds | crashes=0 |
+| 确定性 | 同 seed 双跑 | PASS |
+| Python 侧 | `pytest tests/test_rust_engine.py` | 10 passed + 1 skip |
+| 一键门禁 | `python3 scripts/verify_all.py` | **12/12 gates PASS**（新增 rust_engine_build/rust_engine_test） |
+| legacy | `pytest hsrl2/tests` | 4890 passed / 6 skipped（冻结不回退） |
+
+剩余缺口（不阻塞 RL）：主技能长尾 9（Duos/旧替换）、P2 饰品/非池法术、P3 异变/任务、
+679 场真实战斗 Rust 侧重放、Rally oracle debug seam；进入 RL 前需重冻结 seed 基准
+（`rust/FORK.md` §7 checklist）。

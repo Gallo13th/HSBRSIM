@@ -24,13 +24,21 @@ legacy 引擎 hsrl2（Python，37.0.0 全内容/真实对局桥）
 > 游戏支持但未实现的操作作为 245+ 扩展），性能路线与内容移植计划已产出。
 > 详见 [docs/AUTOTAVERN_P2_KICKOFF.md](docs/AUTOTAVERN_P2_KICKOFF.md)、
 > [docs/RUST_ENGINE.md](docs/RUST_ENGINE.md)、[docs/PORTING_37_PLAN.md](docs/PORTING_37_PLAN.md)。
+>
+> **2026-10-26 第三阶段（P3）**：**以 AutoTavern fork（`hsbg_engine`）为唯一主引擎，
+> 直接修补 AT 把 37.0.0 模拟环境补完整**；`hsrl2` 冻结为 legacy/oracle（只读参考、
+> 只维护回归，不再新增功能）。**P1 内容已完成**：37 池内缺失 15 随从 + Azshara 主技能 +
+> 2 池内法术已移植进 Rust content；池内脚本覆盖 **missing 0**、hsrl2 oracle
+> **15 MATCH/1 DEFERRED/2 STRUCTURAL_OK**、全量 Rust 测试 **887/0**；模拟环境补完，
+> 下一步转入 RL（std 245/3227 profile 的训练/评测）。详见
+> [docs/AUTOTAVERN_P3_KICKOFF.md](docs/AUTOTAVERN_P3_KICKOFF.md)。
 
 ## 组成与状态
 
 | 层 | 目录 | 状态 |
 |----|------|------|
 | **主模拟引擎（P2）** | `rust/`（`hsbg_engine`） | ✅ fork AutoTavern TavernGym（Rust + PyO3）：245 动作 + 精确 mask、3227+124 观测、BatchEnv；裸吞吐 ~274 局/s / 3.65 ms/局（37 数据最终态；上游同代码 272.8；比值 1.00） |
-| legacy 模拟引擎 | `hsrl2/` | ✅ Python 引擎（37.0.0 全内容/真实对局桥/参照 oracle），逐步降级为 legacy/对照 |
+| legacy 模拟引擎（冻结） | `hsrl2/` | 🧊 Python 引擎（37.0.0 全内容/真实对局桥/参照 oracle）；P3 起**冻结**：不再新增功能，只维护回归与差分 oracle |
 | **37.0.0 数据管线（P2）** | `data/p2/` + `tools/p2_data/` | ✅ 官方 37.0.0 → AutoTavern schema（3983 = 3695 映射 + 288 compat；脚本 id 0 missing） |
 | **动作/观测标准 profile（P2）** | `hsbg/env/action_space_std.py` / `obs_std.py` | ✅ 前 245 动作与 AT 逐位一致 + 扩展段；3227 floats + 124 cards 布局与 AT 32 项逐项一致 |
 | RL 环境 | `hsbg/env/` | ✅ 单智能体 8 人对局、实体 token 观测、候选动作、奖励、确定性、多进程向量化 |

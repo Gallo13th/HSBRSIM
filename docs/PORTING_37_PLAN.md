@@ -444,6 +444,7 @@ discover_pick/scheduled/on_event…）+ `flag` **15 个** + `ev` **25 个事件�
 | 批次 | 内容 | 卡数 | 参考 |
 | --- | --- | ---: | --- |
 | P1-A | **数据管线先决**（非卡）：37 数据入 fork（`cards_37.json`）+ compat 条目 `BG_OG_044` + 文本 `@` 拆分 + Duos/UI token 过滤 + cost 约定 | — | §2.4；P2-B 生成器 |
+| **P1 状态（2026-10-26）** | **✅ 已完成**：15 池内随从 + Azshara 主技能 + 2 池内法术已移植（`content/p3_batch_a.rs`/`p3_batch_b.rs`/`p3_systems.rs`）；池内覆盖 missing 0；hsrl2 oracle 15 MATCH/1 DEFERRED/2 STRUCTURAL_OK；全量 cargo test 887/0。证据见 `docs/P3_VERIFICATION.md` / `docs/AUTOTAVERN_P3_KICKOFF.md` §4。 | — | P3 |
 | P1-B | 池内缺失随从 15：`BG23_002, BG26_505, BG27_514, BG31_035, BG31_920, BG31_925, BG32_835, BG32_837, BG33_319, BG34_925, BG35_921, BG36_360, BG36_508, BG36_622, BG36_921` | 15 | 13 张有 hsrl2 脚本；`BG33_319/BG36_360` 需新写（AT 最近脚本相似度 0.70/0.38） |
 | P1-C | 主英雄技能 1：`BG22_HERO_007p`（Azshara） | 1 | `batch_hero_combat3.py` |
 | P1-D | 池内酒馆法术 2：`BG32_815, BG35_922` | 2 | `batch_spells4.py` / `batch_spells_final.py` |

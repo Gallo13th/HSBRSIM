@@ -4,6 +4,10 @@
 > （`docs/AUTOTAVERN_UPGRADE.md`，HEAD `347d396`）。
 > 本文件记录用户新指令、阶段决策、本轮交付与验收证据、下一步 P1 内容移植计划。
 >
+> **P3 决策（2026-10-26，后续更新）**：本 P2 阶段之后，用户确定 **以 AutoTavern fork
+> （`hsbg_engine`）为唯一主引擎、直接修补 AT 补完 37.0.0 模拟环境**；`hsrl2` 冻结为
+> legacy/oracle。P3 见 `docs/AUTOTAVERN_P3_KICKOFF.md`。
+>
 > 用户指令（2026-10-26）：
 > 1. **机制实现首先参考 AutoTavern**，有误的部分再做精修；**数值按最新版本**记录算。
 > 2. **考虑运算效率**：Rust 更高效则使用 Rust；我们转写出的 C 如果更快也可以。

@@ -148,3 +148,16 @@ TavernGym v1.0.0 + TavernBench，36.6.3，MIT）。总报告：
 限制：37.0.0 相对 36.6.3 无新增可玩卡/无数值改动（差异=池子轮换+文本口径）；饰品
 （缺 161/可提供 138 上界）与异变（108，新系统）需 P2/P3 分批；旧策略 checkpoint 属
 legacy profile，需重训；TavernBench states 为 36.6.3，不能与 37 数据 engine 混用。
+
+## 10. 2026-10-26 第三阶段（P3）：AT 唯一主引擎，修补 AT 补完 37.0.0 模拟环境
+
+用户决策（2026-10-26）：**直接以 AutoTavern fork（`hsbg_engine`）为主引擎，直接修补 AT**；
+模拟环境完整后，精力全部转入 RL。`hsrl2` 自此**冻结**为 legacy/oracle（只读参考、
+回归与差分），不再新增功能/内容。
+
+| 项 | 状态 |
+|---|---|
+| P1 内容（37 池内缺口） | ✅ 已完成：15 缺失随从（`content/p3_batch_a.rs`/`p3_batch_b.rs`）+ Azshara 主技能 `BG22_HERO_007p` + 池内法术 `BG32_815`/`BG35_922`（`p3_systems.rs`）；池内覆盖 missing 0 |
+| Dark Paradox `BG36_360` | ✅ 决策=保持 AT 5 形态机制（37 可观察玩法等价；单卡动态 id 化列 P3 后续，FORK §7） |
+| 验收 | ✅ 独立验证（`tools/p3_verify`）：oracle 15 MATCH/1 DEFERRED/2 STRUCTURAL_OK；`cargo test` **39 套件 887/0**；8 人 bot 冒烟 ×20 crashes=0；确定性 PASS；`verify_all` **12/12**；详见 `docs/P3_VERIFICATION.md` |
+| 后续 | P2 饰品（8 新 + triage 138 上界）/ 非池法术 / P3 异变系统；**下一步转 RL**（hsbg_engine std 245/3227 profile 训练评测，旧 checkpoint legacy） |

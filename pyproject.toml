@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hsbg-agent"
-version = "0.3.0"
+version = "0.4.0"
 description = "Hearthstone Battlegrounds RL project: Rust main engine (hsbg_engine, forked from AutoTavern TavernGym) + legacy Python engine (hsrl2) + RL environment/policy/training; action/observation aligned with AutoTavern"
 readme = "README.md"
 license = { text = "MIT" }
