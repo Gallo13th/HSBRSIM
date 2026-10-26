@@ -67,7 +67,8 @@ def _act(env, policy, obs) -> CandidateAction:
     return desc.to_candidate()
 
 
-def run_episode(players: int, seed: int, record: bool = False):
+def run_episode(players: int, seed: int, record: bool = False,
+                check_invariants: bool = False, invariant_every: int = 5):
     env = BattlegroundsEnv(num_players=players, opponent="heuristic",
                            seed=seed, max_turns=40)
     policy = HeuristicPolicy()
@@ -75,6 +76,7 @@ def run_episode(players: int, seed: int, record: bool = False):
     sig: List[Tuple] = []
     rewards: List[float] = []
     choice_steps = 0
+    violations: List[str] = []
     t0 = time.perf_counter()
     steps = 0
     while True:
@@ -88,6 +90,14 @@ def run_episode(players: int, seed: int, record: bool = False):
         action = _act(env, policy, obs)
         obs, reward, terminated, truncated, info = env.step(action)
         rewards.append(float(reward))
+        if check_invariants and steps % max(1, invariant_every) == 0:
+            from hsbg.env.invariants import check_env
+            try:
+                found = check_env(env)
+            except Exception as exc:                  # noqa: BLE001
+                found = [f"check_env_error:{type(exc).__name__}: {exc}"]
+            if found:
+                violations.extend(f"seed={seed}:{item}" for item in found)
         if terminated or truncated:
             break
     elapsed = time.perf_counter() - t0
@@ -104,6 +114,7 @@ def run_episode(players: int, seed: int, record: bool = False):
         "rewards": rewards,
         "sig": sig,
         "info": info,
+        "invariant_violations": violations,
     }
     env.close()
     return out
@@ -125,6 +136,11 @@ def main(argv=None) -> int:
     ap.add_argument("--games", type=int, default=30)
     ap.add_argument("--players", type=int, default=8)
     ap.add_argument("--json", type=str, default=None)
+    ap.add_argument("--check-invariants", action="store_true",
+                    help="每 invariant-every 步跑 hsbg.env.invariants.check_env"
+                         "（默认关闭；有违反项时 exit 1）")
+    ap.add_argument("--invariant-every", type=int, default=5,
+                    help="--check-invariants 的采样间隔（默认每 5 步）")
     args = ap.parse_args(argv)
 
     report: Dict[str, Any] = {"checks": {}, "metrics": {}}
@@ -133,7 +149,9 @@ def main(argv=None) -> int:
     # 1) 单局闭环 + info 契约
     rows = []
     for i in range(args.games):
-        row = run_episode(args.players, 5000 + i)
+        row = run_episode(args.players, 5000 + i,
+                          check_invariants=bool(args.check_invariants),
+                          invariant_every=int(args.invariant_every))
         rows.append(row)
         failures.extend(check_info_contract(row["info"], args.players))
         if not row["rewards"] or any(not math.isfinite(r) for r in row["rewards"]):
@@ -141,6 +159,20 @@ def main(argv=None) -> int:
         if row["truncated"]:
             failures.append(f"truncated episode at seed {5000 + i}")
     report["checks"]["episode_completion"] = not failures
+
+    # 1b) 结构不变量（--check-invariants，默认关闭）
+    if args.check_invariants:
+        violation_samples = [
+            item for row in rows for item in row["invariant_violations"]]
+        report["metrics"]["invariant_violations"] = len(violation_samples)
+        report["metrics"]["invariant_violation_samples"] = \
+            violation_samples[:20]
+        report["checks"]["structural_invariants"] = not violation_samples
+        if violation_samples:
+            failures.append(
+                f"structural invariant violations: {len(violation_samples)}")
+    else:
+        report["checks"]["structural_invariants"] = None
 
     # 2) 确定性
     a = run_episode(args.players, 4242, record=True)
