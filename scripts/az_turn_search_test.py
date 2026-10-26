@@ -43,6 +43,12 @@ def run_game(seed: int, *, states_budget: int, samples: int,
         if g.is_over():
             break
         if g.needs_action(0):
+            legal0 = np.frombuffer(g.legal_mask(0), dtype=np.uint8).astype(bool)
+            if not legal0[0]:
+                # Pending choice/targeting：旧 eval 在 phase=choice 时自动选 0；这里用引擎
+                # bot 的合法选择推进（不参与 TurnSearch 的 action 打分）。
+                g.step(0, g.bot_action(0))
+                continue
             r = E.turn_search(
                 g, 0, states_budget=states_budget,
                 samples_per_action=samples,

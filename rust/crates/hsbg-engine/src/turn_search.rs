@@ -11,8 +11,7 @@
 
 use std::collections::HashSet;
 
-use crate::actions::{Action, N_ACTIONS};
-use crate::bot;
+use crate::actions::{A_CHOOSE, Action, N_ACTIONS};
 use crate::engine::{Game, Phase};
 use crate::rng::Rng;
 
@@ -74,6 +73,141 @@ struct TurnState {
     game: Game,
 }
 
+/// 旧 Python `hsbg.agents.heuristic.HeuristicPolicy` 的精简 Rust 移植。
+/// 只用于 completion（旧 TurnSearch 的 completion_policy=heuristic），不是最终策略。
+fn heuristic_action(game: &Game, seat: usize) -> Option<Action> {
+    let mask = game.legal_mask(seat);
+    let p = &game.players[seat];
+    let playable = |a: Action| mask[a.encode()];
+    let board_full = p.board.len() >= game.cfg.board_size;
+    let hand_full = p.hand.len() >= game.cfg.hand_size;
+
+    // Pending choice：旧 `choose_option_index` 取价值最高的选项；这里保底选第一个合法项。
+    let choices: Vec<usize> = (0..N_ACTIONS)
+        .filter(|i| mask[*i])
+        .filter(|i| matches!(Action::decode(*i), Some(Action::Choose(_))))
+        .collect();
+    if !choices.is_empty() {
+        return Some(Action::Choose(choices[0] - A_CHOOSE));
+    }
+
+    // 1) 打出手牌随从：价值 atk*1.1+hp，优先追加到最右。
+    let mut best_play: Option<(f32, Action)> = None;
+    for (h, card) in p.hand.iter().enumerate() {
+        let Some(m) = card.item.as_minion() else {
+            continue;
+        };
+        if card.locked > 0 {
+            continue;
+        }
+        let val = m.atk as f32 * 1.1 + m.hp as f32;
+        for pos in 0..=p.board.len() {
+            let a = Action::Play { hand: h, pos };
+            if playable(a) {
+                let score = val + if pos == p.board.len() { 0.5 } else { 0.0 };
+                if best_play.as_ref().is_none_or(|(b, _)| score > *b) {
+                    best_play = Some((score, a));
+                }
+            }
+        }
+    }
+    if let Some((_, a)) = best_play {
+        return Some(a);
+    }
+
+    // 2) 手牌法术（清手牌，为买随从腾空间）。
+    for (h, card) in p.hand.iter().enumerate() {
+        if card.item.as_minion().is_some() || card.locked > 0 {
+            continue;
+        }
+        for pos in 0..=p.board.len() {
+            let a = Action::Play { hand: h, pos };
+            if playable(a) {
+                return Some(a);
+            }
+        }
+    }
+
+    // 3) 升级（前中期；留 3 金买牌）。
+    if p.tier < 6 && game.turn <= 8 && p.upgrade_cost >= 0 {
+        let a = Action::Upgrade;
+        if playable(a) && p.gold >= p.upgrade_cost + 3 {
+            return Some(a);
+        }
+    }
+
+    // 4) 买随从：最高价值；满场时只买比最弱随从强的。
+    if !hand_full {
+        let weakest = p
+            .board
+            .iter()
+            .map(|m| m.atk as f32 * 1.1 + m.hp as f32)
+            .fold(f32::INFINITY, f32::min);
+        let mut best: Option<(f32, Action)> = None;
+        for (i, slot) in p.shop.iter().enumerate() {
+            let Some(m) = slot.item.as_minion() else {
+                continue;
+            };
+            let val = m.atk as f32 * 1.1 + m.hp as f32;
+            if board_full && val < weakest + 1.5 {
+                continue;
+            }
+            let a = Action::Buy(i);
+            if playable(a) && best.as_ref().is_none_or(|(b, _)| val > *b) {
+                best = Some((val, a));
+            }
+        }
+        if let Some((_, a)) = best {
+            return Some(a);
+        }
+    }
+
+    // 5) 满场换血：有更强的手牌/酒馆随从时卖掉最弱。
+    if board_full {
+        let weakest_i = p
+            .board
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, m)| m.atk * 11 + m.hp * 10)
+            .map(|(i, _)| i);
+        if let Some(i) = weakest_i {
+            let w = p.board[i].atk as f32 * 1.1 + p.board[i].hp as f32;
+            let hand_strong = p
+                .hand
+                .iter()
+                .filter_map(|h| h.item.as_minion())
+                .any(|m| m.atk as f32 * 1.1 + m.hp as f32 >= w + 1.5);
+            let shop_strong = p
+                .shop
+                .iter()
+                .filter_map(|s| s.item.as_minion())
+                .any(|m| m.atk as f32 * 1.1 + m.hp as f32 >= w + 1.5);
+            let a = Action::Sell(i);
+            if (hand_strong || shop_strong) && playable(a) {
+                return Some(a);
+            }
+        }
+    }
+
+    // 6) 一次性的 Activate / Dark Gift / 英雄技能。
+    for i in 0..N_ACTIONS {
+        let Some(a) = Action::decode(i) else { continue };
+        if matches!(
+            a,
+            Action::Activate(_) | Action::DarkGift | Action::HeroPower(_)
+        ) && mask[i]
+        {
+            return Some(a);
+        }
+    }
+
+    // 6) 刷新（旧 heuristic 的 reroll）。
+    if playable(Action::Refresh) {
+        return Some(Action::Refresh);
+    }
+    Some(Action::EndTurn)
+}
+
 /// 不用 `bot::play_turn`，因为它会执行 EndTurn 推进到下一回合；
 /// 这里只完成当前回合，遇到 EndTurn 就停在回合末状态。
 fn complete_turn(game: &mut Game, seat: usize, max_steps: usize) -> bool {
@@ -84,7 +218,7 @@ fn complete_turn(game: &mut Game, seat: usize, max_steps: usize) -> bool {
         if !game.needs_action(seat) {
             return true;
         }
-        let action = bot::choose_action(game, seat);
+        let action = heuristic_action(game, seat).unwrap_or(Action::EndTurn);
         if action == Action::EndTurn {
             return true;
         }
@@ -187,16 +321,7 @@ fn collect_action_states(
         if g.phase == Phase::GameOver || g.turn != root.turn {
             continue;
         }
-        // 纯 no-op（Freeze/Refresh/Cancel 等）不产生可比较的回合末状态；跳过，
-        // 否则 pairwise 分数会因“completion 帮买牌”而反复选它。
-        if action != Action::EndTurn && state_key(&g, seat) == state_key(root, seat) {
-            continue;
-        }
-        // Freeze/Refresh 是“不消耗回合”的界面动作；不要把 bot 补完的后续买牌
-        // 算进它们的价值，否则基线会反复 Freeze/Refresh 来“借”completion 买牌。
-        if !matches!(action, Action::Freeze | Action::Refresh)
-            && !complete_turn(&mut g, seat, cfg.max_steps_per_turn)
-        {
+        if !complete_turn(&mut g, seat, cfg.max_steps_per_turn) {
             continue;
         }
         if g.phase == Phase::GameOver || g.turn != root.turn {
@@ -236,6 +361,26 @@ fn unique_states(
     (flat, grouped)
 }
 
+fn action_rank(action: &Action) -> u8 {
+    // 对齐旧 Python driver.enumerate_actions 的顺序：
+    // buys → plays → sells → moves → powers → activate → upgrade → reroll → freeze
+    // → dark gift → end_turn。小 states_budget 时顺序会直接决定哪些动作进入搜索。
+    match action {
+        Action::Buy(_) => 0,
+        Action::Play { .. } | Action::Magnetize { .. } => 1,
+        Action::Sell(_) => 2,
+        Action::Move { .. } => 3,
+        Action::HeroPower(_) => 4,
+        Action::Activate(_) => 5,
+        Action::Upgrade => 6,
+        Action::Refresh => 7,
+        Action::Freeze => 8,
+        Action::DarkGift => 9,
+        Action::Choose(_) | Action::Cancel => 10,
+        Action::EndTurn => 11,
+    }
+}
+
 /// 执行一次 TurnSearch 决策；返回动作分数和状态/战斗计数。
 pub fn turn_search(game: &Game, seat: usize, cfg: TurnSearchConfig) -> TurnSearchResult {
     let cfg = cfg.normalized();
@@ -251,11 +396,29 @@ pub fn turn_search(game: &Game, seat: usize, cfg: TurnSearchConfig) -> TurnSearc
         return fallback;
     }
     let mask = game.legal_mask(seat);
+    let mut candidates: Vec<(u8, usize)> = Vec::new();
+    for (i, legal) in mask.iter().enumerate().take(N_ACTIONS) {
+        if *legal {
+            if let Some(action) = Action::decode(i) {
+                // Cancel 只用于回退 targeting；TurnSearch 不应该把回退当动作。
+                if matches!(action, Action::Cancel) {
+                    continue;
+                }
+                // 旧 driver 只在“当前未冻结”时生成 Freeze；Rust 动作空间里
+                // 冻结后仍可再次按 Freeze（切回未冻结），会形成 no-op 循环。
+                if matches!(action, Action::Freeze) && game.players[seat].is_frozen() {
+                    continue;
+                }
+                candidates.push((action_rank(&action), i));
+            }
+        }
+    }
+    candidates.sort_by_key(|(rank, idx)| (*rank, *idx));
     let mut remaining = cfg.states_budget;
     let mut by_action: Vec<(u16, Vec<TurnState>)> = Vec::new();
-    for (i, legal) in mask.iter().enumerate().take(N_ACTIONS) {
-        if !legal || remaining == 0 {
-            continue;
+    for (_, i) in candidates {
+        if remaining == 0 {
+            break;
         }
         let Some(action) = Action::decode(i) else {
             continue;
@@ -306,14 +469,6 @@ pub fn turn_search(game: &Game, seat: usize, cfg: TurnSearchConfig) -> TurnSearc
             ActionAggregate::Max => vals.into_iter().fold(f32::NEG_INFINITY, f32::max),
             ActionAggregate::Mean => vals.iter().sum::<f32>() / vals.len().max(1) as f32,
         };
-        // 避免“完成本回合”的评估把纯无进展动作（Freeze/Refresh）排到 Buy/Play 前：
-        // 这些动作的 completion 可能由 bot 买牌，但真实执行这一帧并没有买。
-        let score = score
-            + match Action::decode(action as usize) {
-                Some(Action::Freeze) | Some(Action::Refresh) => -0.05,
-                Some(Action::EndTurn) => -0.02,
-                _ => 0.0,
-            };
         if action < N_ACTIONS as u16 {
             fallback.action_scores[action as usize] = score;
         }
