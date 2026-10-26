@@ -56,3 +56,37 @@ UI/日志状态，不是可推演的模拟状态。
 
 GPL-3.0 + 禁止商用附加条款。若参考其代码，需要先确认与 HSBRSIM 的分发/许可兼容；
 建议只借鉴协议/交互思路，不直接复制源码。
+
+---
+
+# 参考项目评估：AutoTavern（MCG-NJU）
+
+- 仓库：<https://github.com/MCG-NJU/AutoTavern>
+- 拉取：`git clone --depth 1 git@github.com:MCG-NJU/AutoTavern.git`（commit `fb61201`）
+- 协议：MIT
+
+## 结论：没有 web 页面
+
+对 `main` 分支完整 tree/README/源码/文档做了检查：
+
+- 没有 `.html/.js/.ts/.tsx/.vue`、`package.json`、`templates/`、`static/`；
+- 没有 Flask/FastAPI/Streamlit/Gradio/HTTP server；
+- 只有：
+  - `crates/taverngym` + `crates/taverngym-py`：Rust 引擎/PyO3；
+  - `python/taverngym`：单座/批量环境；
+  - `tavernbench/`：数据、评分、文本报告（`tavernbench/report.py` 输出表格/JSON，不是网页）；
+  - `docs/`：Markdown 文档。
+- 唯一相关的是 `docs/TAVERNBENCH.md` 里的 API 调用说明（模型 API），不是可视化页面。
+
+**因此“AutoTavern 实现简单 web 页面”在当前公开仓库中不成立。** 如果看到的是论文/项目主页的 demo，
+需要单独提供 URL；它不在代码仓库里。
+
+## 我们的利用方式
+
+- 已 fork 其 Rust 引擎（`rust/crates/hsbg-engine`）与 vendored TavernBench；
+- 新增本地控制台 [WEBUI.md](WEBUI.md)（HSBRSIM 自己的页面）：
+  - 状态/版本；
+  - 调 `hsbg.rl.evaluate` 评测训练结果；
+  - runs/checkpoint 浏览；
+  - TavernBench 已发布评分快照 + `--check`。
+

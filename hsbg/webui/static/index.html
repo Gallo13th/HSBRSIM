@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HSBRSIM Console</title>
+<style>
+:root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#e6edf3;
+        --muted:#8b949e; --accent:#58a6ff; --good:#3fb950; --warn:#d29922; --bad:#f85149; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",sans-serif; }
+header { padding:18px 24px; border-bottom:1px solid var(--line);
+         display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+h1 { font-size:19px; margin:0; letter-spacing:.2px; }
+h2 { font-size:15px; margin:0 0 12px; color:var(--fg); }
+.sub { color:var(--muted); font-size:12px; }
+main { max-width:1180px; margin:0 auto; padding:22px 18px 60px; }
+nav { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
+nav button { background:var(--panel); color:var(--muted); border:1px solid var(--line);
+             padding:8px 14px; border-radius:6px; cursor:pointer; }
+nav button.active { color:var(--fg); border-color:var(--accent); }
+section { display:none; }
+section.active { display:block; }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+        padding:16px; margin-bottom:14px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; }
+.kv { background:#0d1117; border:1px solid var(--line); border-radius:6px; padding:10px 12px; }
+.kv .k { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+.kv .v { margin-top:4px; font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+         font-size:13px; word-break:break-all; }
+label { color:var(--muted); font-size:12px; display:block; margin-bottom:4px; }
+input, select { width:100%; background:#0d1117; color:var(--fg); border:1px solid var(--line);
+                border-radius:5px; padding:8px; font:inherit; }
+.row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:12px; }
+button.primary { background:#238636; color:white; border:1px solid #2ea043; border-radius:6px;
+                 padding:9px 16px; cursor:pointer; font:inherit; }
+button.primary:disabled { opacity:.5; cursor:wait; }
+button.ghost { background:transparent; color:var(--fg); border:1px solid var(--line);
+               border-radius:6px; padding:8px 12px; cursor:pointer; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th, td { text-align:left; border-bottom:1px solid var(--line); padding:7px 8px; }
+th { color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; }
+td.num { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+.badge { display:inline-block; padding:2px 7px; border-radius:999px; font-size:11px;
+         border:1px solid var(--line); color:var(--muted); }
+pre { background:#0d1117; border:1px solid var(--line); border-radius:6px; padding:12px;
+      overflow:auto; max-height:460px; font-size:12px; }
+.status { padding:8px 10px; border-radius:6px; margin:10px 0; font-size:13px; }
+.status.ok { background:#0d2818; border:1px solid #238636; color:#7ee787; }
+.status.err { background:#2d1114; border:1px solid #8e1519; color:#ffa198; }
+.muted { color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>HSBRSIM Console</h1>
+  <span class="sub" id="hdr-status">loading…</span>
+</header>
+<main>
+  <nav>
+    <button class="active" data-tab="overview">概览 / 状态</button>
+    <button data-tab="evaluate">评测训练结果</button>
+    <button data-tab="runs">Runs / Checkpoints</button>
+    <button data-tab="bench">TavernBench</button>
+  </nav>
+
+  <section id="tab-overview" class="active">
+    <div class="card">
+      <h2>环境状态</h2>
+      <div class="grid" id="status-grid"></div>
+      <p class="muted" style="margin:10px 0 0">
+        主引擎优先 <code>hsbg_engine</code>（Rust，37 数据）；未安装时显示 legacy hsrl2。
+      </p>
+    </div>
+    <div class="card">
+      <h2>快速开始</h2>
+      <p class="muted">「评测训练结果」可跑 random/heuristic/teacher 或 checkpoint；结果写入
+        <code>runs/webui/</code>，同时出现在 Runs 页。</p>
+      <button class="ghost" onclick="refreshAll()">刷新</button>
+    </div>
+  </section>
+
+  <section id="tab-evaluate">
+    <div class="card">
+      <h2>评测策略 / checkpoint</h2>
+      <div class="row">
+        <div><label>policy</label><input id="ev-policy" value="heuristic"
+          placeholder="heuristic / random / teacher / runs/.../policy.pt"></div>
+        <div><label>episodes</label><input id="ev-episodes" type="number" value="5" min="1" max="200"></div>
+        <div><label>seed</label><input id="ev-seed" type="number" value="0"></div>
+        <div><label>backend</label><select id="ev-backend">
+          <option value="auto">auto</option><option value="real">real</option>
+          <option value="hsrl2">hsrl2</option><option value="mock">mock</option>
+          <option value="taverngym">taverngym</option>
+        </select></div>
+        <div><label>workers</label><input id="ev-workers" type="number" value="1" min="1" max="16"></div>
+        <div><label>opponent</label><input id="ev-opponent" value="heuristic"></div>
+      </div>
+      <button class="primary" id="ev-run">开始评测</button>
+      <span class="muted" style="margin-left:10px">首次运行会加载引擎，可能数十秒。</span>
+      <div id="ev-status"></div>
+      <div id="ev-results"></div>
+    </div>
+  </section>
+
+  <section id="tab-runs">
+    <div class="card">
+      <h2>Runs JSON</h2>
+      <button class="ghost" onclick="loadRuns()">刷新</button>
+      <div id="runs"></div>
+    </div>
+    <div class="card">
+      <h2>Checkpoints</h2>
+      <div id="ckpts"></div>
+    </div>
+  </section>
+
+  <section id="tab-bench">
+    <div class="card">
+      <h2>TavernBench 已发布评分（vendored 快照）</h2>
+      <button class="ghost" onclick="loadBench()">加载</button>
+      <button class="ghost" onclick="runBenchCheck()">运行 --check</button>
+      <div id="bench-status"></div>
+      <div id="bench"></div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+function esc(v) { return String(v ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+async function api(path, opts={}) {
+  const r = await fetch(path, opts);
+  const j = await r.json().catch(() => ({ok:false,error:"bad json"}));
+  if (!r.ok) throw new Error(j.error || ("HTTP "+r.status));
+  return j;
+}
+function setTab(name) {
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b.dataset.tab===name));
+  document.querySelectorAll("section").forEach(s => s.classList.toggle("active", s.id==="tab-"+name));
+  if (name==="runs") loadRuns();
+  if (name==="bench") loadBench();
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+
+async function loadStatus() {
+  try {
+    const s = await api("/api/status");
+    const e = s.engine || {};
+    const rows = [
+      ["engine", e.kind], ["game version", e.game_version || e.reason || "—"],
+      ["server rules", e.server_rules_version || "—"], ["db", JSON.stringify(e.db_info ?? "—")],
+      ["backends", (s.backends||[]).join(", ")],
+      ["checkpoints", s.checkpoints], ["runs json", s.runs_json],
+      ["python", s.python],
+    ];
+    $("status-grid").innerHTML = rows.map(([k,v]) =>
+      `<div class="kv"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join("");
+    $("hdr-status").textContent = `${e.kind} · ${e.game_version || ""} · ${s.time}`;
+  } catch (err) {
+    $("status-grid").innerHTML = `<div class="status err">${esc(err.message)}</div>`;
+    $("hdr-status").textContent = "offline";
+  }
+}
+async function loadRuns() {
+  try {
+    const d = await api("/api/runs");
+    if (!d.rows || !d.rows.length) { $("runs").innerHTML = `<p class="muted">runs/ 下暂无 JSON 结果。</p>`; }
+    else {
+      $("runs").innerHTML = `<table><thead><tr><th>path</th><th>mtime</th><th>summary</th></tr></thead><tbody>` +
+        d.rows.map(r => `<tr><td class="num">${esc(r.path)}</td><td>${esc(r.mtime)}</td>
+          <td class="num">${esc(JSON.stringify(r.summary))}</td></tr>`).join("") + `</tbody></table>`;
+    }
+    const c = await api("/api/checkpoints");
+    $("ckpts").innerHTML = c.rows.length ? `<table><thead><tr><th>path</th><th>mtime</th><th>size</th></tr></thead><tbody>` +
+      c.rows.map(r => `<tr><td class="num">${esc(r.path)}</td><td>${esc(r.mtime)}</td><td class="num">${esc(r.size)}</td></tr>`).join("") +
+      `</tbody></table>` : `<p class="muted">暂无 checkpoint。</p>`;
+  } catch (err) { $("runs").innerHTML = `<div class="status err">${esc(err.message)}</div>`; }
+}
+function statusBox(id, text, ok) {
+  $(id).innerHTML = `<div class="status ${ok?'ok':'err'}">${esc(text)}</div>`;
+}
+async function evaluate() {
+  const body = {
+    policy: $("ev-policy").value, episodes: +$("ev-episodes").value,
+    seed: +$("ev-seed").value, backend: $("ev-backend").value,
+    workers: +$("ev-workers").value, opponent: $("ev-opponent").value,
+  };
+  $("ev-run").disabled = true; $("ev-results").innerHTML = "";
+  statusBox("ev-status", "评测中…", true);
+  try {
+    const d = await api("/api/evaluate", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    statusBox("ev-status", `完成 ${d.elapsed_s}s → ${d.out}`, true);
+    const rows = (d.results||[]).map(r => {
+      const sm = r.summary || {};
+      const dist = r.rank_distribution || {};
+      const distStr = Object.keys(dist).sort((a,b)=>+a-+b).map(k=>`${k}:${(100*dist[k]).toFixed(0)}%`).join("  ");
+      return `<tr><td>${esc(r.policy)}</td><td class="num">${(sm.mean_rank??0).toFixed(2)}</td>
+        <td class="num">${(100*(sm.top4_rate ?? sm.top_half_rate ?? 0)).toFixed(1)}%</td>
+        <td class="num">${(100*(sm.win_rate??0)).toFixed(1)}%</td>
+        <td class="num">${(sm.games_per_second??0).toFixed(2)}</td><td class="num">${esc(distStr)}</td></tr>`;
+    }).join("");
+    $("ev-results").innerHTML = `<table><thead><tr><th>policy</th><th>mean rank</th><th>top4</th><th>win</th><th>games/s</th><th>rank distribution</th></tr></thead><tbody>${rows}</tbody></table>`;
+    loadRuns();
+  } catch (err) {
+    statusBox("ev-status", err.message, false);
+  } finally { $("ev-run").disabled = false; }
+}
+$("ev-run").onclick = evaluate;
+
+async function loadBench() {
+  try {
+    const d = await api("/api/tavernbench");
+    if (!d.ok) { $("bench").innerHTML = `<p class="muted">${esc(d.error)}</p>`; return; }
+    const keys = ["play","rule_score","rules","combat","positioning","ordering","targets","selection","strategy","economy","real_time_play"];
+    let html = `<table><thead><tr><th>system</th>` + keys.map(k=>`<th>${esc(k)}</th>`).join("") + `</tr></thead><tbody>`;
+    for (const [name,row] of Object.entries(d.systems)) {
+      if (name === "chance") continue;
+      html += `<tr><td>${esc(name)}</td>` + keys.map(k => `<td class="num">${row[k]==null?"—":(100*row[k]).toFixed(1)}</td>`).join("") + `</tr>`;
+    }
+    html += `</tbody></table><p class="muted">数值为百分比（play / rule_score / 分类准确率）。source: ${esc(d.source)}</p>`;
+    $("bench").innerHTML = html;
+  } catch (err) { $("bench").innerHTML = `<div class="status err">${esc(err.message)}</div>`; }
+}
+async function runBenchCheck() {
+  statusBox("bench-status", "运行 TavernBench --check…", true);
+  try {
+    const d = await api("/api/tavernbench-check", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"});
+    statusBox("bench-status", d.ok ? "CHECK PASSED" : "CHECK FAILED", d.ok);
+    $("bench").innerHTML = `<pre>${esc((d.stdout||"") + (d.stderr||""))}</pre>`;
+  } catch (err) { statusBox("bench-status", err.message, false); }
+}
+function refreshAll() { loadStatus(); loadRuns(); loadBench(); }
+refreshAll();
+</script>
+</body>
+</html>
