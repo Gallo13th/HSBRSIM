@@ -551,10 +551,12 @@ fn default_config_json() -> String {
 ///
 /// 返回 `(pi_bytes f32[245], action: int, root_value: float, visits: int)`。
 /// `eval_fn=None` 时使用 uniform prior + value=0（fallback，便于无 NN 冒烟）。
+/// `rollout=True`（P4-B 纯搜索模式）：叶节点**不调用** `eval_fn`（可传 None），先验=合法
+/// 动作均匀，价值=用内置 bot 打到终局的 placement utility；适合无 NN 的搜索能力测试。
 /// 注意：搜索期间持有 GIL（回调是 Python/NN 推理）；批量评估/异步待 P4 后续。
 #[pyfunction]
 #[pyo3(signature = (game, seat, simulations=8, c_puct=1.5, temperature=1.0, eval_fn=None,
-                    seed=0, dirichlet_alpha=0.3, dirichlet_epsilon=0.25))]
+                    seed=0, dirichlet_alpha=0.3, dirichlet_epsilon=0.25, rollout=false))]
 fn mcts_search<'py>(
     py: Python<'py>,
     game: &PyGame,
@@ -566,6 +568,7 @@ fn mcts_search<'py>(
     seed: u64,
     dirichlet_alpha: f32,
     dirichlet_epsilon: f32,
+    rollout: bool,
 ) -> PyResult<(Bound<'py, PyBytes>, u16, f32, u32)> {
     let start = game.g.clone();
     if seat >= start.players.len() {
@@ -581,6 +584,7 @@ fn mcts_search<'py>(
         dirichlet_alpha,
         dirichlet_epsilon,
         seed,
+        rollout,
     };
     // 回调异常：先记下，搜索结束后转成 Python 异常（search 的签名不收 Result）。
     let err: std::cell::RefCell<Option<PyErr>> = std::cell::RefCell::new(None);

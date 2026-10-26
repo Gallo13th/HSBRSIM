@@ -88,6 +88,38 @@ fn zero_simulations_returns_eval_prior() {
 }
 
 #[test]
+fn rollout_mode_skips_eval_and_is_seeded() {
+    let g = game(11);
+    let cfg = SearchConfig {
+        simulations: 2,
+        seed: 7,
+        rollout: true,
+        ..Default::default()
+    };
+    // eval 闭包传入即 panic —— 证明 rollout 模式从不调用 eval。
+    let a = search(&g, 0, &cfg, |_g, _s| {
+        panic!("eval must not be called (rollout)")
+    });
+    let b = search(&g, 0, &cfg, |_g, _s| {
+        panic!("eval must not be called (rollout)")
+    });
+    assert_eq!(a.pi, b.pi);
+    assert_eq!(a.action, b.action);
+    assert_eq!(a.pi.len(), N_ACTIONS);
+    let sum: f32 = a.pi.iter().sum();
+    assert!((sum - 1.0).abs() < 1e-4, "sum {sum}");
+    let legal = g.legal_mask(0);
+    for i in 0..N_ACTIONS {
+        if !legal[i] {
+            assert_eq!(a.pi[i], 0.0);
+        }
+    }
+    assert!(legal[a.action as usize]);
+    // rollout 价值来自 bot 打到终局：root_value 落在 placement utility 范围。
+    assert!((-1.0..=1.0).contains(&a.root_value));
+}
+
+#[test]
 fn terminal_root_utility_matches_placement() {
     let g = hsbg_engine::bot::run_bot_game(0, RulesConfig::default());
     assert!(g.is_over());

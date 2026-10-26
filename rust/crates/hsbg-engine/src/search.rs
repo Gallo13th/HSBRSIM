@@ -16,7 +16,6 @@ use std::collections::HashMap;
 
 use crate::actions::N_ACTIONS;
 use crate::engine::Game;
-use crate::types::PlayerId;
 
 /// 搜索超参（Python 侧 `mcts_search` 同名参数）。
 #[derive(Clone, Copy, Debug)]
@@ -33,6 +32,10 @@ pub struct SearchConfig {
     pub dirichlet_epsilon: f32,
     /// 随机种子（Dirichlet 采样 + 根动作采样）。
     pub seed: u64,
+    /// **rollout 模式**（默认 false）：叶节点不调用 `eval`，先验=合法动作均匀，
+    /// 价值= `bot::play_turn` 用内置 bot 打到终局的 placement utility
+    /// （纯搜索能力测试用；`eval` 在 rollout=true 时被忽略）。
+    pub rollout: bool,
 }
 
 impl Default for SearchConfig {
@@ -45,6 +48,7 @@ impl Default for SearchConfig {
             dirichlet_alpha: 0.3,
             dirichlet_epsilon: 0.25,
             seed: 0,
+            rollout: false,
         }
     }
 }
@@ -137,6 +141,37 @@ fn advance_to_seat(g: &mut Game, seat: usize) -> Option<f32> {
     }
 }
 
+/// rollout 模式叶价值：从 `g` 克隆，用内置 bot 推进所有需要行动的座位直到终局，
+/// 返回 `seat` 的 placement utility（guard 20000 步；停摆/异常 → 0）。
+pub fn bot_rollout_value(g: &Game, seat: usize) -> f32 {
+    if let Some(u) = terminal_utility(g, seat) {
+        return u;
+    }
+    let mut sim = g.clone();
+    let n = sim.players.len();
+    let mut guard = 0usize;
+    loop {
+        if let Some(u) = terminal_utility(&sim, seat) {
+            return u;
+        }
+        let mut acted = false;
+        for p in 0..n {
+            if sim.needs_action(p) {
+                crate::bot::play_turn(&mut sim, p);
+                acted = true;
+                break;
+            }
+        }
+        if !acted {
+            return 0.0;
+        }
+        guard += 1;
+        if guard > 20000 {
+            return 0.0;
+        }
+    }
+}
+
 /// 把 eval 的 prior 按合法 mask 做保底处理：非法清零；全零 → 合法动作均分；归一化。
 fn sanitize_prior(prior: &mut [f32], legal: &[bool]) {
     let mut sum = 0.0f32;
@@ -181,13 +216,6 @@ impl Rng64 {
     fn next_f32(&mut self) -> f32 {
         // [0,1)
         ((self.next_u64() >> 40) as f32) / (1u64 << 24) as f32
-    }
-    fn next_u32_below(&mut self, n: u32) -> u32 {
-        if n == 0 {
-            0
-        } else {
-            (self.next_u64() % n as u64) as u32
-        }
     }
     fn normal(&mut self) -> f32 {
         let u1 = self.next_f32().max(1e-7);
@@ -305,13 +333,25 @@ where
             return 0.0;
         }
         let term = advance_to_seat(&mut g, seat);
-        let (mut prior, value) = match term {
-            Some(u) => (vec![0.0; N_ACTIONS], u),
-            None => eval(&g, seat),
-        };
-        if term.is_none() {
-            let legal_child = g.legal_mask(seat);
-            sanitize_prior(&mut prior, &legal_child);
+        let mut prior;
+        let value;
+        match term {
+            Some(u) => {
+                prior = vec![0.0; N_ACTIONS];
+                value = u;
+            }
+            None if cfg.rollout => {
+                // rollout 模式：合法均匀先验 + bot-rollout 到终局的价值。
+                let legal_child = g.legal_mask(seat);
+                prior = vec![1.0; N_ACTIONS];
+                sanitize_prior(&mut prior, &legal_child);
+                value = bot_rollout_value(&g, seat);
+            }
+            None => {
+                (prior, value) = eval(&g, seat);
+                let legal_child = g.legal_mask(seat);
+                sanitize_prior(&mut prior, &legal_child);
+            }
         }
         node.children.as_mut().unwrap().insert(
             a,
@@ -373,6 +413,12 @@ where
     let terminal = terminal_utility(game, seat);
     let (mut root_prior, root_eval_value) = match terminal {
         Some(u) => (vec![0.0; n_actions], u),
+        None if cfg.rollout => {
+            // rollout 模式：根先验=合法均匀，不调用 eval。
+            let mut prior = vec![1.0f32; n_actions];
+            sanitize_prior(&mut prior, &legal);
+            (prior, 0.0)
+        }
         None => eval(game, seat),
     };
     let mut legal_root = legal.clone();
@@ -546,6 +592,27 @@ mod tests {
         // 根 1 次 + 每扩展子节点 1 次（≤ sims）。
         assert!(calls.get() >= 1);
         assert!(calls.get() <= cfg.simulations + 1, "evals {}", calls.get());
+    }
+
+    #[test]
+    fn rollout_mode_does_not_call_eval() {
+        let mut g = Game::new(2, RulesConfig::default());
+        for p in 0..g.players.len() {
+            let _ = g.apply_index(p, crate::actions::Action::Choose(0).encode());
+        }
+        let cfg = SearchConfig {
+            simulations: 2,
+            seed: 5,
+            rollout: true,
+            ..Default::default()
+        };
+        let r = search(&g, 0, &cfg, |_g, _s| {
+            panic!("eval must not be called in rollout mode")
+        });
+        let legal = g.legal_mask(0);
+        assert!((r.pi.iter().sum::<f32>() - 1.0).abs() < 1e-4);
+        assert!(legal[r.action as usize]);
+        assert!((-1.0..=1.0).contains(&r.root_value));
     }
 
     #[test]

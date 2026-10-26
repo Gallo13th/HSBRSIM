@@ -464,6 +464,10 @@ pi_b, action, root_value, visits = E.mcts_search(
 - 本机实测（M1/Apple Silicon，stub eval，1 局 8 座 sims=1）：0.31 s/局、2241 次 search、
   平均 0.105 ms/search（p95 0.317 ms）；单次 search：sims=1 0.058 ms / sims=2 0.084 ms /
   sims=4 0.106 ms（不含 NN 推理）。
+- **P4-B rollout 模式（纯搜索，无 NN）**：`mcts_search(..., rollout=True)`（`SearchConfig::rollout`）
+  叶节点**不调用** `eval_fn`（可传 `None`）；先验=合法动作均匀；价值=用内置 `bot::play_turn`
+  把该叶局面打到终局的 placement utility（clone Game、guard 20000 步、停摆/异常→0）。
+  用于无 NN 的搜索能力测试（`P4-B`）；默认 `rollout=False` 行为不变。
 - 限制：搜索期间持 GIL（回调即 Python/NN 推理，无法同进程多线程并行）；暂无批量 eval/
   异步调度与显式 chance 节点（对手量以 bot 确定性推进，RNG 在 `Game` clone 内折叠）；
   π 为 245 全长，Python 侧仍需按 mask 校验/重归一。远程 1k 局管线只需
