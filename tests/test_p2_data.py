@@ -1,7 +1,7 @@
 """P2 数据层测试：37.0.0.255130 → AutoTavern schema（`data/p2/cards_37.json`）。
 
 覆盖（对应 task-11 验收项）：
-- 数据自检：卡总数、各 kind 计数、池内 minion 277（Dark Paradox 5 形态入池/base 不入池）/
+- 数据自检：卡总数、各 kind 计数、池内 minion 255（Dark Paradox 5 形态入池/base 不入池）/
   spell 73（剔除 3 张 Duos-only）/ hero 118 全覆盖、T3 机制元数据继承、全卡库文本无 `@` 残留、
   golden 链接自洽、tier/race/atk/hp 合法域、无重复 id、与 AutoTavern schema 字段类型一致；
 - MANIFEST 自洽：meta 版本/计数、kind 计数、字段覆盖率、输出版本哈希；
@@ -65,14 +65,14 @@ EXPECTED_COMPAT_KINDS = {
     "quest_reward": 0,
     "dark_gift": 0,
 }
-EXPECTED_POOLS = {"minion": 277, "tier7": 13, "hero": 118, "spell": 73,
+EXPECTED_POOLS = {"minion": 255, "tier7": 12, "hero": 118, "spell": 73,
                   "trinket": 236, "timewarp": 253}
 #: Dark Paradox（AT flow.rs::PARADOX_VARIANTS）：base 不入池，5 形态入池
 EXPECTED_PARADOX_BASE = "BG36_360"
 EXPECTED_PARADOX_VARIANTS = ["BG36_360t3", "BG36_360t4", "BG36_360t5", "BG36_360t6", "BG36_360t9"]
 EXPECTED_PARADOX_TIERS = [2, 5, 4, 3, 6]
 #: strict_pool_tag 过滤后（pools.minion && pool_tag<=1）的随从数
-EXPECTED_STRICT_POOL_ELIGIBLE_MINIONS = 276
+EXPECTED_STRICT_POOL_ELIGIBLE_MINIONS = 254
 #: P2-C 审计（docs/PORTING_37_PLAN.md §2.4）：Duos-only 池法术，不进单人池
 EXPECTED_DUOS_POOL_EXCLUSIONS = ["BG31_242", "BG31_243", "BG31_244"]
 KINDS = tuple(EXPECTED_MAPPED_KINDS)
@@ -238,21 +238,22 @@ def test_schema_field_types(cards):
 # ---------------------------------------------------------------------------
 
 def test_pool_minions_all_covered(by_id, source_data):
-    """池内随从：37 池文件 273 = 单人池 273（含 Dark Paradox base，需剔除）；
-    AT 机制下 base 不入池、5 个形态入池 → 273 − 1 + 5 = 277（pool_tag 继承自 AT）。"""
+    """池内随从：37 池文件 252 = 单人池 252（含 Dark Paradox base，需剔除）；
+    AT 机制下 base 不入池、5 个形态入池 → 252 − 1 + 5 = 255（pool_tag 继承自 AT）。"""
     pool = source_data["bg_pool_minions"]
-    assert len(pool) == 273
+    assert len(pool) == 252
     expected = (set(entry["id"] for entry in pool) - {EXPECTED_PARADOX_BASE}) | set(
         EXPECTED_PARADOX_VARIANTS
     )
-    assert len(expected) == 277
+    expected.discard("BG32_820")
+    assert len(expected) == 255
     for cid in sorted(expected):
         card = by_id[cid]
         assert card["kind"] == "minion"
         assert "minion" in card["pools"], f"{cid} 池内随从缺 minion 池标记"
         # 唯一例外除外的 strict_pool_tag 过滤：BG25_013 是 AT pool_tag=2（非标准 tag）
         assert card["pool_tag"] <= 1 or cid == "BG25_013", f"{cid} pool_tag 异常"
-    assert sum(1 for c in by_id.values() if "minion" in c["pools"]) == 277
+    assert sum(1 for c in by_id.values() if "minion" in c["pools"]) == 255
 
 
 def test_dark_paradox_follows_at_mechanism(by_id, manifest, source_data):
@@ -303,9 +304,9 @@ def test_pool_scope_in_manifest(manifest):
     assert scope["excluded_duos_only"]["ids"] == EXPECTED_DUOS_POOL_EXCLUSIONS
     assert scope["excluded_duos_only"]["count"] == 3
     assert scope["raw_pool_files"]["spell"] == 76
-    assert scope["raw_pool_files"]["minion"] == 273
+    assert scope["raw_pool_files"]["minion"] == 252
     assert scope["effective_single_player"]["spell"] == 73
-    assert scope["effective_single_player"]["minion"] == 277
+    assert scope["effective_single_player"]["minion"] == 255
     assert scope["dark_paradox"]["base"] == EXPECTED_PARADOX_BASE
     assert scope["dark_paradox"]["variants"]
     assert manifest["source"]["hsbrsim_pool_spells_single_player"] == 73
@@ -521,7 +522,7 @@ def test_manifest_self_checks(manifest):
     assert checks["ok"] is True, checks["problems"]
     assert checks["script_ids_missing"] == []
     assert checks["content_literals_missing"] == []
-    assert checks["pool_coverage"] == {"minion": 277, "spell": 73, "hero": 118, "trinket": 409}
+    assert checks["pool_coverage"] == {"minion": 255, "spell": 73, "hero": 118, "trinket": 409}
     strict = checks["pool_eligible_strict"]
     assert strict["count"] == EXPECTED_STRICT_POOL_ELIGIBLE_MINIONS
     assert strict["excluded_ids"] == ["BG25_013"]

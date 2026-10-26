@@ -669,12 +669,12 @@ fn pool_tag_rule_excludes_rot_hide_gnoll_by_default() {
         .iter()
         .filter(|c| c.pools.minion && c.pool_tag <= 1)
         .count();
-    // 37.0.0 数据口径：单人池 minion 277 张（含 Dark Paradox 5 个旧形态 compat 条目），
-    // 其中 pool_tag=2 的只有 BG25_013 Rot Hide Gnoll，其余 276 张 eligible
+    // 37.0.0 数据口径：单人池 minion 255 张（当前版本不含 Naga）（含 Dark Paradox 5 个旧形态 compat 条目），
+    // 其中 pool_tag=2 的只有 BG25_013 Rot Hide Gnoll，其余 254 张 eligible
     // （36.6.3 旧口径为 245 - 1 = 244）。
     assert_eq!(
-        eligible, 276,
-        "277 37-data minion-pool candidates minus Rot Hide Gnoll"
+        eligible, 254,
+        "255 37-data minion-pool candidates minus Rot Hide Gnoll"
     );
     let excl = RulesConfig {
         excluded_cards: vec!["BG25_001".into()],

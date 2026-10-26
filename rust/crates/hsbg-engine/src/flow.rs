@@ -107,16 +107,16 @@ impl Game {
             Races::PIRATE,
             Races::QUILBOAR,
             Races::UNDEAD,
-            // 37.0.0：Naga 种族回池（36.6.3 轮换把 Naga 移出大厅类型，AT 原版 optional
-            // 列表因此只有 9 种）。37 官方标准大厅是 10 种类型里随机 5 种，见
-            // `docs/PORTING_37_PLAN.md` §3.4 与 `rust/FORK.md` §7。
-            Races::NAGA,
         ];
         let mut lobby = Races::NONE;
         let mut optional = optional.to_vec();
         let mut k = cfg.lobby_races;
         optional.push(Races::ABERRATION);
         let forced = cfg.lobby_types.iter().filter_map(|t| {
+            // 当前版本没有 Naga 随从池；即使外部配置写 NAGA，也不能重新打开。
+            if t == "NAGA" {
+                return None;
+            }
             let i = Races::NAMES.iter().position(|n| n == t)?;
             Some(Races(1 << i))
         });
@@ -165,6 +165,9 @@ impl Game {
                 }
                 c.races.is_none() || c.races == Races::ALL || c.races.intersects(lobby)
             })
+            // 当前版本 Naga 不在随从池：即使 data 表仍有历史 Naga 卡（含双种族），
+            // 也不进入本局 universe。ALL 种族的聚合卡不算 Naga 随从。
+            .filter(|c| c.races.is_none() || c.races == Races::ALL || !c.races.intersects(Races::NAGA))
             // Typeless minions tied to a type (Nadina the Red: Dragons, Disguised
             // Graverobber: Undead; client subset tag) need that type in the lobby.
             .filter(|c| c.assoc.is_none() || c.assoc.intersects(lobby))

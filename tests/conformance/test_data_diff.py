@@ -50,7 +50,7 @@ def test_text_diff_is_mostly_representation():
 def test_pool_membership_diff():
     pool = data_diff.compare_cards()["pool"]
     assert pool["autotavern_pool_minions"] == 245
-    assert pool["hsrl2_pool_minions"] == 273
+    assert pool["hsrl2_pool_minions"] == 252
     assert pool["shared_pool_minions"] == 240
     assert len(pool["only_autotavern_pool"]) == 5
     assert len(pool["only_hsrl2_pool"]) == 33

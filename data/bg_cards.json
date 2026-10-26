@@ -2514,7 +2514,7 @@
     "triple_upgrade_id": 80757,
     "spellcraft_id": 83914,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG23_000_G",
@@ -2565,7 +2565,7 @@
     "evolution_card_id": 104436,
     "subset_naga": true,
     "battlecry": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG23_002_G",
@@ -2633,7 +2633,7 @@
     "triple_upgrade_id": 80760,
     "spellcraft_id": 83988,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG23_004_G",
@@ -2691,7 +2691,7 @@
     "triple_upgrade_id": 80763,
     "spellcraft_id": 84374,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG23_007_G",
@@ -2748,7 +2748,7 @@
     "spellcraft_id": 84362,
     "subset_naga": true,
     "taunt": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG23_008_G",
@@ -2799,7 +2799,7 @@
     "script_data_num_1": 1,
     "triple_upgrade_id": 80765,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG23_009_G",
@@ -7435,7 +7435,7 @@
     "cost": 3,
     "triple_upgrade_id": 99066,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG26_505_G",
@@ -10001,7 +10001,7 @@
     "triple_upgrade_id": 103075,
     "spellcraft_id": 103071,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG27_514_G",
@@ -17493,7 +17493,7 @@
     "script_data_num_2": 1,
     "triple_upgrade_id": 114817,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG31_035_G",
@@ -18458,7 +18458,7 @@
       "DEMON"
     ],
     "battlecry": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG31_330_G",
@@ -20124,7 +20124,7 @@
     "triple_upgrade_id": 115556,
     "spellcraft_id": 116478,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG31_920_G",
@@ -20179,7 +20179,7 @@
     "triple_upgrade_id": 115564,
     "spellcraft_id": 116111,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG31_924_G",
@@ -20238,7 +20238,7 @@
     "triple_upgrade_id": 115566,
     "subset_naga": true,
     "deathrattle": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG31_925_G",
@@ -23042,7 +23042,7 @@
     "triple_upgrade_id": 119943,
     "spellcraft_id": 121479,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG32_835_G",
@@ -23131,7 +23131,7 @@
     "triple_upgrade_id": 120906,
     "evolution_card_id": 104472,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG32_837_G",
@@ -25857,7 +25857,7 @@
     "triple_upgrade_id": 122222,
     "spellcraft_id": 122259,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG33_319_G",
@@ -30369,7 +30369,7 @@
     "evolution_card_id": 105664,
     "subset_naga": true,
     "rally": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG34_925_G",
@@ -37566,7 +37566,7 @@
     "triple_upgrade_id": 130659,
     "subset_naga": true,
     "divine_shield": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG35_921_G",
@@ -41505,7 +41505,7 @@
     "activate": true,
     "activate_cost": 1,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG36_508_G",
@@ -41939,7 +41939,7 @@
     "script_data_num_2": 3,
     "triple_upgrade_id": 133708,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG36_622_G",
@@ -42638,7 +42638,7 @@
     "script_data_num_1": 1,
     "triple_upgrade_id": 133452,
     "subset_naga": true,
-    "is_pool_minion": true
+    "is_pool_minion": false
   },
   {
     "id": "BG36_921_G",

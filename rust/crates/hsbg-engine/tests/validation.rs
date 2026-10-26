@@ -132,38 +132,20 @@ fn t10_dark_gift_button_limits() {
     assert!(!g.can_dark_gift(0), "three per game");
 }
 
-/// 37.0.0 口径：Naga 种族回到单人池（36.6.3 轮换池曾把 Naga-only 随从全部移出，旧版用例名
-/// 为 `t19_naga_only_minions_are_out_of_the_pool`）。37 单人池 minion 277 中 races 恰为
-/// NAGA 的有 20 张，另有 2 张双种族含 NAGA；回池是 37 轮换的正常结果，缺脚本的 14 张
-/// Naga 由 P1 内容移植补齐（docs/PORTING_37_PLAN.md §4.1）。
+/// 当前版本 Naga 不在随从池：历史 Naga 卡仍在 db()（用于内容/兼容），
+/// 但任何 `pools.minion` / `pools.tier7` 都不应包含 Naga 或双种族含 Naga 的卡。
 #[test]
-fn t19_naga_only_minions_are_back_in_the_37_pool() {
-    // 37.0.0 数据口径：池内 races 恰为 NAGA 的 20 张（数据表顺序）。
-    const NAGA_ONLY: [&str; 20] = [
-        "BG23_000", "BG23_002", "BG23_004", "BG23_007", "BG23_008", "BG23_009", "BG26_505",
-        "BG27_514", "BG31_035", "BG31_920", "BG31_924", "BG31_925", "BG32_835", "BG32_837",
-        "BG33_319", "BG34_925", "BG35_921", "BG36_508", "BG36_622", "BG36_921",
-    ];
+fn t19_naga_minions_are_out_of_the_current_pool() {
     let in_pool: Vec<&str> = db()
-        .iter()
-        .filter(|c| (c.pools.minion || c.pools.tier7) && c.races == Races::NAGA)
-        .map(|c| c.id.as_str())
-        .collect();
-    assert_eq!(in_pool, NAGA_ONLY, "37.0.0 单人池 Naga-only 随从集合");
-
-    // 含 NAGA 但不止 NAGA 的双种族随从不受上面集合约束：37 数据只有这 2 张
-    // （ALL 种族的卡内部包含 NAGA 位，但不属于“Naga-only/双种族 Naga”，故排除）。
-    let mixed: Vec<&str> = db()
         .iter()
         .filter(|c| {
             (c.pools.minion || c.pools.tier7)
-                && c.races != Races::NAGA
                 && c.races != Races::ALL
                 && c.races.intersects(Races::NAGA)
         })
         .map(|c| c.id.as_str())
         .collect();
-    assert_eq!(mixed, ["BG31_330", "BG32_820"]);
+    assert!(in_pool.is_empty(), "Naga 不应在随从池: {in_pool:?}");
 }
 
 /// A Y'Shaarj lobby bans four heroes and the Tier 5 / 6 Dark Paradox forms.

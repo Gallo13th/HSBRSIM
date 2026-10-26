@@ -508,7 +508,9 @@ def pools_of(source: str, kind: str, card: dict, source_data: SourceData) -> lis
     pools: set[str] = set()
     cid = card["id"]
     duos_only = source == "card" and is_duos_only(card)
-    if source == "card" and card.get("is_pool_minion") and not duos_only:
+    # 当前版本 Naga 不在随从池（历史卡仍保留在卡片表中，但不进入 minion/tier7）。
+    naga = int(card.get("card_race") or 0) == 92
+    if source == "card" and card.get("is_pool_minion") and not duos_only and not naga:
         pools.add("minion")
         if card.get("tech_level") == 7:
             pools.add("tier7")
@@ -602,7 +604,8 @@ def build_card37(source: str, card: dict, source_data: SourceData, at_by_id: dic
         "pools": pools,
         "text": text,
         "text_zh": text_zh,
-        "pool_tag": 1 if card.get("is_pool_minion") else 0,
+        "pool_tag": 0 if (int(card.get("card_race") or 0) == 92) else
+                      (1 if card.get("is_pool_minion") else 0),
         "reachable": bool(pools),
     }
     if is_duos_only(card):

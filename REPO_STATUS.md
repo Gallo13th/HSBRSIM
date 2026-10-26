@@ -138,7 +138,7 @@ TavernGym v1.0.0 + TavernBench，36.6.3，MIT）。总报告：
 | 能力 | 位置 | 状态 |
 |---|---|---|
 | Rust 主引擎（fork AutoTavern TavernGym） | `rust/`（`hsbg-engine`/`hsbg-engine-py`/`python/hsbg_engine`） | ✅ 构建/安装通过；37.0.0 数据（sha `c4826127…`）；`cargo test` **858 passed/0 failed**（36 套件）、`pytest tests/test_rust_engine.py` 10 passed+1 skip；裸吞吐 **274.1 局/s/3.65ms**（上游同代码 272.8，比 1.00） |
-| 37.0.0 数据管线（AutoTavern schema） | `tools/p2_data/` + `data/p2/` | ✅ 3983 卡 = 3695 映射 + 288 compat；AT 机制元数据（pool_tag/lobby_req/assoc/Dark Paradox 5 形态）已继承；AT 脚本 registry 1290 id **0 missing**；单人池 minion 277/hero 118/spell 73；生成器幂等 `--check` 通过（27 tests） |
+| 37.0.0 数据管线（AutoTavern schema） | `tools/p2_data/` + `data/p2/` | ✅ 3983 卡 = 3695 映射 + 288 compat；AT 机制元数据（pool_tag/lobby_req/assoc/Dark Paradox 5 形态）已继承；AT 脚本 registry 1290 id **0 missing**；单人池 minion 255（当前版本无 Naga）/hero 118/spell 73；生成器幂等 `--check` 通过（27 tests） |
 | 标准动作空间（245 + 扩展） | `hsbg/env/action_space_std.py` | ✅ 0..244 与 AT 逐位一致（金标 0 差异）；扩展段（解冻/备用技能槽/备用选择槽/按槽位冻结） |
 | 标准观测（3227 + 124） | `hsbg/env/obs_std.py` | ✅ 与 AT `layout()` 32 项逐项一致；`decode_blocks` 只读视图 |
 | 37.x 内容移植计划 | `tools/p2_delta/` + `docs/PORTING_37_PLAN.md` | ✅ 覆盖矩阵可复现；P1 must-have 18 卡（15 池内随从+1 主技能+2 池内法术）；缺失操作 3 项（按槽位冻结/HeroPower slot≥2/异变系统） |

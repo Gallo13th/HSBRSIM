@@ -20,7 +20,7 @@
   "source": {
     "hsbrsim_data_patch": "37.0.0.255130",
     "hsbrsim_total_bg_cards": 3534,
-    "hsbrsim_pool_minions": 273,
+    "hsbrsim_pool_minions": 252,
     "hsbrsim_pool_spells": 76,
     "hsbrsim_pool_spells_single_player": 73,
     "hsbrsim_heroes": 118,
@@ -81,16 +81,16 @@
       "ui_button": 14
     },
     "pools": {
-      "minion": 277,
-      "tier7": 13,
+      "minion": 255,
+      "tier7": 12,
       "hero": 118,
       "spell": 73,
       "trinket": 236,
       "timewarp": 253
     },
     "pools_single_player": {
-      "minion": 277,
-      "tier7": 13,
+      "minion": 255,
+      "tier7": 12,
       "hero": 118,
       "spell": 73,
       "trinket": 236,
@@ -98,15 +98,15 @@
     }
   },
   "pool_scope": {
-    "note": "单人池口径：37 池子文件给的是“客户端池子标记”。已按 P2-C 审计剔除 3 张Duos-only 法术；并按 AT 机制（flow.rs::PARADOX_VARIANTS）修正 Dark Paradox：base BG36_360 不入池（−1）、5 个形态入池（+5）。36.6.3 上游同 id 的 pools/reachable 与这两种修正一致",
+    "note": "当前版本 Naga 不在随从池：raw 池文件已剔除 21 张 Naga，数据表仍保留历史 Naga 卡但 pools=[]。单人池口径：37 池子文件给的是“客户端池子标记”。已按 P2-C 审计剔除 3 张Duos-only 法术；并按 AT 机制（flow.rs::PARADOX_VARIANTS）修正 Dark Paradox：base BG36_360 不入池（−1）、5 个形态入池（+5）。36.6.3 上游同 id 的 pools/reachable 与这两种修正一致",
     "raw_pool_files": {
-      "minion": 273,
+      "minion": 252,
       "spell": 76,
       "hero": 118
     },
     "effective_single_player": {
-      "minion": 277,
-      "tier7": 13,
+      "minion": 255,
+      "tier7": 12,
       "hero": 118,
       "spell": 73,
       "trinket": 236,
@@ -428,8 +428,8 @@
   "mechanism_meta": {
     "note": "Rust 引擎机制断言所需的派生计数（可直接对照 cards.rs/mechanics.rs 测试）",
     "pool_counts": {
-      "minion": 277,
-      "tier7": 13,
+      "minion": 255,
+      "tier7": 12,
       "hero": 118,
       "spell": 73,
       "trinket": 236,
@@ -437,7 +437,7 @@
     },
     "strict_pool_tag_eligible_minions": {
       "filter": "pools.minion && pool_tag <= 1（strict_pool_tag 默认 true）",
-      "count": 276
+      "count": 254
     },
     "pool_tag_gt_1_ids": [
       "BG25_013"
@@ -1702,7 +1702,7 @@
       "skipped_37_only": 122
     },
     "pool_coverage": {
-      "minion": 277,
+      "minion": 255,
       "spell": 73,
       "hero": 118,
       "trinket": 409
@@ -1747,7 +1747,7 @@
     },
     "pool_eligible_strict": {
       "filter": "pools.minion && pool_tag <= 1（Rust strict_pool_tag 默认开启）",
-      "count": 276,
+      "count": 254,
       "excluded_ids": [
         "BG25_013"
       ]
@@ -1768,7 +1768,7 @@
   },
   "outputs_sha256": {
     "at_scripted_ids.json": "b0b534084b79e851fb23e2a4a94db6f3f66ace8e8d0c51b3aecef55d13e8071d",
-    "cards_37.json": "c482612727c2618e547479d743d40dad6ab4763cf1368e9742eb312ec4886dae",
+    "cards_37.json": "475cad27f52e9724efecae3823203ebf60059eb0c4ad52baaf81817f7b125c86",
     "new_cards_37.json": "eb1297242b4302d48e4cdacc25703b00f8a4d2c6026a5836fe14bc4c1cdaeae3"
   }
 }

@@ -459,7 +459,8 @@ def main():
             kw.update(detect_text_keywords(text))
             entry.update(kw)
             bg_cards_full.append(entry)
-            if has_tag(card, TAG["IS_BACON_POOL_MINION"]):
+            # 当前版本 Naga 不在随从池（即使 CardDefs 仍有历史 pool tag）。
+            if has_tag(card, TAG["IS_BACON_POOL_MINION"]) and entry.get("card_race") != 92:
                 entry["is_pool_minion"] = True
                 pool_minions.append(entry)
         elif ct == 42:  # Spell

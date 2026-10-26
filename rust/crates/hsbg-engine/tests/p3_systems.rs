@@ -91,40 +91,17 @@ fn azshara_hero_and_powers_are_registered() {
 }
 
 #[test]
-fn azshara_is_offered_in_naga_lobbies() {
-    // 37 大厅类型 = 10 种随机 5 种（含 Naga）；Azshara 的 assoc=NAGA，只在 Naga 大厅
-    // 进入英雄池（`hero_fits` 类型过滤）。
+fn naga_lobby_is_ignored_in_current_pool() {
+    // 当前版本没有 Naga 随从池；外部配置强制 NAGA 也必须被忽略。
     let cfg = RulesConfig {
         lobby_types: vec!["NAGA".to_string()],
         ..RulesConfig::default()
     };
     let g = Game::new(0, cfg);
-    assert!(g.lobby_races.intersects(Races::NAGA));
-    assert!(
-        g.lobby_heroes().any(|c| c.id == AZSHARA),
-        "Naga 大厅的英雄池应含 Azshara"
-    );
-
-    // 随机大厅（种子固定，结果确定）：Azshara 应能在某局被抽到。
-    let mut offered = false;
-    for seed in 0..200 {
-        let g = Game::new(seed, RulesConfig::default());
-        offered |= g.players.iter().any(|p| {
-            matches!(
-                p.pending.last(),
-                Some(Pending::HeroSelect { options }) if options.contains(&cid(AZSHARA))
-            )
-        });
-        if offered {
-            break;
-        }
-    }
-    assert!(offered, "Azshara 应可被随机大厅抽到");
+    assert!(!g.lobby_races.intersects(Races::NAGA));
+    assert!(!g.lobby_heroes().any(|c| c.id == AZSHARA));
 }
 
-/// P3 系统补齐：37 的 Naga 大厅（10 类随机 5 类）。36.6.3 轮换把 Naga 移出大厅类型，
-/// AT 原版 `flow.rs::optional` 只有 9 种；37 数据里 Naga-only 随从在池，必须能在
-/// Naga 大厅出现、在非 Naga 大厅不出现（池/英雄过滤共用 `lobby_races`）。
 #[test]
 fn naga_lobby_gates_naga_pool() {
     let d = db();
@@ -139,17 +116,15 @@ fn naga_lobby_gates_naga_pool() {
         ..RulesConfig::default()
     };
     let g = Game::new(0, cfg);
-    assert!(g.lobby_races.intersects(Races::NAGA));
-    assert!(naga_forms(&g) > 0, "Naga 大厅应包含已实现的 Naga-only 随从");
+    assert!(!g.lobby_races.intersects(Races::NAGA));
+    assert_eq!(naga_forms(&g), 0, "当前版本 Naga 不在随从池");
 
-    // 强制非 Naga 大厅：Naga-only 随从（races 恰为 NAGA）不在 universe。
     let cfg = RulesConfig {
         lobby_types: vec!["MURLOC".to_string()],
         ..RulesConfig::default()
     };
     let g = Game::new(0, cfg);
-    assert!(!g.lobby_races.intersects(Races::NAGA));
-    assert_eq!(naga_forms(&g), 0, "非 Naga 大厅不出现 Naga-only 随从");
+    assert_eq!(naga_forms(&g), 0);
 }
 
 #[test]

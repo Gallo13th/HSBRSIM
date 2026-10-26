@@ -6,12 +6,14 @@
 > 基准脚本：`rust/bench_engine.py`。
 > 数据：**37.0.0.255130 最终版（2026-10-26 已集成，sha256 `c4826127…`）**，来源
 > `data/p2/cards_37.json`（`gen_carddb_37.py` v1.1.0：37 官方映射 + 36.6.3 compat
-> + AT 机制元数据继承 + Dark Paradox 5 形态映射；单人池 minion **277** / hero 118 /
+> + AT 机制元数据继承 + Dark Paradox 5 形态映射；单人池 minion **255**（当前版本不含 Naga）/ hero 118 /
 > spell 73 / trinket 236）。替换步骤与约束见 `rust/FORK.md` §5，换数据后
 > `pip install -e .` 重建即可，引擎代码不动。
 > 本文所有数字均为**本机一次实测**（macOS Apple Silicon，§7），不是抄来的。
 
 ---
+
+> **2026-10-26 修正**：当前版本（客户端 37.0.0.255130.254477）Naga **不在随从池**；`flow.rs` 已移除 Naga 大厅类型并在 universe 排除 Naga。旧文档中“Naga 回池 / 277”是错误推断，下面历史段落保留仅作审计记录。
 
 ## 1. 定位：为什么把 TavernGym vendor 成主引擎
 

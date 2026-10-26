@@ -7,6 +7,8 @@
 > 所有数字均由 `tools/p2_data/gen_carddb_37.py` 实际产出，可用 `--report`/`--check` 复算；
 > 本文件中的数字与 `data/p2/MANIFEST.json` 一一对应。
 
+> **2026-10-26 修正**：当前版本 Naga 不在随从池：raw 池 273→252、有效池 277→255；本文旧数字仅作历史审计记录。
+
 | 项目 | 值 |
 |---|---|
 | 目标数据版本 | 37.0.0.255130（`data/bg_summary.json` 的 `patch`） |
