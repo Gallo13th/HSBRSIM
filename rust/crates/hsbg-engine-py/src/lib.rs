@@ -586,6 +586,21 @@ fn mcts_search<'py>(
         seed,
         rollout,
     };
+    // rollout 模式且无 eval 回调：搜索全程不需要 GIL → 释放 GIL，便于多进程/多线程并行。
+    if rollout && eval_fn.is_none() {
+        let result = py.detach(|| {
+            rust_search(&start, seat, &cfg, |_g: &Game, _s: usize| {
+                (vec![1.0; N_ACTIONS], 0.0)
+            })
+        });
+        let pi_bytes: Vec<u8> = result.pi.iter().flat_map(|x| x.to_le_bytes()).collect();
+        return Ok((
+            PyBytes::new(py, &pi_bytes),
+            result.action,
+            result.root_value,
+            result.visits,
+        ));
+    }
     // 回调异常：先记下，搜索结束后转成 Python 异常（search 的签名不收 Result）。
     let err: std::cell::RefCell<Option<PyErr>> = std::cell::RefCell::new(None);
     let result = rust_search(&start, seat, &cfg, |g: &Game, s: usize| {
