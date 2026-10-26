@@ -404,3 +404,66 @@ env 事件监听重绑、全部环境计数器/统计/选择留痕，并重建 `
 状态**（在 clone 上逐个尝试，不污染主局）；`env.action_mask()` 与候选
 长度/顺序一致；非法动作返回 `info["invalid"]=True` 且状态不推进。
 与 AutoTavern「`Game::legal_mask` 允许的动作都被 `apply` 接受」的契约等价。
+
+---
+
+## 10. 2026-10-26 第二阶段增补：AutoTavern 标准 profile（std）
+
+> 用户决策（P2）：HSBRSIM 与 AutoTavern（TavernGym）做**可比基线**——动作空间与
+> 观测全面对齐；游戏内支持但双方未实现的操作作为扩展动作补充。旧候选动作/实体
+> token 观测量接口保留为 **legacy profile**，`Observation`（v3）字段与语义不变。
+> 本节为**新增 profile**，不改变 §1–§9 的 legacy 契约。
+
+### 10.1 标准动作空间（`hsbg.env.action_space_std`）
+
+前 **245** 个动作与 AutoTavern `N_ACTIONS=245` **索引/语义/`action_name` 逐位一致**：
+
+| 索引 | 数量 | 动作 |
+|---|---|---|
+| 0 / 1 / 2 / 3 | 1 each | EndTurn / Refresh / Freeze / Upgrade |
+| 4..5 | 2 | HeroPower(slot 0..1) |
+| 6 / 7 | 1 each | DarkGift / Cancel |
+| 8..15 | 8 | Buy(shop slot 0..7) |
+| 16..22 | 7 | Sell(board slot 0..6) |
+| 23..29 | 7 | Activate(board slot 0..6) |
+| 30..45 | 16 | Choose(option 0..15) |
+| 46..125 | 80 | Play{hand 0..9, pos 0..7} |
+| 126..195 | 70 | Magnetize{hand 0..9, board 0..6} |
+| 196..244 | 49 | Move{from 0..6, to 0..6} |
+
+**扩展段（索引 ≥245，只追加、不改变前 245）**：`N_EXT_ACTIONS=29`、
+`N_TOTAL_ACTIONS=274`：
+
+| 索引 | 动作 | 依据 |
+|---|---|---|
+| 245 | Unfreeze | AutoTavern 只有 Freeze 无解冻；游戏可点掉整馆冻结，HSBRSIM 引擎已有 `unfreeze_tavern`（F-23） |
+| 246..249 | HeroPower(slot 2..5) 预留 | HSBRSIM `hero_power_ids` 为列表，未来多技能扩展（P2-C 操作探针 OPS-09） |
+| 250..265 | Choose(option 16..31) 预留 | AT 固定 16 选项；HSBRSIM `PendingChoice.options` 无固定上限（发现/饰品/任务） |
+| 266..273 | FreezeSlot(slot 0..7) | 按槽位冻结/解冻（7 随从 + 1 法术槽）；证据：37.0.0 卡面 `BG22_HERO_004p` “Freeze them both” + P2-C ops_probe OPS-02；两引擎均无公开单槽 API，P3 环境接入时补引擎/env 映射 |
+
+模块同时提供 `encode/decode`、`SEGMENTS`、`is_std_index/segment_of`、
+`candidate_to_std*/std_to_candidate`（与 legacy `CandidateAction` 双向投影；
+目标折叠到后续 `Choose`，`hero_power` 槽位属于有损投影，详见
+`docs/ACTION_SPACE_STD.md` §5）。**扩展动作当前仅有编码/mask 位定义；
+环境层应用（如 UNFREEZE）在 P3 接入**（未实现时 mask 恒 False）。
+
+### 10.2 标准观测（`hsbg.env.obs_std`）
+
+与 AutoTavern `layout()` **32 项逐位一致**：`features` = **3227** 个 float、
+`cards` = **124** 个卡牌索引；块顺序/块大小/字段偏移见 `docs/OBS_STD.md`
+（MINION_F=31、ITEM_F=40、GLOBAL_F=53、N_QUESTS=3、QUEST_F=2、N_SECRETS=5、
+OPP_F=9、N_OPP=7、PENDING_KINDS=9、N_SHOP=8、N_BOARD=7、N_HAND=10、
+N_CHOICE=16、N_POS=8、N_POWERS=2）。`decode_blocks(features, cards)` 提供只读
+块视图；`N_CARDS` 词表由**数据版本**决定（AT 36.6.3 参考 3984；HSBRSIM 37.0.0
+以生成数据的卡表为准）。
+
+### 10.3 可比性契约与迁移
+
+- **同引擎 + 同数据版本**时，标准 profile 的动作索引与观测块**逐位可比**；
+- 跨数据版本（AT 36.6.3 vs HSBRSIM 37.0.0）时，动作索引仍逐位可比，
+  但 `cards` 卡牌下标需按 `card id` 重映射（块布局与浮点字段语义可比）；
+- 旧策略/checkpoint 属 **legacy profile**（`Observation` v3 + 动态候选动作），
+  不自动兼容 std profile；迁移与重训计划见 `docs/ACTION_SPACE_STD.md` §7、
+  `docs/OBS_STD.md` §9–10；
+- P3 接入环境/训练时：新增 245 维（+扩展）`action_mask`、std 观测编码器与
+  固定动作空间策略头；legacy profile 保留用于对照与既有资产。

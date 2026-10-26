@@ -7,7 +7,13 @@
 
 | 文档 | 用途 |
 |---|---|
-| [docs/AUTOTAVERN_UPGRADE.md](docs/AUTOTAVERN_UPGRADE.md) | ★ AutoTavern 借鉴升级总报告（双引擎/变更/证据/限制，改后端或对拍前必读） |
+| [docs/AUTOTAVERN_UPGRADE.md](docs/AUTOTAVERN_UPGRADE.md) | ★ AutoTavern 借鉴升级（第一阶段）总报告（双引擎/变更/证据/限制） |
+| [docs/AUTOTAVERN_P2_KICKOFF.md](docs/AUTOTAVERN_P2_KICKOFF.md) | ★★ 第二阶段总报告：Rust 主引擎/37 数据/动作观测统一/性能/内容移植（改引擎/数据/动作必读） |
+| [docs/RUST_ENGINE.md](docs/RUST_ENGINE.md) / [rust/FORK.md](rust/FORK.md) | Rust 主引擎 `hsbg_engine` 架构/构建/用法 + fork 策略与改动台账 |
+| [docs/DATA_37_MIGRATION.md](docs/DATA_37_MIGRATION.md) | 37.0.0 → AutoTavern schema 数据管线（生成器/差分/compat 条目/局限） |
+| [docs/PORTING_37_PLAN.md](docs/PORTING_37_PLAN.md) | 37.x 内容移植缺口/难度/分批计划 + 缺失操作清单（P1 must-have 18 卡） |
+| [docs/ACTION_SPACE_STD.md](docs/ACTION_SPACE_STD.md) / [docs/OBS_STD.md](docs/OBS_STD.md) | 标准动作空间（245+扩展）/ 标准观测（3227+124）与迁移 |
+| [docs/PERF_ROUTE.md](docs/PERF_ROUTE.md) | Rust/Python/C 性能实测与迁移路线 |
 | [docs/CONFORMANCE_AUTOTAVERN.md](docs/CONFORMANCE_AUTOTAVERN.md) | 跨引擎一致性台账（57 场景/AC 编号/数据差异；改引擎机制后须同步） |
 | [docs/TAVERNGYM_BACKEND.md](docs/TAVERNGYM_BACKEND.md) | TavernGym 参照后端（安装/构建/EnvLike 适配/基准，改 `hsbg/backends/**` 必读） |
 | [docs/TAVERNBENCH.md](docs/TAVERNBENCH.md) | TavernBench 决策评测（数据/评分/复现，改 `benchmarks/**` 必读） |
@@ -38,6 +44,11 @@ C:\HSagent\
 │   └── tests/             # 引擎回归测试（禁止为了新功能改红）
 ├── data/                  # 引擎卡牌数据 JSON（37.0.0.255130 基线）
 ├── hsdata/                # 可选：原始 CardDefs（不入库，按 docs/DATA_REBUILD.md 重建）
+├── rust/                  # ★★ P2 主引擎：hsbg-engine（fork AutoTavern TavernGym，Rust+PyO3）
+│   ├── crates/hsbg-engine/     # 引擎 crate（数据在 data/cards.json，编译期嵌入）
+│   ├── crates/hsbg-engine-py/  # PyO3 绑定（Python 模块 hsbg_engine._core）
+│   ├── python/hsbg_engine/     # numpy 包装（Game/BattlegroundsEnv/BatchEnv）
+│   └── FORK.md                 # 上游 commit/重命名/改动台账/数据替换步骤
 ├── hsbg/                  # ★ 本项目新增代码
 │   ├── env/               # RL 环境（spec 契约 / 观测 / 动作 / 对局循环 / 向量化 / snapshot / invariants）
 │   ├── backends/          # ★ TavernGym 参照后端（EnvLike 适配 + 基准；默认后端仍是 hsrl2）
@@ -75,7 +86,17 @@ python -m pytest hsrl2/tests -q          # 引擎回归（通过数以本次输�
 python -m pytest tests -q                # 本项目新增测试（含 tests/conformance/；无 taverngym 时自动 skip）
 python tools/smoke_random_games.py --games 8 --seed 2000   # 全对局压测
 python scripts/verify_all.py --fast      # 一键快速门禁（约 2min）
-python scripts/verify_all.py             # 一键全量门禁（约 4-6min）
+python scripts/verify_all.py             # 一键全量门禁（约 4-6min；有 rust/ 时含 Rust build gate）
+```
+
+P2 新增命令（详见 docs/AUTOTAVERN_P2_KICKOFF.md）：
+```powershell
+cd rust; python -m pip install -e .; cd ..   # 构建/安装 Rust 主引擎（Rust 1.98 + maturin）
+python -m pytest tests/test_rust_engine.py tests/test_action_space_std.py tests/test_obs_std.py tests/test_p2_data.py -q
+python tools/p2_data/gen_carddb_37.py --check          # 37 数据管线自检
+python tools/p2_delta/run_all.py                        # 内容/操作缺口覆盖矩阵
+python tools/p2_perf/run_all.py                         # Rust/C/Python 性能基准
+cargo test --release --manifest-path rust/Cargo.toml -p hsbg-engine   # Rust 测试
 ```
 
 macOS/Linux 上用 `python3` 代替 `python`；平台专属用例按 `tests/conftest.py`
@@ -187,3 +208,27 @@ python scripts/validate_env.py --games 20 --check-invariants   # 结构不变量
 - 纯文档改动：只需链接/路径自检，不要求跑 pytest，但不得改代码/测试；
 - 改 `hsbg/env/spec.py`（唯一契约）= 同步 `docs/ENV_SPEC.md` 并升 `Observation.version`；
 - baseline 变红且非本次改动引入：停止修复，记录并通知 Lead，不要顺手改别人 scope。
+
+## 7. 第二阶段（P2）约定：Rust 主引擎 / 数据 / 标准动作观测
+
+- **主引擎是 Rust `hsbg_engine`**（`rust/`，fork AutoTavern TavernGym，MIT）：
+  - 机制实现以 AutoTavern 为基准；**偏离上游必须登记 `rust/FORK.md` §7 台账**
+    （原因/证据/影响/回归）；有误处按官方/真实日志证据精修，禁止无证据改机制。
+  - 数据在 `rust/crates/hsbg-engine/data/cards.json`（编译期嵌入）；**只允许由
+    `tools/p2_data/gen_carddb_37.py` 生成**，不得手改；替换后 `cd rust && python -m pip install -e .` 重建。
+  - 版本上报由数据 `meta` 驱动（`game_version()/server_rules_version()`），不得硬编码。
+  - `hsrl2` 降级为 **legacy/对照 oracle/真实对局桥**：不做新功能，但必须保持回归全绿。
+- **数据版本 = 37.0.0.255130（唯一）**；源数据在 `data/`，AutoTavern schema 产物在
+  `data/p2/`（`cards_37.json` = 37 映射 + 36.6.3 compat 条目，保证脚本 registry 0 missing）。
+  数值/卡面以 `data/`（官方 CardDefs 37.0.0）为准；不得用旧中文快照覆盖英文权威。
+- **动作/观测标准 profile**（`hsbg/env/action_space_std.py`/`obs_std.py`）：
+  - 前 245 动作与 AutoTavern **逐位一致**（金标测试保证），扩展段 ≥245 只追加不改前段；
+  - 观测 3227 floats + 124 cards 与 AT `layout()` 32 项逐项一致；
+  - legacy candidate/Observation v3 保留，但新训练/评测默认走 std profile（P3 接入）。
+- **性能纪律**：引擎/热路径优先 Rust（`docs/PERF_ROUTE.md`）；C 加速仅在实测更快且
+  维护成本可接受时采用（当前结论：Cython 零改造无收益，不引入 C 主路线）。
+- **内容移植**：按 `docs/PORTING_37_PLAN.md` 分批（P1 = 18 卡：15 池内随从 + 1 主英雄
+  技能 + 2 池内法术；黑暗赠礼/Timewarp 0 缺口）；每张卡先写验收用例（与 AT 行为对拍 +
+  hsrl2 参考实现），再写 Rust content；不允许“占位脚本”混入池子。
+- **可比性**：与 AutoTavern 论文对比时必须注明数据版本（37.0.0 vs 36.6.3）与动作/观测
+  profile；同引擎同数据版本才可逐位比较，跨版本卡牌下标需按 card id 重映射。

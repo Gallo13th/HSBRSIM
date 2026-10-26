@@ -136,3 +136,49 @@ rizling 参考版本落后一个版本属正常 warning。
 - `tests/test_policy_model.py::test_forward_latency_batch64` 是**延迟基准**，
   在并发高负载（load average 很高）时会偶发超阈值；空载实测 34.9ms 通过，
   最终门禁应在空载下跑（不得靠放宽断言掩盖）。
+
+---
+
+## 8. 2026-10-26 第二阶段（P2：Rust 主引擎 + 37.0.0 数据 + 动作/观测标准）验收快照
+
+> 环境：macOS Apple Silicon / Python 3.12.2 / Rust 1.98.1；数据 **37.0.0.255130**（Rust 引擎
+> `data/p2/cards_37.json`，sha256 `c482612727c2618e…`）。硬标准仍是 0 failed / 门禁 PASS。
+
+### 8.1 一键门禁（`python3 scripts/verify_all.py`）
+
+| gate | 预期 |
+|---|---|
+| rust_engine_build | `cargo build --release -p hsbg-engine` exit 0（无 cargo/rust 时 SKIP） |
+| engine_tests | 0 failed（4890 passed / 6 skipped 量级，legacy hsrl2） |
+| project_tests | 0 failed（761 passed / 63 skipped 量级；含 P2 新增数据/动作/观测/Rust 引擎测试） |
+| smoke_8p | crashes=0 |
+| env_validation | ok=true，failures=[]（含不变量抽查） |
+| env_bench | 0 errors / 0 invalid |
+| hashseed_determinism | 0 failed（7 passed，双 PYTHONHASHSEED 子进程） |
+| official_consistency | 有语料 exit 0；无语料 SKIP（不误红） |
+| version_check | 四信号成功（项目数据 37.0.0.255130 为最新） |
+| taverngym_conformance | 0 failed（13 passed；无 taverngym 时 SKIP） |
+| tavernbench_check | 26/26 PASS |
+
+### 8.2 P2 专项
+
+| 命令 | 预期 |
+|---|---|
+| `cargo test --release --manifest-path rust/Cargo.toml -p hsbg-engine` | **858 passed / 0 failed**（36 套件，37 数据；含 6 个内容断言已按 37 重算） |
+| `cargo test --release ... -p hsbg-engine --lib` | 15 passed |
+| `pytest tests/test_rust_engine.py -q` | 10 passed + 1 skip（skip=上游 36.6.3 逐位对拍） |
+| `pytest tests/test_action_space_std.py tests/test_obs_std.py -q` | 57 passed（金标：`action_name` 0..244 差异 0、`layout()` 32 项差异 0） |
+| `pytest tests/test_p2_data.py -q` | 27 passed（3983 卡/池计数/机制元数据/Dark Paradox/幂等） |
+| `pytest tests/test_env_snapshot.py tests/test_env_invariants.py -q` | 23 passed |
+| `python3 tools/p2_data/gen_carddb_37.py --check` | byte-identical + meta/池计数/AT 脚本 id 0 missing |
+| `python3 tools/p2_delta/run_all.py` | exit 0（覆盖矩阵/操作探针；产物 runs/p2_delta/） |
+| `python3 tools/p2_perf/run_all.py` | exit 0（Rust/端到端/C 加速基准；产物 runs/p2_perf/） |
+| `python3 rust/bench_engine.py --games 1000` | 裸引擎 ~274 games/s、3.65 ms/局（与上游比值 1.00） |
+
+### 8.3 本机基线说明
+
+- `pytest tests/test_policy_model.py::test_forward_latency_batch64` 是延迟基准，多 agent
+  并发高负载时会偶发超阈值；空载复跑通过（不得放宽断言）。
+- 5 条搜索测试依赖未入库的 `runs/` checkpoint、`tests/test_live_clickbot.py` 非 Windows
+  模块级 skip —— 明细见 `docs/PORTABILITY.md`。
+- Rust 构建产物 `rust/target/` 与 `*.so` 已 gitignore，不入库。

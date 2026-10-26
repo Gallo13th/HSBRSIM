@@ -3,12 +3,11 @@
 把「酒馆战棋」做成**可训练、可评估、可复现**的强化学习智能体项目。
 
 ```
-模拟引擎 (hsrl2)  →  RL 环境 (hsbg.env)  →  策略与训练 (hsbg.policy / hsbg.train)
-        ↑
-可选参照引擎 TavernGym（AutoTavern，Rust/PyO3，36.6.3）
+主引擎 hsbg_engine（Rust/PyO3，fork AutoTavern TavernGym）→ RL 环境/策略/训练
+legacy 引擎 hsrl2（Python，37.0.0 全内容/真实对局桥）
 ```
 
-数据基线：**官方 build 37.0.0.255130**（2026-10 补丁，池内随从 273）。
+数据基线：**官方 build 37.0.0.255130**（2026-10 补丁，池内随从 273；已确认 hsdata 最新 tag=255130）。
 一键门禁 `python scripts/verify_all.py`：引擎/项目测试 + 冒烟 + 环境验收 +
 官方一致性 + 版本检测 + **跨引擎一致性（AutoTavern 参照）** + **TavernBench 评分复现**。
 测试通过数不写死在本文件（会漂移），以 `docs/VERIFICATION.md` 与门禁实测为准。
@@ -17,14 +16,23 @@
 > 的 TavernGym 作为**可选/参照模拟后端**，用其规则实现与 mechanics 测试对
 > `hsrl2` 做跨引擎一致性审计（发现并修复 T1 池份数、升级费等规则偏差），
 > 并引入 TavernBench 决策评测、环境快照/不变量、精确动作掩码验收。
-> 详见 [docs/AUTOTAVERN_UPGRADE.md](docs/AUTOTAVERN_UPGRADE.md)；
-> 默认引擎与 37.0.0 数据基线**保持不变**。
+> 详见 [docs/AUTOTAVERN_UPGRADE.md](docs/AUTOTAVERN_UPGRADE.md)。
+>
+> **2026-10-26 第二阶段（P2）启动**：按用户新指令把 AutoTavern 的 Rust 引擎
+> **fork 为本仓库主引擎 `hsbg_engine`**（`rust/`，MIT，含 37.0.0 数据管线），
+> 动作空间/观测全面对齐 AutoTavern（前 245 动作 + 3227 floats + 124 cards；
+> 游戏支持但未实现的操作作为 245+ 扩展），性能路线与内容移植计划已产出。
+> 详见 [docs/AUTOTAVERN_P2_KICKOFF.md](docs/AUTOTAVERN_P2_KICKOFF.md)、
+> [docs/RUST_ENGINE.md](docs/RUST_ENGINE.md)、[docs/PORTING_37_PLAN.md](docs/PORTING_37_PLAN.md)。
 
 ## 组成与状态
 
 | 层 | 目录 | 状态 |
 |----|------|------|
-| 战局模拟引擎 | `hsrl2/` | ✅ 移植自旧版 v2 引擎 + 官方 37.0.0 数据迁移；机制精度权威 |
+| **主模拟引擎（P2）** | `rust/`（`hsbg_engine`） | ✅ fork AutoTavern TavernGym（Rust + PyO3）：245 动作 + 精确 mask、3227+124 观测、BatchEnv；裸吞吐 ~274 局/s / 3.65 ms/局（37 数据最终态；上游同代码 272.8；比值 1.00） |
+| legacy 模拟引擎 | `hsrl2/` | ✅ Python 引擎（37.0.0 全内容/真实对局桥/参照 oracle），逐步降级为 legacy/对照 |
+| **37.0.0 数据管线（P2）** | `data/p2/` + `tools/p2_data/` | ✅ 官方 37.0.0 → AutoTavern schema（3983 = 3695 映射 + 288 compat；脚本 id 0 missing） |
+| **动作/观测标准 profile（P2）** | `hsbg/env/action_space_std.py` / `obs_std.py` | ✅ 前 245 动作与 AT 逐位一致 + 扩展段；3227 floats + 124 cards 布局与 AT 32 项逐项一致 |
 | RL 环境 | `hsbg/env/` | ✅ 单智能体 8 人对局、实体 token 观测、候选动作、奖励、确定性、多进程向量化 |
 | 环境可靠性 | `hsbg/env/snapshot.py` / `hsbg/env/invariants.py` | ✅ 精确存档/恢复（obs/RNG/候选逐位一致）、结构不变量检查（移植 AutoTavern `invariants.rs`） |
 | RL 接口层 | `hsbg/rl/` | ✅ Policy/EnvLike 协议、Gymnasium 包装（`check_env` 通过）、JSONL 采集器（4 进程 7.4 局/s）、多进程评测 |
@@ -100,6 +108,15 @@ python scripts/run_tavernbench.py --systems tavernagent,jev
 python -c "from hsbg.env import BattlegroundsEnv; from hsbg.env.snapshot import snapshot, restore; \
 e=BattlegroundsEnv(seed=42); o=e.reset(seed=42); s=snapshot(e); print(len(s.game.heroes))"
 python scripts/validate_env.py --games 20 --check-invariants   # 不变量抽查（默认关闭）
+
+# 10) 第二阶段（P2）：Rust 主引擎 / 37 数据 / 标准动作观测（见 docs/AUTOTAVERN_P2_KICKOFF.md）
+cd rust && python -m pip install -e . && cd ..          # 构建并安装 hsbg_engine（需 Rust 1.98 + maturin）
+python -c "import hsbg_engine; g=hsbg_engine.Game(seed=1); print(hsbg_engine.game_version(), list(g.placements()))"
+python rust/bench_engine.py --games 2000 --e2e-games 20  # 引擎吞吐基准（对照上游 taverngym 可选）
+python tools/p2_data/gen_carddb_37.py --check           # 37.0.0 数据管线自检（--report 看差分）
+python -m pytest tests/test_action_space_std.py tests/test_obs_std.py tests/test_rust_engine.py tests/test_p2_data.py -q
+python tools/p2_delta/run_all.py                        # 内容缺口/操作缺口覆盖矩阵（产物 runs/p2_delta/）
+python tools/p2_perf/run_all.py                         # Rust vs Python vs C 性能基准（产物 runs/p2_perf/）
 ```
 
 ## 评测结果（100 局固定种子，8 人局，名次越小越好）
@@ -137,8 +154,15 @@ TavernGym 引擎裸吞吐 **275.5 games/s**（3.63 ms/局，15.4 回合）；端
 
 ## 设计要点
 
-- **引擎是机制精度的唯一权威**：卡牌数值来自官方 CardDefs（build 255130）；效果由
-  `hsrl2/scripts` 注册；环境层不重新实现规则。
+- **引擎是机制精度的唯一权威**：卡牌数值来自官方 CardDefs（build 255130）；主引擎
+  `hsbg_engine`（Rust，fork 自 AutoTavern）沿用其机制实现，有误处按证据精修
+  （`rust/FORK.md` 台账 + `docs/PORTING_37_PLAN.md`）；legacy `hsrl2` 保留为对照/oracle。
+- **动作/观测与 AutoTavern 对齐**：标准 profile 前 245 动作索引/语义/`action_name`
+  与 AT 逐位一致，观测 3227 floats + 124 cards 与 AT `layout()` 32 项逐项一致；
+  扩展动作段（≥245）补游戏内支持但双方未实现的操作（如按槽位冻结）。
+- **数据与性能路线**：37.0.0 数据由 `tools/p2_data` 生成 AutoTavern schema（含 compat
+  条目避免脚本 registry panic）；Rust 裸引擎 ~274 局/s（3.65 ms/局，37 数据），是 hsrl2 的 ~40×，
+  端到端瓶颈转为观测编码（路线见 `docs/PERF_ROUTE.md`）。
 - **双引擎与可靠性参照**：默认 `hsrl2`（37.0.0，可训练/可桥接真实对局）；可选
   `taverngym` 参照后端（AutoTavern，Rust/PyO3，36.6.3）用于跨引擎对拍、吞吐对照
   与规则证据；跨引擎一致性套件把「参照实现/官方 wiki/真实日志」分级为证据。
@@ -172,6 +196,13 @@ TavernGym 引擎裸吞吐 **275.5 games/s**（3.63 ms/局，15.4 回合）；端
 ## 文档
 
 - `docs/AUTOTAVERN_UPGRADE.md` — **AutoTavern 借鉴升级总报告**（对比/设计/变更/证据/限制）
+- `docs/AUTOTAVERN_P2_KICKOFF.md` — **第二阶段总报告**（Rust 主引擎/37 数据/动作观测统一/性能/内容移植计划）
+- `docs/RUST_ENGINE.md` — Rust 主引擎 `hsbg_engine`（架构/安装/用法/与上游关系/基准）
+- `docs/DATA_37_MIGRATION.md` — 37.0.0→AutoTavern schema 数据管线与差分（compat 条目/字段覆盖/局限）
+- `docs/PORTING_37_PLAN.md` — 37.x 内容移植缺口/难度/分批计划 + 缺失操作清单（P1 must-have）
+- `docs/ACTION_SPACE_STD.md` — 标准动作空间（245 + 扩展段）规范/编码/迁移
+- `docs/OBS_STD.md` — 标准观测（3227 floats + 124 cards）块布局/字段/迁移
+- `docs/PERF_ROUTE.md` — Rust vs Python vs C 性能实测与迁移路线
 - `docs/CONFORMANCE_AUTOTAVERN.md` — 跨引擎一致性审计台账（57 场景 / AC-01…AC-04 / 数据差异）
 - `docs/TAVERNGYM_BACKEND.md` — TavernGym 参照后端（安装/构建、EnvLike 适配、基准、限制）
 - `docs/TAVERNBENCH.md` — TavernBench 决策评测（数据结构/评分口径/复现/提交答案）
@@ -210,8 +241,9 @@ TavernGym 引擎裸吞吐 **275.5 games/s**（3.63 ms/局，15.4 回合）；端
 ## 目录
 
 ```
-hsrl2/          模拟引擎（vendored；卡牌脚本在 scripts/batches/）
-data/           官方 37.0.0 数据（backup_249896/ 为旧基线备份）
+rust/           ★ P2 主引擎：hsbg-engine（fork AutoTavern TavernGym，Rust+PyO3）+ hsbg_engine Python 包
+hsrl2/          legacy Python 引擎（vendored；卡牌脚本在 scripts/batches/）
+data/           官方 37.0.0 数据（backup_249896/ 为旧基线备份）；data/p2/ 为 AutoTavern schema 37 数据
 hsbg/env/       RL 环境（spec/driver/observation/game_env/vec_env/snapshot/invariants）
 hsbg/rl/        RL 接口层（api/policies/envs/gym_wrapper/collector/evaluate）
 hsbg/backends/  TavernGym 参照后端（EnvLike 适配、基准；默认后端仍是 hsrl2）
@@ -236,5 +268,8 @@ tmp_*/          隔离工作区（数据迁移/修复演练，可删）
   RTX 4060 Ti 16GB；训练与评测均可在 CUDA 或 CPU 上运行。
 - 本仓库同时验证 **macOS（Apple Silicon, Python 3.12）**：`python3 -m pytest tests`
   全绿（平台/缺失 checkpoint 用例按 `tests/conftest.py` 精确 skip，见 `docs/PORTABILITY.md`）。
-- 可选依赖 `taverngym`（AutoTavern 参照后端）需要 Rust 1.98 + maturin 从源码构建；
-  不安装时默认流程与测试完全不受影响（相关套件自动 skip）。
+- 可选依赖 `taverngym`（AutoTavern 上游参照后端）与 **Rust 主引擎 `hsbg_engine`**
+  需要 Rust 1.98 + maturin 从源码构建：`cd rust && python -m pip install -e .`；
+  不安装时 legacy 流程与测试不受影响（`tests/test_rust_engine.py` 自动 skip）。
+- 本机验证：macOS Apple Silicon（Rust 1.98.1）构建通过；`cargo test --release -p hsbg-engine`
+  与 Python 侧冒烟见 `docs/RUST_ENGINE.md`。

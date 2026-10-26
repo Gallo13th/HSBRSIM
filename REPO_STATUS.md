@@ -132,3 +132,19 @@ TavernGym v1.0.0 + TavernBench，36.6.3，MIT）。总报告：
 `docs/CONFORMANCE_AUTOTAVERN.md` §7。限制：TavernGym 为 36.6.3、动作/观测空间
 与 hsrl2 不同，策略不可直接迁移；TavernBench 为 LLM 决策基准，不替代 self-play
 名次评测。
+
+## 9. 2026-10-26 第二阶段（P2）启动：Rust 主引擎 / 37.0.0 数据 / 动作观测统一
+
+| 能力 | 位置 | 状态 |
+|---|---|---|
+| Rust 主引擎（fork AutoTavern TavernGym） | `rust/`（`hsbg-engine`/`hsbg-engine-py`/`python/hsbg_engine`） | ✅ 构建/安装通过；37.0.0 数据（sha `c4826127…`）；`cargo test` **858 passed/0 failed**（36 套件）、`pytest tests/test_rust_engine.py` 10 passed+1 skip；裸吞吐 **274.1 局/s/3.65ms**（上游同代码 272.8，比 1.00） |
+| 37.0.0 数据管线（AutoTavern schema） | `tools/p2_data/` + `data/p2/` | ✅ 3983 卡 = 3695 映射 + 288 compat；AT 机制元数据（pool_tag/lobby_req/assoc/Dark Paradox 5 形态）已继承；AT 脚本 registry 1290 id **0 missing**；单人池 minion 277/hero 118/spell 73；生成器幂等 `--check` 通过（27 tests） |
+| 标准动作空间（245 + 扩展） | `hsbg/env/action_space_std.py` | ✅ 0..244 与 AT 逐位一致（金标 0 差异）；扩展段（解冻/备用技能槽/备用选择槽/按槽位冻结） |
+| 标准观测（3227 + 124） | `hsbg/env/obs_std.py` | ✅ 与 AT `layout()` 32 项逐项一致；`decode_blocks` 只读视图 |
+| 37.x 内容移植计划 | `tools/p2_delta/` + `docs/PORTING_37_PLAN.md` | ✅ 覆盖矩阵可复现；P1 must-have 18 卡（15 池内随从+1 主技能+2 池内法术）；缺失操作 3 项（按槽位冻结/HeroPower slot≥2/异变系统） |
+| 性能路线 | `tools/p2_perf/` + `docs/PERF_ROUTE.md` | ✅ Rust 裸引擎 ~49× hsrl2；端到端瓶颈在 Python 观测编码（78%）；Cython 零改造无收益（1.0×） |
+| 门禁 | `scripts/verify_all.py` | ✅ 新增 `rust_engine_build` gate（无 cargo/rust 时 SKIP）；既有 10 gate 保持 |
+
+限制：37.0.0 相对 36.6.3 无新增可玩卡/无数值改动（差异=池子轮换+文本口径）；饰品
+（缺 161/可提供 138 上界）与异变（108，新系统）需 P2/P3 分批；旧策略 checkpoint 属
+legacy profile，需重训；TavernBench states 为 36.6.3，不能与 37 数据 engine 混用。

@@ -52,6 +52,21 @@ def _module_available(name: str) -> bool:
         return False
 
 
+def _cargo_path() -> str | None:
+    """定位 cargo：PATH 优先，其次 rustup 默认安装位置（~/.cargo/bin/cargo）。
+
+    GUI/IDE 或非交互 shell 里 PATH 可能不含 ~/.cargo/bin；Rust 主引擎门禁
+    （rust_engine_build）要能在这种环境跑起来，而不是误 SKIP。
+    """
+    import shutil
+
+    found = shutil.which("cargo")
+    if found:
+        return found
+    cand = Path.home() / ".cargo" / "bin" / "cargo"
+    return str(cand) if cand.is_file() else None
+
+
 def run(name: str, cmd: List[str], *, timeout: int = 900) -> Dict:
     t0 = time.perf_counter()
     try:
@@ -117,6 +132,12 @@ def main(argv=None) -> int:
     if args.fast:
         gates = [g for g in gates if g[0] != "taverngym_conformance"] + [
             g for g in gates if g[0] == "taverngym_conformance"]
+    else:
+        # P2：Rust 主引擎（fork 自 AutoTavern）构建门禁；无 cargo 或无 rust/ 时 SKIP。
+        gates.insert(0, ("rust_engine_build",
+                         ["cargo", "build", "--release",
+                          "--manifest-path", "rust/Cargo.toml",
+                          "-p", "hsbg-engine"], 900))
 
     results = []
     t0 = time.perf_counter()
@@ -128,6 +149,15 @@ def main(argv=None) -> int:
                             "skip": True, "seconds": 0.0,
                             "tail": f"SKIPPED: optional dependency {dep} missing"})
             continue
+        if name == "rust_engine_build":
+            cargo = _cargo_path()
+            if cargo is None or not (ROOT / "rust" / "Cargo.toml").exists():
+                print(f"[SKIP] {name}  (无 cargo 或无 rust/Cargo.toml)")
+                results.append({"name": name, "cmd": cmd, "rc": 0, "ok": True,
+                                "skip": True, "seconds": 0.0,
+                                "tail": "SKIPPED: cargo or rust/ missing"})
+                continue
+            cmd = [cargo, *cmd[1:]]
         if not Path(ROOT / cmd[1]).exists() and name == "tavernbench_check":
             print(f"[SKIP] {name}  (scripts/run_tavernbench.py 不存在)")
             results.append({"name": name, "cmd": cmd, "rc": 0, "ok": True,
