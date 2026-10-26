@@ -2,9 +2,9 @@
 
 用途：在远程开发机验证“完整训练管线可运行”（不是强度/规模实验）。
 - 搜索：`hsbg/search/engine_mcts.py`（Python 原型；搜索内对手用 bot，外层 8 座用搜索）；
-- 网络：`hsbg/policy/std_net.py`（features 3227 → 245 policy + 8 rank value；cards 暂未编码）；
+- 网络：torch `AZNet`（可用时）或 numpy `NumpyAZNet`（无 torch 时自动回退）；
 - 数据：每座位决策记录 (features, cards, mask, π, rank)；
-- 训练：policy CE(π) + value CE(rank)，CPU/GPU 均可；
+- 训练：policy CE(π) + value CE(rank)，CPU/GPU；
 - 评测：seat0 vs 7 bot 的策略（不带搜索）平均名次。
 
 运行（远程）：
@@ -24,16 +24,56 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import torch
-import torch.nn.functional as F
-
 import hsbg_engine as E
-from hsbg.policy.std_net import AZNet, make_evaluator, save_checkpoint
 from hsbg.search.engine_mcts import MCTSConfig, search
 
+try:
+    import torch
+    import torch.nn.functional as F
+    TORCH = True
+except Exception:  # noqa: BLE001
+    torch = None
+    F = None
+    TORCH = False
 
-def collect(games: int, sims: int, seed: int, net: AZNet, device: str, temperature: float = 1.0):
-    evaluator = make_evaluator(net, device)
+
+def make_backend(name: str) -> str:
+    if name == "auto":
+        return "torch" if TORCH else "numpy"
+    if name == "torch" and not TORCH:
+        raise RuntimeError("torch not available")
+    return name
+
+
+def make_net(backend: str, device: str):
+    if backend == "torch":
+        from hsbg.policy.std_net import AZNet
+        return AZNet().to(device)
+    from hsbg.policy.numpy_net import NumpyAZNet
+    return NumpyAZNet(seed=0)
+
+
+def net_evaluator(net, backend: str, device: str):
+    if backend == "torch":
+        from hsbg.policy.std_net import make_evaluator
+        return make_evaluator(net, device)
+    from hsbg.policy.numpy_net import make_evaluator
+    return make_evaluator(net)
+
+
+def save_net(net, backend: str, path: str, meta: dict):
+    if backend == "torch":
+        from hsbg.policy.std_net import save_checkpoint
+        save_checkpoint(net, path, meta=meta)
+    else:
+        np.savez(path, **{k: getattr(net, k) for k in net.params})
+        with open(path + ".json", "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False)
+
+
+def collect(games: int, sims: int, seed: int, net, backend: str, device: str,
+            temperature: float = 1.0):
+    evaluator = net_evaluator(net, backend, device)
     cfg = MCTSConfig(simulations=sims, temperature=temperature, seed=seed)
     feats, cards, masks, pis, ranks, seats = [], [], [], [], [], []
     t0 = time.time()
@@ -54,27 +94,24 @@ def collect(games: int, sims: int, seed: int, net: AZNet, device: str, temperatu
                 c = np.frombuffer(c_raw, dtype="<i4").copy()
                 mask = np.frombuffer(game.legal_mask(p), dtype=np.uint8).astype(bool)
                 # smoke 防退化：随机初始化策略可能反复选 Freeze 等无进展动作；
-                # 同一回合动作过多时强制 EndTurn（真实训练由搜索价值学习解决）。
+                # 同一回合动作过多时强制 EndTurn（正式训练由搜索价值学习解决）。
                 if steps_in_turn >= 8:
                     legal = np.nonzero(mask)[0]
                     action = 0 if mask[0] else int(legal[0])
                     pi = np.zeros(245, dtype=np.float32)
                     pi[action] = 1.0
-                    stats = {"forced_end_turn": True}
                 else:
-                    pi, action, stats = search(game, p, evaluator, cfg)
+                    pi, action, _ = search(game, p, evaluator, cfg)
                 game_samples.append((p, f, c, mask, pi))
                 game.step(p, action)
                 decisions += 1
                 acted = True
                 guard += 1
-                if steps_in_turn >= 8:
-                    steps_in_turn = 0
-                else:
-                    steps_in_turn += 1
                 if game.turn != last_turn:
                     last_turn = game.turn
                     steps_in_turn = 0
+                else:
+                    steps_in_turn += 1
                 if guard > 10000:
                     raise RuntimeError("game guard")
             if not acted:
@@ -98,48 +135,60 @@ def collect(games: int, sims: int, seed: int, net: AZNet, device: str, temperatu
         "pi": np.stack(pis),
         "rank": np.asarray(ranks, dtype=np.uint8),
         "seat": np.asarray(seats, dtype=np.uint8),
-        "meta": np.asarray([{"games": games, "sims": sims, "seed": seed,
-                             "decisions": decisions, "seconds": dt}], dtype=object),
     }
-    return data, dt
+    return data, dt, decisions
 
 
-def train(net: AZNet, data, epochs: int, batch: int, lr: float, device: str):
+def train(net, backend: str, data, epochs: int, batch: int, lr: float, device: str):
     features = data["features"]
     pi = data["pi"].astype(np.float32)
     rank = data["rank"].astype(np.int64)
     n = len(rank)
-    opt = torch.optim.Adam(net.parameters(), lr=lr)
-    net.to(device).train()
-    idx = np.arange(n)
     rng = np.random.default_rng(1234)
     logs = []
-    for epoch in range(epochs):
-        rng.shuffle(idx)
-        total = 0.0
-        nb = 0
-        for start in range(0, n, batch):
-            sel = idx[start:start + batch]
-            x = torch.from_numpy(features[sel].astype(np.float32)).to(device)
-            target_pi = torch.from_numpy(pi[sel]).to(device)
-            target_rank = torch.from_numpy(rank[sel]).to(device)
-            logits, vlog = net(x)
-            loss_p = -(target_pi * F.log_softmax(logits, dim=-1)).sum(dim=-1).mean()
-            loss_v = F.cross_entropy(vlog, target_rank - 1)
-            loss = loss_p + loss_v
-            opt.zero_grad(set_to_none=True)
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(net.parameters(), 5.0)
-            opt.step()
-            total += float(loss.item())
-            nb += 1
-        logs.append({"epoch": epoch + 1, "loss": total / max(nb, 1)})
-        print(f"[train] epoch {epoch+1}: loss={logs[-1]['loss']:.4f}", flush=True)
+    if backend == "torch":
+        opt = torch.optim.Adam(net.parameters(), lr=lr)
+        net.train()
+        for epoch in range(epochs):
+            idx = rng.permutation(n)
+            total, nb = 0.0, 0
+            for start in range(0, n, batch):
+                sel = idx[start:start + batch]
+                x = torch.from_numpy(features[sel].astype(np.float32)).to(device)
+                target_pi = torch.from_numpy(pi[sel]).to(device)
+                target_rank = torch.from_numpy(rank[sel]).to(device)
+                logits, vlog = net(x)
+                loss_p = -(target_pi * F.log_softmax(logits, dim=-1)).sum(dim=-1).mean()
+                loss_v = F.cross_entropy(vlog, target_rank - 1)
+                loss = loss_p + loss_v
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(net.parameters(), 5.0)
+                opt.step()
+                total += float(loss.item())
+                nb += 1
+            logs.append({"epoch": epoch + 1, "loss": total / max(nb, 1)})
+            print(f"[train] epoch {epoch+1}: loss={logs[-1]['loss']:.4f}", flush=True)
+    else:
+        opt = net.init_opt()
+        t = 0
+        for epoch in range(epochs):
+            idx = rng.permutation(n)
+            total, nb = 0.0, 0
+            for start in range(0, n, batch):
+                sel = idx[start:start + batch]
+                t += 1
+                loss = net.train_step(features[sel].astype(np.float32), pi[sel],
+                                      rank[sel], opt, lr=lr, t=t)
+                total += float(loss)
+                nb += 1
+            logs.append({"epoch": epoch + 1, "loss": total / max(nb, 1)})
+            print(f"[train] epoch {epoch+1}: loss={logs[-1]['loss']:.4f}", flush=True)
     return logs
 
 
-def evaluate(net: AZNet, games: int, seed: int, device: str):
-    evaluator = make_evaluator(net, device)
+def evaluate(net, backend: str, games: int, seed: int, device: str):
+    evaluator = net_evaluator(net, backend, device)
     ranks = []
     t0 = time.time()
     for gi in range(games):
@@ -196,45 +245,52 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=str, default="runs/az_smoke")
     ap.add_argument("--device", type=str, default="cpu")
+    ap.add_argument("--backend", type=str, default="auto", choices=["auto", "torch", "numpy"])
     args = ap.parse_args()
+    backend = make_backend(args.backend)
 
     os.makedirs(args.out, exist_ok=True)
-    torch.manual_seed(args.seed)
+    if TORCH:
+        torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    print("engine:", E.game_version(), E.db_info(), flush=True)
+    print("engine:", E.game_version(), E.db_info(), "backend:", backend, flush=True)
 
-    net = AZNet().to(args.device)
+    net = make_net(backend, args.device)
     t_start = time.time()
-    data, collect_s = collect(args.games, args.sims, args.seed, net, args.device)
+    data, collect_s, decisions = collect(args.games, args.sims, args.seed, net, backend, args.device)
     data_path = os.path.join(args.out, "data.npz")
-    np.savez_compressed(data_path, **{k: v for k, v in data.items() if k != "meta"})
-    print(f"[data] {data['features'].shape[0]} samples -> {data_path} ({collect_s:.1f}s)", flush=True)
+    np.savez_compressed(data_path, **data)
+    print(f"[data] {data['features'].shape[0]} samples -> {data_path} ({collect_s:.1f}s)",
+          flush=True)
 
-    train_s = time.time()
-    logs = train(net, data, args.epochs, args.batch, args.lr, args.device)
-    train_s = time.time() - train_s
-    ckpt = os.path.join(args.out, "model.pt")
-    save_checkpoint(net, ckpt, meta={"games": args.games, "sims": args.sims,
-                                     "epochs": args.epochs, "seed": args.seed})
+    train_t = time.time()
+    logs = train(net, backend, data, args.epochs, args.batch, args.lr, args.device)
+    train_s = time.time() - train_t
+    ckpt = os.path.join(args.out, "model" + (".pt" if backend == "torch" else ".npz"))
+    save_net(net, backend, ckpt,
+             {"games": args.games, "sims": args.sims, "epochs": args.epochs,
+              "seed": args.seed, "backend": backend})
     print(f"[ckpt] {ckpt}", flush=True)
 
-    metrics = evaluate(net, args.eval_games, args.seed, args.device)
+    metrics = evaluate(net, backend, args.eval_games, args.seed, args.device)
     report = {
         "engine": {"game_version": E.game_version(), "cards": E.db_info()[0]},
+        "backend": backend,
         "args": vars(args),
         "collect_seconds": collect_s,
         "train_seconds": train_s,
         "total_seconds": time.time() - t_start,
         "samples": int(data["features"].shape[0]),
-        "decisions": int(data["meta"][0]["decisions"]),
+        "decisions": int(decisions),
         "train_log": logs,
         "eval": metrics,
     }
     with open(os.path.join(args.out, "report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
-    print("[done]", json.dumps({k: report[k] for k in ("samples", "decisions", "collect_seconds",
-                                                       "train_seconds", "total_seconds")},
-                               ensure_ascii=False), flush=True)
+    print("[done]", json.dumps({k: report[k] for k in ("backend", "samples", "decisions",
+                                                       "collect_seconds", "train_seconds",
+                                                       "total_seconds")}, ensure_ascii=False),
+          flush=True)
     print("[eval]", json.dumps(metrics, ensure_ascii=False), flush=True)
 
 
