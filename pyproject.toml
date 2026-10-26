@@ -4,13 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hsbg-agent"
-version = "0.1.0"
-description = "Hearthstone Battlegrounds simulation engine + RL environment + policy agent"
+version = "0.2.0"
+description = "Hearthstone Battlegrounds simulation engine + RL environment + policy agent (dual-engine: hsrl2 default, TavernGym optional reference backend)"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]
 
+# AutoTavern 借鉴升级（2026-10-26）：TavernBench 评测（benchmarks/tavernbench，
+# vendored，评分纯标准库）与 TavernGym 参照后端（hsbg/backends；需按
+# docs/TAVERNGYM_BACKEND.md 从 AutoTavern 源码构建，PyPI 无发布包，故不列为
+# pip 依赖；跨引擎一致性套件在 taverngym 缺失时自动 skip）。
+# 见 docs/AUTOTAVERN_UPGRADE.md / docs/TAVERNGYM_BACKEND.md。
 [project.optional-dependencies]
 torch = ["torch>=2.0"]
 dev = ["pytest>=7.0"]

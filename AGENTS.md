@@ -7,6 +7,12 @@
 
 | 文档 | 用途 |
 |---|---|
+| [docs/AUTOTAVERN_UPGRADE.md](docs/AUTOTAVERN_UPGRADE.md) | ★ AutoTavern 借鉴升级总报告（双引擎/变更/证据/限制，改后端或对拍前必读） |
+| [docs/CONFORMANCE_AUTOTAVERN.md](docs/CONFORMANCE_AUTOTAVERN.md) | 跨引擎一致性台账（57 场景/AC 编号/数据差异；改引擎机制后须同步） |
+| [docs/TAVERNGYM_BACKEND.md](docs/TAVERNGYM_BACKEND.md) | TavernGym 参照后端（安装/构建/EnvLike 适配/基准，改 `hsbg/backends/**` 必读） |
+| [docs/TAVERNBENCH.md](docs/TAVERNBENCH.md) | TavernBench 决策评测（数据/评分/复现，改 `benchmarks/**` 必读） |
+| [docs/ENV_SNAPSHOT.md](docs/ENV_SNAPSHOT.md) | 环境精确存档/恢复与结构不变量（改 `hsbg/env/snapshot.py`/`invariants.py` 必读） |
+| [docs/PORTABILITY.md](docs/PORTABILITY.md) | 非 Windows 平台测试基线（平台守卫规则） |
 | [docs/LIVE_AUTOMATION_PROTOCOL.md](docs/LIVE_AUTOMATION_PROTOCOL.md) | 实时对局自动化（改 `hsbg/live/**` 必读） |
 | [docs/LIVE_COLLAB_SECTION.md](docs/LIVE_COLLAB_SECTION.md) | Live 协作章节（已合并进 `LIVE_AUTOMATION_PROTOCOL.md` §10，保留为历史片段） |
 | [docs/POLICY_OBS_V3.md](docs/POLICY_OBS_V3.md) | obs v3/MOVE_MINION/旧 checkpoint 迁移（改 policy/训练必读） |
@@ -33,17 +39,20 @@ C:\HSagent\
 ├── data/                  # 引擎卡牌数据 JSON（37.0.0.255130 基线）
 ├── hsdata/                # 可选：原始 CardDefs（不入库，按 docs/DATA_REBUILD.md 重建）
 ├── hsbg/                  # ★ 本项目新增代码
-│   ├── env/               # RL 环境（spec 契约 / 观测 / 动作 / 对局循环 / 向量化）
+│   ├── env/               # RL 环境（spec 契约 / 观测 / 动作 / 对局循环 / 向量化 / snapshot / invariants）
+│   ├── backends/          # ★ TavernGym 参照后端（EnvLike 适配 + 基准；默认后端仍是 hsrl2）
+│   ├── rl/                # Policy/EnvLike 协议、Gym 包装、JSONL 采集/评测、make_env 工厂
 │   ├── agents/            # 脚本对手 / 启发式教师
 │   ├── policy/            # 实体 Transformer 策略 + 价值头
 │   ├── train/             # BC / PPO 训练管线
 │   ├── eval/              # 评测 / 锦标赛 / 基线
 │   ├── bridge/            # 真实对局桥（Power.log 解析、数据资产）
 │   └── paths.py
-├── tests/                 # ★ 新增功能的测试（pytest）
-├── scripts/               # 可执行入口（demo / train / evaluate）
-├── docs/                  # 架构、环境契约、引擎 API、训练手册
-├── tools/                 # 引擎自带审计/生成器（只读使用）
+├── benchmarks/tavernbench/ # ★ vendored TavernBench（960 任务/368 评测集，MIT）
+├── tests/                 # ★ 新增功能的测试（pytest；tests/conformance/ = 跨引擎一致性套件）
+├── scripts/               # 可执行入口（demo / train / evaluate / run_tavernbench）
+├── docs/                  # 架构、环境契约、引擎 API、训练手册、AutoTavern 升级报告
+├── tools/                 # 引擎自带审计/生成器（只读使用）；tools/ac_conformance/ 双引擎对拍
 └── runs/                  # 训练产物（git 忽略）
 ```
 
@@ -58,16 +67,19 @@ C:\HSagent\
 `docs/reference_old/MECHANICS_REFERENCE.md`。旧项目的 RL 文档（`RL_SYSTEM_GUIDE.md`、
 `RL_ENVIRONMENT_AUDIT.md`）仅供参考，**不要**照搬其 v1 引擎接口。
 
-## 2. 环境与命令（Windows，Python 3.13）
+## 2. 环境与命令（Windows 主开发；macOS/Linux 可复核）
 
 ```powershell
 cd C:\HSagent
 python -m pytest hsrl2/tests -q          # 引擎回归（通过数以本次输出为准，不抄旧值）
-python -m pytest tests -q                # 本项目新增测试
+python -m pytest tests -q                # 本项目新增测试（含 tests/conformance/；无 taverngym 时自动 skip）
 python tools/smoke_random_games.py --games 8 --seed 2000   # 全对局压测
-python scripts/verify_all.py --fast      # 一键快速门禁（约 1.5min）
-python scripts/verify_all.py             # 一键全量门禁（约 4-5min）
+python scripts/verify_all.py --fast      # 一键快速门禁（约 2min）
+python scripts/verify_all.py             # 一键全量门禁（约 4-6min）
 ```
+
+macOS/Linux 上用 `python3` 代替 `python`；平台专属用例按 `tests/conftest.py`
+精确 skip（不改变 Windows 行为），基线见 `docs/PORTABILITY.md`。
 
 > 测试函数/行数等基线不要写死在文档里（会漂移）；当前实测值见
 > `docs/AUDIT_CONSISTENCY.md` §2，门禁细则见 `docs/AUDIT_PROTOCOL.md` §8。
@@ -75,6 +87,8 @@ python scripts/verify_all.py             # 一键全量门禁（约 4-5min）
 依赖：`numpy`、`torch`（CUDA 可用，RTX 4060 Ti 16GB）、`pytest`。
 新增第三方依赖前先问 Lead。**禁止**引入 gym/stable-baselines3 作为硬依赖
 （环境层提供 gymnasium 兼容外观即可，内部零依赖）。
+**可选**依赖 `taverngym`（AutoTavern 参照后端/跨引擎对拍，需 Rust 1.98 + maturin
+从源码构建，见 `docs/TAVERNGYM_BACKEND.md`）；不安装时默认流程与门禁不受影响。
 
 ## 3. 核心约定
 
@@ -142,10 +156,25 @@ python scripts/verify_all.py             # 一键全量门禁（约 4-5min）
 任何改动合入前：
 ```powershell
 python -m pytest hsrl2/tests -q      # 必须 0 failed
-python -m pytest tests -q            # 必须 0 failed
+python -m pytest tests -q            # 必须 0 failed（taverngym 缺失时 conformance 自动 skip）
 python tools/smoke_random_games.py --games 4 --seed 7   # crashes=0
-python scripts/verify_all.py         # 推荐：一键全量门禁（= 上面 + env 校验 + 一致性 + 版本）
+python scripts/verify_all.py         # 推荐：一键全量门禁（引擎/项目/冒烟/环境验收/一致性/版本/
+                                     # AutoTavern 跨引擎对拍/TavernBench 评分复现；缺 taverngym 的项 SKIP）
 ```
+
+AutoTavern 借鉴升级新增命令（详见 [docs/AUTOTAVERN_UPGRADE.md](docs/AUTOTAVERN_UPGRADE.md) §6）：
+```powershell
+python -m pytest tests/conformance -q          # 跨引擎一致性套件（需 taverngym，缺失自动 skip）
+python -m tools.ac_conformance.run --seeds 48  # 57 场景分类报告（MATCH/ENGINE_BUG/CONVENTION_DIFF/...）
+python scripts/run_tavernbench.py --check      # TavernBench 数据完整性 + 已发布答案评分复现
+python -m hsbg.backends.benchmark --games 10 --seed 0   # 双后端同 harness 吞吐基准
+python scripts/validate_env.py --games 20 --check-invariants   # 结构不变量抽查（默认关闭）
+```
+**对拍台账纪律**：`tests/conformance` 的 expected 分类是
+`docs/CONFORMANCE_AUTOTAVERN.md` 的结论快照；改引擎机制后若套件失败，必须
+复核台账并按证据更新（不是放宽断言）。新发现的分歧按 `AC-xx` 编号记入台账，
+注明证据等级（参照实现 / 官方 wiki / 真实 Power.log）与是否修复。
+
 环境/策略层额外要求：
 - 环境：同一 seed 两次 rollout 的观测/动作序列完全一致（确定性测试）。
 - 策略：`forward` 对随机 batch 输出形状正确、masked softmax 不含 NaN；

@@ -109,3 +109,26 @@ python tools/version_sync.py --apply --yes
 - live 自动化仍是实验性、仅 1600×900 校准；5+ 选弹层、战斗期内存滞后仍需样本；
 - 价值网络目前用随机阵容+随机 buff 训练，尚未对齐真实对局分布（见 `docs/WARBAND_VALUE_NETWORK.md`）。
 - 原始 `hsdata/CardDefs.xml` 不入库，重建流程见 `docs/DATA_REBUILD.md`。
+
+## 8. 2026-10-26 AutoTavern 借鉴升级（双引擎）
+
+参照仓库：[MCG-NJU/AutoTavern](https://github.com/MCG-NJU/AutoTavern)（commit `fb61201`，
+TavernGym v1.0.0 + TavernBench，36.6.3，MIT）。总报告：
+[docs/AUTOTAVERN_UPGRADE.md](docs/AUTOTAVERN_UPGRADE.md)。
+
+| 能力 | 位置 | 状态 |
+|---|---|---|
+| TavernGym 参照后端（EnvLike 适配、245 动作→候选映射、save/load、`make_env(backend="taverngym")`） | `hsbg/backends/`、`hsbg/rl/envs.py` | ✅ 42 tests；与上游 SoloEnv 逐步 state 等价；默认后端仍 hsrl2 |
+| 跨引擎一致性审计（58 场景 / 数据差异 / AC 台账） | `tests/conformance/`、`tools/ac_conformance/`、`docs/CONFORMANCE_AUTOTAVERN.md` | ✅ 13 tests；MATCH 55 / CONVENTION_DIFF 2 / ENGINE_BUG 0 / UNSUPPORTED 1 |
+| 引擎规则/缺陷修复 | `hsrl2/constants.py`、`game.py`、`scripts/batches/*` | ✅ AC-02 T1 池份数 16→15、AC-03 升级费 T5/T6 9/10→11/11（wiki+参照双证据）；AC-01 先攻平局规则证据冲突 → CONVENTION_DIFF 保持现状；**F-36 跨进程确定性**（3 处 frozenset→RNG，双哈希子进程回归）；**F-37 Reborn 棋盘溢出**（不变量门禁发现，board=8 → 修复，60 局 0 违反）；F-31 Volumizer health；F-22…F-30 引擎只读 API 硬化 |
+| 引擎 API 硬化（只读查询/名次/phase/解冻/解冻事件/RNG 审计/线程安全） | `hsrl2/game.py`、`db.py`、`rng.py`、`entity.py`、`docs/ENGINE_API.md` | ✅ F-22…F-30（见 `docs/ENGINE_NOTES.md`）；默认行为逐位不变 |
+| 环境精确存档/恢复 + 结构不变量 + 掩码精确性验收 | `hsbg/env/snapshot.py`、`hsbg/env/invariants.py`、`docs/ENV_SNAPSHOT.md` | ✅ 见文档（移植 AutoTavern `invariants.rs`） |
+| TavernBench 决策评测（960 任务 / 368 评测集） | `benchmarks/tavernbench/`、`scripts/run_tavernbench.py`、`docs/TAVERNBENCH.md` | ✅ `--check` 26/26 通过（离线评分复现） |
+| 工程可移植性（macOS/Linux 测试基线） | `tests/conftest.py`、`docs/PORTABILITY.md` | ✅ Windows 行为不变；非 Windows 精确 skip |
+
+验收（2026-10-26 本机 macOS）：`pytest hsrl2/tests` / `pytest tests` 全绿，
+`verify_all` 全门禁通过（缺 taverngym 时对应项 SKIP），双后端基准见
+`docs/TAVERNGYM_BACKEND.md` §8，跨引擎对拍统计见
+`docs/CONFORMANCE_AUTOTAVERN.md` §7。限制：TavernGym 为 36.6.3、动作/观测空间
+与 hsrl2 不同，策略不可直接迁移；TavernBench 为 LLM 决策基准，不替代 self-play
+名次评测。

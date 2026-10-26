@@ -333,3 +333,74 @@ class OpponentPolicy(Protocol):
   `VecEnv(num_envs, env_kwargs)`，`reset() -> List[Observation]`，
   `step(actions) -> (List[Obs], rewards, dones, infos)`，支持 auto-reset。
 - 每个环境实例独占一个 `Game`；禁止全局单例。
+
+## 9. 2026-10-26 增补：后端可插拔 / 快照 / 不变量（向后兼容）
+
+> 本节为 AutoTavern 借鉴升级（`docs/AUTOTAVERN_UPGRADE.md`）新增说明。
+> **`Observation` 字段与语义未变，`Observation.version` 仍为 3**；新增
+> 能力全部是环境层叠加模块/可选后端，不破坏既有 checkpoint 与消费方。
+
+### 9.1 可插拔后端（`hsbg.rl.envs.make_env`）
+
+| backend | 类 | 说明 |
+|---|---|---|
+| `hsrl2` / `real` | `hsbg.env.BattlegroundsEnv` | **默认**，37.0.0 引擎，本文 §1–§8 全部契约 |
+| `auto` | 同上（不可用回退 `mock`） | 历史语义保留 |
+| `mock` | `MockBattlegroundsEnv` | 无引擎的确定性合成环境（测试用） |
+| `taverngym` | `hsbg.backends.TavernGymEnv` | **可选参照后端**（AutoTavern Rust 引擎，36.6.3；需安装 `taverngym`） |
+
+`TavernGymEnv` 同样实现 `hsbg.rl.api.EnvLike` 并返回 `hsbg.env.spec.Observation`，
+但它是**参照/评测**后端，不是训练后端的直接替代：
+
+- 数据版本 36.6.3（本仓库 37.0.0），卡池/数值/英雄不同，动作/观测空间不同；
+- 候选动作为 TavernGym 245 维精确 legal mask 的展开，数量可能 **超过**
+  `spec.CANDIDATE_MAX=64`（按 64 padding 的编码器会丢动作，故不用于现有策略训练）；
+- `tavern`/`trinkets`/`choice` 槽位可能超过本文的展示上限（不截断，文档注明）；
+- 仅两处 spec 外扩展：`kind="cancel"`（取消目标选择）与
+  `extra["taverngym"]`（原始 245 维 mask / flat 动作下标 / turn_raw 等）。
+
+详见 `docs/TAVERNGYM_BACKEND.md`；`tests/test_backend_taverngym.py`（42 项）覆盖
+EnvLike 契约、mask 内动作全部可执行、确定性、save/load 字节一致、与上游
+`taverngym.SoloEnv` 逐步 state 等价。
+
+### 9.2 环境精确快照 / 恢复（`hsbg.env.snapshot`）
+
+```python
+from hsbg.env.snapshot import snapshot, restore, clone_env
+snap = snapshot(env)            # O(几 ms)，不改变 env
+...                             # 任意推进
+restore(env, snap)              # 原地恢复：obs/候选/统计/RNG 逐位一致
+twin = clone_env(env)           # 独立 env 副本
+```
+
+覆盖：引擎全状态（`hsbg.planning.model.clone`，含 RNG/PendingChoice/
+pending_hand_queue/deferred_actions/池/战斗记忆）、名次账本、大厅视图别名、
+env 事件监听重绑、全部环境计数器/统计/选择留痕，并重建 `_obs`/候选。
+验收语义：snapshot→restore→相同动作序列与「不 snapshot 的原轨迹」逐步
+观测/奖励一致；快照不改变原 env；连续 snapshot/restore 幂等；决策步稳态
+之外/终止后/跨构造配置快照会抛 `SnapshotError`（明确报错，不产出不一致快照）。
+限制（对手策略实例状态不重建、策略外部 RNG 不纳入等）见 `docs/ENV_SNAPSHOT.md`。
+
+### 9.3 结构不变量（`hsbg.env.invariants`）
+
+移植自 AutoTavern `invariants.rs` 的只读检查（不修改状态/不消耗 RNG/不触发事件）：
+`check_game(game) -> List[str]`、`check_env(env) -> List[str]`、
+`state_digest(...)`（跨进程稳定的状态摘要，供快照对拍）。
+
+- 检查：棋盘/手牌/酒馆容量、tier/金币/存活血量、随从属性（atk≥0、
+  hp≤max_hp）、实体唯一性、名次合法、候选/观测一致性；
+- **不移植**池守恒：HSBRSIM 明确允许「效果生成副本不占池」（RULES §2.3；
+  金色返还、purge、注入等），总量/分种族守恒按设计不成立；改为池簿记合法性
+  弱检查（剩余量非负、purge 后不回池、不超过初始份数上限）；
+- 已知偏差用显式开关（`strict_tavern_slots` / `strict_unique_ranks`），
+  默认不误报；偏差登记见 `docs/ENV_SNAPSHOT.md`；
+- 接入：`python scripts/validate_env.py --games 20 --check-invariants`
+  （默认关闭，不影响既有验收行为）。
+
+### 9.4 精确动作掩码验收
+
+`tests/test_env_invariants.py` / 环境契约测试保证：
+**`env.legal_actions()`（= `obs.candidates`）中的每个候选都能被引擎接受并推进
+状态**（在 clone 上逐个尝试，不污染主局）；`env.action_mask()` 与候选
+长度/顺序一致；非法动作返回 `info["invalid"]=True` 且状态不推进。
+与 AutoTavern「`Game::legal_mask` 允许的动作都被 `apply` 接受」的契约等价。

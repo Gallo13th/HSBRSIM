@@ -90,3 +90,49 @@ rizling 参考版本落后一个版本属正常 warning。
 1. 跑 `python scripts/verify_all.py` 与 §2–§5 命令；
 2. 更新本文件对应数字（保持"硬门禁"列不变）；
 3. 回归 `docs/EXACTNESS_STATUS.md`（官方一致性指标）与 `docs/ENV_VALIDATION.md`（环境性能）。
+
+---
+
+## 7. 2026-10-26 AutoTavern 借鉴升级后的验收快照（macOS / Python 3.12）
+
+> 本次升级新增了 AutoTavern 相关门禁（跨引擎一致性 / TavernBench / 双哈希进程
+> 确定性 / 环境不变量），`verify_all` 从 7 个 gate 扩展为 10 个（缺 `taverngym`
+> 时 `taverngym_conformance` 自动 SKIP）。以下数字是本机 macOS Apple Silicon
+> 实测趋势值，硬标准仍是「0 failed / 0 crash / 门禁 PASS」。
+> Windows/Python 3.13 的通过数会略不同（平台专属用例在 Windows 上执行）。
+
+### 7.1 一键门禁（`python3 scripts/verify_all.py`）
+
+| gate | 命令 | 预期（macOS 实测趋势） |
+|---|---|---|
+| engine_tests | `pytest hsrl2/tests -q` | 0 failed（**4890 passed / 6 skipped**，2026-10-26 冻结树实测） |
+| project_tests | `pytest tests -q` | 0 failed（**667 passed / 62 skipped**，2026-10-26 冻结树实测） |
+| smoke_8p | `tools/smoke_random_games.py --games 8 --seed 2000` | crashes=0、completed=8 |
+| env_validation | `scripts/validate_env.py --games 20 --check-invariants` | `ok: true`，不变量违反 0 |
+| env_bench | `scripts/bench_env.py --seeds 20` | 0 crash / 0 invalid，单局 ~2s 量级 |
+| hashseed_determinism | `pytest tests/test_env_determinism_hashseed.py -q` | 0 failed（7 passed，~7s） |
+| official_consistency | `scripts/audit_official_consistency.py --quiet` | 有官方语料时 exit 0；无语料机器自动 SKIP |
+| version_check | `tools/version_sync.py --check` | 四信号成功 |
+| taverngym_conformance | `pytest tests/conformance -q` | 0 failed（13 passed；无 taverngym 时 SKIP） |
+| tavernbench_check | `scripts/run_tavernbench.py --check` | 26/26 PASS |
+
+### 7.2 AutoTavern 相关专项
+
+| 命令 | 预期（macOS 实测） |
+|---|---|
+| `pytest tests/test_backend_taverngym.py -q` | 42 passed（~1s；需 taverngym） |
+| `pytest tests/conformance -q` | 13 passed（~4s；58 场景，MATCH 55 / CONVENTION_DIFF 2 / UNSUPPORTED 1） |
+| `python3 -m tools.ac_conformance.run --seeds 48` | total=58，ENGINE_BUG 0（~4s） |
+| `python3 scripts/run_tavernbench.py --check` | CHECK PASSED 26/26（~1s） |
+| `pytest tests/test_env_snapshot.py tests/test_env_invariants.py -q` | 23 passed（~4s） |
+| `PYTHONHASHSEED=0/1 pytest hsrl2/tests/test_hashseed_determinism.py -q` | 各 2 passed |
+| `pytest hsrl2/tests/test_hashseed_determinism.py tests/test_env_determinism_hashseed.py -q` | 9 passed（跨进程确定性，~10s） |
+
+### 7.3 本机既有失败/跳过说明
+
+- 5 条搜索/价值测试依赖未入库的 `runs/bc/official_320/policy_bc.pt` → 按
+  `tests/conftest.py` 精确 skip（Windows 有 checkpoint 时照常执行）。
+- `tests/test_live_clickbot.py` 非 Windows 模块级 skip（Windows 照跑）。
+- `tests/test_policy_model.py::test_forward_latency_batch64` 是**延迟基准**，
+  在并发高负载（load average 很高）时会偶发超阈值；空载实测 34.9ms 通过，
+  最终门禁应在空载下跑（不得靠放宽断言掩盖）。
