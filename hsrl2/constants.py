@@ -24,7 +24,12 @@ def gold_base_income(turn: int, income_cap: int = GOLD_INCOME_CAP) -> int:
 
 # ── 酒馆等级 (RULES §3.1) ─────────────────────────────────────────
 TAVERN_MAX_TIER = 6       # 常规上限（Tier 7 仅特殊效果可达）
-BASE_UPGRADE_COSTS = {2: 5, 3: 7, 4: 8, 5: 9, 6: 10, 7: 11}
+# 升级费 Base Cost（目标档位 → 费用）。官方 wiki.gg `/wiki/Battlegrounds`
+# Upgrade Cost 表（2026-10-26 抓取）: T2=5 / T3=7 / T4=8 / **T5=11 / T6=11**;
+# T7=10 为特殊 T7（参照 AutoTavern `config.rs:237`
+# `upgrade_costs: [5, 7, 8, 11, 11, 10]`，索引 = 目标档位-2）。
+# 2026-10-26 AC-03 修正：旧值 T5=9 / T6=10 来自过时规则文档（Patch 35.x 前）。
+BASE_UPGRADE_COSTS = {2: 5, 3: 7, 4: 8, 5: 11, 6: 11, 7: 10}
 UPGRADE_DECAY_PER_TURN = 1   # 每回合未升级 -1
 UPGRADE_COST_FLOOR = 0       # 下限 0 金（RULES §3.1，旧实现错误地取 1）
 
@@ -36,7 +41,12 @@ BOARD_SIZE = 7
 HAND_SIZE = 10
 
 # ── 池副本数 (RULES §2.2) ─────────────────────────────────────────
-POOL_COPIES_BY_TIER = {1: 16, 2: 15, 3: 13, 4: 11, 5: 9, 6: 7, 7: 5}
+# 每张随从的池副本数（按随从 Tier）。官方 wiki.gg `/wiki/Battlegrounds`
+# 副本表（2026-10-26 抓取）: T1=15 / T2=15 / T3=13 / T4=11 / T5=9 / T6=7
+# / T7=5；参照 AutoTavern `config.rs:245`
+# `pool_copies_by_tier: [15, 15, 13, 11, 9, 7, 5]`（36.6.0 wiki data）。
+# 2026-10-26 AC-02 修正：T1 旧值 16 来自过时规则文档（Patch 35.x）。
+POOL_COPIES_BY_TIER = {1: 15, 2: 15, 3: 13, 4: 11, 5: 9, 6: 7, 7: 5}
 
 # ── 伤害 (RULES §5) ───────────────────────────────────────────────
 DAMAGE_CAP_BY_TURN = 5    # 第 1-3 回合

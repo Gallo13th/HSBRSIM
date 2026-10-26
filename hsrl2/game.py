@@ -107,6 +107,11 @@ _PERSIST_KEYWORD_TAGS = (
 )
 
 
+# 免费随从购买的旧 tag 协议哨兵（`_free_minion_buy_hit` 返回值:
+# 命中旧 `FREE_MINION_BUYS_THIS_TURN` 单 tag 通道而非独立来源配额）。
+_LEGACY_FREE_BUY = object()
+
+
 def _frozen_clone(m: Minion) -> Minion:
     """幽灵快照克隆 (RULES §4.8: 幽灵阵容不成长不变化)。
 
@@ -223,6 +228,11 @@ class Game:
         self.rng = GameRNG(seed)
         self.turn = 0
         self.in_combat = False
+        # F-24（D-5）名次账本: 淘汰顺序（先被淘汰者先入列）与开局人数。
+        # `rank_of(hero)` = 开局人数 − 淘汰序号（第一个被淘汰 = 第 N 名）；
+        # 仍存活的英雄当前名次 = 1。由 `_process_eliminations` 维护。
+        self.elimination_order: List[Hero] = []
+        self._initial_hero_count: int = len(heroes)
         # 官方伤害上限外部注入（2026-10-18，官方一致性 P1）：
         # 官方上限来自服务端 GameEntity tag `BACON_COMBAT_DAMAGE_CAP`(2089)
         # / `BACON_COMBAT_DAMAGE_CAP_ENABLED`(3403)；真实对局日志可读到时由
@@ -361,6 +371,34 @@ class Game:
         self.pending_choices.pop(0)
         choice.choose(index)
         return choice
+
+    @property
+    def phase(self) -> str:
+        """当前阶段（F-26/D-14）: ``recruit`` / ``combat`` / ``choice`` /
+        ``game_over``。
+
+        优先级 = ``finished`` > ``in_combat`` > ``pending_choices`` >
+        ``recruit``，与 ``hsbg/env`` 状态机（``hsbg/env/game_env.py::_observe``）
+        同口径:
+
+        - ``game_over``: ``finished`` 已置位（存活 ≤1，``end_recruit_phase``
+          尾部判定）。优先于未结算选择——终局后不再接受策略动作。
+        - ``combat``: 仅在 ``run_combat`` 执行期间为 True（内部同步阶段，
+          外部调用观察不到；事件回调内可读到 ``combat``）。
+        - ``choice``: 队列有未结算 ``PendingChoice``（调用方应先把选择
+          作为决策步暴露/结算）。
+        - ``recruit``: 其余时刻（含 ``start_game`` 前的构造态）。
+
+        注意: `in_combat` 与 `pending_choices` 同时成立时返回 ``combat``
+        （战斗阶段不可暂停，环境层不战斗中暴露选择——见 READINESS §4.2）。
+        """
+        if self.finished:
+            return "game_over"
+        if self.in_combat:
+            return "combat"
+        if self.pending_choices:
+            return "choice"
+        return "recruit"
 
     def start_game(self) -> None:
         self.turn = 1
@@ -779,6 +817,37 @@ class Game:
         self.events.fire(self, "tavern_refresh_complete", hero=hero,
                          auto=auto)
 
+    def can_refresh(self, hero: Hero) -> bool:
+        """只读: 现在手动刷新酒馆会成功吗（F-25/D-3）？
+
+        镜像 `refresh_tavern(hero)`（手动、`consume_free=True` 口径）的
+        付费判定，**不**执行刷新、不扣费、不消耗免费/健康刷新次数:
+
+        - `TURN_SKIPPED` / `game._block_manual_refresh` → False（真实调用
+          静默 no-op，不刷新也不扣费）；
+        - 有免费刷新额度 → True（优先消耗免费额度）;
+        - 有健康刷新额度且 ``health + armor > REFRESH_COST`` → True
+          （以生命代付，护甲先扣）；不足以支付生命时落回金币判定;
+        - 否则要求 ``gold >= REFRESH_COST_OVERRIDE(默认 REFRESH_COST)``
+          （金币不足时真实调用会抛 `GameStateError`——本方法 False 即
+          "会抛"）。
+
+        与真实调用对拍见 `hsrl2/tests/test_engine_api_hardening.py::
+        TestCanRefresh`。
+        """
+        if hero.get(GameTag.TURN_SKIPPED, False):
+            return False
+        if getattr(self, "_block_manual_refresh", False):
+            return False
+        if hero.get(GameTag.FREE_REFRESH_REMAINING, 0) > 0:
+            return True
+        health_refreshes = hero.get(GameTag.HEALTH_REFRESHES_LEFT, 0)
+        if health_refreshes > 0 and \
+                hero.health + hero.armor > C.REFRESH_COST:
+            return True
+        return hero.gold >= hero.get(GameTag.REFRESH_COST_OVERRIDE,
+                                     C.REFRESH_COST)
+
     def add_tavern_entity(self, hero: Hero, entity, *,
                           position: Optional[int] = None,
                           replace=None):
@@ -835,64 +904,15 @@ class Game:
             return False
         if hero.get(GameTag.TURN_SKIPPED, False):
             return False
-        cost = entity.get(GameTag.COST, C.MINION_BUY_COST)
-        # 随从购买价平价覆盖（Sindragosa/Millhouse "Minions cost (2)"
-        # ——作用于随从不作用于法术）; 免费购买次数优先于覆盖价
-        # （Aranna "the first minion you buy each turn is free"）
-        if isinstance(entity, Minion):
-            if getattr(self, "_minion_cost_is_tier", False):
-                cost = entity.tech_level
-            override = hero.get(GameTag.TAVERN_MINION_COST_OVERRIDE, 0)
-            if override:
-                cost = override
-            # 条件化购买价（"**Magnetic** Mechs cost (2)" /
-            # "Refresh with Battlecry minions. They cost (1)"——743/755）:
-            # hero 级规则 [(source, predicate, cost)]，取最低命中价;
-            # source 离场即失效
-            for src, pred, c in list(getattr(hero,
-                                             "_tavern_cost_rules", [])):
-                if src is not None and not (
-                        src in hero.trinkets
-                        or src in getattr(hero, "quest_rewards", [])
-                        or src in hero.board):
-                    continue
-                try:
-                    hit = bool(pred(entity))
-                except Exception:                       # noqa: BLE001
-                    hit = False
-                if hit:
-                    cost = min(cost, int(c))
-            # hero 级 API（脚本用）: 统一注册点
-            # （`hero._tavern_cost_rules` 由脚本直接 append）
-            # 免费随从购买（Aranna 全类型 / Grifter Portrait "first Pirate"
-            # / Warcry Totem "first two Battlecry minions"）——可带种族或
-            # 关键词限定（RULES §7.4.4）; 多来源各自独立配额（不互相覆盖）
-            if self._take_free_minion_buy(hero, entity):
-                cost = 0
-        # 酒馆法术折扣（Ominous Seer "下一个酒馆法术便宜 1 金"）
+        # 定价 / 折扣 / 免费额度走**只读同源实现**（F-25/D-3）: 报价与成交
+        # 共用 `_quote_buy_cost`，不再各写一份（`quote_buy_cost` 对拍测试
+        # 保证不漂移）。免费随从额度仍在**成交路径**消费
+        # （`_take_free_minion_buy`），消费时机与旧实现一致（定价后、支付前）。
+        cost, free_minion_hit, free_spell_buy, applied_spell_discount = \
+            self._quote_buy_cost(hero, entity)
+        if free_minion_hit and self._take_free_minion_buy(hero, entity):
+            cost = 0
         d = self.db.get(entity.card_id)
-        # 酒馆法术折扣（Ominous Seer "Your next Tavern spell costs (1)
-        # less" / Primordial Terrarium 等）。**只在购买真正成交时消耗**:
-        # 折扣先只作用于本次报价，金币/生命不足而失败时 tag 必须保留
-        # （2026-09-02 对抗审查 E2: 旧实现在 gold 检查之前就清零 →
-        # 一次失败购买白烧掉"下一个法术"的折扣）。
-        applied_spell_discount = False
-        free_spell_buy = False
-        if d is not None and d.is_pool_spell:
-            # 持久折扣（Beyond the Mirage "Tavern spells cost (1) less"）
-            pers = hero.get(GameTag.TAVERN_SPELL_COST_MOD, 0)
-            if pers:
-                cost = max(0, cost - pers)
-            # "The first N Tavern spells you buy each turn are free"
-            # （Peacebloom Candle; RULES §7.4.4）优先于折扣
-            if hero.get(GameTag.FREE_SPELL_BUYS_THIS_TURN, 0) > 0:
-                cost = 0
-                free_spell_buy = True
-            else:
-                discount = hero.get(GameTag.NEXT_SPELL_COST_REDUCTION, 0)
-                if discount > 0:
-                    cost = max(0, cost - discount)
-                    applied_spell_discount = True
         # 健康购买（Hasty Excavation "costs Health to buy instead of Gold"）
         # 官方语义: 以生命支付（护甲先扣），生命不足以支付时不可购买。
         # 三种来源（RULES §7.4.7）:
@@ -904,19 +924,8 @@ class Game:
         # 配额与实体标记均为**强制**（文本 "costs Health instead of Gold"，
         # 不提供改用金币的选择——与 Hasty Excavation 同口径）; 生命不足 →
         # 购买失败且不消费配额。
-        health_quota_tag = None
-        health_buy = cost > 0 and (
-            bool(d is not None and d.health_cost)
-            or bool(entity.get(GameTag.HEALTH_BUY, False)))
-        if not health_buy and cost > 0 and isinstance(entity, Spell) \
-                and hero.get(GameTag.HEALTH_SPELL_BUYS_THIS_TURN, 0) > 0:
-            health_buy = True
-            health_quota_tag = GameTag.HEALTH_SPELL_BUYS_THIS_TURN
-        if not health_buy and cost > 0 and isinstance(entity, Minion) \
-                and hero.get(GameTag.HEALTH_MINION_BUYS_THIS_TURN, 0) > 0 \
-                and self._health_buy_race_matches(hero, entity):
-            health_buy = True
-            health_quota_tag = GameTag.HEALTH_MINION_BUYS_THIS_TURN
+        health_buy, health_quota_tag = self._health_buy_kind(
+            hero, entity, d, cost)
         paid_with_health = False
         if health_buy:
             if hero.health + hero.armor > cost:
@@ -955,6 +964,147 @@ class Game:
         if getattr(self, "_refresh_on_buy", False):
             self.refresh_tavern(hero, auto=True)
         return True
+
+    # ── 买价/可买性的只读查询（F-25 / READINESS D-3） ──
+
+    def _quote_buy_cost(self, hero: Hero, entity: Entity) -> tuple:
+        """`buy_from_tavern` 定价的**只读**同源实现（成交路径直接调用）。
+
+        返回 ``(cost, free_minion_hit, free_spell_buy,
+        applied_spell_discount)``——后三项是成交后需要消费的额度/折扣标记
+        （报价本身不消费任何东西）。
+
+        金币报价口径:
+          - 随从: 基础价 → `_minion_cost_is_tier` → 英雄级覆盖价
+            `TAVERN_MINION_COST_OVERRIDE` → 条件化购买价规则
+            （`hero._tavern_cost_rules`，取最低命中价，source 离场失效）→
+            免费随从配额（0 金）;
+          - 酒馆法术: 持久折扣 `TAVERN_SPELL_COST_MOD` → 本回合免费额度
+            `FREE_SPELL_BUYS_THIS_TURN` → `NEXT_SPELL_COST_REDUCTION`。
+        以生命代付（卡 `health_cost` / `HEALTH_BUY` / hero 配额）**不**改变
+        金币报价（可买性见 `can_buy`、支付方式见 `_health_buy_kind`）。
+        """
+        cost = entity.get(GameTag.COST, C.MINION_BUY_COST)
+        free_minion_hit = False
+        free_spell_buy = False
+        applied_spell_discount = False
+        if isinstance(entity, Minion):
+            # 随从购买价平价覆盖（Sindragosa/Millhouse "Minions cost (2)"
+            # ——作用于随从不作用于法术）
+            if getattr(self, "_minion_cost_is_tier", False):
+                cost = entity.tech_level
+            override = hero.get(GameTag.TAVERN_MINION_COST_OVERRIDE, 0)
+            if override:
+                cost = override
+            # 条件化购买价（"**Magnetic** Mechs cost (2)" /
+            # "Refresh with Battlecry minions. They cost (1)"——743/755）:
+            # hero 级规则 [(source, predicate, cost)]，取最低命中价;
+            # source 离场即失效
+            for src, pred, c in list(getattr(hero,
+                                             "_tavern_cost_rules", [])):
+                if src is not None and not (
+                        src in hero.trinkets
+                        or src in getattr(hero, "quest_rewards", [])
+                        or src in hero.board):
+                    continue
+                try:
+                    hit = bool(pred(entity))
+                except Exception:                       # noqa: BLE001
+                    hit = False
+                if hit:
+                    cost = min(cost, int(c))
+            # 免费随从购买（Aranna 全类型 / Grifter Portrait "first Pirate"
+            # / Warcry Totem "first two Battlecry minions"）——可带种族或
+            # 关键词限定（RULES §7.4.4）; 多来源各自独立配额（不互相覆盖）。
+            # **只读 peek**，消费在成交路径（`_take_free_minion_buy`）。
+            free_minion_hit = self._free_minion_buy_hit(hero, entity) is not None
+            if free_minion_hit:
+                cost = 0
+        # 酒馆法术折扣（Ominous Seer "Your next Tavern spell costs (1)
+        # less" / Primordial Terrarium 等）。**只在购买真正成交时消耗**:
+        # 折扣先只作用于本次报价，金币/生命不足而失败时 tag 必须保留
+        # （2026-09-02 对抗审查 E2: 旧实现在 gold 检查之前就清零 →
+        # 一次失败购买白烧掉"下一个法术"的折扣）。
+        d = self.db.get(entity.card_id)
+        if d is not None and d.is_pool_spell:
+            # 持久折扣（Beyond the Mirage "Tavern spells cost (1) less"）
+            pers = hero.get(GameTag.TAVERN_SPELL_COST_MOD, 0)
+            if pers:
+                cost = max(0, cost - pers)
+            # "The first N Tavern spells you buy each turn are free"
+            # （Peacebloom Candle; RULES §7.4.4）优先于折扣
+            if hero.get(GameTag.FREE_SPELL_BUYS_THIS_TURN, 0) > 0:
+                cost = 0
+                free_spell_buy = True
+            else:
+                discount = hero.get(GameTag.NEXT_SPELL_COST_REDUCTION, 0)
+                if discount > 0:
+                    cost = max(0, cost - discount)
+                    applied_spell_discount = True
+        return cost, free_minion_hit, free_spell_buy, applied_spell_discount
+
+    def _health_buy_kind(self, hero: Hero, entity: Entity, card_def,
+                         cost: int) -> tuple:
+        """本次购买是否**强制以生命支付**（只读；返回 (bool, 配额 tag)）。
+
+        判定顺序与 `buy_from_tavern` 一致（RULES §7.4.7）:
+        ``CardDef.health_cost`` → 实体 ``HEALTH_BUY`` tag → 本回合
+        `HEALTH_SPELL_BUYS_THIS_TURN`（法术）→ `HEALTH_MINION_BUYS_THIS_TURN`
+        + `HEALTH_BUY_RACE`（随从）。配额 tag 仅对后两种来源非 None。
+        """
+        if cost <= 0:
+            return False, None
+        if card_def is not None and card_def.health_cost:
+            return True, None
+        if entity.get(GameTag.HEALTH_BUY, False):
+            return True, None
+        if isinstance(entity, Spell) \
+                and hero.get(GameTag.HEALTH_SPELL_BUYS_THIS_TURN, 0) > 0:
+            return True, GameTag.HEALTH_SPELL_BUYS_THIS_TURN
+        if isinstance(entity, Minion) \
+                and hero.get(GameTag.HEALTH_MINION_BUYS_THIS_TURN, 0) > 0 \
+                and self._health_buy_race_matches(hero, entity):
+            return True, GameTag.HEALTH_MINION_BUYS_THIS_TURN
+        return False, None
+
+    def quote_buy_cost(self, hero: Hero, entity: Entity) -> int:
+        """只读买价报价（金币口径；F-25 / READINESS D-3）。
+
+        与 `buy_from_tavern` 的实际扣款**同源**（成交路径调用同一个
+        `_quote_buy_cost`），纯查询: 不扣金币/生命、不消费免费随从额度或
+        法术折扣、不改任何 tag。
+
+        与真实结果对拍见
+        `hsrl2/tests/test_engine_api_hardening.py::TestQuoteBuyCost`。
+
+        - 报价 0 = 免费（免费随从配额 / 本回合免费法术）;
+        - 以生命代付的实体报价仍是"生命代价"，金币分文不扣——候选生成
+          用 `can_buy` 判可用性，不要只看 ``quote <= hero.gold``。
+        """
+        return self._quote_buy_cost(hero, entity)[0]
+
+    def can_buy(self, hero: Hero, entity: Entity) -> bool:
+        """只读: 现在购买该实体能否成交（F-25 / READINESS D-3）。
+
+        镜像 `buy_from_tavern` 的拒绝条件（不执行购买、不消费额度）:
+        必须在酒馆、手牌未满、未 `TURN_SKIPPED`；金币足够，或以生命
+        支付且 ``health + armor > cost``（生命支付为强制口径，金币再多
+        也不改走金币）。
+
+        与真实动作对拍见 `tests::TestQuoteBuyCost`。
+        """
+        if entity not in hero.tavern:
+            return False
+        if hero.hand_full():
+            return False
+        if hero.get(GameTag.TURN_SKIPPED, False):
+            return False
+        cost = self._quote_buy_cost(hero, entity)[0]
+        d = self.db.get(entity.card_id)
+        health_buy, _tag = self._health_buy_kind(hero, entity, d, cost)
+        if health_buy:
+            return hero.health + hero.armor > cost
+        return hero.gold >= cost
 
     def inject_tavern_minion(self, hero: Hero, card_id: str, *,
                              position: Optional[int] = None,
@@ -1043,33 +1193,49 @@ class Game:
             return False
         return True
 
-    def _take_free_minion_buy(self, hero: Hero, entity) -> bool:
-        """尝试以"免费"成交该随从: 命中则消费一次额度并返回 True。
+    def _free_minion_buy_hit(self, hero: Hero, entity):
+        """只读 peek: 该随从能命中哪一份免费购买额度（不消费任何额度）。
 
-        优先级: 独立来源配额（`set_free_minion_buys`）→ 旧单 tag 协议
-        （`FREE_MINION_BUYS_THIS_TURN` + 限定 tag; 兼容既有脚本/测试）。
-        只在**成交路径**调用（失败的购买不得消费额度）。
+        返回命中的独立配额 dict / 旧 tag 协议哨兵 `_LEGACY_FREE_BUY` /
+        None（未命中）。`_take_free_minion_buy` 与本方法同源，保证
+        "报价（peek）== 成交消费"不漂移（F-25/D-3）。
         """
         for q in hero._free_minion_buy_quotas:
             if q["turn"] != self.turn or q["used"] >= q["count"]:
                 continue
             if self._free_buy_qualifiers_match(entity, q["race"],
                                                q["keyword"]):
-                q["used"] += 1
-                self._sync_free_minion_buy_tag(hero)
-                return True
+                return q
         # 旧 tag 协议仅在**完全没有**独立配额来源时回落（否则镜像 tag
         # 会造成二次消费）
         if hero._free_minion_buy_quotas:
-            return False
+            return None
         n = hero.get(GameTag.FREE_MINION_BUYS_THIS_TURN, 0)
         if n > 0 and self._free_buy_qualifiers_match(
                 entity,
                 hero.get(GameTag.FREE_MINION_BUY_RACE, None),
                 hero.get(GameTag.FREE_MINION_BUY_KEYWORD, None)):
+            return _LEGACY_FREE_BUY
+        return None
+
+    def _take_free_minion_buy(self, hero: Hero, entity) -> bool:
+        """尝试以"免费"成交该随从: 命中则消费一次额度并返回 True。
+
+        优先级: 独立来源配额（`set_free_minion_buys`）→ 旧单 tag 协议
+        （`FREE_MINION_BUYS_THIS_TURN` + 限定 tag; 兼容既有脚本/测试）。
+        只在**成交路径**调用（失败的购买不得消费额度）；只读判定见
+        `_free_minion_buy_hit`。
+        """
+        hit = self._free_minion_buy_hit(hero, entity)
+        if hit is None:
+            return False
+        if hit is _LEGACY_FREE_BUY:
+            n = hero.get(GameTag.FREE_MINION_BUYS_THIS_TURN, 0)
             hero.set(GameTag.FREE_MINION_BUYS_THIS_TURN, n - 1)
             return True
-        return False
+        hit["used"] += 1
+        self._sync_free_minion_buy_tag(hero)
+        return True
 
     def _free_minion_buy_matches(self, hero: Hero, entity: Minion) -> bool:
         """（兼容保留）旧 tag 协议的限定匹配。"""
@@ -1078,6 +1244,12 @@ class Game:
             hero.get(GameTag.FREE_MINION_BUY_KEYWORD, None))
 
     def sell_minion(self, hero: Hero, minion: Minion) -> bool:
+        # 类型校验（F-22/D-9）: 只有 Minion 可出售。旧实现只检查"在棋盘或
+        # 手牌"，随后 `release_minion_entity` 假定 Minion → 传入 Spell 会
+        # AttributeError，且金币已加、手牌已移除 = 状态污染（READINESS D-9
+        # probe A9 实测）。非法类型返回 False、零状态改动。
+        if not isinstance(minion, Minion):
+            return False
         if minion not in hero.board and minion not in hero.hand:
             return False
         # on_sell 效果
@@ -1559,6 +1731,25 @@ class Game:
         # `has_race` 展开为全 10 族（旧 `Race.ALL` 哨兵语义不变）。
         return any(target.has_race(r) for r in valid)
 
+    def magnetic_targets(self, hero: Hero, minion: Minion) -> List[Minion]:
+        """磁力吸附的合法宿主列表（只读；F-25 / READINESS D-3）。
+
+        口径与 `play_minion(..., magnetic_target=host)` 的接受条件**同源**:
+        宿主要在 `hero.board`、控制者为本英雄、存活且 ``zone == PLAY``，
+        并通过 `_magnetic_valid`（机械 + 数据例外: Prosthetic Hand 亡灵 /
+        Technical Element 元素 / Mecha-Jaraxxus token 恶魔）。
+
+        - 非磁力随从 / 非 Minion → ``[]``（不是吸附候选）;
+        - 纯查询: 不移动实体、不改属性、不消耗任何状态。
+        """
+        if not isinstance(minion, Minion) or not minion.has(GameTag.MAGNETIC):
+            return []
+        return [host for host in hero.board
+                if host.controller is hero
+                and not host.dead
+                and host.zone == Zone.PLAY
+                and self._magnetic_valid(minion, host)]
+
     def attach_magnetic(self, hero: Hero, magnetic_minion: Minion,
                         host: Minion) -> None:
         """磁力吸附结算 (RULES §6.14):
@@ -1910,6 +2101,16 @@ class Game:
                 return t
         return None
 
+    def next_tavern_tier(self, hero: Hero) -> Optional[int]:
+        """只读: 下一次升级会落到哪个存在档（None = 已到本局最高档）。
+
+        与 `upgrade_tavern` **同源**（`_next_existing_tier`），含异变
+        101/102 的档位阶梯（"Only Tavern Tiers 1, 3, and 5 exist."）。
+        纯查询: 不扣费、不改档位。对拍见
+        `hsrl2/tests/test_engine_api_hardening.py::TestNextTavernTier`。
+        """
+        return self._next_existing_tier(hero)
+
     def tavern_spell_candidates(self, min_tier: Optional[int] = None,
                                 max_tier: Optional[int] = None,
                                 pool_aware: bool = True) -> List[str]:
@@ -1999,8 +2200,34 @@ class Game:
         self.events.fire(self, "tavern_upgraded", hero=hero, tier=next_tier)
 
     def freeze_tavern(self, hero: Hero) -> None:
-        """整馆冻结 (P5) — 下一次刷新（自动或手动）保留全部内容。"""
+        """整馆冻结 (P5) — 下一次刷新（自动或手动）保留全部内容。
+
+        F-23（D-2）: 状态从"未冻结 → 冻结"时广播 ``tavern_frozen`` 事件
+        （已冻结再调用不重复广播；默认无监听器 → 既有行为逐位不变）。
+        """
+        was_frozen = hero.frozen_tavern
         hero.set(GameTag.FROZEN, True)
+        if not was_frozen:
+            self.events.fire(self, "tavern_frozen", hero=hero)
+
+    def unfreeze_tavern(self, hero: Hero) -> bool:
+        """解冻整馆（F-23 / READINESS D-2）——`freeze_tavern` 的对称 API。
+
+        真实游戏可点掉冻结；旧引擎只有冻结、没有解冻，环境层只能直接
+        ``hero.clear(GameTag.FROZEN)``（触碰内部状态且无事件）。
+
+        - 返回 True = 本次确实解冻（原为冻结态）；False = 本来未冻结
+          （无状态变化、不广播事件）——与动作 API「bool = 是否发生」同口径；
+        - 只清**整馆冻结** tag（`freeze_tavern` 设置的那个）；单卡冻结
+          （效果给的实体级 `FROZEN`）由下一次刷新的冻结窗口消费，本 API
+          不越权清除（语义边界，见 ENGINE_NOTES F-23）;
+        - 不刷新酒馆、不产生费用；解冻后下一次刷新不再保留旧内容。
+        """
+        if not hero.frozen_tavern:
+            return False
+        hero.clear(GameTag.FROZEN)
+        self.events.fire(self, "tavern_unfrozen", hero=hero)
+        return True
 
     # ── 金币 (P3) ──
 
@@ -2187,10 +2414,84 @@ class Game:
             return max(0, override_fn(hero, self))
         return power_def.cost
 
+    def _hero_power_check(self, hero: Hero, power_id: Optional[str] = None,
+                          target=None) -> Optional[dict]:
+        """`use_hero_power` 的**只读**前置判定（F-25 / READINESS D-3）。
+
+        - 返回 None = 当前不可用（`use_hero_power` 会返回 False）；
+        - 返回 dict = 可用: ``power_id`` / ``power_def`` / ``script`` /
+          ``cost`` / ``n_targets`` / ``candidates``。
+        ``candidates`` 仅在「定向技能且未显式传 target」时求值——与
+        `use_hero_power` 的实际调用顺序一致（不额外触发脚本钩子）。
+        纯查询: 不扣费、不计数、不挂 PendingChoice、不改任何状态。
+        """
+        if hero.get(GameTag.TURN_SKIPPED, False):
+            return None
+        ids = self.hero_power_ids(hero)
+        if power_id is None:
+            if not ids:
+                return None
+            power_id = ids[0]
+        if power_id not in ids:
+            return None
+        power_def = self.hero_power_def_for(hero, power_id)
+        if power_def is None:
+            return None
+        from hsrl2.scripts import REGISTRY  # 延迟导入避免循环依赖
+        script = REGISTRY.get(power_def.id)
+        if script is None:
+            return None   # 技能未迁移——不可用（诚实缺省，不静默近似）
+        if getattr(script, "passive", False):
+            return None
+        # 可用性协议: 脚本声明 available(hero, game)——门槛/冷却/
+        # Unlocks/上对手无随从等; 默认恒可用
+        avail_fn = getattr(script, "available", None)
+        if avail_fn is not None and not avail_fn(hero, self):
+            return None
+        # 额外使用次数（RULES §6.20——Sous Chef Sticker "+1 use each turn"）
+        max_uses = getattr(script, "uses_per_turn", 1) \
+            + hero.extra_trigger("hp_uses")
+        # 每技能独立计数（RULES §9.3——第二技能槽不与主技能抢次数）
+        used = hero._power_uses_this_turn.get(power_id, 0)
+        if used >= max_uses:
+            return None
+        # 每局次数（"Once/Twice per game"）
+        per_game = getattr(script, "uses_per_game", None)
+        if per_game is not None:
+            used_game = hero._power_uses_this_game.get(power_id, 0)
+            if used_game >= per_game:
+                return None
+        cost = self.hero_power_cost(hero, power_def, script)
+        if cost and hero.gold < cost:
+            return None
+
+        n_targets = getattr(script, "target_count", 1) \
+            if getattr(script, "needs_target", False) else 0
+        candidates = None
+        if n_targets > 0 and target is None:
+            cand_fn = getattr(script, "target_candidates", None)
+            candidates = (list(cand_fn(hero, self))
+                          if cand_fn is not None
+                          else [m for m in hero.board if not m.dead])
+            if len(candidates) < n_targets:
+                return None   # 候选不足不可用（金币未扣）
+        return {"power_id": power_id, "power_def": power_def,
+                "script": script, "cost": cost, "n_targets": n_targets,
+                "candidates": candidates}
+
+    def can_use_hero_power(self, hero: Hero,
+                           power_id: Optional[str] = None) -> bool:
+        """只读: 现在使用该英雄技能能否成功（F-25 / READINESS D-3）。
+
+        等价于 ``use_hero_power(hero, power_id=power_id)`` 当前是否返回
+        True（定向技能按 ``target=None`` 口径——候选不足同样判不可用）。
+        纯查询: 不扣费、不计数、不挂选择。对拍见
+        `hsrl2/tests/test_engine_api_hardening.py::TestCanUseHeroPower`。
+        """
+        return self._hero_power_check(hero, power_id, None) is not None
+
     def use_hero_power(self, hero: Hero, target=None,
                        power_id: Optional[str] = None) -> bool:
-        if hero.get(GameTag.TURN_SKIPPED, False):
-            return False
         """使用英雄技能 (RULES §9.2)。
 
         - 费用: power CardDef.cost，脚本可声明 ``cost_override(hero,
@@ -2206,56 +2507,20 @@ class Game:
         - 第二技能槽 (RULES §9.3): hero_power_ids(hero) = 主技能 +
           `hero._second_power_id`; power_id 参数选择使用哪一个（默认
           主技能），两者次数/费用/可用性各自独立
-        """
-        ids = self.hero_power_ids(hero)
-        if power_id is None:
-            if not ids:
-                return False
-            power_id = ids[0]
-        if power_id not in ids:
-            return False
-        power_def = self.hero_power_def_for(hero, power_id)
-        if power_def is None:
-            return False
-        from hsrl2.scripts import REGISTRY  # 延迟导入避免循环依赖
-        script = REGISTRY.get(power_def.id)
-        if script is None:
-            return False   # 技能未迁移——不可用（诚实缺省，不静默近似）
-        if getattr(script, "passive", False):
-            return False
-        # 可用性协议: 脚本声明 available(hero, game)——门槛/冷却/
-        # Unlocks/上对手无随从等; 默认恒可用
-        avail_fn = getattr(script, "available", None)
-        if avail_fn is not None and not avail_fn(hero, self):
-            return False
-        # 额外使用次数（RULES §6.20——Sous Chef Sticker "+1 use each turn"）
-        max_uses = getattr(script, "uses_per_turn", 1) \
-            + hero.extra_trigger("hp_uses")
-        # 每技能独立计数（RULES §9.3——第二技能槽不与主技能抢次数）
-        used = hero._power_uses_this_turn.get(power_id, 0)
-        if used >= max_uses:
-            return False
-        # 每局次数（"Once/Twice per game"）
-        per_game = getattr(script, "uses_per_game", None)
-        if per_game is not None:
-            used_game = hero._power_uses_this_game.get(power_id, 0)
-            if used_game >= per_game:
-                return False
-        cost = self.hero_power_cost(hero, power_def, script)
-        if cost and hero.gold < cost:
-            return False
 
-        n_targets = getattr(script, "target_count", 1) \
-            if getattr(script, "needs_target", False) else 0
+        前置判定与 `can_use_hero_power` **同源**（`_hero_power_check`），
+        避免"查询可用 / 实调用失败"漂移。
+        """
+        ready = self._hero_power_check(hero, power_id, target)
+        if ready is None:
+            return False
+        power_def = ready["power_def"]
+        script = ready["script"]
+        n_targets = ready["n_targets"]
         if n_targets <= 0 or target is not None:
             return self._finish_hero_power(hero, power_def, script, target)
 
-        cand_fn = getattr(script, "target_candidates", None)
-        candidates = (list(cand_fn(hero, self))
-                      if cand_fn is not None
-                      else [m for m in hero.board if not m.dead])
-        if len(candidates) < n_targets:
-            return False   # 候选不足不可用（金币未扣）
+        candidates = ready["candidates"]
 
         def _chain(picked, remaining):
             """依次收集 n_targets 个目标（每个选定后重估候选——
@@ -2747,7 +3012,22 @@ class Game:
         #    插位规则: 从 freed_pos 起跳过亡语期间新入场的召唤物——
         #    官方可观测行为: 亡语召唤物占据死者板位，复活体排在其后
         #    (Deathrattles resolved before Reborn)
-        if will_reborn:
+        if will_reborn and hero is not None and hero.board_full():
+            # F-37（2026-10-26）: Reborn 是**召唤**，受棋盘 7 上限约束。
+            # 死亡结算中的亡语/其它效果把空位填满时，复生体**不返回**
+            # （参照 AutoTavern `engine.rs::reborn` 走 `summon`，召唤失败
+            # 即不返回；官方 Reborn 语义 = "summon it again with 1 Health"）。
+            # 按普通死亡收尾：进墓地、注销监听器、招募期回池；不 fire
+            # `reborn`（没有复生体）；REBORN 已消耗、Persisting Horror
+            # 的满血复生标记一并作废。
+            self._reborn_full_uuids.discard(m.uuid)
+            m.clear(GameTag.REBORN)
+            m.zone = Zone.GRAVEYARD
+            hero.graveyard.append(m)
+            self.events.unregister_owner(m)
+            if not self.in_combat:
+                self.minion_pool.release_minion_entity(m)
+        elif will_reborn:
             m.clear(GameTag.REBORN)
             m.clear(GameTag.DEAD)
             if m.uuid in self._reborn_full_uuids:
@@ -3256,6 +3536,10 @@ class Game:
           5. fire "hero_eliminated" 事件
         淘汰者从 self.heroes 移除（否则后续回合 check_deaths 仍会扫描其
         棋盘、且本函数重复调用会重复回池）；health 保持 0。
+
+        F-24（D-5）: 在 fire `hero_eliminated` **之前**把英雄追加进
+        `game.elimination_order`（监听器内即可读到最新名次账本；事件顺序
+        == 淘汰顺序，环境层既有 RankTracker 口径不变）。
         """
         eliminated = [h for h in self.heroes if h.health <= 0]
         for hero in eliminated:
@@ -3283,6 +3567,8 @@ class Game:
                 "board": [_frozen_clone(m) for m in hero.board],
                 "tavern_tier": hero.tavern_tier,
             })
+            # F-24（D-5）名次账本: 先记账再 fire 事件（监听器读到最新顺序）
+            self.elimination_order.append(hero)
             self.events.fire(self, "hero_eliminated", hero=hero)
             self.heroes.remove(hero)
             # 区域清空 + 监听器注销——否则已淘汰英雄的 `turn_end` /
@@ -3299,6 +3585,41 @@ class Game:
             for owner in owners:
                 self.events.unregister_owner(owner)
             self.events.unregister_owner(hero)
+
+    # ── 名次查询（F-24 / READINESS D-5） ──
+
+    def rank_of(self, hero: Hero) -> int:
+        """该英雄的**当前/最终**名次（1 = 第 1 名；F-24/D-5）。
+
+        - 已被淘汰: ``开局人数 − 淘汰序号``（第一个被淘汰 = 第 N 名；
+          同回合多人淘汰按 `_process_eliminations` 处理顺序，与
+          `hero_eliminated` 事件顺序同源）;
+        - 仍存活: 1（尚未被淘汰；终局唯一存活者即冠军）;
+        - 本局英雄集合之外的对象 → ``ValueError``。
+
+        与旧环境层 RankTracker 口径一致（第一个死的 = 第 N 名）。
+        """
+        if hero in self.elimination_order:
+            return self._initial_hero_count \
+                - self.elimination_order.index(hero)
+        if hero in self.heroes:
+            return 1
+        raise ValueError(f"rank_of: hero {getattr(hero, 'name', hero)!r} "
+                         f"is not part of this game")
+
+    def final_ranking(self) -> List[Hero]:
+        """终局完整名次表（第 1 名 → 第 N 名；F-24/D-5）。
+
+        仅 ``finished`` 后可用（否则抛 `GameStateError`）: 存活者在前
+        （终局时应恰有 1 名；测试/异常态多名存活时保持 `game.heroes`
+        顺序、并列第 1 口径），其后为淘汰顺序的**反序**（最后被淘汰者
+        名次最高）。
+        """
+        if not self.finished:
+            raise GameStateError("final_ranking: game is not finished")
+        ranking = [h for h in self.heroes if h.is_alive]
+        ranking.extend(reversed(self.elimination_order))
+        return ranking
 
     def run_combat(self, hero_a: Hero, hero_b: Hero,
                    alive_count: int | None = None):

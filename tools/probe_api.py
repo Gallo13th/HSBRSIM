@@ -574,7 +574,7 @@ def probe_a3_play_spell(db: CardDB) -> None:
 
 
 def probe_a3_refresh(db: CardDB) -> None:
-    section("A3 refresh_tavern / freeze_tavern")
+    section("A3 refresh_tavern / freeze_tavern / unfreeze_tavern")
     game = new_game(db, 2, seed=41)
     h = game.heroes[0]
     h.gold = 10
@@ -609,8 +609,21 @@ def probe_a3_refresh(db: CardDB) -> None:
     check("A3", "freeze: 下一次刷新保留整馆并清 FROZEN",
           all(e in h3.tavern for e in frozen) and not h3.frozen_tavern
           and h3.gold == 9)
-    check("A3", "freeze: 引擎无 unfreeze 公开 API（文档限制项）",
-          not hasattr(g3, "unfreeze_tavern"))
+    # 解冻（ENGINE_NOTES F-23）：对称 API + tavern_unfrozen 事件；
+    # 未冻结时返回 False（bool = 是否发生）
+    from hsrl2.events import Listener
+    g4 = new_game(db, 2, seed=44)
+    h4 = g4.heroes[0]
+    g4.freeze_tavern(h4)
+    unfrozen_events = []
+    g4.events.register(Listener(
+        event="tavern_unfrozen", owner=h4,
+        callback=lambda game, **kw: unfrozen_events.append(kw["hero"])))
+    check("A3", "unfreeze: True / FROZEN 清除 / fire tavern_unfrozen",
+          g4.unfreeze_tavern(h4) is True and not h4.frozen_tavern
+          and unfrozen_events == [h4])
+    check("A3", "unfreeze: 未冻结时返回 False（无状态变化）",
+          g4.unfreeze_tavern(h4) is False)
 
 
 def probe_a3_upgrade(db: CardDB) -> None:
@@ -1785,22 +1798,20 @@ def probe_a9(db: CardDB) -> None:
     check("A9", "淘汰后 game.heroes 长度变化（禁止缓存旧列表）",
           len(cached) == 3 and len(g3.heroes) < 3)
 
-    # 已知缺陷：sell_minion 不校验实体类型（传 Spell → AttributeError，
-    # 且金币已加/手牌已移除——状态已污染）。环境必须自己只卖 Minion。
+    # D-9（F-22 修复，2026-10-26）：sell_minion 对非 Minion 实体必须返回
+    # False 且零状态污染（旧实现：AttributeError，且金币已加/手牌已移除）。
+    # 环境仍应只对 Minion 生成 sell 候选（READINESS D-9）。
     g5 = new_game(db, 2, seed=145)
     h5 = g5.heroes[0]
     h5.gold = 0
     sp = g5.create_spell(db.pool_spells()[0].id, controller=h5)
     h5.hand.append(sp)
     sp.zone = Zone.HAND
-    crashed = False
-    try:
-        g5.sell_minion(h5, sp)
-    except AttributeError:
-        crashed = True
-    check("A9", "已知缺陷: sell_minion(Spell) 抛 AttributeError 且状态污染",
-          crashed and h5.gold == 1 and sp not in h5.hand,
-          "环境必须只对 Minion 生成 sell 候选（见 READINESS D-9）")
+    ret = g5.sell_minion(h5, sp)
+    check("A9", "sell_minion(Spell) → False 且零状态污染（F-22/D-9）",
+          ret is False and h5.gold == 0 and sp in h5.hand
+          and sp.zone == Zone.HAND,
+          "非 Minion 实体不得出售；旧实现 AttributeError + 状态污染")
 
     # 非法 position / 0 费升级 / 未知英雄 id 的行为
     g6 = new_game(db, 2, seed=146)

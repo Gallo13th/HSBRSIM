@@ -477,7 +477,12 @@ class SkyAdmiralRogersScript:
             while progress >= threshold:
                 progress -= threshold
                 for _ in range(source.scripts.times):
-                    cands = [b for b in BOUNTY_SPELL_IDS
+                    # **必须排序**（F-36 第 3 处 / KNOWN-DET-1）:
+                    # `BOUNTY_SPELL_IDS` 是 frozenset[str]，迭代顺序随
+                    # PYTHONHASHSEED 变化 → 直接喂 rng.choice 会跨进程抽到
+                    # 不同 Bounty（如 BG33_813 vs BG33_814）。排序对
+                    # `rng.choice` 的均匀性无影响，只固定 index→card 映射。
+                    cands = [b for b in sorted(BOUNTY_SPELL_IDS)
                              if g.spell_pool.available(b) > 0]
                     if not cands:
                         break

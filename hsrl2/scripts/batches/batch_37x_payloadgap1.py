@@ -564,11 +564,18 @@ class RedVolumizerScript(_VolumizerBase):
          `hero.volumizer_aura_atk += NUM_1`（游戏长，跨战斗持久）。
       2. atk 动态钩子: 计数 > 0 → 全量复算 + 计数; 计数 0 → None
          回落引擎默认。任意区域生效（"wherever they are"）。
-      3. 金色 NUM_1=6 由金色 CardDef 自然体现。
+      3. **health 动态钩子（F-31 补齐）**: "your Volumizers have +X
+         Health" 是**全体** Volumizer 的光环——Red 自身不授予 Health，
+         但吃 Blue/Green 授予的 `hero.volumizer_aura_health`。缺该钩子时
+         `_grant_volumizer_aura` 抬当前 HEALTH 后 Red 会 health >
+         max_health（env-upgrader 不变量实测 Red 4/1）。公式与 atk 对称:
+         `_static_total_health(source) + gain`；计数 0 → None。
+      4. 金色 NUM_1=6 由金色 CardDef 自然体现。
 
     Test: test_batch_37x_payloadgap1.py — 打出后自身与所有 Volumizer
     +3 Attack / 第二次打出不重复 / Magnetize 路径触发 / 金色 +6 /
-    非 Volumizer 不增益 / 敌方 Volumizer 不共享。
+    非 Volumizer 不增益 / 敌方 Volumizer 不共享；
+    test_volumizer_health_f31.py — health ≤ max_health 不变量（F-31）。
 
     Params: {1}=3（金色 =6）
     """
@@ -584,6 +591,23 @@ class RedVolumizerScript(_VolumizerBase):
         if not gain:
             return None
         return _static_total_atk(source) + gain
+
+    @staticmethod
+    def health(source):
+        """F-31: 吃 Blue/Green 授予的 hero 级 +Health 光环（与 atk 对称）。
+
+        Red 自身不授予 Health（`health_num_index` 保持 None），但
+        "your Volumizers have +X Health this game" 覆盖**所有** Volumizer；
+        缺此钩子会让 `_grant_volumizer_aura` 同步抬高的当前 HEALTH
+        超过 max_health（不变量破坏）。
+        """
+        hero = getattr(source, "controller", None)
+        if hero is None or source.game is None:
+            return None
+        gain = getattr(hero, "volumizer_aura_health", 0)
+        if not gain:
+            return None
+        return _static_total_health(source) + gain
 
 
 class BlueVolumizerScript(_VolumizerBase):

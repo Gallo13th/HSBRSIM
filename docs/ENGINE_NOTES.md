@@ -599,6 +599,265 @@ c=1 会给 health +4，与期望 +3 不符）；`test_batch_soc.py` 相关期望
 **影响面**：二次 choose 由静默 no-op 改为显式异常；resolve 失败不再可重试；
 env 应优先改用 `Game.take_choice` 并记录 `resolution_error`。
 
+## F-22 `sell_minion` 类型校验（D-9，2026-10-26）
+
+**文件**：`hsrl2/game.py::Game.sell_minion`；测试
+`hsrl2/tests/test_engine_api_hardening.py::TestSellMinionTypeCheck`（4 例）。
+
+**问题**（READINESS D-9 / probe A9 实测）：旧实现只检查"实体在棋盘或手牌"，
+随后 `minion_pool.release_minion_entity(minion)` 假定 Minion。把 `Spell`
+传入 → `AttributeError: 'Spell' object has no attribute 'is_golden'`，
+且**崩溃前已加金币 / 已从手牌移除**（状态污染）→ 训练进程崩溃 + 局面损坏。
+
+**修复**：函数入口 `if not isinstance(minion, Minion): return False`（含
+`None` / 通用 `Entity`）。非法输入返回 False、零状态改动（金币/手牌/zone/
+`MINIONS_SOLD_THIS_TURN` 均不变）。
+
+**规则依据**：出售只对 Minion 有定义（RULES §2.6 / ENGINE_API §3.2 动作表
+本就要求"仅 Minion"）；引擎契约「bool = 是否发生」。
+
+**影响面**：仅改变**非法输入**路径（旧行为是崩溃 + 状态污染）；合法出售路径
+逐位不变（全量回归 + 既有卖卡脚本/测试全绿）。
+
+## F-23 解冻 API + 冻结事件（D-2，2026-10-26）
+
+**文件**：`hsrl2/game.py::Game.unfreeze_tavern` / `freeze_tavern`；测试
+`hsrl2/tests/test_engine_api_hardening.py::TestUnfreezeTavern`（4 例）。
+
+**问题**（READINESS D-2）：旧引擎只有 `freeze_tavern`（置 hero `FROZEN`），
+唯一 `clear(FROZEN)` 在 `refresh_tavern` 内部（一次性冻结）。真实游戏可点掉
+冻结；环境层只能直接改 tag（破坏封装、无事件）。
+
+**修复**：
+- 新增 `Game.unfreeze_tavern(hero) -> bool`：原为冻结态 → 清整馆 `FROZEN`
+  + fire `tavern_unfrozen`，返回 True；本来未冻结 → False（无状态变化、无
+  事件），与动作 API「bool = 是否发生」同口径；
+- `freeze_tavern` 在"未冻结 → 冻结"状态变化时 fire `tavern_frozen`
+  （已冻结重复调用不重复广播）；
+- 边界：本 API **只清整馆冻结 tag**（`freeze_tavern` 设置的）；单卡冻结
+  （效果给的实体级 `FROZEN`）仍由下一次刷新的冻结窗口消费，不在本 API
+  语义内（真实 UI 逐卡解冻在引擎中无对应原语）。
+
+**规则依据**：`docs/reference_old/BATTLEGROUNDS_RULES.md` 冻结/刷新章节 +
+ENGINE_API §3.7（"引擎没有 unfreeze" 为已登记限制）；READINESS D-2 最小
+修复方案。
+
+**影响面**：默认路径不变——全库无 `tavern_frozen`/`tavern_unfrozen` 监听器，
+事件新增对既有对局零影响；`freeze_tavern` 返回值仍为 None（签名不变）。
+新增 4 条契约测试。
+
+## F-24 名次 API：elimination_order / rank_of / final_ranking（D-5，2026-10-26）
+
+**文件**：`hsrl2/game.py::Game.__init__` / `_process_eliminations` /
+`rank_of` / `final_ranking`；测试
+`hsrl2/tests/test_engine_api_hardening.py::TestRankApi`（6 例，含真实
+`end_recruit_phase` 淘汰路径）。
+
+**问题**（READINESS D-5）：引擎不提供名次，环境层必须监听 `hero_eliminated`
+自建 RankTracker；淘汰顺序只存在于事件流里，同一个"第 N 名"逻辑被多处复制。
+
+**修复**：
+- `game.elimination_order: List[Hero]`：`_process_eliminations` 内、fire
+  `hero_eliminated` **之前**追加（监听器内即可读到最新账本；事件顺序 ==
+  淘汰顺序，既有 RankTracker 口径不变）；
+- `game.rank_of(hero) -> int`：已被淘汰 → `开局人数 − 淘汰序号`（第一个死
+  的 = 第 N 名）；仍存活 → 1；不属于本局 → `ValueError`；
+- `game.final_ranking() -> List[Hero]`：仅 `finished` 后可用（否则
+  `GameStateError`），第 1 名 → 第 N 名 = 存活者（终局恰 1 名）+ 淘汰顺序
+  反序；
+- 边界：同回合多人淘汰按 `_process_eliminations` 处理顺序（= 事件顺序）
+  编号；引擎不推断并列名次（官方排序证据不足，不猜）。
+
+**规则依据**：ENGINE_API §6.6（标准 RankTracker 口径：第一个被淘汰 =
+第 N 名、最后存活 = 第 1 名）；RULES §2.3。
+
+**影响面**：默认行为不变（仅新增记账 + 只读 API；`hero_eliminated` 事件
+载荷/顺序不变）。新增 6 条测试。
+
+## F-25 只读查询 API：买价/可买性/技能/下一档/磁力/刷新（D-3，2026-10-26）
+
+**文件**：`hsrl2/game.py`（`quote_buy_cost` / `can_buy` / `can_use_hero_power`
+/ `next_tavern_tier` / `magnetic_targets` / `can_refresh` +
+`_quote_buy_cost` / `_health_buy_kind` / `_free_minion_buy_hit` /
+`_hero_power_check`）；测试
+`hsrl2/tests/test_engine_api_hardening.py::TestQuoteBuyCost` /
+`TestCanUseHeroPower` / `TestMagneticTargets` / `TestCanRefresh` /
+`TestNextTavernTier`（共 24 例，全部含「镜像 == 真实动作」对拍）。
+
+**问题**（READINESS D-3）：合法动作枚举需要的判定都内联在动作函数或私有方法
+里，环境层必须复制：
+- 买价内联在 `buy_from_tavern`（约 100 行）且 `_take_free_minion_buy` **会消费**
+  免费额度（不能预检）；
+- 英雄技能可用性内联在 `use_hero_power`；
+- `_next_existing_tier` / `_magnetic_valid` 私有；
+- 刷新是否可支付内联在 `refresh_tavern`（不可支付会抛异常）。
+
+**修复**（全部纯查询：不扣费、不计数、不消费额度/折扣、不改 tag）：
+1. `quote_buy_cost(hero, entity) -> int`：金币口径报价。**与成交路径同源**
+   ——`buy_from_tavern` 与报价共用 `_quote_buy_cost`（随从: 基础价 →
+   等级价 → 英雄覆盖价 → 条件化规则 → 免费额度；法术: 持久折扣 →
+   本回合免费 → 下一个法术折扣）。免费额度改为「只读 peek
+   （`_free_minion_buy_hit`）/ 成交消费（`_take_free_minion_buy`）」两步，
+   消费时机（定价后、支付前）与旧实现一致；`_take_free_minion_buy` 内部
+   改用同一 peek，保证不漂移。
+2. `can_buy(hero, entity) -> bool`：镜像成交拒绝条件（在馆/手牌未满/
+   未跳回合/金币足够；强制生命支付时要求 `health + armor > cost`）。
+3. `can_use_hero_power(hero, power_id=None) -> bool`：`use_hero_power` 前置
+   判定抽成 `_hero_power_check`（成交路径与查询同源），等价于
+   "`use_hero_power` 现在会不会返回 True"（定向技能 target=None 口径）。
+4. `next_tavern_tier(hero) -> Optional[int]`：`_next_existing_tier` 的公开
+   别名（含异变 101/102 阶梯）。
+5. `magnetic_targets(hero, minion) -> List[Minion]`：与 `play_minion(...,
+   magnetic_target=)` 接受条件同源（友方/存活/PLAY/`_magnetic_valid`，
+   含 Prosthetic Hand 等数据例外）；非磁力 → `[]`。
+6. `can_refresh(hero) -> bool`：镜像 `refresh_tavern(hero)` 付费判定
+   （跳回合/封锁 → False；免费额度 → True；健康刷新可支付 → True；否则
+   `gold >= REFRESH_COST_OVERRIDE`）。False 时真实调用会抛 `GameStateError`。
+
+**规则依据**：ENGINE_API §4.2/§4.3/§4.5/§4.6/§4.7（既有镜像实现）+ RULES
+§7.4.4/§7.4.7/§9.2；READINESS D-3 最小修复方案。
+
+**影响面**：`buy_from_tavern` / `use_hero_power` 行为逐位不变（同源重构，
+全量回归绿）；新增 API 默认零调用。对拍测试覆盖：报价==实际扣款（基础/
+覆盖价/条件规则/法术折扣/免费额度/生命支付）、peek 不消费且不影响后续
+成交、技能可用性==实调用返回值、磁力查询结果被真实吸附接受、刷新
+can==真实调用是否抛异常/扣费。
+
+**集成建议（Lead 排期）**：`hsbg/env/driver.py` 当前仍用镜像实现
+（`_minion_buy_cost` / `hero_power_usable` / `next_existing_tier` /
+`_magnetic_valid` / 刷新前置过滤），建议后续迁移到 F-25 的只读 API；
+迁移要求 env 全量测试前后一致（尤其 `test_env_actions` /
+`test_env_choice_contract` / `test_env_public_contract`），本轮不做。
+
+## F-26 `Game.phase` 阶段属性（D-14，2026-10-26）
+
+**文件**：`hsrl2/game.py::Game.phase`（property）；测试
+`hsrl2/tests/test_engine_api_hardening.py::TestGamePhase`（3 例，含真实
+`run_combat` 内 `before_attack` 回调断言）。
+
+**问题**（READINESS D-14）：引擎没有阶段字段，环境必须自建状态机
+（ENGINE_API §2.1）；状态机写错会出现"choice 阶段发动作"错位。
+
+**修复**：`phase` 取值 `recruit` / `combat` / `choice` / `game_over`，
+优先级与 `hsbg/env/game_env.py::_observe` 同口径：
+`finished`（→game_over）> `in_combat`（→combat，仅 `run_combat` 内部可见，
+事件回调可读）> `pending_choices`（→choice）> 其余 `recruit`（含
+`start_game` 前构造态）。
+
+**规则依据**：ENGINE_API §2.1 状态机 + READINESS D-14 最小修复方案。
+
+**影响面**：纯只读属性（无既有 `phase` 属性/字段冲突），默认行为不变。
+
+## F-27 `CardDB` 公开迭代器（D-8，2026-10-26）
+
+**文件**：`hsrl2/db.py`（`defs()` / `iter_defs()` / `hero_defs()`）；测试
+`hsrl2/tests/test_engine_api_hardening.py::TestCardDBIterators`（4 例）。
+
+**问题**（READINESS D-8）：`CardDB` 只有按 id/pool 的查询，全卡遍历与
+英雄枚举只能读私有 `_by_id`（引擎重构即破坏；环境层已依赖）。
+
+**修复**：`defs()` 返回全部 `CardDef` 的**新列表**（调用方修改不影响 DB）；
+`iter_defs()` 返回只读迭代器（不复制列表）；`hero_defs()` 返回
+`CardType.HERO` 子集。顺序 = 注册顺序（`data/` 文件顺序）。
+
+**规则依据**：D-8 最小修复方案 + READINESS §5 G1（合法动作枚举需要英雄池）。
+
+**影响面**：纯新增只读 API；既有 `pool_minions()/pool_spells()/…` 不变。
+
+## F-28 `GameRNG` 审计开关与清理（D-6，2026-10-26）
+
+**文件**：`hsrl2/rng.py`（`audit` 关键字 / `clear_decisions()`）；测试
+`hsrl2/tests/test_engine_api_hardening.py::TestGameRNGAudit`（4 例）。
+
+**问题**（READINESS D-6）：`decisions` 无上限（每局 mean 1367 条、max 1771，
+<0.2 MB），长期持有 Game / 大量重放时需要开关或清理；无开关只能改私有字段。
+
+**修复**：`GameRNG(seed, *, audit=True)`——**默认 True = 既有审计行为逐位
+不变**（tools/probe_*、`hsbg/planning/rng.py` 依赖）；`audit=False` 时随机流
+完全不变、不再追加条目。新增 `clear_decisions()`（清日志、不动随机流）。
+所有写入点收敛到 `_record()`。
+
+**规则依据**：D-6 最小修复方案；RULES §8 确定性（审计日志不得影响随机流）。
+
+**影响面**：默认路径不变；planning 的 `get_state/set_state/fork` 直接把
+`decisions` 当列表读写，兼容。
+
+## F-29 `stats_gained` 抑制深度改 contextvars（D-15，2026-10-26）
+
+**文件**：`hsrl2/entity.py`（`_stats_gained_suppress_depth` / `suppress_stats_gained`
+/ `_stats_gained_suppressed`）；测试
+`hsrl2/tests/test_engine_api_hardening.py::TestStatsSuppressedContextLocal`（4 例，
+含线程隔离：worker 线程抑制窗口内主线程 `stats_gained` 仍广播）。
+
+**问题**（READINESS D-15）：抑制深度是**模块级 int**；同进程两个线程各跑
+一局时，A 局的抑制窗口会静默 B 局的 `stats_gained` 广播（脚本被动失效/
+数值不一致）→ 排除线程池向量化。
+
+**修复**：改为 `ContextVar[int]`（`default=0`），进入 +1 / 退出 reset
+（支持嵌套、异常复原）。单线程/单上下文语义与旧实现逐位相同；不同线程
+持有独立深度（新线程从 default=0 开始）。调用方 API 不变
+（`with suppress_stats_gained():` / `copy_buffs_to` 内部窗口）。
+
+**规则依据**：READINESS D-15 最小修复方案（contextvars/per-Game）；RULES §3.5
+"复制/复原不等于获得"的抑制窗口语义不变。
+
+**影响面**：默认（单线程）行为逐位不变——全量引擎回归 4873 passed / 6 skipped；
+额外证据：smoke 8 局 seed 2000 `crashes=0`；确定性 20 seeds 双跑指纹一致
+（`tools/final_engine_stress.py --det-cases 20`，digest
+`1db23354326a6f0ea86b0e91671214a011b2e17431f8c6998a7c0f45b4fbbf53`）；
+`grep -rn "import random" hsrl2/` 仍只有 `hsrl2/rng.py` 本体（随机源单点，
+无新增）。
+
+## F-30 本批不改行为项：D-4 / D-7 / D-10 / D-13 现状（2026-10-26）
+
+按任务裁决"无失败测试/无证据不硬改"，以下四项**不改引擎行为**，只回填
+现状与后续动作：
+
+1. **D-4 错误风格不一致**（`refresh_tavern` 金币不足抛 `GameStateError`，
+   其它动作返回 False）：**DEFERRED（保持现状）**。ENGINE_API §3.0/§3.5
+   已把它写成公开契约（"全引擎唯一一个合法但付不起会抛异常的常用动作"），
+   环境层 `hsbg/env/driver.py` 已统一 `try/except` 并前置过滤；任一方向
+   "统一"都会改变现有行为或破坏既有契约测试 → 不硬改。新增的
+   `can_refresh`（F-25）提供了**不抛异常**的预检入口，作为环境层推荐用法。
+2. **D-7 `game.choice_policy` 死字段**（`game.py` 赋 "first"，全库无读取
+   点）：**DEFERRED**。删除字段可能影响外部读取（含测试/诊断脚本），收益
+   低；语义上引擎从不自动结算选择（PendingChoice 契约清晰）。环境层按
+   ENGINE_API §5.5 FIFO 自行结算，不依赖该字段。
+3. **D-10 `Game` 不可 pickle / 无 clone**：**已由外部模块解决，引擎不改**。
+   `hsbg/planning/model.py::clone`（结构化深拷贝 + 闭包重绑）+
+   `hsbg/planning/checkpoint.py`（push/pop）已提供可独立推进的快照；
+   `hsbg/planning/rng.py` 提供 RNG get_state/set_state/fork。引擎侧不新增
+   clone（避免与 planning 的 rebind 语义重复/冲突）。
+4. **D-13 `Hero` 构造不校验 card_id**：**环境层已防护，引擎不改**。
+   `hsbg/env/game_env.py::_hero_pool` 只取 `card_type == CardType.HERO` 的
+   英雄卡，且 `config.hero_id` 不在池内即 `ValueError`。引擎侧校验需要给
+   `Hero.__init__` 传 db（签名变更、影响所有脚本/测试构造点），收益不足以
+   抵影响面；`Game.hero_power_ids() == []` + `use_hero_power() == False`
+   的既有"诚实缺省"保留。
+
+**另（probe_api 同步）**：`tools/probe_api.py::A3` 的
+`not hasattr(game, "unfreeze_tavern")` 旧限制断言在 F-23 后过期，已按
+Lead 追加授权**最小修正**为正向断言（存在 `unfreeze_tavern` + 解冻成功/
+清 FROZEN/fire `tavern_unfrozen`；未冻结时返回 False），实跑
+`python3 tools/probe_api.py` → A3 两条 unfreeze 检查 PASS。同文件
+**A9** 的 `已知缺陷: sell_minion(Spell) 抛 AttributeError 且状态污染`
+断言因 F-22 修复而过期，已按 Lead 追加授权做同类最小修正（改为
+`sell_minion(spell) is False` + 零状态污染断言）；实跑
+**175/177**，仅剩 A5（F-21 PendingChoice 一次性语义导致的既有 probe
+崩溃）与 A7（金色本体既有数据期值）两项**本轮之前既有**过期，
+不在本任务范围。`scripts/verify_all.py` 不跑 probe_api，不影响门禁。
+
+**本批验证汇总（2026-10-26，macOS / python3）**：
+- `python3 -m pytest hsrl2/tests -q`：**4873 passed / 6 skipped / 0 failed**
+  （基线 4816 passed / 6 skipped + 新增 57 条契约测试；无 skip/xfail 新增）；
+- `python3 tools/smoke_random_games.py --games 8 --seed 2000`：
+  `games=8 completed=8 incomplete=0 crashes=0`；
+- 确定性：`python3 tools/final_engine_stress.py --deity-cases 0
+  --discard-cases 0 --det-cases 20` → `determinism.identical=20/20`，
+  digest `1db23354326a6f0ea86b0e91671214a011b2e17431f8c6998a7c0f45b4fbbf53`；
+- 关联根测试：`python3 -m pytest tests/test_engine_fixes.py
+  tests/test_planning.py tests/test_env_move.py tests/test_env_observation.py -q`
+  → 63 passed。
 
 
 
@@ -607,3 +866,298 @@ env 应优先改用 `Game.take_choice` 并记录 `resolution_error`。
 
 
 
+
+
+
+## F-31 Volumizer 光环下 health ≤ max_health 不变量（Red health 钩子缺失）
+
+**文件**：`hsrl2/scripts/batches/batch_37x_payloadgap1.py::RedVolumizerScript`；
+测试 `hsrl2/tests/test_volumizer_health_f31.py`（6 例，先红后绿）。
+
+**问题（env-upgrader 实测，2026-10-26）**：2 人局先 summon Red
+Volumizer（`BG34_170t` 3/1）再 summon Blue（`BG34_170t2` 1/3，
+"your Volumizers have +3 Health this game"）→ Red `health=4 /
+max_health=1`，违反「health ≤ max_health」结构性不变量
+（`hsbg/env/invariants.py` 可检出）；真实对局 seed=4212 turn 6 也命中。
+
+**根因**：`_grant_volumizer_aura` 对 hero 级 `volumizer_aura_health`
+增量后**同步抬升当前在场 Volumizer 的当前 HEALTH**（与 ApplyRaceAura
+可观测行为一致）；`BlueVolumizerScript` / `GreenVolumizerScript` 的
+`health` 动态钩子读取该计数使最大血同步；`RedVolumizerScript` 只有
+`atk` 钩子、**没有 health 钩子** → 最大血不叠加，当前血被抬高后超上限。
+"your Volumizers have +X Health" 是**全体** Volumizer 的光环，Red 必须
+吃 Blue/Green 授予的 health 光环。
+
+**修复**：`RedVolumizerScript` 补与 atk 对称的
+`health(source) -> _static_total_health(source) + gain`（gain =
+`hero.volumizer_aura_health`；计数 0 → None 回落引擎默认）。
+Red 自身仍不授予 Health（`health_num_index` 保持 None）。
+
+**规则依据**：CardDefs 37.0 `BG34_170t2/_G` 文本 "your **Volumizers**
+have +{1} Health this game (wherever they are)"（全体，非单变体）；
+`BG34_170t` 文本只授予 Attack，但"Volumizers"包含 Red。
+
+**影响面**：默认无 Volumizer / 无 health 光环时逐位不变（计数 0 →
+返回 None，走引擎默认 max_health）；仅 Red 在 Blue/Green 光环下行为
+修正（最大血正确叠加）。新增 6 条不变量测试；既有
+`test_batch_37x_payloadgap1.py` 74 例全绿。
+
+## F-32 AC-02：T1 随从池份数 16 → 15（跨引擎一致性）
+
+**文件**：`hsrl2/constants.py::POOL_COPIES_BY_TIER`；测试
+`hsrl2/tests/test_rules_constants_ac02_ac03.py`（6 例）。
+
+**问题**（`docs/CONFORMANCE_AUTOTAVERN.md` AC-02，ENGINE_BUG）：旧值
+`{1:16, 2:15, 3:13, 4:11, 5:9, 6:7, 7:5}` 的 T1=16 来自
+`docs/reference_old/BATTLEGROUNDS_RULES.md`（Patch 35.x 遗留文档，已过时）。
+
+**证据（官方 + 参照双源，E3）**：
+- 官方 wiki.gg `/wiki/Battlegrounds` 随从池副本表（2026-10-26 抓取）：
+  T1=15, T2=15, T3=13, T4=11, T5=9, T6=7, T7=5；
+- AutoTavern `crates/taverngym/src/config.rs:245`
+  `pool_copies_by_tier: [15, 15, 13, 11, 9, 7, 5]`（注释 "36.6.0 wiki data"）。
+
+**修复**：`POOL_COPIES_BY_TIER = {1: 15, 2: 15, 3: 13, 4: 11, 5: 9,
+6: 7, 7: 5}`（其它档位不变）。`python3 -m tools.ac_conformance.repro
+AC-02` 修复后两侧均 `[15, 15, 13, 11, 9, 7, 5]` → verdict MATCH。
+
+**受影响测试（RNG 流位移，非行为退化）**：
+- `hsrl2/tests/test_batch_trinkets8.py::TestMinionBait`：原测试用
+  `CardDef.race` **主类型单值**判断纳迦，池份数改变后刷新抽取流位移，
+  MinionBait 抽到双类型随从 Firescale Hoarder（`BG32_820` =
+  Dragon/**Naga**，类型身份集合含 NAGA）→ 旧 `_nagas`/`race_in` 漏计
+  而失败。修复 = 测试辅助改为**类型身份集合**语义（`Race.NAGA in
+  d.races`，引擎 AC-3 口径），断言语义不变（注入 2 个纳迦/占用 2 份池）。
+  不是脚本 bug：MinionBait 经 `_pool_candidates(g, race)` 选族正确。
+- `hsrl2/tests/test_consume_tavern.py::test_refresh_tavern_applies_
+  persistent_buffs_engine_gap`：固定 seed=34 的刷新内容改变后不再含野兽
+  → 改为跨 seed 寻找匹配实体（断言语义不变）。
+- 无任何测试断言字面 16（既有用例均引用常量符号）——已在测试注释写明。
+
+**影响面**：T1 每卡池份数 -1（池总量 -37）；刷新抽取权重/三连/残局
+守恒分布改变（训练/评估分布向官方对齐）。全量引擎回归见 F-34 汇总结论。
+
+## F-33 AC-03：升级费 T5/T6 9/10 → 11/11（跨引擎一致性）
+
+**文件**：`hsrl2/constants.py::BASE_UPGRADE_COSTS`；测试
+`hsrl2/tests/test_rules_constants_ac02_ac03.py`（6 例，含真实动作扣费）。
+
+**问题**（`docs/CONFORMANCE_AUTOTAVERN.md` AC-03，ENGINE_BUG）：旧值
+`{2:5,3:7,4:8,5:9,6:10,7:11}`；官方/参照为 T5=11、T6=11。
+
+**键语义核对（不盲改）**：`UPGRADE_COST = BASE_UPGRADE_COSTS[目标档位]`
+（`Hero.__init__` 取 `[2]`=5；`_upgrade_cost_after(new_tier)` 写
+`BASE[new_tier]` = 下一次升到 new_tier 的基价）→ 键 **k = 升到 k 档的
+Base Cost**；T7=10 为特殊档（参照 `upgrade_costs[5]`，索引=目标-2）。
+新值 `{2:5, 3:7, 4:8, 5:11, 6:11, 7:10}`。
+
+**证据（官方 + 参照双源，E3）**：
+- 官方 wiki.gg `/wiki/Battlegrounds` 升级费表（2026-10-26 抓取）：
+  T2=5, T3=7, T4=8, **T5=11, T6=11**；
+- AutoTavern `crates/taverngym/src/config.rs:237`
+  `upgrade_costs: [5, 7, 8, 11, 11, 10]` + `recruit.rs::base_upgrade_cost`
+  （index = to_tier-2 → 行为级确认）。
+
+**修复 + 行为对拍**：`python3 -m tools.ac_conformance.repro AC-03`
+修复后两侧常量与**真实 upgrade 动作扣费**逐档一致
+（T2..T6：5/7/8/11/11，gold_after/tier_after 相同）→ verdict MATCH。
+新增测试含「真实 `upgrade_tavern` 扣费 == 官方常量和」与
+「升级后下一次基价键语义」断言。
+
+**影响面**：中后期节奏改变（T5/T6 更贵），策略/BC 数据分布向官方对齐；
+既有测试均引用常量符号（无字面 9/10 断言，已核对）。
+
+## F-34 AC-01 先攻平局裁定：证据冲突 → CONVENTION_DIFF（不改行为）
+
+**文件**：无行为改动（`hsrl2/combat.py` 保持原样，`git diff` 为空）；
+记录见 `docs/CONFORMANCE_AUTOTAVERN.md` AC-01（auditor 已改判）。
+
+**问题**（参照侧）：AutoTavern `combat.rs:316` 首攻判定为
+「数量多者 → 酒馆等级高者 → 随机」，hsrl2 `_determine_first` 平局直接
+随机 → 同数量不同等级时约 50% 概率反向。
+
+**证据冲突（不能判 bug）**：
+- 支持等级优先：AutoTavern 实现 + 其 `mechanics.rs` 专门测试；中文 2020
+  攻略（gamedog，二手来源）；
+- 支持随机：**官方 wiki.gg `/wiki/Battlegrounds` Combat Phase 现行原文**
+  （2026-10-26 抓取）"If the number of minions is equal for both players,
+  one of the players is randomly selected to attack first."；HSBRSIM 旧规则
+  文档亦写随机。
+- → 二源冲突 + 参照实现单方，Lead 裁定 **CONVENTION_DIFF，不改引擎行为**。
+
+**本地真实语料决定性证据检索（2026-10-26，engine-fixer 执行）**：
+- `data/trajectories/`（1100 个引擎自对弈轨迹）、`data/trajectories_{cli,
+  hybrid,real}/`：字段仅 = 己方 `turn/health/armor/tavern_tier/gold/board/
+  trinkets/hero_power_used`，**无对手战团、无攻击顺序、无先手字段**
+  （`grep "combat\|attack\|opp"` 命中 0）→ 不可用于裁定；
+- 真实 BG 语料 `runs/official_traces/`（679 条 BobsBuddy/HDT 轨迹）与
+  `reversed/`（反编译/证据材料）在本 macOS checkout **不存在**
+  （`runs/` gitignore；`find . -name Power.log` 无结果）→ 不可用；
+- `hsbg/bridge` 有 Power.log 解析器（`powerlog.py` / `tools/
+  diff_extract_replays.py`）但本机无原始日志。
+- → 未找到「同数量、不同等级、可判定先手」样本，维持 CONVENTION_DIFF。
+
+**后续（若拿到决定性证据）**：在 `_determine_first` 平局分支比较
+`self.a.tavern_tier`/`self.b.tavern_tier`，仍相同才随机；是否加可选开关
+（与 AutoTavern 逐位对齐用）由 Lead 决策。当前**不改**。
+
+## F-35 AC-04 BG34_405 Relentless Deflector：可达伤害集合差异 → DEFERRED（非 hsrl2 归因）
+
+**文件**：无行为改动（`hsrl2/**` 不动）；记录 `docs/CONFORMANCE_AUTOTAVERN.md`
+AC-04（auditor 台账，candidate）。
+
+**调查（2026-10-26，engine-fixer，45 分钟时间盒）**：
+1. 复现 `python3 -m tools.ac_conformance.repro AC-04`：同胜负（A 400/400 胜），
+   胜方伤害集合 AT {2:76, 3:172, 5:152} vs HS {3:73, 4:100, 5:69, 6:158}。
+2. **排除「Avenge/动态嘲讽」假设**：400 局逐帧扫描 —— AT 侧 BG34_405 的
+   `shield_hits` 恒 0、无 DIVINE_SHIELD/TAUNT 关键词帧；HS 侧监听
+   `keyword_gained` 统计 **0 次** 405 获得圣盾（Avenge 需 3 次友方死亡且
+   405 存活，400 局内一次都未达成；两侧都未触发复仇）。→ 与卡脚本无关。
+3. **控制实验定位在 AT 侧脚本卡**：把 BG34_405 换成**同属性无脚本白板**
+   （5/4 tier3 + 3×1/3 vs 3×2/2）后：
+   - HS 伤害集合 {3,4,5,6}（与带卡时相同）；
+   - AT 伤害集合 {3,4,5,6}（与 HS 一致！）——**带 405 脚本时 AT 变为
+     {2,3,5}**。
+   即：HS 侧带卡/不带卡分布一致（无异常）；**AT 侧使用 BG34_405 脚本时
+   分布改变**，而其 Avenge/TAUNT_WHILE_SHIELDED 在观测帧中从未生效。
+4. 胜方存活组合（405, dummies）：AT {(0,1),(0,2),(1,1)}；HS {(0,2),(0,3),
+   (1,1),(1,2)}；AT 每局恒 6 次攻击事件，HS 4–5 次（同初始 board）——差异
+   在基础战斗循环/AT 脚本卡状态表达，而非 hsrl2 卡脚本。
+
+**结论**：AC-04 **DEFERRED，且从「hsrl2 ENGINE_BUG candidate」改判为
+「AT 侧脚本卡行为差异候选（CONVENTION/AT bug待查）」**；不修改 hsrl2
+行为。若需最终裁定，建议 auditor 用 AT 调试命令逐帧对比 405 与无脚本
+白板的 `has_taunt`/`shield` 内部状态（Rust 侧），或补一张真实 Power.log。
+
+**复现命令**：
+```bash
+python3 -m tools.ac_conformance.repro AC-04
+# 控制实验（本批临时脚本，未入库）：同属性无脚本白板 vs 带卡 400 seeds
+```
+
+## F-36 KNOWN-DET-1 跨进程确定性：frozenset 迭代顺序进入 RNG 候选（已修复）
+
+**文件**：`hsrl2/scripts/batches/batch_rally2.py::BrambleTunnelerScript`、
+`hsrl2/scripts/batches/batch_unfreeze.py::FandralsFortuneScript`；测试
+`hsrl2/tests/test_hashseed_determinism.py`（2 例，子进程 + 不同
+PYTHONHASHSEED 比输出）。
+
+**问题（env-upgrader 实测，2026-10-26）**：同 seed + 同动作序列的完整
+rollout 在 `PYTHONHASHSEED=0` vs `=1` 两进程中分裂（seed=4001：前 129 步
+一致，之后 reward/存活数不同；同进程两次 rollout 逐位一致，故现有确定性
+测试测不到）。本轮通过逐步 dump 规范化 `game.rng.decisions` 定位：首个
+真实分歧 = step24 的两条随机决策 `choose_one_pick`（BG32_237 vs
+BG36_332）与随后的 `tavern_draw`（BG36_200 vs BG36_116）。
+
+**根因**：`hsrl2/scripts/choose_one_authority.py` 的
+`pool_choose_one_{minion,spell}_ids()` 返回 **`frozenset[str]`**；其迭代
+顺序随 str 哈希种子（PYTHONHASHSEED）变化。两个脚本把该迭代结果直接作为
+`game.rng.choice/sample` 的候选列表 → 同一 RNG index 在不同进程映射到
+不同卡（同进程/同哈希种子下不可见）。`MinionPool/SpellPool` 本身顺序是
+`db` 注册顺序（确定性），排除池实现。
+
+**修复（最小，均匀随机语义不变）**：两处候选列表在喂 RNG 前
+`sorted()`（minion 侧本就按 `_pool_candidates` 的 db 顺序构造，无需改）：
+- `BrambleTunnelerScript.rally`: `sorted(choose_minions)` /
+  `sorted(choose_spells)`；
+- `FandralsFortuneScript.on_play`: `sorted(choose_spells)`。
+
+**验证**：
+- 引擎级子进程探针（Bramble rally + Fandral options，HS=0/1/2/3）输出
+  逐位一致；
+- env-upgrader 复现脚本 `runs/env_snapshot/hashseed_repro.py`：
+  seed 4001–4006 在两 PYTHONHASHSEED 下 **trace_sha256_16 完全一致**
+  （4001 `e1024d42d647e456`；4002 `1dd2c80d619e0bb3`；4003
+  `90590472f2475fb9`；4004 `dd8ad5227f3b5ed6`；4005 `ef21175e099264d6`；
+  4006 `5dab6c669ce29f38`）；
+- 新增回归测试用**子进程 + 不同 PYTHONHASHSEED** 比引擎输出（同进程测试
+  原理上覆盖不到该缺陷）；`test_batch_rally2` / `test_batch_unfreeze` /
+  `test_batch_trinkets20` 等消费方全绿。
+
+**边界/后续**：其它脚本若把 `frozenset`/`set` 迭代结果直接喂 RNG 仍有
+同类风险；本批只修实测命中的两处，并以「多 seed 双哈希进程跑完整
+rollout」作为验收手段（env-upgrader 脚本可复用作 CI 慢检）。
+
+### F-36 补丁（第 3 处）：`BOUNTY_SPELL_IDS` frozenset → Rogers Bounty RNG（2026-10-26）
+
+**文件**：`hsrl2/scripts/batches/batch_misc.py::SkyAdmiralRogersScript.on_gold_spent`；
+测试 `hsrl2/tests/test_hashseed_determinism.py`（探针新增 Rogers 路径）。
+
+**发现**（WS7 taverngym-integrator 环境级 sweep，seeds 0..29+4001/4002 ×
+random/heuristic × `PYTHONHASHSEED=0/1`）：F-36 两处修复后仍有 2 例稳定
+分裂——seed=2 / seed=3 + `opponent=random`（heuristic 全部一致，故只在
+随机对手能走到的路径）。无扰动 RNG 日志定位：首个分歧调用
+`label="rogers_bounty"`（HS0 pick=BG33_813 vs HS1=BG33_814，n=5 且 RNG
+状态相同）。
+
+**根因（F-36 同类第 3 处）**：`hsrl2/constants.py::BOUNTY_SPELL_IDS` 是
+`frozenset({BG33_811..815})`；Rogers 用
+`[b for b in BOUNTY_SPELL_IDS if spell_pool.available(b) > 0]` 构造候选后
+直接 `game.rng.choice(cands, label="rogers_bounty")` → 同一 rng index 在
+不同进程落到不同 Bounty 法术。
+
+**修复**：候选列表改 `sorted(BOUNTY_SPELL_IDS)`（与
+`batch_trinkets7.py:271` 既有写法一致；均匀随机语义不变，只固定 index→
+card 映射）。
+
+**验证**：
+- `PYTHONHASHSEED=0/1/4 python3 -m pytest
+  hsrl2/tests/test_hashseed_determinism.py -q` → 2 passed（Rogers 子进程
+  探针：花 9 金发 1 个 Bounty，三 hashseed 输出逐位一致）；
+- WS7 环境级回归 `tests/test_env_determinism_hashseed.py` seed=2/3 转绿
+  （由 taverngym-integrator 复跑确认）；
+- 引擎级整局 sweep（`/tmp` 脚本，8 人随机驱动 + 全状态指纹）seeds
+  2000–2007/4001/4002 在 HS=0 vs 1 下**10/10 指纹一致**；
+- 静态扫描（AST：set 字面量/frozenset 名 → 未 `sorted` 直接进
+  `rng.choice/sample/shuffle`）在 hsrl2 引擎代码内**无其它命中**（3 处
+  疑似均为 list/tuple 字面量误报，已人工复核）。
+
+## F-37 Reborn 插入棋盘缺 7 上限检查 → board=8（不变量门禁捕获，2026-10-26）
+
+**文件**：`hsrl2/game.py::_process_death_inner`（Reborn 分支）；测试
+`hsrl2/tests/test_reborn_board_cap_f37.py`（3 例，先红后绿）。
+
+**现象**（升级新增的 env 不变量门禁捕获）：
+`python3 scripts/validate_env.py --games 20 --check-invariants` →
+`structural invariant violations: 1`、`ok=false`；样本
+`seed=5019: hero[P6]: board=8 > 上限 7`（turn 14、agent `end_turn` 后
+稳定状态，P6 存活 7 血、棋盘 8 只）。
+
+**最小栈（Lead monkeypatch 抓取）**：
+```
+batch_activate.py:748 activate -> game.destroy_minion(target)
+game.py destroy_minion -> check_deaths -> _process_single_death
+  -> _process_death_inner -> hero.board.insert(pos, m)   # Reborn 直插，无 board_full
+```
+机制：Activate 摧毁己方带 Reborn 的随从 → 死亡结算中亡语（/其它召唤）
+把空位重新填满（7）→ Reborn 分支仍 `board.insert` → 8。
+
+**参照证据（AutoTavern 36.6.3）**：
+- `crates/taverngym/src/engine.rs::reborn` 用
+  `if let Some(e) = self.summon(side, pos, m) { emit(Event::Reborn) }`——
+  复生体走 **summon**，棋盘满则 `summon` 返回 None（**不 emit Reborn**
+  = 复生体不返回）；`summon` 满盘分支在非战斗时把池副本回池
+  （`if !self.combat { self.g.pool.return_minion(&m) }`）。
+- `invariants.rs` 硬约束 `board <= 7`；官方 Reborn 语义为
+  "summon it again with 1 Health"（hearthstone.wiki.gg/wiki/Reborn）。
+
+**修复**：`_process_death_inner` Reborn 分支在插入前检查
+`hero is not None and hero.board_full()`；满则不返回复生体——
+- 不 fire `reborn`（没有复生体，与 AT summon 失败一致）；
+- 按普通死亡收尾：`REBORN` tag 清除（已消耗）、进 `hero.graveyard`、
+  注销监听器；非战斗（招募期）按普通死亡回池
+  （`minion_pool.release_minion_entity`，与 AT 的
+  `summon`→`return_minion` 同口径）；
+- `_reborn_full_uuids`（Persisting Horror 满血复生标记）一并作废；
+- 未满局面逐位不变（正常复生/战斗快照路径不受影响）。
+
+**测试**（`test_reborn_board_cap_f37.py`）：
+1. 7 满场 + 复生随从死亡 + 亡语召唤填满 → `board<=7`、复生体未入场、
+   无 `reborn` 事件（修复前实测 **8**）；
+2. 未满对照（5 只）→ 复生照常入场、事件触发、位置正确；
+3. 7 满场但死亡让出空位（无额外召唤）→ 复生照常回归（不误判满场）。
+
+**影响面**：仅在「复生体本应入场但棋盘已被死亡结算中的召唤填满」时改变
+行为（旧行为 = 违反 7 上限）；其余 Reborn 路径（战斗/招募、Persisting
+Horror、F-14 关键词恢复）逐位不变。引擎全量 4890 passed / 6 skipped；
+`validate_env --games 20 --check-invariants` 复跑 **ok=true / violations 0**。

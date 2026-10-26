@@ -1801,3 +1801,197 @@ terminated:
 cd C:\HSagent
 python tools\probe_api.py --verbose     # 逐条 PASS
 ```
+
+---
+
+## 附录 C：F-22..F-29 新增只读 API（2026-10-26 引擎可靠性升级）
+
+> 本节为**新增追加**，不改正文既有契约。对应 `docs/ENGINE_NOTES.md`
+> F-22..F-29 与 `docs/ENGINE_RL_READINESS.md` D-2/D-3/D-5/D-6/D-8/D-9/D-14/
+> D-15；每条均有契约测试（`hsrl2/tests/test_engine_api_hardening.py`）且
+> 默认路径行为逐位不变。旧正文中"引擎没有 X"的表述（§2.1 phase、
+> §3.7 unfreeze、§4.9 私有 API 清单、§6.6 名次、§7.5 卡池枚举）以本节为准。
+
+### C.1 动作返回值 / 类型校验
+
+```python
+game.sell_minion(hero, spell)      # False（旧实现 AttributeError+状态污染）
+game.sell_minion(hero, None)       # False
+```
+
+`sell_minion` 只接受 `Minion`；非法类型返回 False、零状态改动（D-9/F-22）。
+
+### C.2 解冻与阶段（D-2 / D-14）
+
+```python
+game.freeze_tavern(hero)           # 不变: 置 hero FROZEN；状态变化时 fire tavern_frozen
+game.unfreeze_tavern(hero)         # True=解冻成功；False=本来未冻结
+hero.frozen_tavern                 # bool（既有）
+
+game.phase                         # "recruit" | "combat" | "choice" | "game_over"
+```
+
+- `unfreeze_tavern` 只清**整馆冻结** tag；单卡冻结由下一次刷新的冻结窗口消费。
+  事件：`tavern_frozen` / `tavern_unfrozen`（`hero=`）。
+- `phase` 优先级：`finished` → `game_over`；`in_combat` → `combat`
+  （仅 `run_combat` 内部/事件回调可见）；`pending_choices` → `choice`；
+  其余 `recruit`（含 `start_game` 前构造态）。与 `hsbg/env` 状态机同口径。
+
+### C.3 名次（D-5）
+
+```python
+game.elimination_order             # List[Hero]，先被淘汰者在前（_process_eliminations 维护）
+game.rank_of(hero)                 # 已淘汰: 开局人数-淘汰序号（第一个死=第N名）；存活: 1
+game.final_ranking()               # 仅 finished 后: [第1名, ..., 第N名]
+```
+
+同回合多人淘汰按 `_process_eliminations` 处理顺序（= `hero_eliminated`
+事件顺序）编号；不推断并列。`rank_of` 对非本局英雄抛 `ValueError`，
+`final_ranking` 未终局抛 `GameStateError`。
+
+### C.4 只读查询（D-3）
+
+全部纯查询：不扣费/不计数/不消费额度或折扣/不改 tag；实现与成交/真实动作
+**同源**，并有"镜像 == 实际结果"对拍测试。
+
+```python
+# 买价（金币口径）与可买性
+cost = game.quote_buy_cost(hero, entity)   # int；0 = 免费（免费随从/免费法术）
+ok   = game.can_buy(hero, entity)          # bool；含金币/强制生命支付两条路径
+
+# 英雄技能可用性（等价于 use_hero_power(hero, power_id=...) 当前是否 True）
+ok = game.can_use_hero_power(hero, power_id)   # power_id=None → 主技能
+
+# 升级落点（含异变 101/102 档位阶梯；None = 已满级）
+nxt = game.next_tavern_tier(hero)
+
+# 磁力合法宿主（非磁力随从 → []；与 play_minion(magnetic_target=) 同源）
+hosts = game.magnetic_targets(hero, magnetic_minion)
+
+# 手动刷新是否成功/是否会抛 GameStateError（False = 会抛）
+ok = game.can_refresh(hero)
+```
+
+候选枚举推荐用法（替换 §4.3/§4.5/§4.6/§4.7 的镜像代码）：
+
+```python
+from hsrl2.tags import GameTag, Zone
+
+# 买
+if not hero.hand_full():
+    for e in hero.tavern:
+        if game.can_buy(hero, e):
+            acts.append({"kind": "buy", "src": e,
+                         "cost": game.quote_buy_cost(hero, e)})
+# 刷/升级
+if game.can_refresh(hero):
+    acts.append({"kind": "reroll"})
+nxt = game.next_tavern_tier(hero)
+up_cost = max(0, hero.upgrade_cost + hero.get(GameTag.UPGRADE_COST_MOD, 0))
+if nxt is not None and hero.gold >= up_cost:
+    acts.append({"kind": "upgrade", "cost": up_cost})
+# 技能
+for pid in game.hero_power_ids(hero):
+    if not game.can_use_hero_power(hero, pid):
+        continue
+    info = ...  # cost 用 game.hero_power_cost(...)；目标用 script.target_candidates
+# 磁力
+if m.has(GameTag.MAGNETIC):
+    for host in game.magnetic_targets(hero, m):
+        acts.append({"kind": "play_minion", "src": m, "magnetic_target": host})
+```
+
+> `quote_buy_cost` 对**强制以生命支付**的实体返回"生命代价"（金币分文不扣）；
+> 可用性一律用 `can_buy` 判定，不要只看 `quote <= hero.gold`。
+
+### C.5 `CardDB` 公开迭代器（D-8）
+
+```python
+db.defs()          # List[CardDef]，全部定义（新列表，调用方修改不影响 DB）
+db.iter_defs()     # 只读迭代器（不复制列表）
+db.hero_defs()     # List[CardDef]，仅 CardType.HERO
+```
+
+环境层枚举英雄池/全卡不再依赖私有 `db._by_id`（§4.9 / §7.5 的私有访问
+清单相应更新）。
+
+### C.6 RNG 审计开关（D-6）
+
+```python
+from hsrl2.rng import GameRNG
+rng = GameRNG(seed)                 # 默认 audit=True = 既有行为（decisions 记录）
+rng = GameRNG(seed, audit=False)    # 关闭审计：随机流完全不变，decisions 恒空
+rng.clear_decisions()               # 清空审计日志，不动随机流
+```
+
+### C.7 线程安全（D-15）
+
+`Entity.add_buff` 的 `stats_gained` 抑制窗口（`suppress_stats_gained()`）
+改为 `contextvars.ContextVar` 实现：单线程语义不变，不同线程各自独立
+（同进程两线程各跑一局不再互相静默广播）。环境层仍推荐用进程池
+（`hsbg/env/vec_env.py`），但"线程不安全"不再是硬限制。
+
+### C.8 probe_api 同步状态（2026-10-26）
+
+`tools/probe_api.py::A3` 的旧限制断言 `not hasattr(game, "unfreeze_tavern")`
+已按 Lead 追加授权**最小修正**为正向断言：存在 `unfreeze_tavern`，
+调用返回 True、清 `FROZEN`、fire `tavern_unfrozen`；未冻结时返回 False。
+同文件 **A9** 的 `已知缺陷: sell_minion(Spell) 抛 AttributeError 且状态污染`
+断言因 F-22 修复而过期，已按 Lead 追加授权做同类最小修正（改为
+`sell_minion(spell) is False` + 零状态污染断言）；实跑 175/177，
+仅剩 A5 崩溃 / A7 金色本体两项为本批之前既有过期。
+`scripts/verify_all.py` 不运行 probe_api，不影响门禁。
+
+### C.9 规则常量修正（AC-02 / AC-03，2026-10-26）
+
+> 附录 A 的「随从池副本」与「升级费基数」两行已**被本节取代**（旧值来自
+> `docs/reference_old/BATTLEGROUNDS_RULES.md` 的 Patch 35.x 遗留表）：
+
+| 常量 | 旧值（已过时） | 现行值（官方 wiki + AutoTavern） |
+|------|----------------|----------------------------------|
+| `POOL_COPIES_BY_TIER` | `{1:16, 2:15, 3:13, 4:11, 5:9, 6:7, 7:5}` | `{1:15, 2:15, 3:13, 4:11, 5:9, 6:7, 7:5}` |
+| `BASE_UPGRADE_COSTS`（键=目标档） | `{2:5, 3:7, 4:8, 5:9, 6:10, 7:11}` | `{2:5, 3:7, 4:8, 5:11, 6:11, 7:10}` |
+
+证据：hearthstone.wiki.gg `/wiki/Battlegrounds`（2026-10-26 抓取）+
+AutoTavern `config.rs:245`/`:237`；`python3 -m tools.ac_conformance.repro
+AC-02/AC-03` 修复后两侧 MATCH。详见 `docs/ENGINE_NOTES.md` F-32/F-33。
+
+另：`tools/probe_api.py::A9` 的 `sell_minion(Spell)` 已知缺陷断言已随
+F-22 修复按授权改为正向契约断言（`False` + 零状态污染；A3/A9 均已完成，
+实跑 175/177，剩余 A5/A7 为本轮前既有过期，见 C.8）。
+
+### C.10 跨进程确定性（frozenset 迭代进入 RNG，2026-10-26）
+
+同 seed + 同动作序列的 rollout 必须与进程环境无关。本轮修复
+`PYTHONHASHSEED` 引起的跨进程分裂（F-36 / KNOWN-DET-1）：
+
+- 根因：`choose_one_authority.pool_choose_one_{minion,spell}_ids()` 返回
+  `frozenset[str]`，其迭代顺序随 str 哈希种子变化；`Bramble Tunneler
+  BG36_331`（Rally: random Choose One）与 `Fandral's Fortune BG31_892`
+  （Discover 3 Choose One）把该顺序直接作为 `rng.choice/sample` 的候选
+  列表 → 同 RNG index 在不同进程落到不同卡。
+- 修复：两处候选列表喂 RNG 前 `sorted()`（均匀随机语义不变）。
+- 约定（对脚本作者）：**任何 `set`/`frozenset` 的迭代结果不得直接作为
+  `game.rng.*` 的候选序列**；先 `sorted()` 或改用确定性容器
+  （list/db 注册顺序）。池实现（`MinionPool`/`SpellPool`）顺序 = db 注册
+  顺序，本身确定性。
+- 回归：`hsrl2/tests/test_hashseed_determinism.py` 用子进程 +
+  不同 `PYTHONHASHSEED` 比引擎输出（同进程测试覆盖不到该缺陷）。
+- **F-36 第 3 处（2026-10-26，WS7 发现）**：`BOUNTY_SPELL_IDS`（frozenset）
+  在 `SkyAdmiralRogersScript.on_gold_spent` 直接进
+  `rng.choice(label="rogers_bounty")` → 已 `sorted()`；同一约定：集合迭代
+  结果先排序再喂 RNG。
+
+### C.11 Reborn 受召唤上限（F-37，2026-10-26）
+
+Reborn（复生）是"**以 1 血再次召唤**"，因此受棋盘 7 上限约束：死亡结算
+中的亡语/其它召唤把空位填满时，复生体**不返回**（与 AutoTavern
+`engine.rs::reborn` 的 `summon` 失败语义一致：不返回、不 fire `reborn`
+事件；非战斗时池副本按普通死亡回池）。
+
+- 观察点：复生是否发生看 `reborn` 事件 / 棋盘，**不要假设"带 Reborn
+  必回场"**；候选/奖励逻辑不要依赖复生体必然入场。
+- 未满时行为不变（原位、1 血、跳过死亡结算期间新入场的召唤物；F-14
+  关键词恢复、Persisting Horror 满血复生照旧）。
+- 回归：`hsrl2/tests/test_reborn_board_cap_f37.py`；证据
+  `docs/ENGINE_NOTES.md` F-37。

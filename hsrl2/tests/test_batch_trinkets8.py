@@ -152,8 +152,14 @@ def has_kw(d, kw):
 
 
 def race_in(race):
+    """卡定义是否属于该种族（**类型身份集合**语义，AC-3/AC-02）。
+
+    旧实现只读 `d.race` 主类型单值 → 双类型随从（如
+    Firescale Hoarder BG32_820 = Dragon/Naga）漏计；池份数常量修正
+    （AC-02, T1=15）后刷新抽取流改变，暴露该测试辅助的语义错误。
+    """
     def pred(d):
-        return d.race in (race, Race.ALL)
+        return race in d.races
     return pred
 
 
@@ -1163,9 +1169,12 @@ class TestMinionBait(unittest.TestCase):
     TID = "BG30_MagicItem_973"
 
     def _nagas(self, hero):
+        # 类型身份集合（AC-3）: 双类型随从（Firescale Hoarder = Dragon/
+        # Naga）也是纳迦，按 `d.races` 判定（旧实现只读主类型，AC-02
+        # 池常量修正后抽取流变化会漏计）。
         return [e for e in hero.tavern
                 if isinstance(e, Minion)
-                and get_db().get(e.card_id).race in (Race.NAGA, Race.ALL)]
+                and Race.NAGA in get_db().get(e.card_id).races]
 
     def _pair(self, seed, subject):
         """同 seed、同 rng 消耗路径的（有饰品, 无饰品）两局。
@@ -1194,7 +1203,8 @@ class TestMinionBait(unittest.TestCase):
         a1, a2 = g1.heroes[0], g2.heroes[0]
         self.assertEqual(len(self._nagas(a1)), len(self._nagas(a2)) + 2)
         for e in self._nagas(a1):
-            self.assertIn(get_db().get(e.card_id).race, (Race.NAGA, Race.ALL))
+            # 类型身份集合（AC-3）: 双类型纳迦（如 Firescale Hoarder）合法
+            self.assertIn(Race.NAGA, get_db().get(e.card_id).races)
         # 占池: 有饰品局多消耗 2 份纳迦
         self.assertEqual(pool_sum(g1, race_in(Race.NAGA)),
                          pool_sum(g2, race_in(Race.NAGA)) - 2)

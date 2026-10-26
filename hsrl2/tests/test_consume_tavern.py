@@ -302,18 +302,30 @@ class TestApplyAndBuffCurrentTavern(unittest.TestCase):
 
     def test_refresh_tavern_applies_persistent_buffs_engine_gap(self):
         """持久酒馆 Buff 挂接（主线已接线 game.refresh_tavern:
-        新入馆随从应用 hero.tavern_buffs 匹配项; 冻结保留项不重复应用）。"""
-        game = make_game(seed=34)
-        a = game.heroes[0]
-        bd = find_def(race=Race.BEAST, tier=1, min_health=3)
+        新入馆随从应用 hero.tavern_buffs 匹配项; 冻结保留项不重复应用）。
+
+        实现说明（2026-10-26 AC-02）: T1 池份数 16→15 修正后固定 seed 的
+        刷新内容改变（原 seed=34 不再含野兽）→ 改为跨 seed 寻找至少一个
+        匹配的新入馆随从；断言语义不变（匹配者吃到 buff）。
+        """
+        from hsrl2.minion import Minion
         buff = TavernBuff(atk=1, health=1, race_filter=Race.BEAST)
-        game.run_actions(ApplyTavernBuff(a, buff))
-        game.refresh_tavern(a, auto=True)
-        beasts = [m for m in a.tavern
-                  if get_db().get(m.card_id).race == Race.BEAST]
-        self.assertTrue(beasts)
-        for m in beasts:
-            d = get_db().get(m.card_id)
+        game = hero = None
+        for seed in range(1, 80):
+            g = make_game(seed=seed)
+            a = g.heroes[0]
+            g.run_actions(ApplyTavernBuff(a, buff))
+            g.refresh_tavern(a, auto=True)
+            if any(buff.matches(g.db.get(m.card_id)) for m in a.tavern
+                   if isinstance(m, Minion)):
+                game, hero = g, a
+                break
+        self.assertIsNotNone(game, "80 个 seed 内未出现匹配野兽的刷新")
+        matched = [m for m in hero.tavern if isinstance(m, Minion)
+                   and buff.matches(game.db.get(m.card_id))]
+        self.assertTrue(matched)
+        for m in matched:
+            d = game.db.get(m.card_id)
             self.assertEqual(m.atk, d.atk + 1)
             self.assertEqual(m.max_health, d.health + 1)
 

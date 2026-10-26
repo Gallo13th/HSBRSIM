@@ -1040,9 +1040,15 @@ class BrambleTunnelerScript:
         choose_minions = pool_choose_one_minion_ids(game.db)
         choose_spells = pool_choose_one_spell_ids(game.db)
         for _ in range(source.scripts.times):
-            minion_cands = [cid for cid in choose_minions
+            # **必须排序**（F-36/KNOWN-DET-1）: `choose_minions`/`choose_spells`
+            # 是 frozenset[str]，其迭代顺序依赖 str 哈希种子
+            # （PYTHONHASHSEED）→ 直接喂 `rng.choice` 会让「同 seed 同动作
+            # 序列」在不同进程抽到不同卡（跨进程不确定性；同进程测不到）。
+            # 均匀随机语义不变（rng.choice 对同一集合的均匀抽样，仅把
+            # index→card 映射固定为字典序）。
+            minion_cands = [cid for cid in sorted(choose_minions)
                             if cid in avail_minions]
-            spell_cands = [cid for cid in choose_spells
+            spell_cands = [cid for cid in sorted(choose_spells)
                            if game.spell_pool.available(cid) > 0]
             cands = minion_cands + spell_cands
             if not cands:

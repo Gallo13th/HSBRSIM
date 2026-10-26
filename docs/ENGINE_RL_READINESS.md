@@ -529,3 +529,70 @@ python tools\smoke_random_games.py --games 8 --seed 2000
 
 （第 6 个顺带提醒：`sell_minion` 不校验类型，只对 `Minion` 生成 sell 候选；
 别把 Spell 传进去。）
+
+---
+
+## 9. 升级状态回填（2026-10-26，WS3 阶段 A）
+
+> 本节为**新增追加**（Lead 批准），不覆盖上文历史评估。对应
+> `docs/ENGINE_NOTES.md` F-22..F-30；所有"本批新增"均有契约测试
+> `hsrl2/tests/test_engine_api_hardening.py`（57 例，先红后绿）。
+> 默认行为逐位不变：`pytest hsrl2/tests -q` **4873 passed / 6 skipped**
+> （基线 4816 + 新增 57），smoke 8 局 seed 2000 `crashes=0`，确定性
+> 20 seeds 双跑指纹一致。
+
+| ID | 原状态 | 2026-10-26 状态 | 处理 / 证据 |
+|----|--------|-----------------|-------------|
+| D-1 | HIGH：`snapshot_state` deepcopy 实体引用 | ✅ **已修（F-01，2026-10-18）** | 快照跳过 Entity 引用；本批复核代码仍生效 |
+| D-2 | MEDIUM：无解冻 API | ✅ **本批新增（F-23）** | `Game.unfreeze_tavern(hero) -> bool`；`tavern_frozen`/`tavern_unfrozen` 事件；只清整馆冻结，单卡冻结仍由刷新窗口消费 |
+| D-3 | MEDIUM：缺只读查询 API | ✅ **本批新增（F-25）** | `quote_buy_cost` / `can_buy` / `can_use_hero_power` / `next_tavern_tier` / `magnetic_targets` / `can_refresh`；与真实动作**同源 + 对拍测试**（报价==扣款、可用性==实调用、peek 不消费） |
+| D-4 | MEDIUM：错误风格不一致 | 🟡 **DEFERRED（只文档，F-30）** | `refresh_tavern` 抛 `GameStateError` 是 ENGINE_API §3.0/§3.5 的公开契约；环境层已统一 try/except。新增 `can_refresh` 作为不抛异常的预检入口 |
+| D-5 | LOW-MEDIUM：无名次 API | ✅ **本批新增（F-24）** | `elimination_order` + `rank_of` + `final_ranking`（`_process_eliminations` 维护；事件顺序不变） |
+| D-6 | LOW：`rng.decisions` 无上限 | ✅ **本批新增（F-28）** | `GameRNG(seed, audit=False)`（默认 True = 既有行为）+ `clear_decisions()`；随机流不变。planning 侧 get_state/set_state/fork 继续可用 |
+| D-7 | LOW：`choice_policy` 死字段 | 🟡 **DEFERRED（F-30）** | 删除字段影响面 > 收益；引擎从不自动结算选择（PendingChoice 契约不变） |
+| D-8 | LOW：CardDB 无公开迭代器 | ✅ **本批新增（F-27）** | `defs()` / `iter_defs()` / `hero_defs()` |
+| D-9 | MEDIUM：`sell_minion(Spell)` 崩溃+状态污染 | ✅ **本批修（F-22）** | 类型校验：非法返回 False、零状态改动 |
+| D-10 | MEDIUM：Game 不可 pickle/无 clone | ✅ **已由外部模块解决（F-30 记录）** | `hsbg/planning/model.py::clone`（+checkpoint push/pop）、`hsbg/planning/rng.py`；引擎侧不重复实现 |
+| D-11 | MEDIUM：脚本异常直接上抛 | 🟡 **未改（环境层兜底）** | READINESS 原建议即环境层 try/except + 丢弃该局；本批未动（无失败测试/无证据支持沙箱化） |
+| D-12 | LOW：`pending_hand_queue` 无上限 | 🟡 **未改（观测标量即可）** | 语义正确（RULES §3.3 等待）；原建议为环境层暴露长度标量 |
+| D-13 | LOW：Hero 构造不校验 card_id | ✅ **环境层已防护（F-30 记录）** | `hsbg/env/game_env.py::_hero_pool` 只取 `CardType.HERO` 且非法 `hero_id` 抛 ValueError；引擎侧不改进（签名变更影响面大） |
+| D-14 | LOW：无 phase / 可结束回合 API | ✅ **本批新增（F-26）** | `Game.phase`（recruit/combat/choice/game_over，优先级与 env 状态机同口径） |
+| D-15 | MEDIUM：模块级状态使线程并行不安全 | ✅ **本批修（F-29）** | `_stats_gained_suppress_depth` → `ContextVar`；单线程语义逐位不变 + 线程隔离测试；多进程方案仍是推荐（`hsbg/env/vec_env.py`） |
+
+**对 §5 / §7 的更新**：
+
+- G7「冻结/解冻」：解冻已由 F-23 提供，环境层不再需要直接改 tag；
+- G3「名次记录」：可直接用 `game.elimination_order` / `rank_of`（自定义
+  RankTracker 仍可用，事件顺序不变）；
+- G1「合法动作枚举」：买价/技能可用性/下一档/磁力/刷新可改用 F-25 的
+  只读 API（正文 §4.3/§4.5/§4.6/§4.7 的镜像代码仍可运行，但已非必需）；
+- §6 的 D-1/D-9 两条"高危"注意事项已闭环；§附录第 5/6 条同样闭环；
+- `tools/probe_api.py::A3` 的 `not hasattr(game, "unfreeze_tavern")` 断言
+  已按 Lead 追加授权修正为正向断言（解冻成功/清 FROZEN/事件；未冻结
+  False），实跑 A3 通过；同文件 **A9** 的 `sell_minion(Spell)` 已知缺陷
+  断言已按授权修正为 `False` + 零状态污染（probe 175/177）；A5/A7 两项
+  为此前既有过期（不在本任务范围）。
+
+**复核命令（macOS / python3）**：
+
+```bash
+cd /Users/letiangao/HSAgent/HSBRSIM
+python3 -m pytest hsrl2/tests -q                  # 4873 passed / 6 skipped
+python3 -m pytest hsrl2/tests/test_engine_api_hardening.py -q   # 57 passed
+python3 tools/smoke_random_games.py --games 8 --seed 2000       # crashes=0
+python3 tools/final_engine_stress.py --deity-cases 0 --discard-cases 0 \
+    --det-cases 20 --out /tmp/engine_stress_f22.json            # identical=20/20
+```
+
+**规则常量修正（2026-10-26，AC-02/AC-03，见 ENGINE_NOTES F-32/F-33）**：
+`POOL_COPIES_BY_TIER[1]` 16→15、`BASE_UPGRADE_COSTS[5]/[6]` 9/10→11/11
+（`[7]`→10），官方 wiki + AutoTavern 双源；`repro AC-02/AC-03` 修复后
+MATCH。升级费/池份数相关的历史基准数字（如 §3.1 的加载/整局分布参照）
+需按新常量重测后再引用。
+
+**跨进程确定性（2026-10-26，F-36/KNOWN-DET-1）**：修复了
+`PYTHONHASHSEED` 导致的 rollout 分裂（frozenset 迭代顺序进入
+`Bramble Tunneler`/`Fandral's Fortune` 的 RNG 候选）。§4.1 的
+"同版本 + 同数据 + 同 agents 随机源隔离"重放约束现在**不再隐含
+"必须同 PYTHONHASHSEED"**；新增子进程回归测试
+`hsrl2/tests/test_hashseed_determinism.py`。

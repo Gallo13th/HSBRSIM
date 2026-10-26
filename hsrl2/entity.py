@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import uuid
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from hsrl2.tags import CardType, GameTag, Race, Zone
@@ -26,9 +27,14 @@ if TYPE_CHECKING:
 # `add_buff`，但那些调用**不是**"获得属性"——它们是把本已存在的属性搬到
 # 别处或还原回来。若照常广播 `stats_gained`，一张"每当……获得攻击力"的卡
 # 会在三连/战后各重复触发 1 次（ENGINE_BACKLOG §E2 结构性推断 2–4 倍计）。
-# 抑制计数为模块级（`add_buff` 可能在 `game is None` 的实体上被调用——
-# 建实体初始化路径），支持嵌套。
-_stats_gained_suppress_depth = 0
+#
+# F-29（READINESS D-15）: 抑制深度从**模块级 int** 改为 `ContextVar`
+# （context-local）。单线程/单上下文语义与旧实现逐位相同（进入 +1、退出
+# -1、支持嵌套），但不同线程各自持有独立的抑制深度——同进程两个线程各跑
+# 一局时，A 局的抑制窗口不再静默 B 局的 `stats_gained` 广播（线程安全；
+# 多进程/多线程向量化不再因这条模块级状态被排除）。
+_stats_gained_suppress_depth: ContextVar[int] = ContextVar(
+    "hsrl2_stats_gained_suppress_depth", default=0)
 
 
 @contextmanager
@@ -40,17 +46,20 @@ def suppress_stats_gained():
 
         with suppress_stats_gained():
             other.add_buff(...)      # 复制/复原，不构成"获得"
+
+    深度是 context-local 的（`ContextVar`）: 同线程/同上下文内嵌套 +1/-1，
+    其它线程不受影响；异常退出同样复原。
     """
-    global _stats_gained_suppress_depth
-    _stats_gained_suppress_depth += 1
+    token = _stats_gained_suppress_depth.set(
+        _stats_gained_suppress_depth.get() + 1)
     try:
         yield
     finally:
-        _stats_gained_suppress_depth -= 1
+        _stats_gained_suppress_depth.reset(token)
 
 
 def _stats_gained_suppressed() -> bool:
-    return _stats_gained_suppress_depth > 0
+    return _stats_gained_suppress_depth.get() > 0
 
 
 class Buff:

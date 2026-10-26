@@ -422,7 +422,10 @@ class FandralsFortuneScript:
         choose_spells = pool_choose_one_spell_ids(game.db)
         minion_cands = [cid for cid in _pool_candidates(game)
                         if cid in choose_minions]
-        spell_cands = [cid for cid in choose_spells
+        # **必须排序**（F-36/KNOWN-DET-1）: `choose_spells` 是
+        # frozenset[str]，迭代顺序依赖 PYTHONHASHSEED → 直接喂
+        # `rng.sample` 会跨进程抽到不同选项（同进程不可见）。
+        spell_cands = [cid for cid in sorted(choose_spells)
                        if game.spell_pool.available(cid) > 0]
         cands = minion_cands + spell_cands
         if not cands:

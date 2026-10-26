@@ -137,3 +137,26 @@ class CardDB:
 
     def __len__(self) -> int:
         return len(self._by_id)
+
+    # ── 公开只读迭代器（F-27 / READINESS D-3/D-8） ──
+
+    def defs(self) -> list[CardDef]:
+        """全部卡牌定义（**新列表**只读快照；调用方修改不影响 DB）。
+
+        环境层枚举全卡（含 token/金色/法术/英雄/饰品）不必再碰私有
+        `_by_id`。顺序 = 注册顺序（`CardDB.load` 的 data/ JSON 文件顺序）。
+        """
+        return list(self._by_id.values())
+
+    def iter_defs(self):
+        """只读迭代全部卡牌定义（生成器；不复制列表）。"""
+        return iter(self._by_id.values())
+
+    def hero_defs(self) -> list[CardDef]:
+        """全部英雄卡定义（``CardType.HERO``；F-27/D-8）。
+
+        环境层英雄池/英雄 id 枚举的公开入口（旧实现自行过滤
+        `db._by_id`，引擎重构即破坏）。
+        """
+        return [d for d in self._by_id.values()
+                if d.card_type == CardType.HERO]
