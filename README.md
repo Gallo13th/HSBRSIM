@@ -210,6 +210,7 @@ TavernGym 引擎裸吞吐 **275.5 games/s**（3.63 ms/局，15.4 回合）；端
 - `docs/PORTING_37_PLAN.md` — 37.x 内容移植缺口/难度/分批计划 + 缺失操作清单（P1 must-have）
 - `docs/ACTION_SPACE_STD.md` — 标准动作空间（245 + 扩展段）规范/编码/迁移
 - `docs/OBS_STD.md` — 标准观测（3227 floats + 124 cards）块布局/字段/迁移
+- `docs/AZ_MCTS_SELFPLAY_DESIGN.md` — 逐步 MCTS + 自对弈训练设计（推理/训练两阶段/公式推导/Rust 搜索核/远程部署）
 - `docs/PERF_ROUTE.md` — Rust vs Python vs C 性能实测与迁移路线
 - `docs/CONFORMANCE_AUTOTAVERN.md` — 跨引擎一致性审计台账（57 场景 / AC-01…AC-04 / 数据差异）
 - `docs/TAVERNGYM_BACKEND.md` — TavernGym 参照后端（安装/构建、EnvLike 适配、基准、限制）

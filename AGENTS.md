@@ -13,6 +13,7 @@
 | [docs/DATA_37_MIGRATION.md](docs/DATA_37_MIGRATION.md) | 37.0.0 → AutoTavern schema 数据管线（生成器/差分/compat 条目/局限） |
 | [docs/PORTING_37_PLAN.md](docs/PORTING_37_PLAN.md) | 37.x 内容移植缺口/难度/分批计划 + 缺失操作清单（P1 must-have 18 卡） |
 | [docs/ACTION_SPACE_STD.md](docs/ACTION_SPACE_STD.md) / [docs/OBS_STD.md](docs/OBS_STD.md) | 标准动作空间（245+扩展）/ 标准观测（3227+124）与迁移 |
+| [docs/AZ_MCTS_SELFPLAY_DESIGN.md](docs/AZ_MCTS_SELFPLAY_DESIGN.md) | ★ 逐步 MCTS + 自对弈训练设计（推理/训练两阶段/数学形式化/Rust 搜索核/远程部署） |
 | [docs/PERF_ROUTE.md](docs/PERF_ROUTE.md) | Rust/Python/C 性能实测与迁移路线 |
 | [docs/CONFORMANCE_AUTOTAVERN.md](docs/CONFORMANCE_AUTOTAVERN.md) | 跨引擎一致性台账（57 场景/AC 编号/数据差异；改引擎机制后须同步） |
 | [docs/TAVERNGYM_BACKEND.md](docs/TAVERNGYM_BACKEND.md) | TavernGym 参照后端（安装/构建/EnvLike 适配/基准，改 `hsbg/backends/**` 必读） |
