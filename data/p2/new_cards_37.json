@@ -1,0 +1,865 @@
+{
+  "source_patch": "37.0.0.255130",
+  "note": "37.0.0 数据中不存在于 AutoTavern(36.6.3) schema 的卡 id（全部为异变/UI 按钮，AutoTavern schema 无对应 kind，未进入 cards_37.json；供内容任务参考）",
+  "count": 122,
+  "by_reason": {
+    "anomaly": 108,
+    "ui_button": 14
+  },
+  "cards": [
+    {
+      "id": "BG22_BuddyMeter",
+      "dbf": 78380,
+      "card_type": 24,
+      "name": "Buddy Button",
+      "reason": "ui_button"
+    },
+    {
+      "id": "BG27_Anomaly_000",
+      "dbf": 101954,
+      "card_type": 43,
+      "name": "Money Match",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_001",
+      "dbf": 101959,
+      "card_type": 43,
+      "name": "Finicky Hourglass",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_002",
+      "dbf": 101986,
+      "card_type": 43,
+      "name": "Prudence of Amitus",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_005",
+      "dbf": 101992,
+      "card_type": 43,
+      "name": "Mimiron's Clockwork Stadium",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_006",
+      "dbf": 101994,
+      "card_type": 43,
+      "name": "Curse of Aggramar",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_100",
+      "dbf": 102986,
+      "card_type": 43,
+      "name": "Big League",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_101",
+      "dbf": 102987,
+      "card_type": 43,
+      "name": "What Are the Odds?",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_102",
+      "dbf": 102988,
+      "card_type": 43,
+      "name": "How to Even??",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_103",
+      "dbf": 102991,
+      "card_type": 43,
+      "name": "Tavern Special",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_104t",
+      "dbf": 102992,
+      "card_type": 43,
+      "name": "Oops, All Beasts!",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_104t10",
+      "dbf": 103248,
+      "card_type": 43,
+      "name": "Oops, All Pirates!",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_104t2",
+      "dbf": 103204,
+      "card_type": 43,
+      "name": "Oops, All Demons!",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_104t3",
+      "dbf": 103205,
+      "card_type": 43,
+      "name": "Oops, All Dragons!",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_104t4",
+      "dbf": 103206,
+      "card_type": 43,
+      "name": "Oops, All Elementals!",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_104t5",
+      "dbf": 103207,
+      "card_type": 43,
+      "name": "Oops, All Mechs!",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_104t6",
+      "dbf": 103208,
+      "card_type": 43,
+      "name": "Oops, All Murlocs!",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_104t7",
+      "dbf": 103209,
+      "card_type": 43,
+      "name": "Oops, All Naga!",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_104t8",
+      "dbf": 103210,
+      "card_type": 43,
+      "name": "Oops, All Quilboar!",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_104t9",
+      "dbf": 103211,
+      "card_type": 43,
+      "name": "Oops, All Undead!",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_301",
+      "dbf": 102075,
+      "card_type": 43,
+      "name": "False Idols",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_302",
+      "dbf": 102076,
+      "card_type": 43,
+      "name": "Bring Home the Bacon",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_303",
+      "dbf": 102085,
+      "card_type": 43,
+      "name": "Grapnel of the Titans",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_307",
+      "dbf": 102931,
+      "card_type": 43,
+      "name": "Oops, All EVIL!",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_501",
+      "dbf": 102971,
+      "card_type": 43,
+      "name": "Temperance of Aman'Thul",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_502",
+      "dbf": 102972,
+      "card_type": 43,
+      "name": "Blood of Sargeras",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_503",
+      "dbf": 102976,
+      "card_type": 43,
+      "name": "The Yogg-iseum",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_504",
+      "dbf": 103078,
+      "card_type": 43,
+      "name": "Secrets of Norgannon",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_505",
+      "dbf": 103198,
+      "card_type": 43,
+      "name": "Reckless Enhancement",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_555",
+      "dbf": 106438,
+      "card_type": 43,
+      "name": "No Place Like Holmes",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_556",
+      "dbf": 106443,
+      "card_type": 43,
+      "name": "Valuation Inflation",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_558",
+      "dbf": 106468,
+      "card_type": 43,
+      "name": "Feline Fortune",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_559",
+      "dbf": 106470,
+      "card_type": 43,
+      "name": "Treasure Hoard",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_560",
+      "dbf": 106498,
+      "card_type": 43,
+      "name": "Anomalous Twin",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_561",
+      "dbf": 106499,
+      "card_type": 43,
+      "name": "Anomalous Bribe",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_562",
+      "dbf": 106500,
+      "card_type": 43,
+      "name": "Anomalous Wisdomball",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_570",
+      "dbf": 106507,
+      "card_type": 43,
+      "name": "Treasure Hoard",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_571",
+      "dbf": 106508,
+      "card_type": 43,
+      "name": "Treasure Hoard",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_572",
+      "dbf": 106510,
+      "card_type": 43,
+      "name": "Treasure Hoard",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_573",
+      "dbf": 109379,
+      "card_type": 43,
+      "name": "Treasure Hoard",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_575",
+      "dbf": 106633,
+      "card_type": 43,
+      "name": "Eleventh Hour",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_577",
+      "dbf": 106631,
+      "card_type": 43,
+      "name": "No Face, No Case",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_580",
+      "dbf": 107226,
+      "card_type": 43,
+      "name": "Audience's Choice",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_711",
+      "dbf": 102046,
+      "card_type": 43,
+      "name": "Double Header",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_714",
+      "dbf": 102412,
+      "card_type": 43,
+      "name": "Everything's on Fire!",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_715",
+      "dbf": 102455,
+      "card_type": 43,
+      "name": "Gladiator's Spoils",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_716",
+      "dbf": 102459,
+      "card_type": 43,
+      "name": "Up-Prizing",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_718",
+      "dbf": 102457,
+      "card_type": 43,
+      "name": "Overseer's Orb",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_720",
+      "dbf": 102748,
+      "card_type": 43,
+      "name": "Nguyen's Shifting Disks",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_721",
+      "dbf": 102792,
+      "card_type": 43,
+      "name": "Uncompensated Upset",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_723",
+      "dbf": 102875,
+      "card_type": 43,
+      "name": "Summoning of Champions",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_726",
+      "dbf": 102908,
+      "card_type": 43,
+      "name": "Blessed or Blighted",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_750",
+      "dbf": 102083,
+      "card_type": 43,
+      "name": "Packed Stands",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_751",
+      "dbf": 102084,
+      "card_type": 43,
+      "name": "Perfected Alchemy",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_754",
+      "dbf": 102092,
+      "card_type": 43,
+      "name": "Path of the Treasure-Seeker",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_755",
+      "dbf": 102093,
+      "card_type": 43,
+      "name": "A Faire Reward",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_800",
+      "dbf": 102006,
+      "card_type": 43,
+      "name": "Little League",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_801",
+      "dbf": 102090,
+      "card_type": 43,
+      "name": "The Golden Arena",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_802",
+      "dbf": 102177,
+      "card_type": 43,
+      "name": "Echoes of Argus",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_803",
+      "dbf": 102982,
+      "card_type": 43,
+      "name": "Anomalous Evidence",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_805",
+      "dbf": 102989,
+      "card_type": 43,
+      "name": "Match Fixing",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_810",
+      "dbf": 103541,
+      "card_type": 43,
+      "name": "Bring in the Buddies",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_820",
+      "dbf": 103111,
+      "card_type": 43,
+      "name": "Deep Blue Sooner",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_822",
+      "dbf": 103113,
+      "card_type": 43,
+      "name": "Denathrius' Anima Reserves",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_900",
+      "dbf": 102005,
+      "card_type": 43,
+      "name": "Golganneth's Tempest",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_Buddies",
+      "dbf": 106692,
+      "card_type": 43,
+      "name": "Buddies",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_Prizes2",
+      "dbf": 129427,
+      "card_type": 43,
+      "name": "Darkmoon Faire Prizes",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG27_Anomaly_Quests",
+      "dbf": 106694,
+      "card_type": 43,
+      "name": "Quests",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_101",
+      "dbf": 118680,
+      "card_type": 43,
+      "name": "Lay of the Land",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_102",
+      "dbf": 118697,
+      "card_type": 43,
+      "name": "Continuing Education",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_104",
+      "dbf": 118733,
+      "card_type": 43,
+      "name": "Rising Current",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_105",
+      "dbf": 118688,
+      "card_type": 43,
+      "name": "Sin'dorei Mirror",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_106",
+      "dbf": 118669,
+      "card_type": 43,
+      "name": "Marin's Treasure Box",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_109",
+      "dbf": 118671,
+      "card_type": 43,
+      "name": "Mystical Blossom",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_111",
+      "dbf": 118734,
+      "card_type": 43,
+      "name": "Elven Elite",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_112",
+      "dbf": 118700,
+      "card_type": 43,
+      "name": "Incubation Mutation",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_114",
+      "dbf": 118670,
+      "card_type": 43,
+      "name": "Factory Line",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_115",
+      "dbf": 118674,
+      "card_type": 43,
+      "name": "Magic Shop",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_116",
+      "dbf": 118673,
+      "card_type": 43,
+      "name": "Light the Way",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_117",
+      "dbf": 118676,
+      "card_type": 43,
+      "name": "Emergency Landing",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_120",
+      "dbf": 119092,
+      "card_type": 43,
+      "name": "Scout's Honor",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_123",
+      "dbf": 119094,
+      "card_type": 43,
+      "name": "Cosmic Duality",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_124",
+      "dbf": 119044,
+      "card_type": 43,
+      "name": "Golden Arrow",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_126",
+      "dbf": 119748,
+      "card_type": 43,
+      "name": "Planar Alignment",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG31_Anomaly_127",
+      "dbf": 119749,
+      "card_type": 43,
+      "name": "Instant Warband",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG32_Anomaly_001",
+      "dbf": 122788,
+      "card_type": 43,
+      "name": "Greater Pouches",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG32_Anomaly_002",
+      "dbf": 122789,
+      "card_type": 43,
+      "name": "Lesser Pouches",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG32_Anomaly_003",
+      "dbf": 122790,
+      "card_type": 43,
+      "name": "Impressive Foresight",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG33_Anomaly_001",
+      "dbf": 123021,
+      "card_type": 43,
+      "name": "Summoning Pact",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG33_Anomaly_002",
+      "dbf": 123022,
+      "card_type": 43,
+      "name": "Spirit of Friendship",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG33_Anomaly_003",
+      "dbf": 123081,
+      "card_type": 43,
+      "name": "Third Nature",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG33_Anomaly_005",
+      "dbf": 123086,
+      "card_type": 43,
+      "name": "Colorful Camaraderie",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG33_Anomaly_008",
+      "dbf": 123078,
+      "card_type": 43,
+      "name": "Partner in Crime",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG33_Anomaly_009",
+      "dbf": 123083,
+      "card_type": 43,
+      "name": "Amicable Amendment",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG34_Anomaly_800",
+      "dbf": 128740,
+      "card_type": 43,
+      "name": "Major Goldthorn Potion",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG34_Anomaly_800t",
+      "dbf": 129082,
+      "card_type": 43,
+      "name": "Minor Goldthorn Potion",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG34_Anomaly_801",
+      "dbf": 128739,
+      "card_type": 43,
+      "name": "Boon of Chronum",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG34_Anomaly_802",
+      "dbf": 128741,
+      "card_type": 43,
+      "name": "Major Waygate",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG34_Anomaly_804",
+      "dbf": 128889,
+      "card_type": 43,
+      "name": "Twisting Hourglass",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG34_Anomaly_805",
+      "dbf": 128772,
+      "card_type": 43,
+      "name": "Oathstone's Summoning",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG34_Anomaly_809",
+      "dbf": 128775,
+      "card_type": 43,
+      "name": "Unforeseen Portal",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG35_Anomaly_001",
+      "dbf": 131414,
+      "card_type": 43,
+      "name": "Fly the Flag",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG35_Anomaly_002",
+      "dbf": 131413,
+      "card_type": 43,
+      "name": "Anomalous Cube",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG35_Anomaly_004",
+      "dbf": 131411,
+      "card_type": 43,
+      "name": "Anomalous Conflux",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG35_Anomaly_005",
+      "dbf": 131412,
+      "card_type": 43,
+      "name": "Anomalous Timeline",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG35_Anomaly_006",
+      "dbf": 131637,
+      "card_type": 43,
+      "name": "Anomalous Expedition",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG35_Anomaly_007",
+      "dbf": 131644,
+      "card_type": 43,
+      "name": "Lesser Fortune",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG35_Anomaly_008",
+      "dbf": 131646,
+      "card_type": 43,
+      "name": "Greater Fortune",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG36_Anomaly_002",
+      "dbf": 132530,
+      "card_type": 43,
+      "name": "Dark Gifts!",
+      "reason": "anomaly"
+    },
+    {
+      "id": "BG36_Button_DarkGift",
+      "dbf": 132531,
+      "card_type": 12,
+      "name": "Dark Discovery",
+      "reason": "ui_button"
+    },
+    {
+      "id": "TB_BaconShopLockAll_Button",
+      "dbf": 59560,
+      "card_type": 12,
+      "name": "Freeze",
+      "reason": "ui_button"
+    },
+    {
+      "id": "TB_BaconShopTechUp02_Button",
+      "dbf": 59561,
+      "card_type": 12,
+      "name": "Tavern Tier 2",
+      "reason": "ui_button"
+    },
+    {
+      "id": "TB_BaconShopTechUp03_Button",
+      "dbf": 59562,
+      "card_type": 12,
+      "name": "Tavern Tier 3",
+      "reason": "ui_button"
+    },
+    {
+      "id": "TB_BaconShopTechUp04_Button",
+      "dbf": 59563,
+      "card_type": 12,
+      "name": "Tavern Tier 4",
+      "reason": "ui_button"
+    },
+    {
+      "id": "TB_BaconShopTechUp05_Button",
+      "dbf": 59564,
+      "card_type": 12,
+      "name": "Tavern Tier 5",
+      "reason": "ui_button"
+    },
+    {
+      "id": "TB_BaconShopTechUp06_Button",
+      "dbf": 59565,
+      "card_type": 12,
+      "name": "Tavern Tier 6",
+      "reason": "ui_button"
+    },
+    {
+      "id": "TB_BaconShopTechUp07_Button",
+      "dbf": 103099,
+      "card_type": 12,
+      "name": "Tavern Tier 7",
+      "reason": "ui_button"
+    },
+    {
+      "id": "TB_BaconShop_1p_Reroll_Button",
+      "dbf": 59920,
+      "card_type": 12,
+      "name": "Refresh",
+      "reason": "ui_button"
+    },
+    {
+      "id": "TB_BaconShop_8p_Reroll_Button",
+      "dbf": 59559,
+      "card_type": 12,
+      "name": "Refresh",
+      "reason": "ui_button"
+    },
+    {
+      "id": "TB_BaconShop_DragBuy",
+      "dbf": 59894,
+      "card_type": 22,
+      "name": "Drag To Buy",
+      "reason": "ui_button"
+    },
+    {
+      "id": "TB_BaconShop_DragBuy_Spell",
+      "dbf": 104997,
+      "card_type": 22,
+      "name": "Drag To Buy Spell",
+      "reason": "ui_button"
+    },
+    {
+      "id": "TB_BaconShop_DragSell",
+      "dbf": 59895,
+      "card_type": 22,
+      "name": "Drag To Sell",
+      "reason": "ui_button"
+    }
+  ]
+}

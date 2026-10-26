@@ -1,0 +1,1774 @@
+{
+  "schema": "hsbrsim-p2-carddb/1",
+  "generator_version": "1.1.0",
+  "meta": {
+    "client_version": "37.0.0.255130",
+    "server_patch": "37.0.0",
+    "source": "HSBRSIM 官方数据 37.0.0.255130 + AutoTavern 36.6.3 compat 条目",
+    "count": 3983,
+    "mapped_count": 3695,
+    "compat_count": 288,
+    "generator": "HSBRSIM tools/p2_data/gen_carddb_37.py v1.1.0",
+    "at_baseline": "36.6.3.253932 (36.6.3)"
+  },
+  "commands": {
+    "generate": "python3 tools/p2_data/gen_carddb_37.py",
+    "check": "python3 tools/p2_data/gen_carddb_37.py --check",
+    "report": "python3 tools/p2_data/gen_carddb_37.py --report",
+    "test": "python3 -m pytest tests/test_p2_data.py -q"
+  },
+  "source": {
+    "hsbrsim_data_patch": "37.0.0.255130",
+    "hsbrsim_total_bg_cards": 3534,
+    "hsbrsim_pool_minions": 273,
+    "hsbrsim_pool_spells": 76,
+    "hsbrsim_pool_spells_single_player": 73,
+    "hsbrsim_heroes": 118,
+    "hsbrsim_hero_powers": 165,
+    "hsbrsim_trinkets": 409,
+    "hsbrsim_quest_rewards": 73,
+    "hsbrsim_anomalies": 108,
+    "hsbrsim_dark_gifts": 47,
+    "hsbrsim_tavern_spells": 205,
+    "hsbrsim_card_zhcn": 34607,
+    "at_baseline_client_version": "36.6.3.253932",
+    "at_baseline_server_patch": "36.6.3",
+    "at_cards_count": 3983
+  },
+  "counts": {
+    "cards_total": 3983,
+    "mapped": 3695,
+    "compat": 288,
+    "skipped_37_only": 122,
+    "by_kind": {
+      "minion": 2596,
+      "spell": 296,
+      "hero": 143,
+      "hero_power": 176,
+      "trinket_lesser": 201,
+      "trinket_greater": 219,
+      "tavern_spell": 208,
+      "quest": 24,
+      "quest_reward": 73,
+      "dark_gift": 47
+    },
+    "mapped_by_kind": {
+      "minion": 2393,
+      "spell": 263,
+      "hero": 118,
+      "hero_power": 165,
+      "trinket_lesser": 194,
+      "trinket_greater": 215,
+      "tavern_spell": 205,
+      "quest": 22,
+      "quest_reward": 73,
+      "dark_gift": 47
+    },
+    "compat_by_kind": {
+      "minion": 203,
+      "spell": 33,
+      "hero": 25,
+      "hero_power": 11,
+      "trinket_lesser": 7,
+      "trinket_greater": 4,
+      "tavern_spell": 3,
+      "quest": 2,
+      "quest_reward": 0,
+      "dark_gift": 0
+    },
+    "skipped_by_reason": {
+      "anomaly": 108,
+      "ui_button": 14
+    },
+    "pools": {
+      "minion": 277,
+      "tier7": 13,
+      "hero": 118,
+      "spell": 73,
+      "trinket": 236,
+      "timewarp": 253
+    },
+    "pools_single_player": {
+      "minion": 277,
+      "tier7": 13,
+      "hero": 118,
+      "spell": 73,
+      "trinket": 236,
+      "timewarp": 253
+    }
+  },
+  "pool_scope": {
+    "note": "单人池口径：37 池子文件给的是“客户端池子标记”。已按 P2-C 审计剔除 3 张Duos-only 法术；并按 AT 机制（flow.rs::PARADOX_VARIANTS）修正 Dark Paradox：base BG36_360 不入池（−1）、5 个形态入池（+5）。36.6.3 上游同 id 的 pools/reachable 与这两种修正一致",
+    "raw_pool_files": {
+      "minion": 273,
+      "spell": 76,
+      "hero": 118
+    },
+    "effective_single_player": {
+      "minion": 277,
+      "tier7": 13,
+      "hero": 118,
+      "spell": 73,
+      "trinket": 236,
+      "timewarp": 253
+    },
+    "dark_paradox": {
+      "base": "BG36_360",
+      "variants": [
+        {
+          "id": "BG36_360t3",
+          "tier": 2,
+          "at_expected_tier": 2
+        },
+        {
+          "id": "BG36_360t4",
+          "tier": 5,
+          "at_expected_tier": 5
+        },
+        {
+          "id": "BG36_360t5",
+          "tier": 4,
+          "at_expected_tier": 4
+        },
+        {
+          "id": "BG36_360t6",
+          "tier": 3,
+          "at_expected_tier": 3
+        },
+        {
+          "id": "BG36_360t9",
+          "tier": 6,
+          "at_expected_tier": 6
+        }
+      ],
+      "basis": "AutoTavern flow.rs::PARADOX_VARIANTS（base 不入池；每局随机 1 个形态进池）",
+      "note": "37 源把 base 标为池内、token 不标；此处按 AT 机制约定映射，tier/数值保持 37 值",
+      "base_applied": true
+    },
+    "excluded_duos_only": {
+      "ids": [
+        "BG31_242",
+        "BG31_243",
+        "BG31_244"
+      ],
+      "count": 3,
+      "rule": "文本拆分后没有第二段（无单人变体）且匹配 /(?i)\\bteammate\\b|\\bpass (?:a|an|one)\\b/",
+      "evidence": [
+        "docs/PORTING_37_PLAN.md §2.4（P2-C 审计）/ §4.5",
+        "36.6.3 上游 cards.json 中 BG31_242/243/244 均为 pools=[]、reachable=false",
+        "这 3 张在 37 与 36.6.3 数据中都没有金卡形式（无 _G id）"
+      ]
+    }
+  },
+  "field_provenance": {
+    "id": "T1:37",
+    "dbf": "T1:37",
+    "kind": "T1:37(card_type/池子/flag)",
+    "name": "T1:37",
+    "name_zh": "T1:data/card_zhcn.json + T2:36.6.3 补齐",
+    "tier": "T1:tech_level",
+    "atk": "T1:atk",
+    "hp": "T1:health",
+    "armor": "T1:heroes.armor",
+    "cost": "T1:cost",
+    "races": "T1:card_race+race_tags",
+    "assoc": "T1:subset_*(随从减去 races) + T3:36.6.3 精确继承",
+    "keywords": "T1:flags + T1:文本规则(START_OF_COMBAT/STEALTH/END_OF_TURN_TRIGGER)",
+    "golden": "T1:triple_upgrade_id + T2:链接目标缺失时用 36.6.3 补",
+    "normal": "T1:triple_base_id + T2:同上",
+    "pools": "T1:池子文件(minion/tier7/spell/hero，剔除 Duos-only) + T2:trinket/timewarp",
+    "pool_tag": "T3:36.6.3 客户端 IS_BACON_POOL_MINION 原值（37 无权威值）",
+    "reachable": "T1:池内为真 + T2:36.6.3 reachable",
+    "text": "T1:37 text(占位符/变体/复数标记规范化)",
+    "text_zh": "T2:36.6.3 中文(英文逐字一致时优先) + T1:card_zhcn 兜底",
+    "text_alt": "T1:'@' 变体拆分 + T3:36.6.3(有变体且文本对齐时)",
+    "text_alt_zh": "T2:36.6.3 中文变体 + T1:card_zhcn 兜底",
+    "hero_power": "T1:hero_power_dbf + T3:36.6.3",
+    "buddy": "T1:companion_id + T3:36.6.3",
+    "spellcraft": "T1:spellcraft_id + T3:36.6.3",
+    "spellcraft_spell": "T1:被 spellcraft 链接指向 + T3:36.6.3",
+    "quest_goal": "T1:quest_progress_total + T3:36.6.3",
+    "reward_card": "T1:reward_dbf_id + T3:36.6.3",
+    "window": "T3:36.6.3",
+    "prize_tier": "T3:36.6.3",
+    "tw_types": "T2:36.6.3",
+    "tw_weight": "T2:36.6.3",
+    "tw_min_minions": "T2:36.6.3",
+    "lobby_req": "T1:酒馆法术 subset_* + T3:36.6.3(ABERRATION 门控等)"
+  },
+  "field_coverage": {
+    "races": {
+      "non_default": 2005,
+      "total": 3695
+    },
+    "assoc": {
+      "non_default": 398,
+      "total": 3695
+    },
+    "keywords": {
+      "non_default": 1626,
+      "total": 3695
+    },
+    "golden": {
+      "non_default": 1183,
+      "total": 3695
+    },
+    "normal": {
+      "non_default": 1171,
+      "total": 3695
+    },
+    "pools": {
+      "non_default": 957,
+      "total": 3695
+    },
+    "text_zh": {
+      "non_default": 3515,
+      "total": 3695
+    },
+    "pool_tag": {
+      "non_default": 274,
+      "total": 3695
+    },
+    "hero_power": {
+      "non_default": 118,
+      "total": 3695
+    },
+    "buddy": {
+      "non_default": 109,
+      "total": 3695
+    },
+    "prize_tier": {
+      "non_default": 32,
+      "total": 3695
+    },
+    "reward_card": {
+      "non_default": 5,
+      "total": 3695
+    },
+    "quest_goal": {
+      "non_default": 42,
+      "total": 3695
+    },
+    "spellcraft_spell": {
+      "non_default": 69,
+      "total": 3695
+    },
+    "spellcraft": {
+      "non_default": 70,
+      "total": 3695
+    },
+    "window": {
+      "non_default": 47,
+      "total": 3695
+    },
+    "tw_types": {
+      "non_default": 93,
+      "total": 3695
+    },
+    "tw_weight": {
+      "non_default": 143,
+      "total": 3695
+    },
+    "tw_min_minions": {
+      "non_default": 3,
+      "total": 3695
+    },
+    "text_alt": {
+      "non_default": 152,
+      "total": 3695
+    },
+    "text_alt_zh": {
+      "non_default": 122,
+      "total": 3695
+    },
+    "lobby_req": {
+      "non_default": 59,
+      "total": 3695
+    }
+  },
+  "t2_inherited": {
+    "fields": [
+      "pools.trinket",
+      "pools.timewarp",
+      "reachable",
+      "window",
+      "prize_tier",
+      "tw_types",
+      "tw_weight",
+      "tw_min_minions",
+      "lobby_req(19 张 ABERRATION 门控)",
+      "golden/normal(目标缺失时补齐)",
+      "name_zh(37 中文缺失时)/text_zh(英文逐字对齐时优先 36.6.3)"
+    ],
+    "counts": {
+      "name_zh": 388,
+      "text_zh_inherited": 395,
+      "text_zh_aligned_replaced": 110,
+      "text_alt_zh": 17,
+      "golden": 18,
+      "normal": 6,
+      "lobby_req": 19
+    }
+  },
+  "t3_inherited_meta": {
+    "note": "AutoTavern 机制实现依赖的“客户端元数据”；37 官方数据没有权威等价来源，对两版本共享 id 从 36.6.3 上游 cards.json 继承（不改变 37 数值/文本/原名）。pool_tag 为精确继承（含 0 值），其余字段仅在上游有非默认值时继承；text_alt/text_alt_zh 还要求与 37 文本/中文逐字对齐（避免错贴变体）。",
+    "source": "AutoTavern 36.6.3 cards.json（crates/taverngym/data/cards.json，只读）",
+    "shared_mapped_ids": 3695,
+    "exact_fields": [
+      "pool_tag"
+    ],
+    "inherit_when_at_non_default_fields": [
+      "lobby_req",
+      "assoc",
+      "window",
+      "buddy",
+      "hero_power",
+      "reward_card",
+      "spellcraft",
+      "spellcraft_spell",
+      "prize_tier",
+      "quest_goal",
+      "text_alt",
+      "text_alt_zh"
+    ],
+    "fields": {
+      "pool_tag": {
+        "at_non_default": 274,
+        "applied": 3695,
+        "changed": 70,
+        "already_equal": 3625,
+        "coverage": 1.0
+      },
+      "lobby_req": {
+        "at_non_default": 59,
+        "applied": 59,
+        "changed": 0,
+        "already_equal": 59,
+        "coverage": 0.015968
+      },
+      "assoc": {
+        "at_non_default": 398,
+        "applied": 398,
+        "changed": 7,
+        "already_equal": 391,
+        "coverage": 0.107713
+      },
+      "window": {
+        "at_non_default": 47,
+        "applied": 47,
+        "changed": 0,
+        "already_equal": 47,
+        "coverage": 0.01272
+      },
+      "buddy": {
+        "at_non_default": 109,
+        "applied": 109,
+        "changed": 0,
+        "already_equal": 109,
+        "coverage": 0.029499
+      },
+      "hero_power": {
+        "at_non_default": 118,
+        "applied": 118,
+        "changed": 0,
+        "already_equal": 118,
+        "coverage": 0.031935
+      },
+      "reward_card": {
+        "at_non_default": 5,
+        "applied": 5,
+        "changed": 0,
+        "already_equal": 5,
+        "coverage": 0.001353
+      },
+      "spellcraft": {
+        "at_non_default": 70,
+        "applied": 70,
+        "changed": 0,
+        "already_equal": 70,
+        "coverage": 0.018945
+      },
+      "spellcraft_spell": {
+        "at_non_default": 69,
+        "applied": 69,
+        "changed": 0,
+        "already_equal": 69,
+        "coverage": 0.018674
+      },
+      "prize_tier": {
+        "at_non_default": 32,
+        "applied": 32,
+        "changed": 0,
+        "already_equal": 32,
+        "coverage": 0.00866
+      },
+      "quest_goal": {
+        "at_non_default": 42,
+        "applied": 42,
+        "changed": 0,
+        "already_equal": 42,
+        "coverage": 0.011367
+      },
+      "text_alt": {
+        "at_non_default": 9,
+        "applied": 8,
+        "changed": 0,
+        "already_equal": 8,
+        "coverage": 0.002165
+      },
+      "text_alt_zh": {
+        "at_non_default": 122,
+        "applied": 122,
+        "changed": 1,
+        "already_equal": 121,
+        "coverage": 0.033018
+      }
+    }
+  },
+  "mechanism_meta": {
+    "note": "Rust 引擎机制断言所需的派生计数（可直接对照 cards.rs/mechanics.rs 测试）",
+    "pool_counts": {
+      "minion": 277,
+      "tier7": 13,
+      "hero": 118,
+      "spell": 73,
+      "trinket": 236,
+      "timewarp": 253
+    },
+    "strict_pool_tag_eligible_minions": {
+      "filter": "pools.minion && pool_tag <= 1（strict_pool_tag 默认 true）",
+      "count": 276
+    },
+    "pool_tag_gt_1_ids": [
+      "BG25_013"
+    ],
+    "dark_paradox": {
+      "base": "BG36_360",
+      "variants": [
+        {
+          "id": "BG36_360t3",
+          "tier": 2,
+          "at_expected_tier": 2
+        },
+        {
+          "id": "BG36_360t4",
+          "tier": 5,
+          "at_expected_tier": 5
+        },
+        {
+          "id": "BG36_360t5",
+          "tier": 4,
+          "at_expected_tier": 4
+        },
+        {
+          "id": "BG36_360t6",
+          "tier": 3,
+          "at_expected_tier": 3
+        },
+        {
+          "id": "BG36_360t9",
+          "tier": 6,
+          "at_expected_tier": 6
+        }
+      ],
+      "basis": "AutoTavern flow.rs::PARADOX_VARIANTS（base 不入池；每局随机 1 个形态进池）",
+      "note": "37 源把 base 标为池内、token 不标；此处按 AT 机制约定映射，tier/数值保持 37 值",
+      "base_applied": true
+    },
+    "lobby_req_non_default_count": 59,
+    "lobby_req_ids": [
+      "BG28_600",
+      "BG28_601",
+      "BG28_602",
+      "BG28_603",
+      "BG28_604",
+      "BG28_606",
+      "BG28_607",
+      "BG28_609",
+      "BG28_698",
+      "BG31_819",
+      "BG31_891",
+      "BG31_892",
+      "BG32_337",
+      "BG32_814",
+      "BG32_815",
+      "BG33_112",
+      "BG33_248",
+      "BG33_811",
+      "BG33_812",
+      "BG33_813",
+      "BG33_814",
+      "BG33_815",
+      "BG33_817",
+      "BG33_819",
+      "BG33_898",
+      "BG33_899",
+      "BG34_444",
+      "BG34_689",
+      "BG34_888",
+      "BG34_889",
+      "BG34_990",
+      "BG34_HeroPowerSpell_016",
+      "BG34_Treasure_950",
+      "BG34_Treasure_951",
+      "BG35_149",
+      "BG35_910",
+      "BG35_911",
+      "BG35_922",
+      "BG36_246",
+      "BG36_301t",
+      "BG36_303",
+      "BG36_371",
+      "BG36_880",
+      "BG36_HERO_000",
+      "BG36_MagicItem_400",
+      "BG36_MagicItem_402",
+      "BG36_MagicItem_403",
+      "BG36_MagicItem_403t",
+      "BG36_MagicItem_404",
+      "BG36_MagicItem_404t",
+      "BG36_MagicItem_406",
+      "BG36_MagicItem_416",
+      "BG36_MagicItem_417",
+      "BG36_MagicItem_418",
+      "BG36_MagicItem_430",
+      "BG36_MagicItem_600",
+      "BG36_MagicItem_602",
+      "BG36_MagicItem_606",
+      "BG36_MagicItem_852"
+    ]
+  },
+  "unmapped": {
+    "note": "37 数据没有来源、且上游也没有的字段一律省略（Rust serde default），不编造",
+    "fields": [
+      {
+        "field": "kind:anomaly/ui_button",
+        "reason": "AutoTavern CardKind 只有 10 个取值，不含异变/UI 按钮",
+        "count": 122
+      },
+      {
+        "field": "keywords:AURA/TRIGGER_VISUAL/DISCOVER",
+        "reason": "37 无对应布尔 flag；文本启发式误报率高（DISCOVER 精确率 16%），不映射"
+      },
+      {
+        "field": "quest_goal 的奖励计数",
+        "reason": "37 只有 quest_progress_total（任务目标），奖励计数无来源"
+      },
+      {
+        "field": "lobby_req:ABERRATION",
+        "reason": "37 数据无 subset_aberration；19 张共享卡用 T2 从 36.6.3 继承"
+      },
+      {
+        "field": "text_alt 第 3 段及以后",
+        "reason": "上游 schema 只有一段 text_alt；多段变体只保留前两段"
+      },
+      {
+        "field": "|4(...) 复数标记（无前置数字时）",
+        "reason": "无法判定单复数，按复数渲染"
+      }
+    ]
+  },
+  "diff_vs_at_36_6_3": {
+    "shared_ids": 3695,
+    "shared_by_kind": {
+      "dark_gift": 47,
+      "hero": 118,
+      "hero_power": 165,
+      "minion": 2393,
+      "quest": 22,
+      "quest_reward": 73,
+      "spell": 263,
+      "tavern_spell": 205,
+      "trinket_greater": 215,
+      "trinket_lesser": 194
+    },
+    "removed_count": 288,
+    "removed_by_kind": {
+      "hero": 25,
+      "hero_power": 11,
+      "minion": 203,
+      "quest": 2,
+      "spell": 33,
+      "tavern_spell": 3,
+      "trinket_greater": 4,
+      "trinket_lesser": 7
+    },
+    "removed_by_pool": {},
+    "removed_ids": [
+      "AT_121",
+      "AV_113t3t2",
+      "BAR_073",
+      "BG22_HERO_007t",
+      "BGDUO20_GEM_No_Impact",
+      "BGDUO31_201",
+      "BGDUO31_201_G",
+      "BGDUO31_201s",
+      "BGDUO31_202",
+      "BGDUO31_202_G",
+      "BGDUO31_202s",
+      "BGDUO31_203",
+      "BGDUO31_203_G",
+      "BGDUO31_205",
+      "BGDUO31_205_G",
+      "BGDUO31_205_gs",
+      "BGDUO31_205s",
+      "BGDUO31_206",
+      "BGDUO31_206_G",
+      "BGDUO31_206_Gs",
+      "BGDUO31_206s",
+      "BGDUO31_207",
+      "BGDUO31_207_G",
+      "BGDUO31_207_Gs",
+      "BGDUO31_207s",
+      "BGDUO31_208",
+      "BGDUO31_208_G",
+      "BGDUO31_208_Teammate_Trigger",
+      "BGDUO31_209",
+      "BGDUO31_209_G",
+      "BGDUO31_209t",
+      "BGDUO31_209t_G",
+      "BGDUO31_210",
+      "BGDUO31_210_G",
+      "BGDUO31_210s",
+      "BGDUO31_211",
+      "BGDUO31_211_G",
+      "BGDUO31_212",
+      "BGDUO31_212_G",
+      "BGDUO33_140",
+      "BGDUO33_140_G",
+      "BGDUO33_150",
+      "BGDUO33_150_G",
+      "BGDUO33_150t",
+      "BGDUO33_150t2",
+      "BGDUO_100",
+      "BGDUO_100_G",
+      "BGDUO_104",
+      "BGDUO_104_G",
+      "BGDUO_105",
+      "BGDUO_105_G",
+      "BGDUO_107",
+      "BGDUO_107_G",
+      "BGDUO_107_Gs",
+      "BGDUO_107s",
+      "BGDUO_108",
+      "BGDUO_108_G",
+      "BGDUO_109",
+      "BGDUO_109_G",
+      "BGDUO_109_Gs",
+      "BGDUO_109s",
+      "BGDUO_110",
+      "BGDUO_110_G",
+      "BGDUO_110_Gs",
+      "BGDUO_110s",
+      "BGDUO_111",
+      "BGDUO_111_G",
+      "BGDUO_112",
+      "BGDUO_112_G",
+      "BGDUO_113",
+      "BGDUO_114",
+      "BGDUO_114_G",
+      "BGDUO_115",
+      "BGDUO_115_G",
+      "BGDUO_117",
+      "BGDUO_117_G",
+      "BGDUO_118",
+      "BGDUO_118_G",
+      "BGDUO_118_Gs",
+      "BGDUO_118s",
+      "BGDUO_119",
+      "BGDUO_119_G",
+      "BGDUO_119s",
+      "BGDUO_120",
+      "BGDUO_120_G",
+      "BGDUO_120_Gt",
+      "BGDUO_120t",
+      "BGDUO_121",
+      "BGDUO_121_G",
+      "BGDUO_121_Gs",
+      "BGDUO_121s",
+      "BGDUO_122",
+      "BGDUO_122_G",
+      "BGDUO_123",
+      "BGDUO_124",
+      "BGDUO_125",
+      "BGDUO_125_G",
+      "BGDUO_700",
+      "BGDUO_700_G",
+      "BGDUO_701",
+      "BGDUO_701_G",
+      "BGDUO_701_Gs",
+      "BGDUO_701s",
+      "BGDUO_Anomaly_003t",
+      "BGDUO_Anomaly_007t",
+      "BGDUO_HERO_100",
+      "BGDUO_HERO_100_Buddy",
+      "BGDUO_HERO_100_Buddy_G",
+      "BGDUO_HERO_100p",
+      "BGDUO_HERO_101",
+      "BGDUO_HERO_101_Buddy",
+      "BGDUO_HERO_101_Buddy_G",
+      "BGDUO_HERO_101p",
+      "BGDUO_HERO_104",
+      "BGDUO_HERO_104_Buddy",
+      "BGDUO_HERO_104_Buddy_G",
+      "BGDUO_HERO_104p",
+      "BGDUO_HERO_222",
+      "BGDUO_HERO_222_Buddy",
+      "BGDUO_HERO_222_Buddy_G",
+      "BGDUO_HERO_222p",
+      "BGDUO_HERO_222t",
+      "BGDUO_HERO_223",
+      "BGDUO_HERO_223_Buddy",
+      "BGDUO_HERO_223_Buddy_G",
+      "BGDUO_HERO_223p",
+      "BGDUO_MagicItem_001",
+      "BGDUO_MagicItem_002",
+      "BGDUO_MagicItem_002t",
+      "BGDUO_MagicItem_002t2",
+      "BGDUO_MagicItem_003",
+      "BGDUO_MagicItem_004",
+      "BGDUO_MagicItem_005",
+      "BGDUO_MagicItem_006",
+      "BGDUO_MagicItem_007",
+      "BGDUO_MagicItem_008",
+      "BGDUO_MagicItem_009",
+      "BGDUO_MagicItem_010",
+      "BGDUO_MagicItem_010t",
+      "BGS_039",
+      "BG_BT_258",
+      "BG_BT_258_G",
+      "BG_OG_044",
+      "BG_OG_044_G",
+      "BG_OG_145",
+      "BG_OG_145_G",
+      "BG_OG_256",
+      "BG_TSC_069",
+      "BG_TSC_069_G",
+      "BG_TTN_732",
+      "BG_TTN_732_G",
+      "BG_UNG_073",
+      "BOT_218",
+      "BOT_218t",
+      "BOT_445",
+      "BOT_445t",
+      "BOT_537",
+      "BOT_537t",
+      "CFM_610",
+      "CFM_816",
+      "CORE_EX1_059",
+      "CORE_EX1_564",
+      "CORE_GVG_085",
+      "CORE_LOOT_013",
+      "CORE_YOD_026",
+      "CORE_tt_004",
+      "CRED_379",
+      "CRED_666",
+      "DAL_088t2",
+      "DAL_742",
+      "DAL_743t",
+      "EX1_062",
+      "EX1_093",
+      "EX1_162",
+      "EX1_170",
+      "EX1_185",
+      "EX1_506",
+      "EX1_506a",
+      "EX1_509",
+      "EX1_554t",
+      "EX1_564",
+      "EX1_577",
+      "EX1_finkle",
+      "FP1_010",
+      "GIL_655",
+      "GVG_021",
+      "GVG_055",
+      "GVG_062",
+      "GVG_085",
+      "GVG_106",
+      "HM_BG_001",
+      "ICC_029",
+      "ICC_032",
+      "ICC_038",
+      "ICC_092",
+      "ICC_094",
+      "ICC_099",
+      "ICC_099_Puzzle",
+      "ICC_858",
+      "JAIL_800hp2",
+      "KAR_005a",
+      "KAR_095",
+      "KAR_702",
+      "LOE_012",
+      "LOOT_013",
+      "OG_216",
+      "OG_216a",
+      "OG_300",
+      "PVPDR_YOP_WarPalT1",
+      "RLK_070",
+      "RLK_070t",
+      "RLK_117",
+      "RLK_119",
+      "RLK_538",
+      "RLK_824",
+      "RLK_833",
+      "RLK_833t",
+      "RLK_912",
+      "RLK_957",
+      "RLK_958",
+      "RLK_Prologue_EX1_185",
+      "RLK_Prologue_RLK_070",
+      "RLK_Prologue_RLK_070t",
+      "RLK_Prologue_RLK_957",
+      "TB_BaconShopBob",
+      "TB_BaconShopBob_TWT",
+      "TB_BaconShop_HERO_10_Tutorial",
+      "TB_BaconShop_HERO_11_Tutorial",
+      "TB_BaconShop_HERO_14_Tutorial",
+      "TB_BaconShop_HERO_19",
+      "TB_BaconShop_HERO_22_Tutorial",
+      "TB_BaconShop_HERO_27_Tutorial",
+      "TB_BaconShop_HERO_30",
+      "TB_BaconShop_HERO_30_Tutorial",
+      "TB_BaconShop_HERO_31",
+      "TB_BaconShop_HERO_35_Tutorial",
+      "TB_BaconShop_HERO_37_Tutorial",
+      "TB_BaconShop_HERO_47",
+      "TB_BaconShop_HERO_59t",
+      "TB_BaconShop_HERO_61",
+      "TB_BaconShop_HERO_Deathwhisper",
+      "TB_BaconShop_HERO_KelThuzad",
+      "TB_BaconShop_HERO_PH",
+      "TB_BaconUps_004",
+      "TB_BaconUps_006",
+      "TB_BaconUps_006t",
+      "TB_BaconUps_008",
+      "TB_BaconUps_025",
+      "TB_BaconUps_027t",
+      "TB_BaconUps_034",
+      "TB_BaconUps_044",
+      "TB_BaconUps_045t",
+      "TB_BaconUps_049",
+      "TB_BaconUps_049t",
+      "TB_BaconUps_059",
+      "TB_BaconUps_059t",
+      "TB_BaconUps_061",
+      "TB_BaconUps_066",
+      "TB_BaconUps_072",
+      "TB_BaconUps_136",
+      "TB_BaconUps_152",
+      "TB_BaconUps_153",
+      "TB_BaconUps_309",
+      "TB_BaconUps_309t",
+      "THD_011hp",
+      "THD_018hp",
+      "THD_108hp2",
+      "TLC_817t",
+      "TLC_817t2",
+      "TLC_817t5",
+      "TRL_232",
+      "TRL_232t",
+      "ULDA_Finley_HP1t",
+      "ULD_179",
+      "ULD_205",
+      "ULD_275",
+      "UNG_010",
+      "UNG_037",
+      "UNG_201t",
+      "UNG_999t2t1",
+      "VAN_EX1_554t",
+      "VAN_EX1_564",
+      "VAN_EX1_577",
+      "VAN_EX1_finkle",
+      "VAN_skele21",
+      "WON_340",
+      "YOD_026",
+      "tt_004"
+    ],
+    "compare_note": "列表字段按集合比较（顺序无语义）；可选字段缺失等价 schema 默认值",
+    "changed_fields": {
+      "kind": {
+        "changed": 1,
+        "by_kind": {
+          "quest": 1
+        },
+        "examples": [
+          {
+            "id": "BG24_Quest_328",
+            "kind": "quest",
+            "old": "spell",
+            "new": "quest"
+          }
+        ]
+      },
+      "name_zh": {
+        "changed": 1,
+        "by_kind": {
+          "tavern_spell": 1
+        },
+        "examples": [
+          {
+            "id": "BG34_Trinket_2nd_Spell",
+            "kind": "tavern_spell",
+            "old": "废案",
+            "new": "购买大型饰品"
+          }
+        ]
+      },
+      "cost": {
+        "changed": 1989,
+        "by_kind": {
+          "minion": 1989
+        },
+        "examples": [
+          {
+            "id": "BG19_010",
+            "kind": "minion",
+            "old": 0,
+            "new": 3
+          },
+          {
+            "id": "BG19_010_G",
+            "kind": "minion",
+            "old": 0,
+            "new": 3
+          },
+          {
+            "id": "BG19_010_Gt",
+            "kind": "minion",
+            "old": 0,
+            "new": 3
+          },
+          {
+            "id": "BG19_010t",
+            "kind": "minion",
+            "old": 0,
+            "new": 3
+          },
+          {
+            "id": "BG20_100",
+            "kind": "minion",
+            "old": 0,
+            "new": 3
+          },
+          {
+            "id": "BG20_100_G",
+            "kind": "minion",
+            "old": 0,
+            "new": 3
+          },
+          {
+            "id": "BG20_101",
+            "kind": "minion",
+            "old": 0,
+            "new": 3
+          },
+          {
+            "id": "BG20_101_G",
+            "kind": "minion",
+            "old": 0,
+            "new": 3
+          },
+          {
+            "id": "BG20_102",
+            "kind": "minion",
+            "old": 0,
+            "new": 3
+          },
+          {
+            "id": "BG20_102_G",
+            "kind": "minion",
+            "old": 0,
+            "new": 3
+          },
+          {
+            "id": "BG20_103",
+            "kind": "minion",
+            "old": 0,
+            "new": 3
+          },
+          {
+            "id": "BG20_103_G",
+            "kind": "minion",
+            "old": 0,
+            "new": 3
+          }
+        ]
+      },
+      "races": {
+        "changed": 1,
+        "by_kind": {
+          "trinket_lesser": 1
+        },
+        "examples": [
+          {
+            "id": "BG32_MagicItem_416",
+            "kind": "trinket_lesser",
+            "old": [
+              "MURLOC"
+            ],
+            "new": []
+          }
+        ],
+        "detail": {
+          "dropped_MURLOC": 1
+        }
+      },
+      "keywords": {
+        "changed": 1521,
+        "by_kind": {
+          "dark_gift": 2,
+          "hero_power": 70,
+          "minion": 1020,
+          "quest": 13,
+          "quest_reward": 49,
+          "spell": 12,
+          "tavern_spell": 13,
+          "trinket_greater": 182,
+          "trinket_lesser": 160
+        },
+        "examples": [
+          {
+            "id": "BG20_102",
+            "kind": "minion",
+            "old": [
+              "TRIGGER_VISUAL"
+            ],
+            "new": []
+          },
+          {
+            "id": "BG20_102_G",
+            "kind": "minion",
+            "old": [
+              "TRIGGER_VISUAL"
+            ],
+            "new": []
+          },
+          {
+            "id": "BG20_103",
+            "kind": "minion",
+            "old": [
+              "TRIGGER_VISUAL"
+            ],
+            "new": []
+          },
+          {
+            "id": "BG20_103_G",
+            "kind": "minion",
+            "old": [
+              "TRIGGER_VISUAL"
+            ],
+            "new": []
+          },
+          {
+            "id": "BG20_106",
+            "kind": "minion",
+            "old": [
+              "TRIGGER_VISUAL"
+            ],
+            "new": []
+          },
+          {
+            "id": "BG20_106_G",
+            "kind": "minion",
+            "old": [
+              "TRIGGER_VISUAL"
+            ],
+            "new": []
+          },
+          {
+            "id": "BG20_203",
+            "kind": "minion",
+            "old": [
+              "TAUNT",
+              "TRIGGER_VISUAL"
+            ],
+            "new": [
+              "TAUNT"
+            ]
+          },
+          {
+            "id": "BG20_203_G",
+            "kind": "minion",
+            "old": [
+              "TAUNT",
+              "TRIGGER_VISUAL"
+            ],
+            "new": [
+              "TAUNT"
+            ]
+          },
+          {
+            "id": "BG20_204",
+            "kind": "minion",
+            "old": [
+              "DIVINE_SHIELD",
+              "TRIGGER_VISUAL",
+              "WINDFURY"
+            ],
+            "new": [
+              "DIVINE_SHIELD",
+              "WINDFURY"
+            ]
+          },
+          {
+            "id": "BG20_204_G",
+            "kind": "minion",
+            "old": [
+              "DIVINE_SHIELD",
+              "TRIGGER_VISUAL",
+              "WINDFURY"
+            ],
+            "new": [
+              "DIVINE_SHIELD",
+              "WINDFURY"
+            ]
+          },
+          {
+            "id": "BG20_205",
+            "kind": "minion",
+            "old": [
+              "AURA"
+            ],
+            "new": []
+          },
+          {
+            "id": "BG20_205_G",
+            "kind": "minion",
+            "old": [
+              "AURA"
+            ],
+            "new": []
+          }
+        ],
+        "detail": {
+          "added_CHOOSE_ONE": 11,
+          "added_DIVINE_SHIELD": 1,
+          "added_END_OF_TURN_TRIGGER": 14,
+          "added_REBORN": 1,
+          "added_START_OF_COMBAT": 5,
+          "dropped_AURA": 155,
+          "dropped_CHOOSE_ONE": 3,
+          "dropped_DISCOVER": 29,
+          "dropped_END_OF_TURN_TRIGGER": 32,
+          "dropped_InvisibleDeathrattle": 5,
+          "dropped_MAGNETIC": 1,
+          "dropped_QUEST": 8,
+          "dropped_SECRET": 2,
+          "dropped_SIDE_QUEST": 2,
+          "dropped_START_OF_COMBAT": 8,
+          "dropped_TRIGGER_VISUAL": 1314,
+          "dropped_TWINSPELL": 1
+        }
+      },
+      "pools": {
+        "changed": 37,
+        "by_kind": {
+          "hero": 2,
+          "minion": 32,
+          "tavern_spell": 3
+        },
+        "examples": [
+          {
+            "id": "BG22_HERO_007",
+            "kind": "hero",
+            "old": [],
+            "new": [
+              "hero"
+            ]
+          },
+          {
+            "id": "BG23_000",
+            "kind": "minion",
+            "old": [],
+            "new": [
+              "minion"
+            ]
+          },
+          {
+            "id": "BG23_002",
+            "kind": "minion",
+            "old": [],
+            "new": [
+              "minion"
+            ]
+          },
+          {
+            "id": "BG23_004",
+            "kind": "minion",
+            "old": [],
+            "new": [
+              "minion"
+            ]
+          },
+          {
+            "id": "BG23_007",
+            "kind": "minion",
+            "old": [],
+            "new": [
+              "minion"
+            ]
+          },
+          {
+            "id": "BG23_008",
+            "kind": "minion",
+            "old": [],
+            "new": [
+              "minion"
+            ]
+          },
+          {
+            "id": "BG23_009",
+            "kind": "minion",
+            "old": [],
+            "new": [
+              "minion"
+            ]
+          },
+          {
+            "id": "BG23_HERO_304",
+            "kind": "hero",
+            "old": [],
+            "new": [
+              "hero"
+            ]
+          },
+          {
+            "id": "BG25_034",
+            "kind": "minion",
+            "old": [
+              "tier7"
+            ],
+            "new": [
+              "minion",
+              "tier7"
+            ]
+          },
+          {
+            "id": "BG26_149",
+            "kind": "minion",
+            "old": [
+              "tier7"
+            ],
+            "new": [
+              "minion",
+              "tier7"
+            ]
+          },
+          {
+            "id": "BG26_505",
+            "kind": "minion",
+            "old": [],
+            "new": [
+              "minion"
+            ]
+          },
+          {
+            "id": "BG27_016",
+            "kind": "minion",
+            "old": [
+              "tier7"
+            ],
+            "new": [
+              "minion",
+              "tier7"
+            ]
+          }
+        ],
+        "detail": {
+          "added_hero": 2,
+          "added_minion": 32,
+          "added_spell": 3,
+          "added_tier7": 1
+        }
+      },
+      "reachable": {
+        "changed": 26,
+        "by_kind": {
+          "hero": 2,
+          "minion": 21,
+          "tavern_spell": 3
+        },
+        "examples": [
+          {
+            "id": "BG22_HERO_007",
+            "kind": "hero",
+            "old": false,
+            "new": true
+          },
+          {
+            "id": "BG23_000",
+            "kind": "minion",
+            "old": false,
+            "new": true
+          },
+          {
+            "id": "BG23_002",
+            "kind": "minion",
+            "old": false,
+            "new": true
+          },
+          {
+            "id": "BG23_004",
+            "kind": "minion",
+            "old": false,
+            "new": true
+          },
+          {
+            "id": "BG23_007",
+            "kind": "minion",
+            "old": false,
+            "new": true
+          },
+          {
+            "id": "BG23_008",
+            "kind": "minion",
+            "old": false,
+            "new": true
+          },
+          {
+            "id": "BG23_009",
+            "kind": "minion",
+            "old": false,
+            "new": true
+          },
+          {
+            "id": "BG23_HERO_304",
+            "kind": "hero",
+            "old": false,
+            "new": true
+          },
+          {
+            "id": "BG26_505",
+            "kind": "minion",
+            "old": false,
+            "new": true
+          },
+          {
+            "id": "BG27_514",
+            "kind": "minion",
+            "old": false,
+            "new": true
+          },
+          {
+            "id": "BG28_606",
+            "kind": "tavern_spell",
+            "old": false,
+            "new": true
+          },
+          {
+            "id": "BG31_035",
+            "kind": "minion",
+            "old": false,
+            "new": true
+          }
+        ]
+      },
+      "text": {
+        "changed": 7,
+        "by_kind": {
+          "minion": 5,
+          "spell": 1,
+          "trinket_greater": 1
+        },
+        "examples": [
+          {
+            "id": "BG25_HERO_100pt",
+            "kind": "minion",
+            "old": "0",
+            "new": "0 0"
+          },
+          {
+            "id": "BG28_597",
+            "kind": "minion",
+            "old": "At the end of your turn, gain +1 Attack. Repeat for each card you played this turn.",
+            "new": "At the end of your turn, gain +1 Attack. Repeat for each card you played this turn. (0)"
+          },
+          {
+            "id": "BG28_597_G",
+            "kind": "minion",
+            "old": "At the end of your turn, gain +2 Attack. Repeat for each card you played this turn.",
+            "new": "At the end of your turn, gain +2 Attack. Repeat for each card you played this turn. (0)"
+          },
+          {
+            "id": "BG30_Trinket_2nd",
+            "kind": "trinket_greater",
+            "old": "The Greater Trinket Shop opens in 8 turns!8The second Trinket Shop opens next turn!",
+            "new": "The Greater Trinket Shop opens in 8 turns!"
+          },
+          {
+            "id": "BG34_639_G",
+            "kind": "minion",
+            "old": "After this is in your hand for 2 turns, choose a Golden Tier 6 Dragon to hatch into. (2 |4(turn, turns) left!)",
+            "new": "After this is in your hand for 2 turns, choose a Golden Tier 6 Dragon to hatch into. (2 turns left!)"
+          },
+          {
+            "id": "BG36_523",
+            "kind": "minion",
+            "old": "After you spend 6 Gold, get a Lockbox. If you already have one, it opens 1 turns sooner instead. (6 Gold left!)",
+            "new": "After you spend 6 Gold, get a Lockbox. If you already have one, it opens 1 turn sooner instead. (6 Gold left!)"
+          },
+          {
+            "id": "BG_OldGod",
+            "kind": "spell",
+            "old": "After 4 friendly Aberrations die each combat, awaken a 1/1 130610. (4 left!)",
+            "new": "After 4 friendly Aberrations die each combat, awaken a 1/1 0. (4 left!)"
+          }
+        ]
+      },
+      "text_alt": {
+        "changed": 144,
+        "by_kind": {
+          "hero_power": 19,
+          "minion": 93,
+          "spell": 3,
+          "tavern_spell": 7,
+          "trinket_greater": 12,
+          "trinket_lesser": 10
+        },
+        "examples": [
+          {
+            "id": "BG20_HERO_280p5",
+            "kind": "hero_power",
+            "old": null,
+            "new": "Once per turn, after you buy 3 minions, get a plain copy of one of them. (Done!)"
+          },
+          {
+            "id": "BG21_018",
+            "kind": "minion",
+            "old": null,
+            "new": "Whenever this gains Attack from other sources, gain +0/+1."
+          },
+          {
+            "id": "BG21_018_G",
+            "kind": "minion",
+            "old": null,
+            "new": "Whenever this gains Attack from other sources, gain +0/+1 twice."
+          },
+          {
+            "id": "BG21_HERO_000p",
+            "kind": "hero_power",
+            "old": null,
+            "new": "Give 1 random friendly minions +1/+1. Passive: After each combat, choose an improvement."
+          },
+          {
+            "id": "BG22_HERO_007p",
+            "kind": "hero_power",
+            "old": null,
+            "new": "When your warband reaches 30 total Attack, begin your Naga Conquest. (0 left!)"
+          },
+          {
+            "id": "BG22_HERO_200p",
+            "kind": "hero_power",
+            "old": null,
+            "new": "After 9 friendly minions die, get a random Mech. (9 left!)"
+          },
+          {
+            "id": "BG25_033",
+            "kind": "minion",
+            "old": null,
+            "new": "Avenge (4): This minion sells for 1 more Gold. (Sells for 0 extra Gold!)"
+          },
+          {
+            "id": "BG25_033_G",
+            "kind": "minion",
+            "old": null,
+            "new": "Avenge (4): This minion sells for 2 more Gold. (Sells for 0 extra Gold!)"
+          },
+          {
+            "id": "BG26_176",
+            "kind": "minion",
+            "old": null,
+            "new": "After you play a Tier 6 minion, give your minions +1/+2."
+          },
+          {
+            "id": "BG26_176_G",
+            "kind": "minion",
+            "old": null,
+            "new": "After you play a Tier 6 minion, give your minions +2/+4."
+          },
+          {
+            "id": "BG26_199",
+            "kind": "minion",
+            "old": null,
+            "new": "At the end of every 2 turns, get a plain copy of the minion to the left of this. (End of this turn!)"
+          },
+          {
+            "id": "BG26_199_G",
+            "kind": "minion",
+            "old": null,
+            "new": "At the end of every 2 turns, get a plain copy of adjacent minions. (End of this turn!)"
+          }
+        ]
+      }
+    }
+  },
+  "cross_validation_vs_at_36_6_3": {
+    "note": "以 36.6.3 上游 cards.json 为参照真值，统计 37 映射结果在共享 id 上的一致性",
+    "scalar_fields": {
+      "name": {
+        "same": 3695,
+        "total": 3695
+      },
+      "tier": {
+        "same": 3695,
+        "total": 3695
+      },
+      "atk": {
+        "same": 3695,
+        "total": 3695
+      },
+      "hp": {
+        "same": 3695,
+        "total": 3695
+      },
+      "armor": {
+        "same": 3695,
+        "total": 3695
+      },
+      "golden": {
+        "same": 3695,
+        "total": 3695
+      },
+      "normal": {
+        "same": 3695,
+        "total": 3695
+      },
+      "pool_tag": {
+        "same": 3695,
+        "total": 3695
+      },
+      "hero_power": {
+        "same": 3695,
+        "total": 3695
+      },
+      "buddy": {
+        "same": 3695,
+        "total": 3695
+      },
+      "spellcraft": {
+        "same": 3695,
+        "total": 3695
+      },
+      "quest_goal": {
+        "same": 3695,
+        "total": 3695
+      },
+      "reward_card": {
+        "same": 3695,
+        "total": 3695
+      }
+    },
+    "set_fields": {
+      "races": {
+        "same": 3694,
+        "total": 3695
+      },
+      "assoc": {
+        "same": 3695,
+        "total": 3695
+      },
+      "lobby_req": {
+        "same": 3695,
+        "total": 3695
+      },
+      "keywords": {
+        "same": 2174,
+        "total": 3695
+      },
+      "pools": {
+        "same": 3658,
+        "total": 3695
+      },
+      "tw_types": {
+        "same": 3695,
+        "total": 3695
+      }
+    },
+    "flag_keyword_precision": {
+      "BATTLECRY": {
+        "tp": 324,
+        "fp": 0,
+        "fn": 0
+      },
+      "DEATHRATTLE": {
+        "tp": 390,
+        "fp": 0,
+        "fn": 0
+      },
+      "TAUNT": {
+        "tp": 174,
+        "fp": 0,
+        "fn": 0
+      },
+      "DIVINE_SHIELD": {
+        "tp": 121,
+        "fp": 1,
+        "fn": 0
+      },
+      "WINDFURY": {
+        "tp": 33,
+        "fp": 0,
+        "fn": 0
+      },
+      "REBORN": {
+        "tp": 55,
+        "fp": 1,
+        "fn": 0
+      },
+      "MAGNETIC": {
+        "tp": 52,
+        "fp": 0,
+        "fn": 1
+      },
+      "VENOMOUS": {
+        "tp": 29,
+        "fp": 0,
+        "fn": 0
+      },
+      "POISONOUS": {
+        "tp": 5,
+        "fp": 0,
+        "fn": 0
+      },
+      "AVENGE": {
+        "tp": 120,
+        "fp": 0,
+        "fn": 0
+      },
+      "START_OF_COMBAT": {
+        "tp": 171,
+        "fp": 5,
+        "fn": 8
+      },
+      "BACON_RALLY": {
+        "tp": 144,
+        "fp": 0,
+        "fn": 0
+      },
+      "CHOOSE_ONE": {
+        "tp": 33,
+        "fp": 11,
+        "fn": 3
+      },
+      "QUEST": {
+        "tp": 11,
+        "fp": 0,
+        "fn": 8
+      }
+    },
+    "text_en": {
+      "same": 3688,
+      "total": 3695,
+      "rate": 0.99811
+    },
+    "text_zh": {
+      "same": 3515,
+      "total": 3515,
+      "rate": 1.0,
+      "available_both": 3515
+    }
+  },
+  "script_ids": {
+    "extracted": "AutoTavern src/content/*.rs 注册元组 + src/**/*.rs 的 cardid!/.id()",
+    "counts": {
+      "registration": 1266,
+      "registration_const": 19,
+      "cardid": 83,
+      "db_id": 36,
+      "union": 1290
+    },
+    "missing": [],
+    "unresolved_const_idents": []
+  },
+  "checks": {
+    "problems": [],
+    "ok": true,
+    "counts": {
+      "cards": 3983,
+      "kinds": {
+        "dark_gift": 47,
+        "hero": 143,
+        "hero_power": 176,
+        "minion": 2596,
+        "quest": 24,
+        "quest_reward": 73,
+        "spell": 296,
+        "tavern_spell": 208,
+        "trinket_greater": 219,
+        "trinket_lesser": 201
+      },
+      "mapped": 3695,
+      "compat": 288,
+      "skipped_37_only": 122
+    },
+    "pool_coverage": {
+      "minion": 277,
+      "spell": 73,
+      "hero": 118,
+      "trinket": 409
+    },
+    "duos_only": [
+      "BG31_242",
+      "BG31_243",
+      "BG31_244"
+    ],
+    "paradox": {
+      "base": "BG36_360",
+      "variants": [
+        {
+          "id": "BG36_360t3",
+          "tier": 2,
+          "at_expected_tier": 2
+        },
+        {
+          "id": "BG36_360t4",
+          "tier": 5,
+          "at_expected_tier": 5
+        },
+        {
+          "id": "BG36_360t5",
+          "tier": 4,
+          "at_expected_tier": 4
+        },
+        {
+          "id": "BG36_360t6",
+          "tier": 3,
+          "at_expected_tier": 3
+        },
+        {
+          "id": "BG36_360t9",
+          "tier": 6,
+          "at_expected_tier": 6
+        }
+      ],
+      "basis": "AutoTavern flow.rs::PARADOX_VARIANTS（base 不入池；每局随机 1 个形态进池）",
+      "note": "37 源把 base 标为池内、token 不标；此处按 AT 机制约定映射，tier/数值保持 37 值",
+      "base_applied": true
+    },
+    "pool_eligible_strict": {
+      "filter": "pools.minion && pool_tag <= 1（Rust strict_pool_tag 默认开启）",
+      "count": 276,
+      "excluded_ids": [
+        "BG25_013"
+      ]
+    },
+    "script_ids_checked": 1290,
+    "script_ids_missing": [],
+    "content_literals_missing": [],
+    "duos_only_ids": [
+      "BG31_242",
+      "BG31_243",
+      "BG31_244"
+    ],
+    "duos_pool_exclusions": [
+      "BG31_242",
+      "BG31_243",
+      "BG31_244"
+    ]
+  },
+  "outputs_sha256": {
+    "at_scripted_ids.json": "b0b534084b79e851fb23e2a4a94db6f3f66ace8e8d0c51b3aecef55d13e8071d",
+    "cards_37.json": "c482612727c2618e547479d743d40dad6ab4763cf1368e9742eb312ec4886dae",
+    "new_cards_37.json": "eb1297242b4302d48e4cdacc25703b00f8a4d2c6026a5836fe14bc4c1cdaeae3"
+  }
+}
