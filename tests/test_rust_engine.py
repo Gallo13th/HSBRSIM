@@ -47,6 +47,7 @@ from hsbg_engine import (  # noqa: E402
     layout,
     run_bot_games,
     server_rules_version,
+    turn_search,
     version,
 )
 
@@ -372,3 +373,29 @@ def test_state_json_roundtrip():
     assert game.is_over() and restored.is_over()
     assert game.state_json() == restored.state_json()
     assert list(game.placements()) == list(restored.placements())
+
+
+def test_turn_search_api_smoke():
+    """Rust TurnSearch PyO3 API：合法动作 + 状态预算 + pairwise 计数。"""
+    game = Game(70000)
+    for p in range(game.num_players):
+        if game.needs_action(p):
+            game.step(p, game.bot_action(p))
+    for _ in range(12):
+        legal = np.frombuffer(game.legal_mask(0), dtype=np.uint8).astype(bool)
+        if legal[0] or not game.needs_action(0):
+            break
+        game.step(0, game.bot_action(0))
+
+    raw, action, score, n_states, n_combats = turn_search(
+        game, 0, states_budget=4, samples_per_action=1,
+        combat_samples=1, max_steps_per_turn=12, seed=1,
+    )
+    scores = np.frombuffer(raw, dtype="<f4")
+    legal = np.frombuffer(game.legal_mask(0), dtype=np.uint8).astype(bool)
+    assert scores.shape == (N_ACTIONS,)
+    assert 0 <= action < N_ACTIONS
+    assert bool(legal[action])
+    assert n_states >= 1 and n_states <= 4
+    assert n_combats >= 0
+    assert np.isfinite(score)

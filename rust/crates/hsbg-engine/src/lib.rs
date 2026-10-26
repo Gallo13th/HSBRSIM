@@ -39,6 +39,7 @@ pub mod rng;
 pub mod script;
 // P4-M1：逐步 MCTS 搜索核（新增能力，不改变默认行为；见 rust/FORK.md §7）。
 pub mod search;
+pub mod turn_search;
 pub mod state;
 pub mod types;
 pub mod workers;

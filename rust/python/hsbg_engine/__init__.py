@@ -36,6 +36,7 @@ try:
         mcts_search,
         run_bot_games,
         server_rules_version,
+        turn_search,
         version,
     )
 except ImportError as exc:  # pragma: no cover - only hit before the Rust build
@@ -127,6 +128,7 @@ __all__ = [
     "mcts_search",
     "run_bot_games",
     "server_rules_version",
+    "turn_search",
     "source_hash",
     "version",
 ]

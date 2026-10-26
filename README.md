@@ -241,6 +241,7 @@ TavernGym 引擎裸吞吐 **275.5 games/s**（3.63 ms/局，15.4 回合）；端
 - `docs/MULTI_AGENT_RULES.md` — 多智能体任务板/写范围/handoff
 - `docs/POLICY_OBS_V3.md` — obs v3/MOVE_MINION/旧 checkpoint 迁移
 - `docs/SEARCH_15TURN_BENCH.md` — 15 回合单座搜索宽度/深度/跨回合预期基准
+- `docs/TURN_SEARCH_RUST.md` — Rust 回合内 TurnSearch（pairwise 搜索基线）
 - `docs/REFERENCE_PROJECTS.md` — 外部参考项目评估（HearthstoneLegendArriver / AutoTavern）
 - `docs/WEBUI.md` — 本地 Web 控制台（评测/训练结果/runs/TavernBench）
 - `docs/8H_FINAL_REPORT.md` — 8h 自主工作最终报告

@@ -24,6 +24,7 @@
 | [docs/LIVE_COLLAB_SECTION.md](docs/LIVE_COLLAB_SECTION.md) | Live 协作章节（已合并进 `LIVE_AUTOMATION_PROTOCOL.md` §10，保留为历史片段） |
 | [docs/POLICY_OBS_V3.md](docs/POLICY_OBS_V3.md) | obs v3/MOVE_MINION/旧 checkpoint 迁移（改 policy/训练必读） |
 | [docs/SEARCH_15TURN_BENCH.md](docs/SEARCH_15TURN_BENCH.md) | 15 回合单座搜索宽度/深度/跨回合预期基准（搜索调参必读） |
+| [docs/TURN_SEARCH_RUST.md](docs/TURN_SEARCH_RUST.md) | Rust 回合内 TurnSearch（pairwise 搜索基线/API/测试） |
 | [docs/REFERENCE_PROJECTS.md](docs/REFERENCE_PROJECTS.md) | 外部参考项目评估（HearthstoneLegendArriver / AutoTavern） |
 | [docs/WEBUI.md](docs/WEBUI.md) | 本地 Web 控制台：评测训练结果/runs/TavernBench（std 库） |
 | [docs/8H_FINAL_REPORT.md](docs/8H_FINAL_REPORT.md) | 8h 自主工作最终报告（2026-10-23 07:00） |

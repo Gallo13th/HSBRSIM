@@ -12,6 +12,9 @@ use hsbg_engine::bot;
 use hsbg_engine::cards::db;
 use hsbg_engine::obs::{OBS_CARDS, OBS_FLOATS};
 use hsbg_engine::search::{SearchConfig, search as rust_search};
+use hsbg_engine::turn_search::{
+    ActionAggregate, TurnSearchConfig, turn_search as rust_turn_search,
+};
 use hsbg_engine::{Game, RulesConfig, SoloEnv};
 
 fn parse_config(config_json: Option<&str>) -> PyResult<RulesConfig> {
@@ -668,6 +671,60 @@ fn call_eval_fn(
     Ok((prior, value))
 }
 
+/// 回合内 TurnSearch（Rust 版）：当前回合状态枚举 + pairwise 战斗，不做完整 bot rollout。
+#[pyfunction]
+#[pyo3(signature = (game, seat, states_budget=24, samples_per_action=1, combat_samples=1,
+                    max_steps_per_turn=40, seed=0, aggregate="max"))]
+fn turn_search<'py>(
+    py: Python<'py>,
+    game: &PyGame,
+    seat: usize,
+    states_budget: usize,
+    samples_per_action: usize,
+    combat_samples: usize,
+    max_steps_per_turn: usize,
+    seed: u64,
+    aggregate: &str,
+) -> PyResult<(Bound<'py, PyBytes>, u16, f32, u32, u32)> {
+    if seat >= game.g.players.len() {
+        return Err(PyValueError::new_err(format!(
+            "seat {seat} out of range (0..{})",
+            game.g.players.len()
+        )));
+    }
+    let agg = match aggregate.to_ascii_lowercase().as_str() {
+        "max" => ActionAggregate::Max,
+        "mean" => ActionAggregate::Mean,
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "aggregate must be max/mean, got {other}"
+            )));
+        }
+    };
+    let cfg = TurnSearchConfig {
+        states_budget,
+        samples_per_action,
+        combat_samples,
+        max_steps_per_turn,
+        seed,
+        aggregate: agg,
+    };
+    let start = game.g.clone();
+    let result = py.detach(|| rust_turn_search(&start, seat, cfg));
+    let scores: Vec<u8> = result
+        .action_scores
+        .iter()
+        .flat_map(|x| x.to_le_bytes())
+        .collect();
+    Ok((
+        PyBytes::new(py, &scores),
+        result.action,
+        result.best_score,
+        result.n_states as u32,
+        result.n_combats as u32,
+    ))
+}
+
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("N_ACTIONS", N_ACTIONS)?;
@@ -690,5 +747,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(card_static, m)?)?;
     m.add_function(wrap_pyfunction!(catalog_json, m)?)?;
     m.add_function(wrap_pyfunction!(mcts_search, m)?)?;
+    m.add_function(wrap_pyfunction!(turn_search, m)?)?;
     Ok(())
 }
