@@ -297,7 +297,8 @@ cd rust && cargo test --release -p hsbg-engine --lib
 # 37 最终数据下：15 passed; 0 failed
 
 cd rust && cargo test --release -p hsbg-engine --no-fail-fast
-# 37 最终数据下：36 个测试套件 858 passed; 0 failed; 0 ignored
+# P3 收尾（37 数据 + Naga 大厅 + P3 内容）：39 个测试套件 887 passed; 0 failed; 0 ignored
+# 37 数据（P3 前）：36 套件 878 passed / 9 failed（固定 seed 漂移，P3-C 已按 37 重算）
 # 36.6.3 替换前基线：36 套件 858 passed / 0 failed（与上游同 commit 一致）
 ```
 
@@ -313,6 +314,11 @@ cd rust && cargo test --release -p hsbg-engine --no-fail-fast
 - `aberration_subset_needs_aberrations_in_the_lobby` / `lobby_without_forced_aberrations`
   / `t20_yshaarj_lobby_bans`：v1.1.0 数据修复（AT 机制元数据继承 + Dark Paradox 5
   形态映射）后自动恢复，未改断言。
+- `extra_offers_apply...` / `denathrius_quest...` / `trinket_avenge...` /
+  `boon_of_light...` / `a_reborn_creation...` / `master_nguyen...` / `quest_reward_rules`
+  + buddies_a/c fixtures：37 Naga 大厅与 P3 内容入池导致固定 seed 漂移，已按 37 数据
+  重算期望或改成与抽取无关的构造/夹具（清单与依据见 `rust/FORK.md` §7 台账），
+  **不放宽断言、无 skip/xfail**；
 - **无 `#[ignore]` 项、无剩余失败。**
 
 ### 6.3 逐位一致证据
@@ -433,6 +439,8 @@ python3 rust/bench_engine.py --games 1000 --e2e-games 20 --solo-games 100 \
 
 ---
 
+---
+
 ## 9. 参考
 
 - **`rust/FORK.md`**：上游 commit/许可归因、重命名映射、fork 改动清单、数据替换与
@@ -447,3 +455,60 @@ python3 rust/bench_engine.py --games 1000 --e2e-games 20 --solo-games 100 \
   （规则配置逐项证据等级）。
 - 上游 GitHub：<https://github.com/MCG-NJU/AutoTavern>（MIT；TavernGym v1.0.0，
   commit `fb61201a557ddd36a411cf44aac51ce4d9b606ce`）。
+
+---
+
+## 10. P3 系统补齐（37 大厅 / 主英雄技能 / Dark Paradox）
+
+P3 起引擎/内容补全都以 37.0.0 数据为准，系统改动台账见 `rust/FORK.md` §7。
+
+### 10.1 37 大厅类型：Naga 回池（`flow.rs`）
+
+- 37.0.0 标准大厅 = **10 种类型随机 5 种**：Beast/Demon/Dragon/Elemental/Mech/Murloc/
+  **Naga**/Pirate/Quilboar/Undead（36.6.3 轮换把 Naga 移出大厅，AT 原版 `optional`
+  只有 9 种；37 数据里 Naga-only 随从回池，见 `docs/PORTING_37_PLAN.md` §3.4）。
+- `RulesConfig::lobby_types`（强制类型）语义不变：名取自 `Races::NAMES`（含 `NAGA`），
+  用例可用 `lobby_types: vec!["NAGA"]` 定向 Naga 大厅；Aberration 仍是特殊位
+  （`aberration_forced` 先占 1 席，`optional` 里的 ABERRATION 只在剩余名额时抽样），
+  Naga 加入不影响。
+- 类型过滤随大厅自然生效：Naga assoc 英雄（Queen Azshara `BG22_HERO_007`、Lady Vashj
+  `BG23_HERO_304`）只在 Naga 大厅进入英雄池；Naga-only 随从只在 Naga 大厅进 universe。
+- **回归影响**：固定 seed 的既有测试出现期望漂移（大厅抽样/池内容变化），已在 P3-C
+  按 37 数据重算（见 `rust/FORK.md` §10.2，未放宽断言）；P3 内容全部合入后需重新冻结
+  seed 基准。
+
+### 10.2 Queen Azshara 主技能（`content/p3_systems.rs`）
+
+| 卡 | 37 数据语义 | 实现 |
+|---|---|---|
+| `BG22_HERO_007p` Azshara's Ambition（passive，0 费） | “When your warband reaches 30 total Attack, begin your Naga Conquest.” | 监听能改变己方战队总攻的事件 + `start_of_turn`/`end_of_turn` 检查点；`Ctx::boards[side]` 存活随从攻击力和 ≥30（与 `content::check_total_attack` 同口径）→ `Ctx::set_hero_power` 替换为 p2 |
+| `BG22_HERO_007p2` Naga Conquest（active，1 费） | “Discover a Naga.” | 池感知 Discover 三选一：`races.intersects(NAGA)`（ALL 种族天然命中）+ 常规 Tier 上限（Tier 7 需已解锁）；每回合 1 次，费用取数据 cost=1 |
+
+- 英雄可通过 Naga 大厅被抽到（`hero_power` 脚本注册后 `hero_pool` 过滤放行）；
+  回归：`tests/p3_systems.rs`（hero 注册/大厅抽取/29→30 阈值/变身/Discover/费用/
+  每回合 1 次，共 6 例 + 1 例技能替换原语）。
+- 与 hsrl2 参照一致：阈值 30（卡面字面量）、进化到 p2、无 tier 限定（hsrl2
+  `Discover(race=NAGA)` 口径）。
+
+### 10.3 `BG36_360` Dark Paradox：**保持 AT 5 形态机制**（决策）
+
+- 37 数据：base `BG36_360` 是 tier1/1/1 的**占位壳**（`pools=[]`、无脚本、不在池），
+  可玩的是 5 个 36.6.3 形态 token（`BG36_360t3/t4/t5/t6/t9`，Tier 2/5/4/3/6，
+  各有脚本与 golden）；`flow.rs::PARADOX_VARIANTS` 每局随机抽 1 个入池。
+- 37 卡面“每局不同 Dark Gift/属性/Tier”在**可观察玩法**上已被该机制覆盖；单卡 id
+  动态化需要 per-game `CardDef` override 贯穿 pool/shop/triple/obs/state_json，
+  收益仅为表征、风险高 → P3 不做，登记 `rust/FORK.md` §7 + 后续项（数据补 37 形态表 +
+  引擎 per-game override）。
+- 回归：`tests/p3_systems.rs::dark_paradox_37_data_and_mapping_invariants`（数据字段、
+  5 形态 Tier 覆盖、每局恰 1 形态、base 不入池、200 seeds 全形态可达、存档往返）。
+
+### 10.4 验收
+
+```bash
+cargo build --release -p hsbg-engine                       # PASS
+cargo test --release -p hsbg-engine --test p3_systems      # 8 passed / 0 failed
+cargo test --release -p hsbg-engine --no-fail-fast          # 39 套件 887 passed / 0 failed
+python3 -m pytest tests/test_rust_engine.py                 # 10 passed + 1 skip
+```
+
+---

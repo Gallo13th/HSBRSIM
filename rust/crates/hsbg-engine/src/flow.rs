@@ -107,6 +107,10 @@ impl Game {
             Races::PIRATE,
             Races::QUILBOAR,
             Races::UNDEAD,
+            // 37.0.0：Naga 种族回池（36.6.3 轮换把 Naga 移出大厅类型，AT 原版 optional
+            // 列表因此只有 9 种）。37 官方标准大厅是 10 种类型里随机 5 种，见
+            // `docs/PORTING_37_PLAN.md` §3.4 与 `rust/FORK.md` §7。
+            Races::NAGA,
         ];
         let mut lobby = Races::NONE;
         let mut optional = optional.to_vec();

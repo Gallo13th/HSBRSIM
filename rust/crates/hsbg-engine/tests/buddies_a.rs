@@ -20,6 +20,8 @@ fn game(seed: u64) -> Game {
         g.players[p].quests.clear();
         g.players[p].counters.clear();
         g.players[p].max_gold_bonus = 0;
+        // 37 大厅规则（Naga 回池）后 fixture 对齐：清 skipping，与 tests/common/mod.rs:31 一致。
+        g.players[p].skipping = false;
         g.players[p].board.clear();
         g.players[p].powers.clear();
         g.players[p].set_hero_power(0, cid("TB_BaconShop_HP_035"));

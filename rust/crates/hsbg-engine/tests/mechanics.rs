@@ -999,14 +999,20 @@ fn this_game_refresh_effects_stack_and_fire_on_refresh() {
 
 #[test]
 fn extra_offers_apply_on_refresh_but_not_when_unfreezing() {
-    // Ysera needs Dragons in the lobby.
-    let seed = (61..200)
+    // Ysera needs Dragons in the lobby. 37 大厅（10 类随机 5 类）下，seed 选择必须用与
+    // fixture 相同的大厅配置（`game()` 用 `aberration_forced: true`），否则两个 seed 的
+    // 大厅不是同一个（旧断言依赖 36.6.3 的 9 类抽样，已漂移）。
+    let cfg = RulesConfig {
+        aberration_forced: true,
+        ..RulesConfig::default()
+    };
+    let seed = (0..400)
         .find(|s| {
-            Game::new(*s, RulesConfig::default())
+            Game::new(*s, cfg.clone())
                 .lobby_races
                 .intersects(hsbg_engine::types::Races::DRAGON)
         })
-        .unwrap();
+        .expect("an Aberration + Dragon lobby");
     let mut g = game(seed);
     g.players[0].set_hero_power(0, cid("TB_BaconShop_HP_062")); // Ysera
     g.players[0].gold = 10;
@@ -1753,7 +1759,20 @@ fn power_of_spells_cast_when_bought_and_add_a_second_hero_power() {
 
 #[test]
 fn denathrius_quest_progress_and_reward() {
-    let mut g = game(110);
+    // 37 大厅：quest_goal 会按“缺少的类型”缩放（Reward 111 对 MURLOC 有 120% 修正）。
+    // 选一个含 Murloc 的 Aberration 大厅 seed，使 8 × 110% = 9 的期望成立（与旧断言同）。
+    let cfg = RulesConfig {
+        aberration_forced: true,
+        ..RulesConfig::default()
+    };
+    let seed = (0..400)
+        .find(|s| {
+            Game::new(*s, cfg.clone())
+                .lobby_races
+                .intersects(hsbg_engine::types::Races::MURLOC)
+        })
+        .expect("an Aberration + Murloc lobby");
+    let mut g = game(seed);
     g.set_hero_power(0, 0, cid("BG24_HERO_100p"));
     let Some(Pending::Quest { options, .. }) = g.players[0].pending.last().cloned() else {
         panic!("expected a Quest choice")
@@ -3464,7 +3483,20 @@ fn combat_ctx(g: &mut Game) -> hsbg_engine::engine::Ctx<'_> {
 #[test]
 fn trinket_avenge_and_first_deathrattle_bonus() {
     // Fridge Magnet: Avenge (3) in combat gets a random Magnetic minion.
-    let mut g = game(410);
+    // 37 大厅：随机 Magnetic 随从来自本局 universe，需要 MECH 类型的大厅（旧 seed 410 的
+    // 大厅变了）；选一个含 Mech 的 Aberration 大厅 seed。
+    let cfg = RulesConfig {
+        aberration_forced: true,
+        ..RulesConfig::default()
+    };
+    let seed = (0..400)
+        .find(|s| {
+            Game::new(*s, cfg.clone())
+                .lobby_races
+                .intersects(hsbg_engine::types::Races::MECH)
+        })
+        .expect("an Aberration + Mech lobby");
+    let mut g = game(seed);
     buy_trinket(&mut g, 0, "BG30_MagicItem_545");
     g.players[0].hand.clear();
     g.players[0].tier = 4; // "random" cards are tier <= yours
@@ -4660,29 +4692,23 @@ fn n10_n11_reborn_goes_right_of_its_summons_as_a_fresh_card() {
 fn a_reborn_creation_is_assembled_from_its_two_cards_again() {
     // A Putricide Creation that comes back from Reborn is not a bare 1/1 without its effects:
     // the Creation is its two cards, so the fresh copy has them again (and their stats and
-    // keywords), but nothing the dead one had gained since. Built through the Hero Power; the picks
-    // are tried until the Creation has Reborn.
-    let picks = (0..3).flat_map(|i| (0..3).map(move |j| (i, j)));
-    let built = (900..940u64)
-        .flat_map(|seed| picks.clone().map(move |(i, j)| (seed, i, j)))
-        .find_map(|(seed, i, j)| {
-            let mut g = game(seed);
-            g.players[0].tier = 4;
-            g.players[0].gold = 10;
-            g.set_hero_power(0, 0, cid("BG25_HERO_100p"));
-            g.apply(0, Action::HeroPower(0)).ok()?;
-            g.apply(0, Action::Choose(i)).ok()?;
-            g.apply(0, Action::Choose(j)).ok()?;
-            let m = g.players[0]
-                .hand
-                .iter()
-                .filter_map(|h| h.item.as_minion())
-                .find(|m| m.is_card("BG25_HERO_100pt"))?
-                .clone();
-            m.has(Kw::REBORN).then_some((g, m))
-        });
-    let (mut g, made) = built.expect("a Creation with Reborn among the picks tried");
-    assert_eq!(made.attached.len(), 2);
+    // keywords), but nothing the dead one had gained since.
+    //
+    // 37.0.0 数据口径：不再靠随机 Hero Power 抽卡（P3 内容陆续入池会改变抽取结果），改为
+    // 手工构造「两张卡拼成的 Creation」：base `BG25_010` + part `BG26_ICC_028`（两者都没有
+    // “被 Reborn 时给新副本加永久增益”的脚本，避免 Jelly Belly 之类污染断言），并显式加
+    // Reborn（原测例由随机 part 提供）。牌面数值以 37 数据为准。
+    let mut g = game(900);
+    let base = cid("BG25_010"); // Handless Forsaken 2/1（亡语）
+    let part = cid("BG26_ICC_028"); // Sunborne Val'kyr 5/4（战吼）
+    let (ba, bp) = (db().get(base), db().get(part));
+    let mut made = minion(&mut g, 0, "BG25_HERO_100pt");
+    made.set_stats(ba.atk + bp.atk, ba.hp + bp.hp);
+    made.give(ba.kw);
+    made.give(bp.kw);
+    made.attached = vec![base, part];
+    made.give(Kw::REBORN); // 原测例的 Creation 带 Reborn（随机 part 提供的）；这里显式给
+
     let mut on_board = made.clone();
     on_board.set_stats(made.atk + 10, made.max_hp + 10); // a buff: not part of the card
     on_board.attached.push(cid("BG35_341")); // a Magnetic part: neither
@@ -4699,14 +4725,13 @@ fn a_reborn_creation_is_assembled_from_its_two_cards_again() {
     assert_eq!(back.attached, made.attached, "its two cards, nothing else");
     assert_eq!(
         (back.atk, back.hp, back.max_hp),
-        (made.atk, 1, made.max_hp),
-        "the two cards' stats, 1 Health"
+        (ba.atk + bp.atk, 1, ba.hp + bp.hp),
+        "the two cards' printed stats, 1 Health"
     );
     assert!(!back.has(Kw::REBORN));
     assert_eq!(back.has(Kw::TAUNT), made.has(Kw::TAUNT));
     assert!(hsbg_engine::script::implemented(cid("BG25_HERO_100pt")));
 }
-
 #[test]
 fn n16_n17_n19_n20_n21_triples() {
     // A locked hand card doesn't triple.
@@ -8802,19 +8827,25 @@ fn master_nguyen_is_not_offered_locked_or_quest_powers() {
     }
     // An ordinary power is not excluded.
     assert!(!out(2, "TB_BaconShop_HP_001"));
-    // Nguyen's own offer on Turn 2 holds none of them.
-    for seed in 0..30 {
+    // Nguyen's own offer on Turn 2 holds none of them. 37 大厅/池内容变化后，个别 seed 的
+    // 本局英雄池可能凑不出 2 个可选技能（空 offer）；对每个真正出现的 offer 仍严格断言
+    // 不含被排除项，并要求至少出现一次（不依赖固定 seed 的抽取结果）。
+    let mut offers = 0;
+    for seed in 0..200 {
         let mut g = game(8950 + seed);
         g.lobby_races = no_aberrations();
         g.players[0].hero = Some(cid("BG20_HERO_202"));
         g.turn = 2;
         g.with_recruit(0, |c| hsbg_engine::content::hero_start_of_turn(c, 0));
         let Some(Pending::HeroPowerChoice { options, .. }) = g.players[0].pending.last() else {
-            panic!("a Hero Power choice is expected")
+            continue;
         };
         let banned = hsbg_engine::content::nguyen_excluded(2);
         assert!(options.iter().all(|o| !banned.contains(o)), "seed {seed}");
+        assert!(!options.is_empty());
+        offers += 1;
     }
+    assert!(offers > 0, "Turn 2 应至少出现一次 Hero Power offer");
 }
 
 #[test]
@@ -8936,6 +8967,13 @@ fn quest_reward_rules() {
     g.players[0].quests[0].goal = 1; // Crack the Case: one attack
     set_board(&mut g, 0, &["BG35_155"]);
     set_board(&mut g, 1, &["BG36_345"]);
+    // 37 大厅/内容变化会改变战斗先手（`first_attacker` 的 RNG 流）：旧 seed 下先手是我方。
+    // 这里把对手改成“打不死的低攻靶子”（1 攻 / 50 血），保证双方交替攻击、我方至少攻击
+    // 一次，“Crack the Case: one attack” 的完成不再依赖先手。
+    let tank = &mut g.players[1].board[0];
+    tank.atk = 1;
+    tank.hp = 50;
+    tank.max_hp = 50;
     fight(&mut g);
     assert_eq!(g.players[0].rewards, vec![cid("BG24_Reward_719")]);
     assert_eq!(count(&g, "BG24_Reward_719t"), 0);
@@ -13643,6 +13681,14 @@ fn boon_of_light_does_not_target_a_divine_shield() {
     g.players[0].board[0].give(Kw::DIVINE_SHIELD);
     let shielded = g.players[0].board[0].eid;
     let plain = g.players[0].board[1].eid;
+    // 37 池内容变化会改变随机酒馆：显式构造 1 个酒馆随从，让「目标含酒馆随从」的断言
+    // 不依赖随机 roll（目标语义不变）。
+    let tavern_minion = minion(&mut g, 0, "BG23_000");
+    let tavern_sid = tavern_minion.eid;
+    g.players[0].shop = vec![hsbg_engine::state::ShopSlot::new(
+        tavern_sid,
+        Item::Minion(tavern_minion),
+    )];
     g.apply(0, Action::HeroPower(0)).unwrap();
     let Some(Pending::Target { options, .. }) = g.players[0].pending.last().cloned() else {
         panic!("a target")

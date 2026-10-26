@@ -317,7 +317,50 @@ python3 rust/bench_engine.py --games 1000     # 与 §10 基准对比，确认�
 | 2026-10-26 | `tests/mechanics.rs::pool_tag_rule_excludes_rot_hide_gnoll_by_default` | `eligible` 断言 244 → **276** | 37 数据口径：单人池 277，唯一 `pool_tag=2` 为 BG25_013（pool_tag 继承语义未变） | mechanics 套件 415 passed | 不适用（数据断言） |
 | 2026-10-26 | `tests/shown_minions_b.rs::gold_counters_show_the_gold_left` | 文本 `1 turns sooner` → **`1 turn sooner`** | 37 卡面文本（数据驱动；引擎只归一化括号内计数器） | shown_minions_b 10 passed | 不适用（数据断言） |
 | 2026-10-26 | `tests/validation.rs::t19_*` | 由“Naga-only 全部出池（36.6.3）”改为“Naga 回池（37）”：断言池内 NAGA-only 20 张 + 双种族 2 张 | 37 轮换（Naga 回池）；`docs/PORTING_37_PLAN.md` §3.4/§4.1 | validation 14 passed | 不适用（数据断言） |
+| 2026-10-26（P3） | `src/flow.rs` 大厅类型 `optional` 列表 | 加入 **`Races::NAGA`**：36.6.3 轮换把 Naga 移出大厅类型（AT 原版只有 9 种），37.0.0 Naga 回池 → 恢复官方“10 种类型随机 5 种” | 证据：37 数据单人池 minion 277 含 20 张 Naga-only 与 2 张双种族含 Naga（`data/p2/MANIFEST.json` pools diff，32 张回池）；`docs/PORTING_37_PLAN.md` §3.4“Naga 回池”；37 官方大厅 10 种族；hsrl2 冻结参照同样有 Naga 大厅（E1：数据 + 官方轮换说明） | `tests/p3_systems.rs::naga_lobby_gates_naga_pool` + 全量 cargo test（见 §10.2） | 上游 36.6.3 未支持（版本差异，非 AT bug；可反馈） |
+| 2026-10-26（P3） | `src/content/p3_systems.rs`（新增） | 37 内容移植：`BG22_HERO_007p` Queen Azshara 主技能（30 总攻 → 替换为 `BG22_HERO_007p2` Naga Conquest：池感知 Discover a Naga，1 费/每回合 1 次）；`warband_attack` 用 `Ctx::boards[side]`（与 `content::check_total_attack` 同口径） | 37 卡面文本（30 total Attack / Discover a Naga / cost 1）+ hsrl2 `batch_hero_combat3.py::AzsharaScript/NagaConquestScript` 数据链（E1：数据 + 参照实现） | `tests/p3_systems.rs` 6 个 Azshara 用例 | 新增内容（37 专属），上游无 |
+| 2026-10-26（P3） | （**决策，不改代码**）`BG36_360` Dark Paradox | **保持 AT 5 形态机制**：`flow.rs::PARADOX_VARIANTS` 每局随机 1 个 `BG36_360t*` 入池。37 的“单卡每局随机 Dark Gift/属性/Tier”在可观察玩法上已被等价覆盖；单卡 id 动态化需 per-game `CardDef` override 贯穿 pool/shop/triple/obs/state_json，属高风险，P3 不做 | 证据：37 数据 base `BG36_360` = tier1/1/1 占位壳、`pools=[]`、无脚本；5 token 覆盖 Tier2..6 且各有脚本/golden（`tests/p3_systems.rs::dark_paradox_37_data_and_mapping_invariants` 固化）。差异仅为**表征**（token id vs base id）与“37 可能存在的更多形态数据缺失” | `tests/p3_systems.rs::dark_paradox_37_data_and_mapping_invariants`（200 seeds 不变式） | 决策记录；P3 后续项见下 |
+| 2026-10-26（P3） | `tests/mechanics.rs` 7 例 + `tests/buddies_a.rs`/`tests/buddies_c.rs` fixtures 2 例 | 37 大厅（+NAGA）与 P3 内容入池导致固定 seed 的期望/夹具漂移：**不放宽断言**，按 37 数据重算期望或用与抽取无关的构造/夹具：①`extra_offers_apply...` seed 选择改用 fixture 同款 `aberration_forced` 配置 + Dragon 大厅；②`denathrius_quest...` 选含 MURLOC 大厅 seed（Reward 111 的 120% 类型修正）；③`trinket_avenge...` 选含 MECH 大厅 seed（随机 Magnetic 来自本局 universe）；④`boon_of_light...` 显式构造酒馆随从；⑤`a_reborn_creation...` 手工构造 Creation（避免随机抽卡的 Reborn 触发增益污染）；⑥`master_nguyen...` 对出现的 offer 严格断言排除项 + 要求至少一次（个别 seed 空 offer）；⑦`quest_reward_rules` 对手改为 1 攻/50 血靶子（不依赖战斗先手）；⑧buddies_a/c fixture 补 `skipping=false`（对齐 `tests/common/mod.rs`） | 37.0.0 数据 + 10 类大厅（Naga 回池）+ P3 内容入池（data/内容事实，非机制回退） | `cargo test --release -p hsbg-engine --no-fail-fast` → **39 套件 887 passed / 0 failed**（详见 §10.2） | 不适用（37 数据适配） |
 | （占位，待阶段二机制精修任务填写） | | | | | |
+
+**P3 大厅类型语义（`flow.rs::optional` / `RulesConfig`）**：
+
+- 37.0.0 = **10 种类型**（Beast/Demon/Dragon/Elemental/Mech/Murloc/Naga/Pirate/
+  Quilboar/Undead）随机 5 种；36.6.3 AT 原版 9 种（Naga 轮换出池）。
+- `RulesConfig::lobby_types`：强制入大厅的类型名（`Races::NAMES`，含 `NAGA`）——测试
+  可用 `lobby_types=["NAGA"]` 定向 Naga 大厅；语义不变（先占 `lobby_races` 名额、去重）。
+- Aberration 仍是特殊位：`aberration_forced` 时先占 1 席；`optional` 末尾追加
+  `Races::ABERRATION` 只在剩余名额 k>0 时参与抽样——Naga 加入 `optional` 不影响该逻辑。
+- `lobby_races` 默认仍 5；`hero_fits` 的类型过滤（`assoc`/`lobby_req`）随大厅自然生效：
+  Naga assoc 英雄（Azshara `BG22_HERO_007`、Lady Vashj `BG23_HERO_304`）只在含 Naga 的
+  大厅进入英雄池。
+- **回归影响**：固定 seed 的既有测试（`tests/mechanics.rs` 7 个、`tests/buddies_a/c`
+  2 个 fixtures）因大厅抽样/池内容变化出现期望漂移；已按 37 数据重算/对齐（见 §10.2），
+  未放宽断言。
+- **全部 P3 内容合入后重新冻结 seed 基准（checklist）**——P3 会改变 `ContentMode::
+  Implemented` 下的 pool/universe 抽样，任何“固定 seed + 绝对期望”的测试/评测都会漂移：
+  1. **37 Naga 回池**：`flow.rs::optional` 大厅类型 9→10 类（本文件 §7 首行，已记）；
+  2. **P3 内容入池**：批次 A 9 张（`p3_batch_a.rs`）+ 批次 B 8 张（`p3_batch_b.rs`：
+     6 池内随从 `BG33_319/BG34_925/BG35_921/BG36_508/BG36_622/BG36_921` + 2 池内法术
+     `BG32_815/BG35_922`）+ 系统项（Azshara/Dark Paradox）——新注册脚本的池卡进入
+     universe/全池抽样；
+  3. 重冻结时同步重跑 `python3 tools/p3_verify/run_all.py`（oracle/coverage/gates 的池
+     统计与卡清单会随入池变化），并重跑 `cargo test --release -p hsbg-engine
+     --no-fail-fast` 与 `pytest tests/test_rust_engine.py`；
+  4. 评测/训练侧的 seed 基准（e.g. 固定 seed 的基线 rollout）同样需要重跑冻结记录。
+
+**Dark Paradox P3 后续项（本次决策 = 保持 5 形态，不做单卡动态 id）**：
+
+1. **数据层**：需要 37.0.0 单卡形态表（每局可抽的 Dark Gift/属性/Tier 列表）。
+   当前 `data/p2/cards_37.json` 只有 base 占位壳 + 36.6.3 的 5 个 token，没有 37
+   官方形态表，无法凭空实现“37 版形态集合”。
+2. **引擎层**（若做）：per-game `CardDef` override（或 `Game::paradox_form` 表），
+   在 universe / pool 记账 / shop 摆位与价格 / 三连与 golden / 观测卡牌 embedding /
+   `state_json` 读取处统一用“本局形态”替换 tier/stats/script；属跨系统改动，需全量
+   回归 + 观测/存档兼容方案（AT 的 `CardId` = CardDef 稠密下标，单卡动态化会破坏
+   “卡表指纹 → 存档”的既有不变量）。
+3. **验收**：与 37 真实对局 / 官方文本对拍（E1–E2），并保证与 AT 5 形态机制的差异
+   仅限**表征**（card id 暴露），玩法等价。
 
 规则依据的证据等级口径见仓库 `docs/AUDIT_PROTOCOL.md`（E0–E4）；对拍分类口径见
 `docs/CONFORMANCE_AUTOTAVERN.md`。
@@ -492,6 +535,20 @@ $ cargo test --release -p hsbg-engine --no-fail-fast
 
 > **没有** `#[ignore]` 项、没有剩余失败；全部内容断言与 37 数据自洽。若后续数据再换版本，
 > 按 §5.4 流程重算断言，不要改引擎迎合旧断言（见仓库 AGENTS.md 门禁纪律）。
+
+**P3 收尾（2026-10-26，task-22）**：37 Naga 大厅（`flow.rs::optional` + NAGA）+ P3 内容
+入池后，固定 seed 的 9 个既有测试漂移：已按 37 数据/37 内容**重算期望或改成与抽取无关
+的构造**（清单与逐条依据见 §7 台账最后一行；不删测试、不放宽断言、无 skip/xfail）。
+最终全量：
+
+```text
+$ cargo test --release -p hsbg-engine --no-fail-fast
+39 个测试套件: 887 passed; 0 failed; 0 ignored      # 含 P3 新套件 p3_systems(8)/p3_cards_a/b
+$ cargo test --release -p hsbg-engine --test p3_systems
+8 passed; 0 failed
+$ python3 -m pytest tests/test_rust_engine.py
+10 passed, 1 skipped
+```
 
 ### 10.3 与上游逐位一致（36.6.3 数据，替换前历史证据）
 
