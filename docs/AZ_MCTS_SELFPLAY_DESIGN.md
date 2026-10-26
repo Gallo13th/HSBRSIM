@@ -5,7 +5,8 @@
 >
 > **v0.2 增补（2026-10-26）**：用户确认 §0 的 D6–D11（8 座全搜索 / 历史对手回放 /
 > 统一估计器接口 / 训练价值仅终局名次 / 动作严格对齐 AT 245 / 效率优先且可远程构建依赖）；
-> 新增 §3.10“早期搜索的 rank-level 成对胜负矩阵评估”及附录 A.9。
+> 新增 §3.10“早期搜索的 rank-level 成对胜负矩阵评估”及附录 A.9；
+> 补充远程机 M0 实测基线（§7.9，2026-10-26）。
 >
 > 范围：以 AutoTavern fork（`rust/` 内 `hsbg_engine`，数据 37.0.0.255130）为唯一主引擎，
 > 用**逐步（move-level）MCTS** 生成训练数据，从零训练 245 动作策略 + 名次价值网络；
@@ -828,11 +829,14 @@ struct Tree { nodes: Vec<Node>, root: NodeId, rng: SmallRng }
 
 ### 7.4 状态复制、回放与 RNG
 
-两种策略，基准后二选一：
-1. **节点存 Game**：每个节点持有 `Game`（或 `Box<Game>`）；简单但内存大；适合小 S；
+两种策略，**M0 实测后决策**：
+1. **节点存 Game**：每个节点持有 `Game`（或 `Box<Game>`）；简单但内存大；
 2. **路径回放**：树只存动作路径；每次模拟从根 `Game.copy()` 出发逐步 `step`；
-   内存小，代价是重复 step；适合深树/大 S。
-建议：**默认路径回放**（内存可控），对高频子树缓存 `Game`（LRU）；基准后定。
+   内存小，代价是重复 step。
+
+**M0 实测（远程机，§7.9）**：`Game.copy()` p50 **2.45µs**、p99 **2.77µs**（远低于
+早期 hsrl2 clone 的 6.49ms），因此**默认采用“节点存 Game”**：每次扩张/推进只 copy
+一次，避免深路径重复 step；仅对内存设节点上限/分层缓存，路径回放作为内存兜底。
 - `Game.copy` 含 RNG；chance 采样用树级 RNG（独立 seed），`EndTurn` 边记录采样种子；
 - `state_json/from_json` 仅用于快照/调试（JSON 慢，不做热路径）。
 
@@ -916,10 +920,34 @@ res = search(g, seat=0, cfg=cfg, eval_fn=net.eval_batch,
 5. **数据生成吞吐**：在给定 S/K/M 下，每小时可产生多少高质量样本；
    据此反推 100k/1M 局所需机时与节点成本。
 
-**目标（初版，待实测修正）**：单核 ≥500 sims/s；copy p99 <200µs；
-8 座全搜索 ≥2–5 局/h/进程组（逐步搜索很重，需实测）；成对矩阵不成为主要瓶颈。
+**M0 实测基线（2026-10-26，远程机 `biocourse-glt`/oulab-cs9；Python 3.14；
+`hsbg_engine` release 构建，Python 侧单线程调用）：**
+
+| 原语 | 实测 |
+|---|---|
+| `Game.copy()` | p50 **2.45µs**，p95 2.52µs，p99 2.77µs |
+| `Game.observe(p)` | p50 **1.63µs**，p99 1.72µs |
+| `Game.legal_mask(p)` | p50 **0.20µs**，p99 0.25µs |
+| `Game.step`（bot 对局 n=1049） | p50 **3.1µs**，p95 9.0µs，p99 92.3µs（`EndTurn`/战斗尖峰） |
+| `run_bot_games`（100% bot，单线程） | **201.6 games/s**（4.96 ms/局） |
+| `BatchEnv`（64 局, threads=8, Python 逐步调度） | 75 steps/s（4809 slot-steps/s）——**Python 编排瓶颈，不是引擎瓶颈** |
+| `combat_preview`（`details=false`） | **2.6µs/combat** |
+
+**由实测得到的结论**：
+- 单次 MCTS 模拟的引擎成本约 `copy 2.5µs + 2–3×step 3µs + observe 1.6µs ≈ 10–15µs`
+  （未计 NN 前向）；节点存 Game 可行；
+- 8 座全搜索粗估：每座 ~100 决策 × S=16 × ~12µs ≈ 19ms/座/局 → 8 座 ≈ 150ms/局
+  （引擎部分，~7 games/s/core；含树/NN/虚拟损失后实测目标 1–4 games/s/core；
+  128 核 -> 数百 games/s 量级，需 M1 实测）；
+- 成对矩阵：$K=16,M=4$ 约 $\binom{16}{2}\cdot4\cdot2.6\mu s\approx1.2ms$/次评估；
+  $K=8,M=2$ 约 0.15ms；只在回合边界/关键节点用，可承受；
+- Python 逐 step 调度 `BatchEnv` 只有 75 steps/s，**训练数据生成必须把搜索/对手推进
+  放在 Rust 核内**，Python 只做批量 NN 与落盘（进一步验证 §7.5 设计）。
+
+**目标（初版，待 M1 修正）**：单核 ≥500 sims/s；8 座全搜索 ≥1–4 games/s/core；
+成对矩阵不成为主要瓶颈。
 **决策点**：若 8 座全搜索成本过高，优先用 S 预算/批量/多机扩展，而不是减座位（D6）；
-若 copy 成本过高，走“路径回放 + 缓存”或 Rust 侧树状态共享。
+若内存或 copy 成本在树规模下恶化，走“路径回放 + 缓存”或 Rust 侧树状态共享。
 
 ---
 
@@ -1046,7 +1074,17 @@ cargo test --release --manifest-path rust/Cargo.toml -p hsbg-engine
 python3 rust/bench_engine.py --games 2000 --e2e-games 20
 ```
 
-### 10.4 性能基准命令（M0 用）
+### 10.4 M0 环境现状（2026-10-26 已部署）与基准
+
+- 仓库：`~/projects/HSBRSIM`（bundle clone，HEAD `703591f`；与 `~/rna2smol` 分开）；
+- `hsbg_engine` 已用远程机 Python 3.14 构建/安装（`python3 -m pip install -e .`）；
+- **远程 toolchain 备注**：rustup 镜像安装未完成（网络慢），M0 暂借用同机其他用户
+  的 `rustc/cargo 1.97.1`，并在**远程副本**临时把 `rust-version` 从 1.98 改为 1.97
+  以完成构建（本地仓库/提交未改动）。正式训练前需远程安装 **rustc ≥1.98**（rustup 或
+  conda），并保持 `rust-version = 1.98`。
+- M0 实测数字见 §7.9；后续 M1 基准需补搜索核自身吞吐（当前只有引擎原语）。
+
+### 10.5 性能基准命令（M0 用）
 
 ```bash
 # 单测/基准（需在远程机）
@@ -1270,6 +1308,7 @@ leave-one-out 检查 $s_i$ 是否由单一对手造成。
 
 1. 评审本文档（v0.2，已固化 D6–D11 与 §3.10）；
 2. 在 `biocourse-glt` 上完成环境构建 + **M0 效率基准**（§7.9：copy/step/obs、
-   8 座全搜索吞吐、成对矩阵成本、批量评估）；
+   8 座全搜索吞吐、成对矩阵成本、批量评估）——**初版已跑：copy 2.45µs、step p50 3.1µs、
+   combat 2.6µs、run_bot_games 201.6 games/s**；搜索核吞吐待 M1；
 3. 依据 M0 实测结果写开发计划（M1 Python 原型 → M2 Rust 搜索核 → M3 两阶段自对弈）；
 4. 先跑 1k 局小规模验证“搜索确实提升策略”，再按效率曲线扩到 100k+。
