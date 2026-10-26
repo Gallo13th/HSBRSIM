@@ -9,6 +9,9 @@
 |---|---|
 | [docs/AUTOTAVERN_UPGRADE.md](docs/AUTOTAVERN_UPGRADE.md) | ★ AutoTavern 借鉴升级（第一阶段）总报告（双引擎/变更/证据/限制） |
 | [docs/AUTOTAVERN_P2_KICKOFF.md](docs/AUTOTAVERN_P2_KICKOFF.md) | ★★ 第二阶段总报告：Rust 主引擎/37 数据/动作观测统一/性能/内容移植（改引擎/数据/动作必读） |
+| [docs/AZ_ALPHAZERO_FINAL_REPORT.md](docs/AZ_ALPHAZERO_FINAL_REPORT.md) | ★ AlphaZero 不完全信息搜索阶段总报告（设计/质量/训练/bench） |
+| [docs/AZ_IMPERFECT_SEARCH_DESIGN.md](docs/AZ_IMPERFECT_SEARCH_DESIGN.md) | PIMC/ISMCTS 搜索设计 v0.1（公式/实现/限制） |
+| [docs/AZ_BENCH_RESEARCH.md](docs/AZ_BENCH_RESEARCH.md) | AutoTavern/TavernBench 数据与搜索 bench 方案 |
 | [docs/AUTOTAVERN_RL.md](docs/AUTOTAVERN_RL.md) | ★ AutoTavern Rust 环境 + RL 训练/采集/评测（hsrl2 已停用） |
 | [docs/RUST_ENGINE.md](docs/RUST_ENGINE.md) / [rust/FORK.md](rust/FORK.md) | Rust 主引擎 `hsbg_engine` 架构/构建/用法 + fork 策略与改动台账 |
 | [docs/DATA_37_MIGRATION.md](docs/DATA_37_MIGRATION.md) | 37.0.0 → AutoTavern schema 数据管线（生成器/差分/compat 条目/局限） |

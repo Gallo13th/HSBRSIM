@@ -324,10 +324,15 @@ def check_manifest() -> List[Dict[str, Any]]:
         if not path.is_file():
             bad.append(f"{rel}: 文件缺失")
             continue
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        # Git on Windows may check text files out with CRLF while MANIFEST was
+        # generated from LF bytes. Hash the normalized text (binary files unchanged).
+        data = path.read_bytes()
+        if path.suffix != ".gz":
+            data = data.replace(b"\r\n", b"\n")
+        digest = hashlib.sha256(data).hexdigest()
         if digest != meta["sha256"]:
             bad.append(f"{rel}: sha256 不符")
-        elif path.stat().st_size != meta["size"]:
+        elif len(data) != meta["size"]:
             bad.append(f"{rel}: 大小不符")
     ok = not bad and len(files) == manifest.get("file_count", -1)
     detail = f"{len(files)} 个文件哈希一致" if ok else "; ".join(bad[:5])
