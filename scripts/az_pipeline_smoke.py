@@ -118,7 +118,7 @@ def collect(games: int, sims: int, seed: int, net, backend: str, device: str,
                 break
         placements = game.placements()
         for (p, f, c, mask, pi) in game_samples:
-            feats.append(f.astype(np.float16))
+            feats.append(f.astype(np.float32))
             cards.append(np.asarray(c, dtype=np.int16))
             masks.append(np.asarray(mask, dtype=np.uint8))
             pis.append(np.asarray(pi, dtype=np.float16))
@@ -170,6 +170,7 @@ def train(net, backend: str, data, epochs: int, batch: int, lr: float, device: s
             logs.append({"epoch": epoch + 1, "loss": total / max(nb, 1)})
             print(f"[train] epoch {epoch+1}: loss={logs[-1]['loss']:.4f}", flush=True)
     else:
+        net.fit_norm(features[::max(1, n // 5000)].astype(np.float32))
         opt = net.init_opt()
         t = 0
         for epoch in range(epochs):

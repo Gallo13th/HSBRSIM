@@ -30,9 +30,16 @@ class NumpyAZNet:
         self.b2 = np.zeros(N_ACTIONS, np.float32)
         self.Wv = (rng.standard_normal((hidden, N_PLAYERS)) * np.sqrt(2.0 / hidden)).astype(np.float32)
         self.bv = np.zeros(N_PLAYERS, np.float32)
+        self.mu = np.zeros(in_dim, np.float32)
+        self.sigma = np.ones(in_dim, np.float32)
         self.params = ("W1", "b1", "W2", "b2", "Wv", "bv")
 
+    def fit_norm(self, x: np.ndarray):
+        self.mu = x.mean(axis=0).astype(np.float32)
+        self.sigma = (x.std(axis=0) + 1e-3).astype(np.float32)
+
     def forward(self, x: np.ndarray):
+        x = (x - self.mu) / self.sigma
         z1 = x @ self.W1 + self.b1
         h = np.maximum(z1, 0.0)
         logits = h @ self.W2 + self.b2
@@ -88,7 +95,8 @@ class NumpyAZNet:
                 "v": {k: np.zeros_like(getattr(self, k)) for k in self.params}}
 
     def save(self, path: str):
-        np.savez(path, **{k: getattr(self, k) for k in self.params})
+        np.savez(path, **{k: getattr(self, k) for k in self.params},
+                 mu=self.mu, sigma=self.sigma)
 
     @classmethod
     def load(cls, path: str):
@@ -96,7 +104,7 @@ class NumpyAZNet:
         n = cls.__new__(cls)
         for k in z.files:
             setattr(n, k, z[k])
-        n.params = tuple(z.files)
+        n.params = tuple(k for k in z.files if k not in ("mu", "sigma"))
         return n
 
 
