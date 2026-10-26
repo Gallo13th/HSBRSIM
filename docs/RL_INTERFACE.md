@@ -482,3 +482,51 @@ JSONL 体积：真环境 100 局 / 12,677 步 → **13.9 MB**（≈1.1 KB/步，
 - [ ] `teacher` 目前复用 `hsbg.agents.heuristic.HeuristicPolicy`；若后续有更强教师
       （搜索/学习策略）可直接替换 `hsbg.agents.registry.make_opponent("teacher")` 的实现，
       RL 层的 `teacher` spec / bind_env 无需改动。
+
+---
+
+## 11. TavernGym 参照后端（可选，默认不启用）
+
+> 详见 [TAVERNGYM_BACKEND.md](TAVERNGYM_BACKEND.md)。默认后端仍是 hsrl2；
+> 本节只说明 RL 接口层如何选用它、以及接口层的边界约束。
+
+`hsbg.rl.envs.BACKENDS` 现为 `("auto", "real", "hsrl2", "mock", "taverngym")`：
+`hsrl2` 是 `real` 的显式别名（默认），`auto` 保留"真实环境不可用则回退 mock"
+的历史语义；`taverngym` **惰性导入**，未安装时只有显式选择它才报错（附带安装步骤）。
+
+```python
+from hsbg.rl import make_env, make_policy, run_episode
+
+env = make_env(backend="taverngym", seed=0)          # AutoTavern Rust 引擎（数据 36.6.3）
+env = make_env(backend="taverngym", seed=0,
+               env_kwargs={"obs_source": "view"})    # 调试视图观测源（慢约 10x）
+rec = run_episode(env, make_policy("random", seed=0), seed=0, max_steps=1000)
+```
+
+CLI（`--backend` 取值来自 `BACKENDS`，默认 `auto` 行为不变）：
+
+```bash
+python -m hsbg.rl.collector --policy random --envs 1 --episodes 2 \
+    --backend taverngym --out runs/rl/taverngym.jsonl
+python -m hsbg.rl.evaluate --policy random --episodes 2 --backend taverngym
+```
+
+约束（与 hsrl2 后端的差异详见 [TAVERNGYM_BACKEND.md](TAVERNGYM_BACKEND.md) §7）：
+
+* `taverngym` 是**另一套游戏数据版本（36.6.3.253932）**的参照模拟器，不是 hsrl2：
+  采集产物不要与 hsrl2 数据混合训练/直接对比（卡牌 id、固定 245 维动作空间、
+  观测编码都不同）；
+* `teacher` 等引擎感知策略只支持 hsrl2：`_check_policy_backend` 对
+  `mock`/`taverngym` 明确报 `ValueError`（taverngym 没有 `env.game`/`env.agent_hero`）；
+* 对手固定为引擎内置脚本 bot，`opponent`/`mock_kwargs` 参数对它不生效；
+  观测源等用 `env_kwargs={"obs_source": ...}` 透传；
+* 候选数可能 > `CANDIDATE_MAX=64`（JSONL 的 `n_candidates` 如实记录；按上限
+  padding 的编码器/训练侧会截断——该后端定位为参照/评测）；
+* 观测源默认 `features`（官方公开观测，公开信息、约 0.17 ms/步），
+  `view` 仅作对照（含调试 JSON 序列化，约 2.3~12 ms/步）。
+
+实测（本机同一 benchmark harness、同机同时；详见
+[TAVERNGYM_BACKEND.md](TAVERNGYM_BACKEND.md) §8）：taverngym 后端 features 源约
+**33.9 games/s、0.36 ms/步**；hsrl2 后端约 **6.5 games/s、3.89 ms/步**。
+因数据/规则版本不同，**吞吐只作工程参考，不是棋力或规则一致性对比**。
+

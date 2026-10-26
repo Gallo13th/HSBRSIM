@@ -1,15 +1,23 @@
-"""环境工厂 + 确定性 Mock 环境（``backend='mock'``）。
+"""环境工厂 + 确定性 Mock 环境（``backend='mock'``）+ TavernGym 参照后端。
 
-真实环境是 ``hsbg.env.game_env.BattlegroundsEnv``（运行完整的 ``hsrl2`` 引擎）。
-为了让采集/评测/接口测试在没有引擎（或需要极快确定性回归）时也能跑，
-这里提供一个**纯 Python、完全由 seed 决定**的合成环境
-:class:`MockBattlegroundsEnv`：
+后端名（``BACKENDS``）：
 
-* 观测结构 / 候选动作 / 奖励口径与 ``hsbg.env.spec`` 一致；
-* 每局长度、候选数量、是否进入 ``choice`` 阶段都由 ``seed`` 决定；
-* 终局在 ``info["rank"]`` 给出 1..num_players 的名次，便于统计名次分布。
+* ``hsrl2`` / ``real``：真实环境 ``hsbg.env.game_env.BattlegroundsEnv``
+  （完整的 vendored ``hsrl2`` 引擎，**默认后端**；``hsrl2`` 是 ``real`` 的
+  显式别名）；
+* ``auto``：优先真实环境，不可用则回退 Mock（会打印一次提示）；
+* ``mock``：纯 Python、完全由 seed 决定的合成环境 :class:`MockBattlegroundsEnv`
+  （观测结构 / 候选动作 / 奖励口径与 ``hsbg.env.spec`` 一致；每局长度、候选
+  数量、是否进入 ``choice`` 阶段都由 ``seed`` 决定；终局在 ``info["rank"]``
+  给出 1..num_players 的名次），用于无引擎/快速确定性回归；
+* ``taverngym``：**可选参照后端**，AutoTavern 的 Rust 引擎
+  （:class:`hsbg.backends.TavernGymEnv`，数据 36.6.3.253932）。需要单独安装
+  ``taverngym``（见 ``docs/TAVERNGYM_BACKEND.md`` §2）；对手固定为引擎内置
+  脚本 bot，``opponent``/``mock_kwargs`` 参数对它不适用；观测源等参数用
+  ``env_kwargs={"obs_source": "features"|"view"}`` 传入。
 
-``backend='auto'`` 时优先真实环境，不可用则回退 Mock（会打印一次提示）。
+默认仍是 hsrl2 真实环境（``make_env()`` ≡ ``make_env(backend="hsrl2")``）；
+本模块不引入新的第三方依赖（taverngym 只在选中该后端时才惰性导入）。
 """
 
 from __future__ import annotations
@@ -36,7 +44,9 @@ from hsbg.env.spec import (
 from hsbg.rl.api import resolve_action
 
 #: 环境后端名
-BACKENDS: Tuple[str, ...] = ("auto", "real", "mock")
+#: 环境后端名。``hsrl2`` 是 ``real`` 的显式别名（默认）；``auto`` 优先真实
+#: 环境、不可用回退 ``mock``；``taverngym`` 为可选参照后端（惰性导入）。
+BACKENDS: Tuple[str, ...] = ("auto", "real", "hsrl2", "mock", "taverngym")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -501,7 +511,7 @@ def real_env_available() -> bool:
 
 def make_env(
     *,
-    backend: str = "auto",
+    backend: str = "hsrl2",
     seed: Optional[int] = None,
     num_players: int = 8,
     opponent: str = "heuristic",
@@ -510,15 +520,32 @@ def make_env(
     mock_kwargs: Optional[Dict[str, Any]] = None,
     verbose: bool = False,
 ):
-    """按 backend 创建单环境（``real`` / ``mock`` / ``auto``）。"""
+    """按 backend 创建单环境（``hsrl2``/``real`` / ``auto`` / ``mock`` / ``taverngym``）。
+
+    默认 ``backend="hsrl2"``（= ``real``，真实 hsrl2 环境；不传参时行为与历史
+    版本一致）。``taverngym`` 后端惰性导入 ``hsbg.backends``，``env_kwargs``
+    直接透传给 :class:`hsbg.backends.TavernGymEnv`（如 ``{"obs_source": "view"}``）；
+    ``opponent`` 与 ``mock_kwargs`` 对 taverngym 不适用（对手是引擎内置脚本 bot）。
+    """
     global _WARNED_FALLBACK
-    backend = str(backend or "auto").lower()
+    backend = str(backend or "hsrl2").lower()
     if backend not in BACKENDS:
         raise ValueError(f"未知 backend {backend!r}，可选 {BACKENDS}")
-    if backend in ("real", "auto") and real_env_available():
-        from hsbg.env.game_env import BattlegroundsEnv
+    if backend == "taverngym":
+        from hsbg.backends import TavernGymEnv
 
         kwargs: Dict[str, Any] = {
+            "num_players": int(num_players),
+            "agent_index": int(agent_index),
+        }
+        kwargs.update(env_kwargs or {})
+        if seed is not None and "seed" not in kwargs:
+            kwargs["seed"] = int(seed)
+        return TavernGymEnv(**kwargs)
+    if backend in ("real", "hsrl2", "auto") and real_env_available():
+        from hsbg.env.game_env import BattlegroundsEnv
+
+        kwargs = {
             "num_players": int(num_players),
             "agent_index": int(agent_index),
             "opponent": str(opponent),
@@ -527,9 +554,9 @@ def make_env(
         if seed is not None and "seed" not in kwargs:
             kwargs["seed"] = int(seed)
         return BattlegroundsEnv(**kwargs)
-    if backend == "real":
+    if backend in ("real", "hsrl2"):
         raise RuntimeError(
-            "backend='real' 但真实环境不可用（hsbg.env 导入失败）；"
+            f"backend={backend!r} 但真实环境不可用（hsbg.env 导入失败）；"
             "请改用 backend='mock' 或检查引擎/环境层"
         )
     if backend == "auto" and not _WARNED_FALLBACK:
@@ -541,10 +568,12 @@ def make_env(
 
 
 def env_backend_name(env: Any) -> str:
-    """报告用：``real`` / ``mock`` + 类名。"""
+    """报告用：``real`` / ``mock`` / ``taverngym`` + 类名。"""
     name = type(env).__name__
     if isinstance(env, MockBattlegroundsEnv):
         return f"mock({name})"
+    if getattr(env, "backend", None) == "taverngym":
+        return f"taverngym({name})"
     return f"real({name})"
 
 

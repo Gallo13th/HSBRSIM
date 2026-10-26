@@ -12,6 +12,7 @@ bootstrap CI、名次分布），在 RL 接口层补上：
 命令行::
 
     python -m hsbg.rl.evaluate --policy random --episodes 20
+    python -m hsbg.rl.evaluate --policy random --episodes 2 --backend taverngym
     python -m hsbg.rl.evaluate --policy heuristic --policy random --episodes 20 --workers 2
 """
 
@@ -273,19 +274,24 @@ def _split(tasks: Sequence[Tuple[int, int]], workers: int) -> List[List[Tuple[in
 
 
 def _check_policy_backend(policy: Any, backend: str) -> None:
-    """引擎感知策略（teacher）需要真实环境：mock/回退场景提前明确报错。"""
+    """引擎感知策略（teacher）需要真实 hsrl2 环境：非真实后端提前明确报错。
+
+    ``taverngym`` 也是真实模拟器，但它不是 ``BattlegroundsEnv``（没有
+    ``env.game``/``env.agent_hero``），因此与 ``mock`` 一样不支持 teacher。
+    """
     if not policy_requires_engine(policy):
         return
-    backend_name = str(backend or "auto").lower()
-    if backend_name == "mock":
+    backend_name = str(backend or "hsrl2").lower()
+    if backend_name in ("mock", "taverngym"):
         raise ValueError(
-            "teacher 策略需要真实环境（env.game/env.agent_hero），"
-            "backend='mock' 不支持。请用 backend='real'/'auto'，"
+            "teacher 策略需要真实 hsrl2 环境（env.game/env.agent_hero），"
+            f"backend={backend_name!r} 不支持。请用 backend='real'/'auto'/'hsrl2'，"
             "或改用 heuristic/random（观测级可移植策略）。"
         )
-    if backend_name == "auto" and not real_env_available():
+    if backend_name in ("auto", "hsrl2") and not real_env_available():
         raise ValueError(
             "teacher 策略需要真实环境，但当前真实环境不可用（hsbg.env 导入失败）。"
+            "请检查环境层，或改用 heuristic/random。"
         )
 
 
