@@ -7,15 +7,27 @@
 - 英雄选择（点解锁英雄卡 → 点确认）与“确认灰显不推进”；
 - 启动链 _enter_game（只在明确状态点击，登录页只等待）；
 - note 词表与 hsbg.env.spec.ActionKind 语义对齐。
+
+平台守卫：``hsbg.live.click_bot → hsbg.live.launcher`` 在模块级执行
+``ctypes.windll.user32``，非 Windows 上 import 即 AttributeError（收集错误）。
+因此非 Windows 平台在 import 前整模块 skip；Windows 上行为不变（全部用例照跑）。
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
 import pytest
+
+if sys.platform != "win32":
+    pytest.skip(
+        "hsbg.live.click_bot 依赖 Windows API（ctypes.windll / Win32 SendInput），"
+        "非 Windows 平台按设计跳过；Windows 上照常执行",
+        allow_module_level=True,
+    )
 
 from hsbg.env.spec import ActionKind
 from hsbg.live import click_bot as cb

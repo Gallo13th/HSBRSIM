@@ -1,0 +1,4 @@
+# TavernBench 是随仓库发布的基准确数据（任务/标签/已发布答案），必须入库。
+# 根 .gitignore 的 `*.jsonl` 会误伤本目录，这里用嵌套规则重新纳入。
+!data/**/*.jsonl
+!results/**/answers.jsonl
