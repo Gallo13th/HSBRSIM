@@ -73,13 +73,23 @@ PYTHONPATH=$PWD/rust/python:. ~/.conda/envs/hiermolgen/bin/python scripts/az_sel
 | 同 eval bot 基线 | 4.96 | 4.96 | 4.96 |
 | 4 局 self-play 耗时 / 吞吐 | 9.9s / 0.406 games/s | 118s / 0.034 | 134s / 0.030 |
 
+从 entity2 checkpoint 继续训练（`--net-checkpoint`）：
+| 续训配置 | 样本 | value corr | policy top1 | eval mean rank | bot |
+|---|---:|---:|---:|---:|---:|
+| +4 局（stage3） | 4,566 | 0.996 | 0.751 | 7.28 | 4.96 |
+| +16 局（stage4） | 16,964 | 0.995 | 0.727 | 6.16 | 4.78 |
+
+4 局 stage 因样本少/无 KL anchor 出现退化；16 局明显缓解但仍未超过单 stage entity2
+（5.28，评估 seed/数据不同，差异在噪声范围）。说明 **每 stage 数据量与 KL/league 比
+单次模型容量更关键**。
+
 **结论**：entity/pointer 架构在 **value 拟合、policy top1、单 stage 评测名次** 上均优于
 Tiny MLP；但**搜索叶评估（14.8M 网络逐叶前向）使 self-play 慢 ~12×**；且单 stage 4 局
 数据下仍远弱于 bot，说明 **数据/对手库/迭代次数** 仍是主瓶颈。
 
-从 entity2 checkpoint 继续第 3 个 stage（`--net-checkpoint`，再 4 局）：
-value corr 0.996，但 eval rank 退化到 7.28 —— **小样本 stage + 无 KL anchor/无联赛导致
-灾难性漂移**；这不是架构问题，而是训练方案不完整（paper 每 stage 570k 局 + KL anchor）。
+续训结果说明：**小样本 stage + 无 KL anchor/无联赛会导致漂移**（4 局 stage 退化到 7.28）；
+16 局 stage 回到 6.16，但仍未稳定超过单 stage 的 5.28。这不是架构问题，而是训练方案
+不完整（paper 每 stage 570k 局 + KL anchor + library 对手）。
 
 ## 5. 下一步（按论文可迁移性）
 
