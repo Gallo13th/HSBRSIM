@@ -543,3 +543,21 @@ def test_kl_anchor_zero_at_stage_start_and_penalizes_drift():
         for p in model.parameters():
             p.add_(torch.randn_like(p) * 0.05)
     assert _kl(_cur_logp()) > 1e-3
+
+
+def test_grad_accum_matches_effective_batch_and_processed_count():
+    """grad_accum>1：processed_samples 仍等于 n，ratio 起点仍为 1。"""
+    torch = _needs_torch()
+    from hsbg.az.train.model import build_net
+
+    torch.manual_seed(0)
+    model = build_net(16)
+    batch = _batch_from_model(model, n_games=3, decisions_per_seat=3)
+    cfg = PPOConfig(device="cpu", value_loss="rank", pi_coef=0.0,
+                    minibatch=8, grad_accum=3, epochs=1)
+    stats = train_ppo(model, batch, cfg)
+    assert int(stats["processed_samples"]) == int(stats["samples"])
+    ep = stats["epochs"][0]
+    # 首个有效 step 的 ratio 起点=1；后续 step 会轻微偏离，取 5e-3 容差
+    assert float(ep["ratio_mean"]) == pytest.approx(1.0, abs=5e-3)
+    assert float(ep["clip_frac"]) == pytest.approx(0.0, abs=1e-3)

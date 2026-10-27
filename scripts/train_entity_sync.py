@@ -70,6 +70,8 @@ def main() -> int:
     ap.add_argument("--lam", type=float, default=0.95, help="GAE λ（论文 0.995）")
     ap.add_argument("--max-grad-norm", type=float, default=0.5,
                     help="梯度裁剪范数（论文 1.0）")
+    ap.add_argument("--grad-accum", type=int, default=1,
+                    help="梯度累积步数：有效 minibatch = minibatch * grad_accum（论文 8192）")
     ap.add_argument("--pi-coef", type=float, default=0.1)
     ap.add_argument("--entropy-coef", type=float, default=0.005)
     ap.add_argument("--max-actions-per-turn", type=int, default=40)
@@ -97,6 +99,8 @@ def main() -> int:
     ap.add_argument("--eval-games", type=int, default=512)
     ap.add_argument("--eval-seats", type=int, default=8)
     ap.add_argument("--eval-seed-base", type=int, default=420000)
+    ap.add_argument("--eval-device", default="",
+                    help="评测用的 GPU（默认跟随 --device；建议用没跑 actor 的卡）")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--checkpoint", default="")
     ap.add_argument("--trainer-state", default="")
@@ -151,6 +155,7 @@ def main() -> int:
         clip=float(args.clip), target_kl=float(args.target_kl),
         entropy_coef=float(args.entropy_coef), pi_coef=float(args.pi_coef),
         max_grad_norm=float(args.max_grad_norm),
+        grad_accum=int(args.grad_accum),
         device=str(args.device), seed=int(args.seed),
         log_every=int(args.log_every))
     trainer: Optional[PPOTrainer] = None
@@ -199,7 +204,8 @@ def main() -> int:
         out_json = os.path.join(eval_dir, f"c0_{tag}.json")
         log_path = os.path.join(eval_dir, f"c0_{tag}.log")
         cmd = [sys.executable, os.path.join(ROOT, "scripts", "c0_gate.py"),
-               "--checkpoint", ckpt, "--arch", str(arch), "--device", str(args.device),
+               "--checkpoint", ckpt, "--arch", str(arch),
+               "--device", str(args.eval_device or args.device),
                "--games", str(int(args.eval_games)), "--seats", str(int(args.eval_seats)),
                "--seed-base", str(int(args.eval_seed_base)), "--smoke",
                "--bootstrap", "1000", "--out", out_json]

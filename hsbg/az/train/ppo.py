@@ -278,6 +278,9 @@ class PPOConfig:
     #: KL anchor 到 stage 起点的系数 β（论文 Table 7：0.1，前 100 个 iteration 后放开）。
     #: >0 时必须由 trainer 提供 anchor 分布（见 PPOTrainer.set_anchor）。
     anchor_coef: float = 0.0
+    #: 梯度累积：minibatch 是微批大小，grad_accum 个微批 = 一个有效 minibatch。
+    #: 论文有效 minibatch = 8192；显存不够时用 e.g. minibatch=2048, grad_accum=4。
+    grad_accum: int = 1
     #: rank=名次 CE；mse=value MSE（critic=E[u(rank)]）
     value_loss: str = "rank"
     #: entity 有标量 value 头时的辅助 MSE 权重（tiny 无此头，忽略）
@@ -836,18 +839,32 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     processed = 0
     stopped_early = False
     t0 = time.time()
+    # 梯度累积：minibatch 是**微批**大小，grad_accum 个微批 = 一个有效 minibatch（论文 8192）
+    accum = max(1, int(getattr(cfg, "grad_accum", 1)))
+    eff = mb * accum
     for epoch in range(epochs):
         order = rng.permutation(n)
         acc: Dict[str, List[float]] = {}
         nb = 0
         epoch_stopped = False
-        for start in range(0, n, mb):
-            sel = base_idx[order[start:start + mb]]
+        for start in range(0, n, eff):
+            slices = [(start + j * mb, min(start + (j + 1) * mb, n))
+                      for j in range(accum)]
+            slices = [(a, b) for a, b in slices if a < b]
+            if not slices:
+                break
             opt.zero_grad(set_to_none=True)
-            out = ppo_losses(model, batch, cfg, indices=sel, anchor_logp=anchor_logp)
-            out["total"].backward()
+            step_metrics: Dict[str, float] = {}
+            served = 0
+            for a, b in slices:
+                sel = base_idx[order[a:b]]
+                out = ppo_losses(model, batch, cfg, indices=sel, anchor_logp=anchor_logp)
+                (out["total"] / float(len(slices))).backward()
+                served += int(sel.size)
+                for k, v in out.items():
+                    step_metrics[k] = (step_metrics.get(k, 0.0)
+                                       + float(v.detach().cpu()) / float(len(slices)))
             torch.nn.utils.clip_grad_norm_(model.parameters(), float(cfg.max_grad_norm))
-            step_metrics = {k: float(v.detach().cpu()) for k, v in out.items()}
             for k, v in step_metrics.items():
                 acc.setdefault(k, []).append(v)
             if on_step is not None:
@@ -857,7 +874,7 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                       f"policy={step_metrics['policy_loss']:.4f} "
                       f"value={step_metrics['value_loss']:.4f} "
                       f"kl={step_metrics['approx_kl']:.5f}", flush=True)
-            # 标准 PPO：逐 minibatch 监控近似 KL；超阈的这一步不执行更新
+            # 标准 PPO：逐有效 minibatch 监控近似 KL；超阈的这一步不执行更新
             if cfg.kl_early_stop and float(cfg.target_kl) > 0.0 and \
                     step_metrics["approx_kl"] > 1.5 * float(cfg.target_kl):
                 stopped_early = True
@@ -865,7 +882,7 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                 break
             opt.step()
             updates += 1
-            processed += int(sel.size)
+            processed += int(served)
             nb += 1
         rec: Dict[str, Any] = {"epoch": epoch + 1, "steps": nb}
         rec.update({k: float(np.mean(v)) for k, v in acc.items()})
