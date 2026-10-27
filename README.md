@@ -88,5 +88,6 @@ python scripts/run_tavernbench.py --check
 - `docs/TRAINING_RUNTIME_HANDOFF.md` — **接手文档**（BC 数据来源 / 对手课程 / actor 架构 / 决策与评分示例）
 - `docs/COMPUTE_PLAN_4GPU.md` — **4 GPU / 多 CPU / 6–12h 长训练计算计划**
 - `docs/COMPUTE_BENCHMARK.md` — **18M/56+1、4 GPU、worker/sims 吞吐实测**
+- `docs/AT_LAYOUT_CONTRACT.md` — **AT 3227/124/245 数据与动作契约**
 - `docs/VERIFICATION.md` — 门禁与预期
 - `docs/TAVERNBENCH.md` — 决策基准
