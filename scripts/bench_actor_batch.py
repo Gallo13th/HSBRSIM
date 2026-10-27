@@ -26,6 +26,7 @@ from hsbg.az.train.batch_eval import BatchLeafServer, BatchPPOEvaluator  # noqa:
 from hsbg.az.train.evaluate import EvalConfig, evaluate_policy  # noqa: E402
 from hsbg.az.train.model import build_net  # noqa: E402
 from hsbg.az.train.ppo import PPOGreedyPolicy  # noqa: E402
+from hsbg.az.train.profiling import GPUSampler, io_counters  # noqa: E402
 
 
 def main() -> int:
@@ -60,6 +61,8 @@ def main() -> int:
         with lock:
             results.append(r)
 
+    sampler = GPUSampler(0.1)
+    io0 = io_counters()
     t0 = time.time()
     try:
         with ThreadPoolExecutor(max_workers=int(args.parallel)) as ex:
@@ -68,19 +71,15 @@ def main() -> int:
         total_s = time.time() - t0
         st = dict(server.stats)
         server.close()
+    gpu = sampler.stop()
+    io1 = io_counters()
     decisions = sum(int(r.get("decisions", 0)) for r in results)
     games_done = sum(int(r.get("games", 0)) for r in results)
     secs = [float(r.get("seconds", 0.0)) for r in results if r.get("seconds")]
     secs_sorted = sorted(secs)
     p95 = secs_sorted[min(len(secs_sorted) - 1, int(0.95 * len(secs_sorted)))] if secs_sorted else None
-    gpu_util = None
-    gpu_peak = None
-    try:
-        if torch.cuda.is_available():
-            gpu_util = float(torch.cuda.utilization())
-            gpu_peak = int(torch.cuda.max_memory_allocated())
-    except Exception:
-        pass
+    gpu_util = gpu.get("gpu_util_mean")
+    gpu_peak = gpu.get("gpu_peak_bytes")
     payload = {
         "arch": args.arch, "device": args.device,
         "actors": int(args.parallel), "games": games_done,
@@ -89,7 +88,11 @@ def main() -> int:
         "decisions_per_s": decisions / max(total_s, 1e-9),
         "batch": st, "actor_seconds_median": statistics.median(secs) if secs else None,
         "actor_seconds_p95": p95, "gpu_util_percent": gpu_util,
+        "gpu_util_p95": gpu.get("gpu_util_p95"),
+        "gpu_samples": gpu.get("gpu_samples"),
         "gpu_peak_bytes": gpu_peak,
+        "io_read_bytes": io1["read_bytes"] - io0["read_bytes"],
+        "io_write_bytes": io1["write_bytes"] - io0["write_bytes"],
         "mean_rank": (sum(float(r.get("mean_rank", 0)) for r in results) / max(len(results), 1)),
         "illegal": sum(int(r.get("illegal_actions", 0)) for r in results),
         "truncated": sum(int(r.get("truncated_games", 0)) for r in results),
