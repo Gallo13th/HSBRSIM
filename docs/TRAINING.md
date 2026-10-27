@@ -44,7 +44,7 @@
 - 卡牌 = identity embedding + 静态特征 + 规则文本 hash embedding；
 - pointer head 输出 245 masked logits；
 - 名次头 8 logits → placement/value；
-- 默认 d=384/8 层/8 头/约 18M 参数；`arch="tiny"` 用于快速 smoke。
+- 默认 d=384/8 层/8 头；实测约 **14.8M** 参数（论文 18M 的差异来自 head/FF 配置）；`arch="tiny"` 用于快速 smoke。
 
 ## 5. 训练阶段
 

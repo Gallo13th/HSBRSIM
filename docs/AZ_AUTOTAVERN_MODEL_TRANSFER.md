@@ -48,7 +48,7 @@
 | Pointer head 245 | Buy/Sell/Activate/Choose/Play(手牌×位置)/Magnetize(手牌×随从)/Move(随从×随从) 点积 + 类型/位置 + 偏置；标量动作来自 global | ✅ |
 | Transformer d384/8/8 | d=384, 8 layers, 8 heads；FF=4d；**14.8M 参数**（与 18M 的差异主要来自 head/FF 配置） | ✅ |
 | value + placement head | rank(8) + value scalar（MSE 辅助） | ✅ |
-| PPO | 仍为 **AZ 风格 supervised**：搜索 π CE + rank CE + value MSE；未接 PPO | ❌ |
+| PPO | **已实现**：`hsbg/az/train/ppo.py`（masked PPO + GAE + clip + KL 早停；π 辅助 CE 可配；`--sims 0` 退化为纯网络 PPO，`--behavior net/mcts/mixed`） | ✅ 代码就绪；未规模训练 |
 | 1M decisions/iter、300 iter/stage、KL anchor | 未实现；当前 stage 只有 4 局/5k decisions | ❌ |
 | reality-calibrated opponent libraries | 未实现；当前 self-play 8 座同策略，没有 library/联赛 | ❌ |
 | 课程/23 版迭代/天梯闭环 | 未实现；只有单机小规模 | ❌ |
@@ -93,8 +93,8 @@ Tiny MLP；但**搜索叶评估（14.8M 网络逐叶前向）使 self-play 慢 ~
 
 ## 5. 下一步（按论文可迁移性）
 
-1. **PPO/actor-learner 或混合 AZ**：论文用 PPO 而非 search-per-leaf；我们当前 self-play
-   搜索成本高。应至少做 **批量叶评估**，再决定 PPO vs search-data 蒸馏；
+1. **PPO/actor-learner 或混合 AZ**：PPO 已实现（`hsbg/az/train/ppo.py`）；论文用纯 PPO，
+   我们默认 MCTS-guided PPO。下一步先做 **批量叶评估**，再决定 MCTS 比例与规模；
 2. **Reality-calibrated opponent library**：需要真实/录制对局数据（我们已有 Power.log/bridge
    资产可接）；先做 bot/历史 checkpoint library，再做人类统计校准；
 3. **KL anchor + 多 stage 迭代**：每个 stage 从上一 checkpoint 初始化，前 N iter KL 约束；
@@ -107,4 +107,5 @@ Tiny MLP；但**搜索叶评估（14.8M 网络逐叶前向）使 self-play 慢 ~
 - 文本 embedding 是字符哈希，不是论文的学习式 rule-text encoder；
 - 未实现 attachment/global 的全部细节，token 数 49 vs 56；
 - 我们的评测是 seat0 vs bot，不是 7 座 library；与论文的完整对局不可直接横比；
-- 当前代码仅完成“模型迁移 + 单 stage AZ 训练”，PPO/库/课程/规模尚未迁移。
+- PPO 代码已就绪（2026-10-27），但只做过 1 局 smoke，未做论文规模的 actor-learner/库/课程/迭代；
+- 当前评测仍是 seat0 vs bot，不是 7 座 library；不要用 4 局 stage 判断强弱。
