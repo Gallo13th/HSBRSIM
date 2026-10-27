@@ -79,7 +79,7 @@ def _engine_bot_bootstrap(games: int, seed: int, sample_stride: int,
           f"{meta.get('elapsed_s', 0):.2f}s", flush=True)
     if len(ds) == 0:
         return ds, None, meta
-    net = build_net(256, arch=args.arch)
+    net = build_net(256, arch=arch)
     train = train_policy_value(net, ds, epochs=max(1, int(epochs)), batch_size=int(batch_size),
                                lr=float(lr), device=device, seed=0,
                                max_samples=int(max_samples))
@@ -229,7 +229,7 @@ def main() -> int:
     # ── 3) 训练（搜索数据 + 可选冷启动数据）──
     train_ds = dataset if bootstrap_ds is None else AZDataset.concat([bootstrap_ds, dataset])
     if net is None:
-        net = build_net(256, arch=args.arch)
+        net = build_net(256, arch=arch)
     t_train = time.time()
     train_meta = train_policy_value(
         net, train_ds, epochs=int(args.epochs), batch_size=int(args.batch_size),
