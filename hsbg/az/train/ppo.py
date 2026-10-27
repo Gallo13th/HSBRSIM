@@ -923,7 +923,8 @@ class PPOSelfPlayPolicy(Policy):
                  eval_fn: Optional[Callable[..., Any]] = None,
                  engine_backend: str = "auto", seed: int = 0,
                  norm_mean: Optional[np.ndarray] = None,
-                 norm_std: Optional[np.ndarray] = None) -> None:
+                 norm_std: Optional[np.ndarray] = None,
+                 move_model: bool = True) -> None:
         self.torch = _torch()
         self.model = model
         self.device = self.torch.device(device)
@@ -943,7 +944,8 @@ class PPOSelfPlayPolicy(Policy):
         self.forced_actions = 0
         self.search_calls = 0
         self.search_failures = 0
-        self.model.to(self.device)
+        if move_model:
+            self.model.to(self.device)
         self.model.eval()
 
     def reset(self) -> None:

@@ -33,7 +33,7 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
         model, device=device, config=cfg, search_fn=search_fn,
         search_config=search_config, eval_fn=eval_fn,
         engine_backend=engine_backend, seed=int(seed) + gi,
-        norm_mean=norm_mean, norm_std=norm_std)
+        norm_mean=norm_mean, norm_std=norm_std, move_model=False)
     policy.game_id = int(cfg.game_id_offset) + gi
     records: List[Dict[str, Any]] = []
     illegal = 0
