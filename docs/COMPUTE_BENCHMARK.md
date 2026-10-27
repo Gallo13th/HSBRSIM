@@ -144,7 +144,7 @@ $P scripts/train_entity_sync.py --iterations 1 --games 64 --workers 64 \
 - **长训练不应在 actor 重构前启动**；
 - 等用户明确通知后，先做 30–60 分钟 4 GPU + CPU 扫描，再跑 6–12h。
 
-## 10. 进程级 actor pool 扫描状态（未通过）
+## 10. 进程级 actor pool 扫描状态（数据被污染，结论未成立）
 
 `ProcessActorPool` + `bench_process_pool.py` 已实现：
 
@@ -153,22 +153,36 @@ $P scripts/train_entity_sync.py --iterations 1 --games 64 --workers 64 \
 - 返回 records 给 learner；
 - 4 GPU / sims=4 / 8 games per round 扫描尝试。
 
-**结果：扫描未完成。** 运行约 2 分钟后出现：
+**当前状态（2026-10-27 修正）**：`runs/bench/process_4gpu_30min.json` **确实存在**，但只有
+3 轮、总时长 106.4s、5,616 decisions、**50.9–56.0 decisions/s**，远未跑满 30min。同一次尝试
+的日志里出现：
 
 ```text
 BrokenPipeError: [Errno 32] Broken pipe
 SpawnPoolWorker ... multiprocessing/pool.py ... put(...)
 ```
 
-没有生成有效 `runs/bench/process_4gpu_30min.json`。  
-因此不能报告 4 GPU 进程级 actor 的 30min 稳定吞吐；需要先修 worker 生命周期/结果传输。
+（一次性 `multiprocessing.Pool` 的 worker 生命周期/结果传输问题，截至本文写作时仍未修。）  
+更关键的是**采样环境被污染**：该 JSON 记录的显存是 GPU0 626 MB、GPU1 22,873 MB、
+GPU2 14,455 MB、GPU3 14,473 MB，第 3 轮 GPU1–3 的 util 冲到 96%；这些都不是本扫描的负载，
+而是**同一用户另一个项目（HierMolGen `mt3_train`）当时占用 GPU1–3**（2026-10-27 20:08 复查，
+GPU1–4 仍被该任务 4 个进程占用 78–82%，只有 GPU 0/5/6/7 空闲）。
 
-已有可用的 4 GPU **推理**基准（见 §3）和单进程线程 actor 基准（§4），但二者都不能替代
-进程级 actor 扫描。
+因此：
+
+- 这份数据**不能**作为「4 GPU 进程级 actor 吞吐」的结论，也不能用来反推 6–12h 预算；
+- 已有可用的 4 GPU **推理**基准（§3）与单进程线程 actor 基准（§4），但都不能替代进程级
+  actor 扫描（§3/§4 当时是否同样共享卡，**待确认**，复核吞吐时一并重测）。
 
 ### 下一步修法
 
 1. 用 `concurrent.futures.ProcessPoolExecutor` 或显式 `Process` + `Queue` 替代反复 `Pool`；
 2. 每轮 worker 结果用文件/共享队列，失败 worker 可重启；
 3. 先跑 2–5 分钟短测，确认无 BrokenPipe，再跑 30min；
-4. 记录每轮 decisions/s、GPU util、显存、失败/重启次数。
+4. 记录每轮 decisions/s、GPU util、显存、失败/重启次数；
+5. 扫描前后各记录一次 `nvidia-smi` 全卡占用，确保 4 张卡上没有其它任务（有则换卡重跑）。
+
+> 正在 **GPU 0 / 5 / 6 / 7（当前空闲卡）** 上用持久化 worker（显式 `Process` + 队列，替代
+> 反复 `Pool`）重跑 30min 扫描；结果追加到本节末尾。
+
+<!-- LEAD-APPEND: clean-scan-results -->

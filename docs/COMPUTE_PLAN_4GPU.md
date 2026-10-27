@@ -258,4 +258,7 @@ nvidia-smi --query-gpu=index,utilization.gpu,memory.used --format=csv -l 5
 
 确认后先做 **30–60 分钟 4 GPU + CPU 扫描**，再锁定 6–12h 预算；不会直接在没有吞吐数据的情况下承诺长训练结果。
 
-> 网络已选 **entity18m（17.98M / 57 token）**；实测吞吐见 [COMPUTE_BENCHMARK.md](COMPUTE_BENCHMARK.md)。
+> 网络选型状态（2026-10-27）：默认训练模型仍为 **entity（14,808,254 参数 / 49 token）**，
+> 现有 1M 基线用的就是它；**entity18m（17,982,654 / 57 token）** 已实现，作为 paper 56+1 的
+> **结构对齐候选**，本文件的吞吐基准以它测量（两者 checkpoint 不通用）。最终选型待长训练前确认。
+> 详见 [COMPUTE_BENCHMARK.md](COMPUTE_BENCHMARK.md)。

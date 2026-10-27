@@ -37,7 +37,8 @@ pub mod obs;
 pub mod recruit;
 pub mod rng;
 pub mod script;
-// P4-M1：逐步 MCTS 搜索核（新增能力，不改变默认行为；见 rust/FORK.md §7）。
+// P4-M1：逐步 MCTS 搜索核（新增能力，不改变默认行为；设计与用法见
+// docs/AZ_MCTS_SELFPLAY_DESIGN.md §7 与 hsbg/az/search.py）。
 pub mod search;
 pub mod turn_search;
 pub mod state;

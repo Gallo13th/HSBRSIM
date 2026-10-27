@@ -45,4 +45,4 @@ def test_at_obs_layout_matches_common():
     assert OBS_CARDS == 124
     assert O.N_CHOICE == 16
     assert O.N_POS == 8
-    assert O.N_ACTION == 245 if hasattr(O, "N_ACTION") else True
+    assert O.N_ACTIONS == 245

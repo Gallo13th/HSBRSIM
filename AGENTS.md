@@ -17,7 +17,7 @@ hsbg/eval/metrics.py     # 纯函数指标
 benchmarks/tavernbench/  # vendored TavernBench
 tests/                   # AZ / 标准 profile / 数据 / Rust 适配
 scripts/                 # verify_all / az_eval_search / az_selfplay_smoke / train_az_ppo
-tools/                   # 数据更新（generate_bg_data / version_sync / rea_fetch_hsdata / p2_data）
+tools/                   # 数据更新（generate_bg_data / rea_fetch_hsdata / p2_data）
 docs/                    # 当前设计（无历史报告）
 ```
 
@@ -26,7 +26,8 @@ docs/                    # 当前设计（无历史报告）
 - **引擎是机制/数值唯一权威**：Rust `hsbg_engine` + `rust/crates/hsbg-engine/data/cards.json`。
   改机制/数据必须登记 `rust/FORK.md`，并跑 `cargo test --release -p hsbg-engine`。
 - **动作**：0..244 与 AutoTavern 逐位一致；245..273 是扩展段（Unfreeze / 备用技能槽 /
-  备用选择槽 / FreezeSlot）。前 245 永远冻结。
+  备用选择槽 / FreezeSlot），总宽 274。前 245 永远冻结；**扩展 29 维目前仅 Python 侧声明，
+  引擎未实现**（`legal_mask` 固定 245 位，`apply_index ≥ 245` 直接拒绝）。
 - **观测**：3227 floats + 124 cards；`layout()` 32 项与 AutoTavern 一致；卡牌下标
   跨数据版本不可复用。
 - **确定性**：同 seed + 同动作序列逐位一致；`state_json` 精确 save/restore。
@@ -50,7 +51,6 @@ python scripts/run_tavernbench.py --check
 
 # 数据（255790）
 python tools/p2_data/gen_carddb_37.py --check   # 需 HSBRSIM_AT_ROOT 或 ../AutoTavern
-python tools/version_sync.py --check
 ```
 
 ## 4. 写范围（并行 agent）
@@ -62,7 +62,7 @@ python tools/version_sync.py --check
 | az-search | `hsbg/az/{search,belief,puct,env_api,policy,toy_env}.py`、`tests/test_az_search.py` |
 | az-train | `hsbg/az/train/**`、`scripts/az_*.py`、`scripts/train_az_ppo.py`、`tests/test_az_*.py` |
 | env-profile | `hsbg/env/action_space_std.py`、`hsbg/env/obs_std.py`、对应测试 |
-| data | `data/**`、`data/p2/**`、`tools/p2_data/**`、`tools/version_sync.py` |
+| data | `data/**`、`data/p2/**`、`tools/p2_data/**` |
 
 规则：一个文件同一时间只允许一个 writer；写前 30 秒内重读；冲突时先告知 Lead。
 禁止 `git reset --hard` / `git checkout -- .` / `git clean` / 全仓格式化。

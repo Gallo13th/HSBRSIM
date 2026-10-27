@@ -555,7 +555,7 @@ def validate_layout() -> None:
            if pair[0] != pair[1]}
     if bad:
         raise AssertionError(f"动作常量派生关系不成立：{bad}")
-    # 编解码全量自检（245 + 21 = 266 项，导入期 < 1 ms）
+    # 编解码全量自检（245 + 29 = 274 项，导入期 < 1 ms）
     for index in range(N_TOTAL_ACTIONS):
         action = decode(index)
         if encode(action) != index:

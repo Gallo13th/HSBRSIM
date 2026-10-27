@@ -13,8 +13,10 @@
 > 所有训练/搜索只使用 `hsbg_engine`；不再保留任何 legacy 引擎。
 >
 > 相关文档：[ENGINE.md](ENGINE.md)、[ACTION_OBS.md](ACTION_OBS.md)、
-> [ACTION_OBS.md](ACTION_OBS.md)、
-> [AUTOTAVERN_P3_KICKOFF.md](AUTOTAVERN_P3_KICKOFF.md)、[P3_VERIFICATION.md](P3_VERIFICATION.md)。
+> [VERIFICATION.md](VERIFICATION.md)（门禁与验收口径）。
+> P3 阶段的两份原始报告（原 `AUTOTAVERN_P3_KICKOFF.md`、`P3_VERIFICATION.md`）已在
+> `c53148c` 的 AutoTavern-only 清理中删除，现存结论见 `docs/ENGINE.md`、`rust/FORK.md`
+> 与 `docs/VERIFICATION.md`。
 
 ---
 
@@ -59,6 +61,10 @@ AT 未公开训练代码的复刻；MuZero 式世界模型；在线搜索替代�
 > Upgrade/HeroPower/DarkGift/Cancel/Buy/Sell/Activate/Choose/Play/Magnetize/Move）。
 > 本设计**训练/搜索只用 245**，245+ 扩展（Unfreeze/HeroPower 额外槽/FreezeSlot 等）
 > 不纳入（与 AT/TavernBench 严格可比）；若未来需要，另行立项并同步动作语义/数据版本。
+>
+> **口径澄清（2026-10-27）**：环境总宽度其实是 **274**（`hsbg/env/action_space_std.py`
+> 的 245 主段 + 29 扩展段），但训练/搜索只用前 245；扩展 29 维目前仅 Python 侧声明、
+> 引擎未实现（`legal_mask` 固定 245 位，`apply_index ≥ 245` 直接拒绝）。本节 D10 的设计意图不变。
 
 ### 1.2 硬约束
 
@@ -116,7 +122,7 @@ $$
 - **奖励**：仅终局有名次奖励（§2.5）。
 
 > 8 人之间是常和（constant-sum）名次效用，不是 2 人零和；因此**不使用 negamax**，
-> 单座位视角把其余 7 座视为“带策略的随机环境”（与 `docs/ALGORITHM_RESEARCH.md` 一致）。
+> 单座位视角把其余 7 座视为“带策略的随机环境”。
 
 ### 2.2 观测、信息集与信念
 

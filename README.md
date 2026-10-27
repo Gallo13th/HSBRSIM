@@ -5,7 +5,8 @@
 **唯一模拟器**：`rust/` 的 `hsbg_engine`（[MCG-NJU/AutoTavern](https://github.com/MCG-NJU/AutoTavern)
 TavernGym 的 fork，MIT），数据基线 **37.0.0.255790**。
 **唯一训练/搜索栈**：`hsbg/az` —— 不完全信息 MCTS（PIMC/ISMCTS + PUCT）→ 8 座自对弈 → PPO。
-**唯一动作/观测契约**：245 动作 + 精确 mask；3227 floats + 124 cards（与 AutoTavern 逐位对齐）。
+**唯一动作/观测契约**：245 主段 + 29 扩展 = 274 动作（训练/搜索只用前 245）+ 精确 mask；
+3227 floats + 124 cards（与 AutoTavern 逐位对齐）。
 
 > 全仓库只保留 AutoTavern 引擎 + 不完全信息 MCTS + 自对弈 + PPO 这一条路径。
 
@@ -13,7 +14,7 @@ TavernGym 的 fork，MIT），数据基线 **37.0.0.255790**。
 
 ```text
 hsbg/
-├── env/                # 标准 profile：action_space_std（245 + 扩展 29）= 274；obs_std（3227+124）
+├── env/                # 标准 profile：action_space_std（245 主段 + 29 扩展 = 274，训练只用 245）；obs_std（3227+124）
 ├── az/                 # 唯一搜索/自对弈/训练栈
 │   ├── env_api.py      # 引擎鸭子接口：observe / legal_mask / step / state_json
 │   ├── belief.py       # determinization / 信念采样（公开信息）
@@ -82,9 +83,12 @@ python scripts/run_tavernbench.py --check
 - `docs/ENGINE.md` — `hsbg_engine` fork/数据/构建
 - `docs/ACTION_OBS.md` — 动作/观测契约
 - `docs/AZ_MCTS_SELFPLAY_DESIGN.md` / `docs/AZ_IMPERFECT_SEARCH_DESIGN.md` — MCTS/自对弈设计
+- `docs/AZ_AUTOTAVERN_MODEL_TRANSFER.md` — AT entity 模型迁移记录（网络结构/pointer head 对齐与对照）
 - `docs/TRAINING.md` — MCTS + 自对弈 + PPO 快速指南
 - `docs/TRAINING_DESIGN.md` — **完整训练系统设计**（搜索/叶评估/吞吐/剪枝/PPO）
 - `docs/TRAINING_PLAN_V2.md` — **v2 计划**（entity 14.8M / 异步 actor-learner / 重搜做题 / 冷启动联赛）
+- `docs/MULTISTAGE_TRAINING.md` — **多 stage 与数据预算**（BC/PPO 实测曲线、吞吐预算、S1–S3）
+- `docs/TRAINING_RUN_2026-10-27.md` — **1h tiny 自对弈试训结果**（7.98→7.63 的负结果与诊断）
 - `docs/TRAINING_RUNTIME_HANDOFF.md` — **接手文档**（BC 数据来源 / 对手课程 / actor 架构 / 决策与评分示例）
 - `docs/COMPUTE_PLAN_4GPU.md` — **4 GPU / 多 CPU / 6–12h 长训练计算计划**
 - `docs/COMPUTE_BENCHMARK.md` — **18M/56+1、4 GPU、worker/sims 吞吐实测**

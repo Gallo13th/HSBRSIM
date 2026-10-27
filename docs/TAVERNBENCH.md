@@ -295,14 +295,14 @@ runner 都是**可续跑**的（已答 id 跳过）；`run_tools` 需要本机�
 | 评测形态 | 静态局面 + 固定 prompt，逐题打分（0/1 + 分级分） | 完整 8 人对局 self-play / 对脚本对手，统计名次/胜率 |
 | 数据/版本 | taverngym 状态 JSON，patch 36.6.3 | hsbg_engine，数据基线 37.0.0.255790 |
 | 动作空间 | 基准把答案**文本化**（选项/整数/序列） | 动态候选动作 + 实体 token 观测（与 TavernGym 245 动作不同） |
-| 入口 | `scripts/run_tavernbench.py` / `tavernbench.report` | `scripts/evaluate.py`、`scripts/eval_*.py`、`hsbg/eval/**` |
+| 入口 | `scripts/run_tavernbench.py` / `tavernbench.report` | `scripts/c0_gate.py`、`scripts/eval_*.py`、`hsbg/eval/**` |
 | 用途 | 「决策质量」外部基准、LLM baseline、提示词/工具使用实验 | 训练进展门禁、self-play 强度、与基线对比 |
 
 **明确边界**：
 
 1. **不可直接互相换算**：TavernBench 的 `play`/`rule` 分数与 HSBRSIM 的
-   self-play 名次/胜率不是同一口径；不要用 TavernBench 分数替代
-   `docs/EVAL_REPORT.md` 的训练/策略评测结论。
+   self-play 名次/胜率不是同一口径；不要用 TavernBench 分数替代本项目的训练/策略评测结论
+   （评测口径见 `docs/TRAINING_RUNTIME_HANDOFF.md` §5 与 `hsbg/eval/**`）。
 2. **不是 RL reward/训练信号**：它是离线静态题库的 LLM 评测，不提供环境
    rollout、奖励或梯度；`benchmarks/tavernbench` 只读，不被 `hsbg_engine`、
    `hsbg/**` 代码路径引用。
