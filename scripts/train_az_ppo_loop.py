@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import shutil
@@ -125,8 +126,13 @@ def main() -> int:
         _run(cmd, log_path)
 
     i = 0
+    last_iter_seconds = 0.0
     while time.time() < deadline:
         if args.iterations > 0 and i >= args.iterations:
+            break
+        # 预留一个完整迭代的时间，避免最后一轮严重越界
+        if last_iter_seconds > 0 and (deadline - time.time()) < max(90.0, last_iter_seconds):
+            print("[loop] 剩余时间不足一个迭代，停止采集", flush=True)
             break
         ckpt = os.path.join(current, "model.pt")
         if not os.path.isfile(ckpt):
@@ -186,6 +192,7 @@ def main() -> int:
             print(f"[loop] iter {i} eval mean_rank={net.get('mean_rank')} "
                   f"top4={net.get('top4_rate')}", flush=True)
         history.append(rec)
+        last_iter_seconds = float(rec.get("seconds", 0) - (history[-2].get("seconds", 0) if len(history) > 1 else 0))
         with open(history_path, "w", encoding="utf-8") as f:
             json.dump({"minutes": args.minutes, "elapsed_s": time.time() - t0,
                        "args": vars(args), "history": history}, f,
@@ -208,7 +215,7 @@ def main() -> int:
             _run([sys.executable, "scripts/eval_az_checkpoint.py",
                   "--checkpoint", final_ckpt, "--arch", args.arch,
                   "--device", args.device, "--games", str(args.final_games),
-                  "--seed", "91000", "--policy-seat", str(seat),
+                  "--seed", "90000", "--policy-seat", str(seat),
                   "--out", final_path], log_path, timeout=600)
             final[f"seat_{seat}"] = _load_json(final_path)
         summary["final"] = final
@@ -217,6 +224,15 @@ def main() -> int:
             ranks.extend(((v.get("results") or {}).get("net") or {}).get("rank_sequence", []))
         if ranks:
             summary["final_mean_rank"] = sum(ranks) / len(ranks)
+    initial_ranks = []
+    for v in (summary.get("initial_eval") or {}).values():
+        initial_ranks.extend(((v.get("results") or {}).get("net") or {}).get("rank_sequence", []))
+    if not initial_ranks:
+        for pth in sorted(glob.glob(os.path.join(initial_dir, "seat_*.json"))):
+            initial_ranks.extend((_load_json(pth).get("results", {}).get("net", {})
+                                  .get("rank_sequence", [])))
+    if initial_ranks:
+        summary["initial_mean_rank"] = sum(initial_ranks) / len(initial_ranks)
     summary["elapsed_s"] = time.time() - t0
     with open(os.path.join(args.out, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
