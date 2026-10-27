@@ -234,8 +234,8 @@ def _synthetic_policy_metrics(games: int = 3) -> dict:
 
 
 def test_eval_report_fields_and_roundtrip(tmp_path):
-    engine = {"engine_version": "1.0.0", "game_version": "37.0.0.255130",
-              "data_version": "37.0.0.255130", "n_actions": 245,
+    engine = {"engine_version": "1.0.0", "game_version": "37.0.0.255790",
+              "data_version": "37.0.0.255790", "n_actions": 245,
               "obs_floats": 3227, "obs_cards": 124}
     report = build_eval_report(
         engine=engine,
@@ -262,8 +262,8 @@ def test_eval_report_fields_and_roundtrip(tmp_path):
 
 
 def test_train_report_builder(tmp_path):
-    engine = {"engine_version": "1.0.0", "game_version": "37.0.0.255130",
-              "data_version": "37.0.0.255130", "n_actions": 245,
+    engine = {"engine_version": "1.0.0", "game_version": "37.0.0.255790",
+              "data_version": "37.0.0.255790", "n_actions": 245,
               "obs_floats": 3227, "obs_cards": 124}
     report = build_train_report(
         engine=engine,
@@ -391,8 +391,8 @@ def test_eval_one_game_report_and_validate():
     assert res["seconds"] > 0
     if res["games_finished"] == 1:
         assert 1 <= int(list(res["rank_counts"])[0]) <= N_PLAYERS
-    engine = {"engine_version": "1.0.0", "game_version": "37.0.0.255130",
-              "data_version": "37.0.0.255130", "n_actions": 245,
+    engine = {"engine_version": "1.0.0", "game_version": "37.0.0.255790",
+              "data_version": "37.0.0.255790", "n_actions": 245,
               "obs_floats": 3227, "obs_cards": 124}
     report = build_eval_report(
         engine=engine,

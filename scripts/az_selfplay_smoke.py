@@ -91,7 +91,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="AZ 初期自对弈/训练 smoke")
     ap.add_argument("--policy", default="search_rust",
                     help="自对弈策略：random|heuristic|net|search_rust|search_rust_rollout|"
-                         "search_py|search_az")
+                         "search_az")
     ap.add_argument("--games", type=int, default=4, help="自对弈局数")
     ap.add_argument("--mode", default="game", choices=["game", "batch"],
                     help="game=Game 逐步(可搜索)；batch=BatchEnv 8 座批量(仅纯策略)")
@@ -101,7 +101,7 @@ def main() -> int:
     ap.add_argument("--search-temperature", type=float, default=1.0,
                     help="自对弈数据生成建议 1.0（探索）；评测用 <=0 = argmax")
     ap.add_argument("--search-det", type=int, default=1, help="search_az 的 determinizations")
-    ap.add_argument("--search-backend", default="rust", choices=["rust", "py", "az"])
+    ap.add_argument("--search-backend", default="rust", choices=["rust", "az"])
     ap.add_argument("--evaluator", default="heuristic",
                     choices=["heuristic", "uniform", "net", "bot_prior", "rollout"],
                     help="搜索叶评估器；net 需要 --net-checkpoint 或 --bootstrap-games；"
@@ -181,10 +181,6 @@ def main() -> int:
                              evaluator=evaluator, dirichlet_epsilon=0.0)
         if args.policy in ("search_rust_rollout", "rollout"):
             policy_kwargs.pop("evaluator", None)
-    elif args.policy in ("search_py", "python", "mcts_py"):
-        policy_kwargs.update(simulations=args.search_sims,
-                             temperature=float(args.search_temperature),
-                             evaluator=evaluator)
     elif args.policy in ("search_az", "az", "mcts_az"):
         engine_backend = args.search_engine_backend
         if getattr(evaluator, "accepts_game", False) and engine_backend == "auto":

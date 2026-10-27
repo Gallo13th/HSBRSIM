@@ -65,8 +65,6 @@ def _search_kwargs(args: argparse.Namespace, evaluator) -> Dict[str, Any]:
     accepts_game = bool(getattr(evaluator, "accepts_game", False))
     base = {"simulations": args.search_sims,
             "temperature": float(args.search_temperature)}
-    if name == "py":
-        return {**base, "evaluator": evaluator}
     if name == "az":
         engine_backend = args.search_engine_backend
         if accepts_game and engine_backend == "auto":
@@ -95,7 +93,7 @@ def build_factories(args: argparse.Namespace, seed: int,
                 raise SystemExit("[error] --policies net 需要 --net-checkpoint")
             factories["net"] = lambda: make_policy("net", evaluator=evaluator)
         elif name.startswith("search"):
-            if name in ("search_rust", "search_rust_rollout", "search_py", "search_az"):
+            if name in ("search_rust", "search_rust_rollout", "search_az"):
                 accepts_game = bool(getattr(evaluator, "accepts_game", False))
                 if accepts_game and name != "search_az":
                     raise SystemExit(
@@ -167,8 +165,8 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=90000, help="评测 seed 起点（与训练/自对弈分离）")
     ap.add_argument("--policies", default="random,bot,heuristic,search_rust",
                     help="逗号分隔：random,bot,heuristic,net,search_rust,search_rust_rollout,"
-                         "search_py,search_az")
-    ap.add_argument("--search-backend", default="rust", choices=["rust", "py", "az"])
+                         "search_az")
+    ap.add_argument("--search-backend", default="rust", choices=["rust", "az"])
     ap.add_argument("--search-sims", type=int, default=8)
     ap.add_argument("--search-temperature", type=float, default=0.0,
                     help=">0 探索采样；<=0 = argmax（评测用默认 0 以保证强度）")
@@ -235,7 +233,7 @@ def main() -> int:
 
     # 搜索配置写进每个策略的指标（便于复现/解释）
     backend_of = {"search_rust": "rust", "search_rust_rollout": "rust",
-                  "search_py": "python", "search_az": "az"}
+                  "search_az": "az"}
     for name, m in comparison["policies"].items():
         if name.startswith("search"):
             m["search_config"] = {

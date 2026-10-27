@@ -24,6 +24,7 @@ v2 changes (S14 / 36.2 refactor):
 """
 
 import json
+import os
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -32,7 +33,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
-HSDATA_XML = ROOT / "hsdata" / "CardDefs.xml"
+HSDATA_XML = Path(os.environ.get(
+    "HSBRSIM_HSDATA_XML", str(ROOT / "reversed" / "hsdata_255790" / "CardDefs.Bacon.xml")))
+HSDATA_README = Path(os.environ.get(
+    "HSBRSIM_HSDATA_README", str(HSDATA_XML.parent / "README.md")))
 
 # ── Correct XML enumID mappings ──
 TAG = {
@@ -142,7 +146,7 @@ SUBSET_TAGS = {
 # **不是** `BACON_SUBSET_*`（后者是饰品的"关联随从类型"，用途不同——
 # Whelp Smuggler `BG21_013` 有 `subset_dragon` 却无 DRAGON tag，AC-7）。
 # 仅导出 BG 标准 11 族（BLOODELF/NERUBIAN 等艺术族不进酒馆类型系统）。
-# 255130 起 RaceTagMap 新增 `ABERRATION tag=4756`；实测 255130 BG 实体中
+# RaceTagMap 含 `ABERRATION tag=4756`；BG 实体中
 # 该 tag 0 命中（ABERRATION 只以 CARDRACE=126 出现），保留为数据契约对齐。
 RACE_TAGS = {
     2522: "PIRATE", 2523: "DRAGON", 2534: "UNDEAD", 2536: "MURLOC",
@@ -304,7 +308,7 @@ def build_card_info(card):
     # token（`BG24_Quest_Bob` / `BG33_Anomaly_008_Quest`，text "In 3
     # turns, choose one of three Quests!"）无此 tag，故引擎
     # **但引擎并不读取该字段**——`Game.quest_defs()` 的口径是
-# `card_type==SPELL ∧ id 含 "quest" ∧ tag 535`（见 `hsrl2/game.py::is_quest_card`）；
+# `card_type==SPELL ∧ id 含 "quest" ∧ tag 535`；
 # 20 张任务卡中仅 11 张带该标志，故任何"用 quest 标志筛任务卡"的写法都是错的。
     if has_tag(card, TAG["QUEST"]):
         info["quest"] = True
@@ -508,7 +512,7 @@ def main():
 
     # Read patch version from README
     version = "unknown"
-    readme_path = ROOT / "hsdata" / "README.md"
+    readme_path = HSDATA_README
     if readme_path.exists():
         for line in open(readme_path):
             if line.startswith("Version:"):

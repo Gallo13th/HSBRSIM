@@ -8,14 +8,12 @@ embedding 下标），与上游 ``taverngym.layout()`` 逐项一致，从而：
 
 1. 与 AT 引擎/策略/数据**逐位可比**（同数据版本下同一浮点块/卡牌槽位含义相同）；
 2. 固定形状观测便于统一策略编码器与向量化训练；
-3. 旧 ``hsbg.env.spec.Observation``（实体 token 动态观测）保留为 **legacy
-   profile**（Lead 在 ``docs/ENV_SPEC.md`` 集成；本模块不修改 ``spec.py``）。
+3. 训练/搜索只使用这一套 3227+124 观测；旧实体 token 观测已删除。
 
-本模块**不依赖** ``taverngym``/``numpy`` 以外的第三方库；``numpy`` 仅用于
-``decode_blocks`` 的块视图（仓库已依赖 numpy）。常量来自上游源码
-``crates/taverngym/src/obs.rs``（taverngym 1.0.0 / 游戏 36.6.3.253932）与
-运行时 ``taverngym.layout()``；金标测试 ``tests/test_obs_std.py`` 在装有
-``taverngym`` 时逐项对照 ``layout()``/``OBS_FLOATS``/``OBS_CARDS``/``N_CARDS``。
+本模块**不依赖** numpy 以外的第三方库；常量来自 AutoTavern 源码
+``crates/taverngym/src/obs.rs``（TavernGym v1.0.0），
+金标测试 ``tests/test_obs_std.py`` 逐项对照 ``hsbg_engine.layout()`` /
+``OBS_FLOATS`` / ``OBS_CARDS`` / ``N_CARDS``。
 
 数据版本契约（重要）
 --------------------
@@ -24,7 +22,7 @@ embedding 下标），与上游 ``taverngym.layout()`` 逐项一致，从而：
 * **卡牌 id 词表**由**数据版本**决定：``cards[i]`` 是"卡牌 embedding 下标"
   （``CardId + 1``，0 = 空槽），下标 → 卡 id 的映射来自该构建的
   ``crates/taverngym/data/cards.json``（36.6.3 构建 ``N_CARDS=3984``，含空位，
-  实际 3983 张）。HSBRSIM 数据基线是 37.0.0.255130，**跨数据版本时卡牌下标
+  实际 3983 张）。HSBRSIM 数据基线是 37.0.0.255790，**跨数据版本时卡牌下标
   不可直接比较/复用**（需要按卡 id 重新映射；映射表由数据管线提供）。
 * 因此"与 AT 逐位可比"的严格条件是：**同引擎版本 + 同数据版本**（或已完成
   卡牌 id 对齐）。浮点块的**位置**含义跨版本稳定，卡牌块的**内容**不稳定。
@@ -191,13 +189,13 @@ N_LOBBIES = RACES_COUNT
 
 #: 卡牌 embedding 下标 0 = 空槽；``cards[i] = CardId + 1``
 EMPTY_CARD_INDEX = 0
-#: 上游 36.6.3.253932 构建的 ``taverngym.N_CARDS``（= 3983 张卡 + 空位 0）。
+#: 当前 37.0.0.255790 构建的 ``hsbg_engine.N_CARDS``（= 3983 张卡 + 空位 0）。
 #: **数据版本相关**：换数据包/重编引擎后该值会变；运行时应优先读
-#: ``taverngym.N_CARDS``，本常量仅作文档基线。
+#: ``hsbg_engine.N_CARDS``，本常量仅作文档基线。
 N_CARDS_REFERENCE = 3984
 N_CARDS_NOTE = (
     "N_CARDS = 1 + 当前构建卡表大小（0 号为空槽）；36.6.3.253932 构建为 3984。"
-    "HSBRSIM 数据基线 37.0.0.255130 的卡表不同 → 跨数据版本 cards 下标需按卡 id"
+    "HSBRSIM 数据基线 37.0.0.255790 的卡表不同 → 跨数据版本 cards 下标需按卡 id"
     " 重新映射，不能直接复用。"
 )
 

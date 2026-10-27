@@ -1,14 +1,14 @@
 {
   "schema": "hsbrsim-p2-carddb/1",
-  "generator_version": "1.1.0",
+  "generator_version": "1.2.0",
   "meta": {
-    "client_version": "37.0.0.255130",
+    "client_version": "37.0.0.255790",
     "server_patch": "37.0.0",
-    "source": "HSBRSIM 官方数据 37.0.0.255130 + AutoTavern 36.6.3 compat 条目",
+    "source": "HSBRSIM 官方数据 37.0.0.255790 + AutoTavern 36.6.3 compat 条目",
     "count": 3983,
     "mapped_count": 3695,
     "compat_count": 288,
-    "generator": "HSBRSIM tools/p2_data/gen_carddb_37.py v1.1.0",
+    "generator": "HSBRSIM tools/p2_data/gen_carddb_37.py v1.2.0",
     "at_baseline": "36.6.3.253932 (36.6.3)"
   },
   "commands": {
@@ -18,7 +18,7 @@
     "test": "python3 -m pytest tests/test_p2_data.py -q"
   },
   "source": {
-    "hsbrsim_data_patch": "37.0.0.255130",
+    "hsbrsim_data_patch": "37.0.0.255790",
     "hsbrsim_total_bg_cards": 3534,
     "hsbrsim_pool_minions": 252,
     "hsbrsim_pool_spells": 76,
@@ -81,7 +81,7 @@
       "ui_button": 14
     },
     "pools": {
-      "minion": 255,
+      "minion": 256,
       "tier7": 12,
       "hero": 118,
       "spell": 73,
@@ -89,7 +89,7 @@
       "timewarp": 253
     },
     "pools_single_player": {
-      "minion": 255,
+      "minion": 256,
       "tier7": 12,
       "hero": 118,
       "spell": 73,
@@ -98,14 +98,14 @@
     }
   },
   "pool_scope": {
-    "note": "当前版本 Naga 不在随从池：raw 池文件已剔除 21 张 Naga，数据表仍保留历史 Naga 卡但 pools=[]。单人池口径：37 池子文件给的是“客户端池子标记”。已按 P2-C 审计剔除 3 张Duos-only 法术；并按 AT 机制（flow.rs::PARADOX_VARIANTS）修正 Dark Paradox：base BG36_360 不入池（−1）、5 个形态入池（+5）。36.6.3 上游同 id 的 pools/reachable 与这两种修正一致",
+    "note": "单人池口径：37 池子文件给的是“客户端池子标记”。已按 P2-C 审计剔除 3 张Duos-only 法术；并按 AT 机制（flow.rs::PARADOX_VARIANTS）修正 Dark Paradox：base BG36_360 不入池（−1）、5 个形态入池（+5）。36.6.3 上游同 id 的 pools/reachable 与这两种修正一致",
     "raw_pool_files": {
       "minion": 252,
       "spell": 76,
       "hero": 118
     },
     "effective_single_player": {
-      "minion": 255,
+      "minion": 256,
       "tier7": 12,
       "hero": 118,
       "spell": 73,
@@ -218,7 +218,7 @@
       "total": 3695
     },
     "pools": {
-      "non_default": 957,
+      "non_default": 936,
       "total": 3695
     },
     "text_zh": {
@@ -335,8 +335,8 @@
       "pool_tag": {
         "at_non_default": 274,
         "applied": 3695,
-        "changed": 70,
-        "already_equal": 3625,
+        "changed": 91,
+        "already_equal": 3604,
         "coverage": 1.0
       },
       "lobby_req": {
@@ -428,7 +428,7 @@
   "mechanism_meta": {
     "note": "Rust 引擎机制断言所需的派生计数（可直接对照 cards.rs/mechanics.rs 测试）",
     "pool_counts": {
-      "minion": 255,
+      "minion": 256,
       "tier7": 12,
       "hero": 118,
       "spell": 73,
@@ -437,7 +437,7 @@
     },
     "strict_pool_tag_eligible_minions": {
       "filter": "pools.minion && pool_tag <= 1（strict_pool_tag 默认 true）",
-      "count": 254
+      "count": 255
     },
     "pool_tag_gt_1_ids": [
       "BG25_013"
@@ -1161,10 +1161,10 @@
         }
       },
       "pools": {
-        "changed": 37,
+        "changed": 18,
         "by_kind": {
           "hero": 2,
-          "minion": 32,
+          "minion": 13,
           "tavern_spell": 3
         },
         "examples": [
@@ -1174,54 +1174,6 @@
             "old": [],
             "new": [
               "hero"
-            ]
-          },
-          {
-            "id": "BG23_000",
-            "kind": "minion",
-            "old": [],
-            "new": [
-              "minion"
-            ]
-          },
-          {
-            "id": "BG23_002",
-            "kind": "minion",
-            "old": [],
-            "new": [
-              "minion"
-            ]
-          },
-          {
-            "id": "BG23_004",
-            "kind": "minion",
-            "old": [],
-            "new": [
-              "minion"
-            ]
-          },
-          {
-            "id": "BG23_007",
-            "kind": "minion",
-            "old": [],
-            "new": [
-              "minion"
-            ]
-          },
-          {
-            "id": "BG23_008",
-            "kind": "minion",
-            "old": [],
-            "new": [
-              "minion"
-            ]
-          },
-          {
-            "id": "BG23_009",
-            "kind": "minion",
-            "old": [],
-            "new": [
-              "minion"
             ]
           },
           {
@@ -1255,15 +1207,75 @@
             ]
           },
           {
-            "id": "BG26_505",
+            "id": "BG27_016",
             "kind": "minion",
-            "old": [],
+            "old": [
+              "tier7"
+            ],
             "new": [
-              "minion"
+              "minion",
+              "tier7"
             ]
           },
           {
-            "id": "BG27_016",
+            "id": "BG27_017",
+            "kind": "minion",
+            "old": [
+              "tier7"
+            ],
+            "new": [
+              "minion",
+              "tier7"
+            ]
+          },
+          {
+            "id": "BG28_606",
+            "kind": "tavern_spell",
+            "old": [],
+            "new": [
+              "spell"
+            ]
+          },
+          {
+            "id": "BG31_330",
+            "kind": "minion",
+            "old": [
+              "minion"
+            ],
+            "new": []
+          },
+          {
+            "id": "BG31_999",
+            "kind": "minion",
+            "old": [
+              "tier7"
+            ],
+            "new": [
+              "minion",
+              "tier7"
+            ]
+          },
+          {
+            "id": "BG32_815",
+            "kind": "tavern_spell",
+            "old": [],
+            "new": [
+              "spell"
+            ]
+          },
+          {
+            "id": "BG34_145",
+            "kind": "minion",
+            "old": [
+              "tier7"
+            ],
+            "new": [
+              "minion",
+              "tier7"
+            ]
+          },
+          {
+            "id": "BG34_319",
             "kind": "minion",
             "old": [
               "tier7"
@@ -1276,16 +1288,16 @@
         ],
         "detail": {
           "added_hero": 2,
-          "added_minion": 32,
+          "added_minion": 12,
           "added_spell": 3,
-          "added_tier7": 1
+          "dropped_minion": 1
         }
       },
       "reachable": {
-        "changed": 26,
+        "changed": 6,
         "by_kind": {
           "hero": 2,
-          "minion": 21,
+          "minion": 1,
           "tavern_spell": 3
         },
         "examples": [
@@ -1296,56 +1308,8 @@
             "new": true
           },
           {
-            "id": "BG23_000",
-            "kind": "minion",
-            "old": false,
-            "new": true
-          },
-          {
-            "id": "BG23_002",
-            "kind": "minion",
-            "old": false,
-            "new": true
-          },
-          {
-            "id": "BG23_004",
-            "kind": "minion",
-            "old": false,
-            "new": true
-          },
-          {
-            "id": "BG23_007",
-            "kind": "minion",
-            "old": false,
-            "new": true
-          },
-          {
-            "id": "BG23_008",
-            "kind": "minion",
-            "old": false,
-            "new": true
-          },
-          {
-            "id": "BG23_009",
-            "kind": "minion",
-            "old": false,
-            "new": true
-          },
-          {
             "id": "BG23_HERO_304",
             "kind": "hero",
-            "old": false,
-            "new": true
-          },
-          {
-            "id": "BG26_505",
-            "kind": "minion",
-            "old": false,
-            "new": true
-          },
-          {
-            "id": "BG27_514",
-            "kind": "minion",
             "old": false,
             "new": true
           },
@@ -1356,10 +1320,22 @@
             "new": true
           },
           {
-            "id": "BG31_035",
-            "kind": "minion",
+            "id": "BG32_815",
+            "kind": "tavern_spell",
             "old": false,
             "new": true
+          },
+          {
+            "id": "BG35_922",
+            "kind": "tavern_spell",
+            "old": false,
+            "new": true
+          },
+          {
+            "id": "BG36_360",
+            "kind": "minion",
+            "old": true,
+            "new": false
           }
         ]
       },
@@ -1576,7 +1552,7 @@
         "total": 3695
       },
       "pools": {
-        "same": 3658,
+        "same": 3677,
         "total": 3695
       },
       "tw_types": {
@@ -1702,7 +1678,7 @@
       "skipped_37_only": 122
     },
     "pool_coverage": {
-      "minion": 255,
+      "minion": 256,
       "spell": 73,
       "hero": 118,
       "trinket": 409
@@ -1747,7 +1723,7 @@
     },
     "pool_eligible_strict": {
       "filter": "pools.minion && pool_tag <= 1（Rust strict_pool_tag 默认开启）",
-      "count": 254,
+      "count": 255,
       "excluded_ids": [
         "BG25_013"
       ]
@@ -1768,7 +1744,7 @@
   },
   "outputs_sha256": {
     "at_scripted_ids.json": "b0b534084b79e851fb23e2a4a94db6f3f66ace8e8d0c51b3aecef55d13e8071d",
-    "cards_37.json": "475cad27f52e9724efecae3823203ebf60059eb0c4ad52baaf81817f7b125c86",
-    "new_cards_37.json": "eb1297242b4302d48e4cdacc25703b00f8a4d2c6026a5836fe14bc4c1cdaeae3"
+    "cards_37.json": "26e40386c923b90515d8c9b26ae211be02c0741e64798e8b6e46addfa6ed6a55",
+    "new_cards_37.json": "49c4ae2469249fb78e9008db5b67a94127560ec0fc884da4f994ef9ff9b480c5"
   }
 }

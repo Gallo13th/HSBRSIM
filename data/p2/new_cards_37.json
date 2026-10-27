@@ -1,5 +1,5 @@
 {
-  "source_patch": "37.0.0.255130",
+  "source_patch": "37.0.0.255790",
   "note": "37.0.0 数据中不存在于 AutoTavern(36.6.3) schema 的卡 id（全部为异变/UI 按钮，AutoTavern schema 无对应 kind，未进入 cards_37.json；供内容任务参考）",
   "count": 122,
   "by_reason": {

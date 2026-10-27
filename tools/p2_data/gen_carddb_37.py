@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""生成 37.0.0.255130 版本的 AutoTavern schema `cards.json`（离线、可复现）。
+"""生成 37.0.0.255790 版本的 AutoTavern schema `cards.json`（离线、可复现）。
 
 背景
 ----
 第二阶段主路线是 fork AutoTavern 的 Rust 引擎（`hsbg_engine`）。上游引擎把
 `crates/taverngym/data/cards.json`（36.6.3.253932，3983 卡）编译进二进制；本脚本把
-HSBRSIM 官方数据 `data/bg_*.json`（patch 37.0.0.255130）映射为**同一 schema**，输出
+HSBRSIM 官方数据 `data/bg_*.json`（patch 37.0.0.255790）映射为**同一 schema**，输出
 `data/p2/cards_37.json`，供 Rust fork 替换数据使用。
 
 设计原则
@@ -57,18 +57,18 @@ ROOT = Path(__file__).resolve().parents[2]          # HSBRSIM 仓库根
 DATA = ROOT / "data"
 DEFAULT_OUT = DATA / "p2"
 DEFAULT_AT_ROOT = Path(
-    os.environ.get("HSBRSIM_AT_ROOT", "/Users/letiangao/HSAgent/repos/AutoTavern")
+    os.environ.get("HSBRSIM_AT_ROOT", str(ROOT.parent / "AutoTavern"))
 )
 AT_CARDS_REL = "crates/taverngym/data/cards.json"
 AT_SRC_REL = "crates/taverngym/src"
 
-GEN_VERSION = "1.1.0"          # 生成器 schema 版本（改动映射规则时同步 +1）
+GEN_VERSION = "1.2.0"          # 生成器 schema 版本（改动映射规则时同步 +1）
 SCHEMA_ID = "hsbrsim-p2-carddb/1"
-CLIENT_VERSION = "37.0.0.255130"
+CLIENT_VERSION = "37.0.0.255790"
 SERVER_PATCH = "37.0.0"
-SOURCE_DESC = "HSBRSIM 官方数据 37.0.0.255130 + AutoTavern 36.6.3 compat 条目"
+SOURCE_DESC = "HSBRSIM 官方数据 37.0.0.255790 + AutoTavern 36.6.3 compat 条目"
 
-#: 37 数据里 card_type 的语义（见 hsrl2/tags.py CardType）
+#: 37 数据里 card_type 的语义（见 官方 CardType/Race 定义 CardType）
 CARD_TYPE_HERO = 3
 CARD_TYPE_MINION = 4
 CARD_TYPE_SPELL = 5
@@ -89,7 +89,7 @@ SKIPPED_CARD_TYPES = {
     CARD_TYPE_UI_24: "ui_button",
 }
 
-#: 37 数值 → AutoTavern 种族名。数值来自 hsdata `CARDRACE`（hsrl2/tags.py `Race`）。
+#: 37 数值 → AutoTavern 种族名。数值来自 hsdata `CARDRACE`（官方 CardType/Race 定义 `Race`）。
 RACE_BY_VALUE = {
     11: "UNDEAD",
     14: "MURLOC",
@@ -1751,7 +1751,7 @@ def report(build_result: dict) -> None:
     checks = build_result["checks"]
     outputs = build_result["outputs"]
     print("=" * 78)
-    print(f"37.0.0.255130 → AutoTavern schema（生成器 v{GEN_VERSION}）")
+    print(f"37.0.0.255790 → AutoTavern schema（生成器 v{GEN_VERSION}）")
     print("=" * 78)
     print(f"meta: client_version={meta['client_version']} server_patch={meta['server_patch']}")
     print(f"      count={meta['count']} mapped={meta['mapped_count']} compat={meta['compat_count']}")
@@ -1843,7 +1843,7 @@ def check_outputs(build_result: dict, out_dir: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="37.0.0.255130 → AutoTavern schema 生成器")
+    parser = argparse.ArgumentParser(description="37.0.0.255790 → AutoTavern schema 生成器")
     parser.add_argument("--check", action="store_true", help="校验已入库产物是否与重算一致")
     parser.add_argument("--report", action="store_true", help="只打印统计，不写文件")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="输出目录（默认 data/p2）")

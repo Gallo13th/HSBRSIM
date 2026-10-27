@@ -1,5 +1,5 @@
 {
-  "patch": "37.0.0.255130",
+  "patch": "37.0.0.255790",
   "total_bg_cards": 3534,
   "pool_minions": {
     "count": 252,
@@ -26,7 +26,7 @@
       "QUILBOAR": 25,
       "UNDEAD": 22
     },
-    "with_activate": 23
+    "with_activate": 22
   },
   "pool_spells": {
     "count": 76,

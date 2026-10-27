@@ -9,7 +9,7 @@ interface. HSBRSIM 的主引擎（vendored fork of TavernGym / AutoTavern, MIT�
 - `BatchEnv`: many games stepped together, any set of controlled seats.
 
 数据：`rust/crates/hsbg-engine/data/cards.json`（编译期 include；换数据后必须重新
-`pip install -e .` 重建）。当前为上游 36.6.3 数据，37.0.0.255130 数据由 HSBRSIM 数据任务替换。
+`pip install -e .` 重建）。当前为 AutoTavern schema 37.0.0.255790 数据。
 """
 
 import os

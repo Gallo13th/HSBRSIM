@@ -64,7 +64,7 @@ pub const SERVER_RULES_VERSION: &str = "36.6.3";
 /// Hearthstone client build the embedded card data replicates (`meta.client_version` of
 /// `data/cards.json`), or [`GAME_VERSION`] when the data file carries none.
 ///
-/// Data-driven on purpose: HSBRSIM 替换卡牌数据（36.6.3 -> 37.0.0.255130）不必改引擎代码，
+/// Data-driven on purpose: HSBRSIM 替换卡牌数据（36.6.3 -> 37.0.0.255790）不必改引擎代码，
 /// 上报的版本自动跟随数据文件。
 pub fn game_version() -> &'static str {
     let v = crate::cards::db().client_version.as_str();

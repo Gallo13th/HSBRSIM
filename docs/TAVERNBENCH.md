@@ -291,9 +291,9 @@ runner 都是**可续跑**的（已答 id 跳过）；`run_tools` 需要本机�
 
 | 维度 | TavernBench（本目录） | HSBRSIM 自主策略评测 |
 |---|---|---|
-| 被测对象 | LLM / Agent 的**单步或短程决策** | `hsbg/policy` RL 策略（BC/PPO/搜索） |
+| 被测对象 | LLM / Agent 的**单步或短程决策** | 本项目 RL 策略（MCTS+PPO） |
 | 评测形态 | 静态局面 + 固定 prompt，逐题打分（0/1 + 分级分） | 完整 8 人对局 self-play / 对脚本对手，统计名次/胜率 |
-| 数据/版本 | taverngym 状态 JSON，patch 36.6.3 | hsrl2 引擎，数据基线 37.0.0.255130 |
+| 数据/版本 | taverngym 状态 JSON，patch 36.6.3 | hsbg_engine，数据基线 37.0.0.255790 |
 | 动作空间 | 基准把答案**文本化**（选项/整数/序列） | 动态候选动作 + 实体 token 观测（与 TavernGym 245 动作不同） |
 | 入口 | `scripts/run_tavernbench.py` / `tavernbench.report` | `scripts/evaluate.py`、`scripts/eval_*.py`、`hsbg/eval/**` |
 | 用途 | 「决策质量」外部基准、LLM baseline、提示词/工具使用实验 | 训练进展门禁、self-play 强度、与基线对比 |
@@ -304,9 +304,9 @@ runner 都是**可续跑**的（已答 id 跳过）；`run_tools` 需要本机�
    self-play 名次/胜率不是同一口径；不要用 TavernBench 分数替代
    `docs/EVAL_REPORT.md` 的训练/策略评测结论。
 2. **不是 RL reward/训练信号**：它是离线静态题库的 LLM 评测，不提供环境
-   rollout、奖励或梯度；`benchmarks/tavernbench` 只读，不被 `hsrl2/**`、
+   rollout、奖励或梯度；`benchmarks/tavernbench` 只读，不被 `hsbg_engine`、
    `hsbg/**` 代码路径引用。
-3. **HSBRSIM 的 RL 策略不能直接接入**：现有策略网络输出 hsrl2 动作/观测空间
+3. **HSBRSIM 的 RL 策略不能直接接入**：现有策略网络输出 hsbg_engine 37 动作/观测空间
    的 logits，TavernBench 要求「把 taverngym 状态渲染成 prompt 并产出
    JSON 答案」；两者版本（37.0.0 vs 36.6.3）与动作空间都不同，接入需自写
    适配器（不在本次范围内）。当前 vendored `tavernbench.engine/render` 保留

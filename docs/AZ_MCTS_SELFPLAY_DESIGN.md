@@ -8,12 +8,12 @@
 > 新增 §3.10“早期搜索的 rank-level 成对胜负矩阵评估”及附录 A.9；
 > 补充远程机 M0 实测基线（§7.9，2026-10-26）。
 >
-> 范围：以 AutoTavern fork（`rust/` 内 `hsbg_engine`，数据 37.0.0.255130）为唯一主引擎，
+> 范围：以 AutoTavern fork（`rust/` 内 `hsbg_engine`，数据 37.0.0.255790）为唯一主引擎，
 > 用**逐步（move-level）MCTS** 生成训练数据，从零训练 245 动作策略 + 名次价值网络；
-> `hsrl2` 仅作遗留 oracle/参考，不参与训练。
+> 所有训练/搜索只使用 `hsbg_engine`；不再保留任何 legacy 引擎。
 >
-> 相关文档：[RUST_ENGINE.md](RUST_ENGINE.md)、[ACTION_SPACE_STD.md](ACTION_SPACE_STD.md)、
-> [OBS_STD.md](OBS_STD.md)、[ALGORITHM_RESEARCH.md](ALGORITHM_RESEARCH.md)、
+> 相关文档：[ENGINE.md](ENGINE.md)、[ACTION_OBS.md](ACTION_OBS.md)、
+> [ACTION_OBS.md](ACTION_OBS.md)、
 > [AUTOTAVERN_P3_KICKOFF.md](AUTOTAVERN_P3_KICKOFF.md)、[P3_VERIFICATION.md](P3_VERIFICATION.md)。
 
 ---
@@ -28,7 +28,7 @@
 | **D4** | 自对弈**两阶段交替**：先 8 座全为我方模型对战；在“足够高质量数据”后，变为 **1 座我方模型 + 7 座历史数据中对应回合的历史对手**；如此反复 | 历史对手来自我们自己生成的高质量历史轨迹/快照，而非 AT（AT 未发布完整对局数据） |
 | **D5** | 在远程开发机 **`biocourse-glt`** 上部署 HSBRSIM，用于快速性能测试 | 本 Mac 仅用于代码编写；训练/基准在远程机执行 |
 | **D6** | **Phase A 全 8 座都跑搜索**（不是 1–2 座搜索） | 数据质量优先；效率通过 Rust 核/批量评估/预算控制（§6.2、§7） |
-| **D7** | 历史对手默认 **回放动作序列**（replay） | 非法/状态偏移时 fallback：BC/脚本 bot；不把历史对手改成 BC 为主 |
+| **D7** | 历史对手默认 **回放动作序列**（replay） | 非法/状态偏移时 fallback：网络/脚本 bot；不把历史对手改成 网络 为主 |
 | **D8** | 隐藏信息/对手状态估计使用**统一接口** | `BeliefSampler`（Rust trait）+ 估计器 `q_φ(h\|o)`；训练/推理共用（§3.7、§7.6） |
 | **D9** | 训练价值目标**只用终局名次** | $z$ 为终局 rank（one-hot / 期望效用）；不使用 TD/中间奖励作为训练目标 |
 | **D10** | 动作空间**严格对齐 AT：245** | 不引入 245+ 扩展（Unfreeze/额外技能槽等）；与 AT/TavernBench 逐位可比 |
@@ -405,7 +405,7 @@ $$
 C_{\text{game}}\approx D_{\text{seat}}\cdot C_{\text{dec}}
 +D_{\text{opp}}\cdot C_{\text{opp}},
 $$
-$D_{\text{seat}}\approx 60$–$100$ 决策/局，$D_{\text{opp}}$ 为对手决策数（Phase B 用历史回放/BC，成本近似 0）。
+$D_{\text{seat}}\approx 60$–$100$ 决策/局，$D_{\text{opp}}$ 为对手决策数（Phase B 用历史回放/网络，成本近似 0）。
 数值预算在开发机基准后回填（§7.8）。
 
 ### 3.9 与标准 AlphaZero 假设的对照
@@ -652,7 +652,7 @@ $$
 
 **历史对手库** $\mathcal{H}$：来自我们自己的历史数据（replay），每条记录包含：
 - 对局 id、轮次 $t$、大厅（种族/英雄/饰品/异变配置）、座位 $j$ 的**完整状态快照**；
-- 该座位从 $t$ 起的**动作序列**（用于回放/BC）；
+- 该座位从 $t$ 起的**动作序列**（用于回放/网络）；
 - 该对局的终局名次（质量标签）、模型版本、搜索 $S$、时间戳。
 
 **采样**：给定学习座位当前回合 $t$ 与公开上下文 $c$（大厅/回合/等级/血量区间），
@@ -664,8 +664,8 @@ $$
 
 **对手策略** $\pi^{\text{hist}}_j$（**D7：默认回放**）：
 1. **回放模式（默认）**：动作序列逐条重放；若动作在当前状态非法（因学习座位改变了战斗结果），
-   从该点切换到脚本 bot fallback（不默认改 BC）；
-2. **行为克隆模式（可选/研究）**：用历史数据训练 $\pi^{\text{BC}}_j(a\mid o)$，
+   从该点切换到脚本 bot fallback（不默认改 网络）；
+2. **行为克隆模式（可选/研究）**：用历史数据训练 $\pi^{\text{网络}}_j(a\mid o)$，
    作为 fallback 或消融，不作为默认对手。
 
 **对手分布**：
@@ -737,7 +737,7 @@ $$
 **优先采样**：按“TD/价值误差、margin、稀有对手/大厅”加权；维护 replay 容量 $M$，
 只训练最近 $M$ 局（或重要性采样）。
 
-### 6.6 从零冷启动（无 BC、无人类数据）
+### 6.6 从零冷启动（无 网络、无人类数据）
 
 1. $\theta_0$ 随机；前 $K_0$ 轮用 **成对胜负矩阵（§3.10）或 rollout 价值**作为叶评估，
    $\alpha$ 逐步降到 0（D11 效率优先：先测 $K,M,S$ 的吞吐/质量曲线）；
@@ -776,7 +776,7 @@ $$
 
 - 样本：`features[3227] f32, cards[124] i32, mask[245] u8, pi: sparse[(a,N)], rank r, seat, turn, game_id, model_version, S, temperature, seed`。
 - 对手库：`game_id, turn, seat, lobby, hero, snapshot(state_json), actions[], rank, quality, model_version`。
-- 所有数据带 `data_version`（37.0.0.255130）与 `engine_version`，跨版本不可混用。
+- 所有数据带 `data_version`（37.0.0.255790）与 `engine_version`，跨版本不可混用。
 
 ---
 
@@ -792,7 +792,7 @@ $$
 
 ### 7.2 Crate / 模块结构
 
-建议在 fork 内新增 crate `crates/hsbg-search`（依赖 `hsbg-engine`），或
+当前实现：`crates/hsbg-engine/src/search.rs`（`mcts_search`）。
 `crates/hsbg-engine/src/search/` 模块：
 
 ```
@@ -835,7 +835,7 @@ struct Tree { nodes: Vec<Node>, root: NodeId, rng: SmallRng }
    内存小，代价是重复 step。
 
 **M0 实测（远程机，§7.9）**：`Game.copy()` p50 **2.45µs**、p99 **2.77µs**（远低于
-早期 hsrl2 clone 的 6.49ms），因此**默认采用“节点存 Game”**：每次扩张/推进只 copy
+因此**默认采用“节点存 Game”**：每次扩张/推进只 copy
 一次，避免深路径重复 step；仅对内存设节点上限/分层缓存，路径回放作为内存兜底。
 - `Game.copy` 含 RNG；chance 采样用树级 RNG（独立 seed），`EndTurn` 边记录采样种子；
 - `state_json/from_json` 仅用于快照/调试（JSON 慢，不做热路径）。
@@ -854,7 +854,7 @@ pub trait Evaluator: Send + Sync {
 
 - **Rust 侧**：多个搜索线程把 leaf 请求放入 `crossbeam` 队列；一个 evaluator 线程批量
   取请求 → 调 Python 回调（`Python::with_gil`，一次批量）→ 回填；
-- **Python 侧**：`hsbg/search/engine_mcts_rs.py` 封装 `search(...)`，传入可调用对象
+- **Python 侧**：`hsbg/az/search.py` 封装 `hsbg_engine.mcts_search(...)`，传入可调用对象
   `eval_fn(features, cards, masks) -> (logits, value, ranks)`；内部用 Torch 批量前向；
 - 虚拟损失在等待评估期间生效；
 - 备选（更简单、先做）：单树批量——收集当前树的所有 leaf，一次前向，回填；
@@ -891,16 +891,14 @@ pub trait OpponentPolicy: Send + Sync {
 
 ```python
 import hsbg_engine as E
-from hsbg.search.engine_mcts import MCTSConfig, search
+from hsbg.az import SearchConfig, search
 
-cfg = MCTSConfig(simulations=32, c_puct=2.0,
-                 dirichlet_alpha=0.3, epsilon=0.25,
-                 temperature=1.0, max_turns=20,
-                 worlds=1, virtual_loss=1.0)
+cfg = SearchConfig(simulations=32, determinizations=2, c_puct=2.0,
+                   dirichlet_alpha=0.3, dirichlet_epsilon=0.25,
+                   temperature=1.0, seed=0)
 g = E.Game(seed=0)
-res = search(g, seat=0, cfg=cfg, eval_fn=net.eval_batch,
-             opponents="selfplay", belief=None)
-# res.pi: np.ndarray[245] 访问分布；res.action: int；res.stats: dict
+res = search(g, seat=0, config=cfg, eval_fn=net.eval_batch)
+# res.pi: np.ndarray[245] 访问分布；res.action: int；res.root_value/visits
 ```
 
 ### 7.9 效率优先的 M0 基准计划（远程机，D11）
@@ -962,7 +960,7 @@ sample = {
   rank: uint8,                              # 1..8
   seat: uint8, turn: uint8,
   game_id: int64, model_version: str, S: int, temperature: float,
-  seed: int64, data_version: "37.0.0.255130", engine_version: "hsbg_engine-1.0.0",
+  seed: int64, data_version: "37.0.0.255790", engine_version: "hsbg_engine-1.0.0",
   stats: { root_value: f32, visits: int, entropy: f32, top1_margin: int }
 }
 ```
@@ -979,7 +977,7 @@ sample = {
 opponent_record = {
   game_id, turn, seat, lobby_races, hero, tier, health,
   snapshot: state_json,      # 该座位在 turn 起点的完整状态
-  actions: [u16...],         # 该座位 turn 起的动作序列（回放/BC）
+  actions: [u16...],         # 该座位 turn 起的动作序列（回放/网络）
   rank, quality, model_version, S, data_version
 }
 ```
@@ -1018,11 +1016,11 @@ opponent_record = {
 | M1 Python MCTS | 1k 局无崩溃；搜索 π 比 raw policy A/B 显著更好；数据 schema 校验 |
 | M2 Rust 核 | 吞吐目标；1 万局数据训练；vs heuristic 胜率提升；oracle gap 记录 |
 | M3 Phase A/B | Phase A 数据质量达标 → Phase B 不退化；历史对手池胜率≥阈值 |
-| M4 规模化 | 全量训练后名次 < heuristic/BC；搜索增益可复现；TavernBench 对照 |
+| M4 规模化 | 全量训练后名次 < heuristic/网络；搜索增益可复现；TavernBench 对照 |
 
 ### 9.4 与 AT/TavernBench 的可比性
 
-- 动作/观测与 AT 逐位一致（245/3227/124），但数据版本不同（我们 37.0.0.255130，
+- 动作/观测与 AT 逐位一致（245/3227/124），但数据版本不同（我们 37.0.0.255790，
   AT 36.6.3）；对比时注明并按 card id 重映射；
 - 可选 adapter：把 obs 转成 TavernBench prompt/答案格式，评 decision accuracy；
   TavernAgent 答案可作对照（不参与训练）。
@@ -1273,7 +1271,7 @@ leave-one-out 检查 $s_i$ 是否由单一对手造成。
 2. **从零 MCTS 早期信号弱**：随机价值/策略下搜索增益小；需 rollout 冷启动/短局/大 S。
 3. **隐藏信息处理**：determinization 先验不准会拖累搜索；估计器接入前需评估 oracle gap。
 4. **8 人高方差/非平稳**：价值目标噪声大；需要名次分布、大样本、固定对手池。
-5. **Phase B 历史对手语义**：回放动作在状态偏移时非法；BC 对手可能太弱/太强；
+5. **Phase B 历史对手语义**：回放动作在状态偏移时非法；网络 对手可能太弱/太强；
    需定义 fallback 与质量筛选。
 6. **搜索与训练吞吐**：Rust 核 + 批量评估是硬工程；Python 侧每步往返必须消除。
 7. **数据规模/算力**：从零需要大量自对弈；128 核 + 4×4090 可支撑，但需预算管理。

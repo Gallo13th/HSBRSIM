@@ -1,8 +1,7 @@
 """AZ 训练脚手架公共常量与工具。
 
 约束（与任务板 task-3 一致）：
-- 只复用 `hsbg_engine`（Rust 主引擎）的公开 API；**不修改** `hsbg/env`、`hsbg/rl`、
-  `hsbg/train` 等既有模块；
+- 只复用 `hsbg_engine`（Rust 主引擎）的公开 API；本包是唯一的训练/搜索栈。
 - 固定形状：245 动作 / 3227 features / 124 cards / 8 座；
 - 本模块在**没有 hsbg_engine** 的开发机上也能 import（引擎相关入口惰性加载），
   这样数据/模型/报告相关的单测不依赖引擎。
@@ -24,7 +23,7 @@ OBS_FLOATS = 3227
 OBS_CARDS = 124
 N_PLAYERS = 8
 N_RANKS = 8
-DATA_VERSION = "37.0.0.255130"
+DATA_VERSION = "37.0.0.255790"
 
 # ── 245 动作分段（闭区间，含端点）────────────────────────────────────────
 # EndTurn=0, Refresh=1, Freeze=2, Upgrade=3, HeroPower=4..5, DarkGift=6,

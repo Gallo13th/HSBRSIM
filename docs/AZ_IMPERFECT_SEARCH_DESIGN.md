@@ -7,7 +7,7 @@
 > 代码：`hsbg/az/`（env_api / belief / puct / search / policy / toy_env / evaluate）
 > 测试：`tests/test_az_search.py`
 > 相关：[AZ_MCTS_SELFPLAY_DESIGN.md](AZ_MCTS_SELFPLAY_DESIGN.md)（D1–D11 决策）、
-> [OBS_STD.md](OBS_STD.md)、[ACTION_SPACE_STD.md](ACTION_SPACE_STD.md)、
+> [ACTION_OBS.md](ACTION_OBS.md)、[ACTION_OBS.md](ACTION_OBS.md)、
 > [AZ_1K_VALIDATION.md](AZ_1K_VALIDATION.md)（从零 AZ 负结果）、
 > [AZ_PURE_SEARCH_TEST.md](AZ_PURE_SEARCH_TEST.md)（bot-rollout 负结果）。
 
@@ -52,9 +52,9 @@ u(r)=1-\frac{2(r-1)}{7}\in[-1,1],\qquad \sum_{p=1}^{8}u(r_p)=0\ \text{（常和�
 $$
 
 - 状态 $s$ 含 8 座隐藏量（对手手牌/金币/商店/未公开战团）；
-- 观测 $o$ 是 seat 的 3227 floats + 124 cards（[OBS_STD](OBS_STD.md)），其中对手只含
+- 观测 $o$ 是 seat 的 3227 floats + 124 cards（[ACTION_OBS](ACTION_OBS.md)），其中对手只含
   **公开摘要**：血量/护甲/酒馆等级/最近一次见到的战团（`opponents`、`opponent_boards`）；
-- 动作 245（[ACTION_SPACE_STD](ACTION_SPACE_STD.md)），`EndTurn=0` 是**宏动作**：
+- 动作 245（[ACTION_OBS](ACTION_OBS.md)），`EndTurn=0` 是**宏动作**：
   触发其余 7 座行动（对手策略）+ 配对/战斗 RNG + 商店刷新 + 淘汰；
 - 单座决策目标是最大化 $\mathbb{E}[u(r)]$；其余 7 座视为"带策略的随机环境"，不做
   negamax（8 人常和非两人零和）。
@@ -148,7 +148,7 @@ $$
 
 | 文件 | 职责 |
 |---|---|
-| `env_api.py` | env 适配（engine `Game` / toy）、观测块解码（OBS_STD 冻结偏移）、公开信息 `PublicInfo`、`opponent_seats` 映射、`finish_hero_select`/`warmup_with_bots` |
+| `env_api.py` | env 适配（engine `Game` / toy）、观测块解码（ACTION_OBS 冻结偏移）、公开信息 `PublicInfo`、`opponent_seats` 映射、`finish_hero_select`/`warmup_with_bots` |
 | `belief.py` | `BeliefSampler` 协议；`EnginePublicPriorSampler`（公开信息先验 + debug 注入）；`CloneSampler`（oracle，仅诊断）；`PassthroughSampler`；`split_simulations` |
 | `puct.py` | `Node`、`masked_prior`、`puct_select`、`dirichlet_legal`、`visit_distribution`、`sample_action` |
 | `search.py` | `SearchConfig`/`SearchResult`；Python PUCT+PIMC 后端；Rust `mcts_search` 后端；evaluator 适配（4 参回调 / `ObsView` 回调）；安全回退；诊断信息 |
@@ -377,7 +377,7 @@ $$
 
 ---
 
-## 7. 搜索预算与实测成本（远程 `biocourse-glt`，hsbg_engine 1.0.0 / 数据 37.0.0.255130）
+## 7. 搜索预算与实测成本（远程 `biocourse-glt`，hsbg_engine 1.0.0 / 数据 37.0.0.255790）
 
 ### 7.1 原语（hiermolgen Python 3.10 / numpy 2.2，单线程）
 
@@ -493,7 +493,7 @@ midgame seed70001 (turn5, gold7): heuristic top [Buy(0)..Buy(4) .152]; search ar
 它避免了 bot-full-rollout 的 off-policy 偏差（§5.3），同时把搜索锚定在脚本策略附近；
 实测 rank 2.80（≈bot 2.65），是当前冷启动下"搜索能产出足够质量对局"的直接证据。
 代价：需要 Python 搜索后端（Rust eval 回调只有观测，拿不到 game 调 `bot_action`），
-耗时从 11.1s 增到 59.4s/20 局。训练阶段若先 BC/蒸馏 bot 策略，可把 bot 先验换成网络先验，
+耗时从 11.1s 增到 59.4s/20 局。训练阶段若先用网络先验/蒸馏 bot 策略，可把 bot 先验换成网络先验，
 把这项成本移到 NN 推理。
 
 ---
@@ -503,7 +503,7 @@ midgame seed70001 (turn5, gold7): heuristic top [Buy(0)..Buy(4) .152]; search ar
 ### 9.1 两阶段闭环（与 AZ 设计 §6 一致）
 
 ```text
-θ ← 随机初始化 / BC(bot, heuristic)
+θ ← 随机初始化 / 网络先验(bot, heuristic)
 for iter k:
     D_k ← SELFPLAY(θ, search=S/W 调度, opponents=league)     # π 目标 = visit 分布
     θ ← TRAIN(D_k, policy CE + rank CE)
@@ -602,7 +602,7 @@ PYTHONPATH=$PWD ~/.conda/envs/hiermolgen/bin/python -m pytest tests/test_az_sear
 
 1. **接价值网络**：用训练侧的 rank 分布头替换 `heuristic_value`，重跑同协议看
    `search_net` 是否显著优于 `search_heuristic`/bot（这是搜索增益的真实检验）；
-2. **BC/蒸馏 bot 先验**：把 `BotPriorEvaluator` 换成网络先验，去掉 Python 后端成本；
+2. **网络先验/蒸馏 bot 先验**：把 `BotPriorEvaluator` 换成网络先验，去掉 Python 后端成本；
 3. **成对胜负矩阵**（AZ 设计 §3.10）作早期叶值，替代规则价值；
 4. **ISMCTS + 跨世界 mask 合并**（若 strategy fusion 诊断显著）；
 5. **Rust BeliefSampler**：把注入搬进引擎，目标 <0.2ms/world，支撑 8 座全搜索；

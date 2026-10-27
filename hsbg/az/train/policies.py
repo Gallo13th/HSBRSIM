@@ -319,46 +319,6 @@ class RustMCTSPolicy(Policy):
                                 "simulations": self.simulations, "rollout": self.rollout})
 
 
-# ── Python 原型搜索（hsbg/search/engine_mcts.py，只读复用）───────────────
-class PythonMCTSPolicy(Policy):
-    """复用既有 Python MCTS 原型（``hsbg.search.engine_mcts``）作为对照搜索策略。"""
-
-    name = "search_py"
-    supports_pi = True
-
-    def __init__(self, simulations: int = 8, c_puct: float = 1.5, temperature: float = 1.0,
-                 seed: int = 0, evaluator: Optional[Evaluator] = None,
-                 dirichlet_alpha: float = 0.3, dirichlet_epsilon: float = 0.0) -> None:
-        from hsbg.search.engine_mcts import MCTSConfig  # 惰性：无引擎机器也可 import 本模块
-
-        self.MCTSConfig = MCTSConfig
-        self.cfg = MCTSConfig(simulations=int(simulations), c_puct=float(c_puct),
-                              temperature=float(temperature), seed=int(seed),
-                              dirichlet_alpha=float(dirichlet_alpha),
-                              dirichlet_epsilon=float(dirichlet_epsilon))
-        self.evaluator = evaluator
-        self._n = 0
-
-    def reset(self) -> None:
-        self._n = 0
-
-    def decide(self, game: Any, seat: int) -> Decision:
-        from hsbg.search.engine_mcts import search as py_search  # 惰性
-
-        if self.evaluator is None:
-            raise RuntimeError("PythonMCTSPolicy 需要 evaluator(features,cards,mask,seat)")
-        seat = int(seat)
-        cfg = self.MCTSConfig(**{**self.cfg.__dict__, "seed": self.cfg.seed + self._n})
-        self._n += 1
-        pi, action, stats = py_search(game, seat, self.evaluator, cfg)
-        mask = np.frombuffer(game.legal_mask(seat), dtype=np.uint8).astype(bool)
-        pi = masked_normalize(pi, mask)
-        return Decision(int(action), pi, {"search": True, "policy": self.name,
-                                         "root_value": float(stats.get("root_value", 0.0)),
-                                         "visits": int(stats.get("visits", 0)),
-                                         "simulations": self.cfg.simulations})
-
-
 # ── hsbg.az 搜索原型（task-2，search-architect）───────────────────────────
 def _normalize_search_result(res: Any) -> tuple[int, np.ndarray, Dict[str, Any]]:
     """把 task-2 的返回值规范化为 ``(action, pi, info)``（支持 dataclass/tuple/dict）。"""
@@ -368,7 +328,7 @@ def _normalize_search_result(res: Any) -> tuple[int, np.ndarray, Dict[str, Any]]
         info = {k: v for k, v in res.items() if k not in ("action", "pi")}
         return int(action), np.asarray(pi, dtype=np.float32), info
     if isinstance(res, (tuple, list)):
-        # 兼容 hsbg.search.engine_mcts: (pi, action, stats)
+        # 兼容旧搜索返回三元组 (pi, action, stats)
         if len(res) >= 2 and np.ndim(res[0]) == 1 and np.size(res[0]) == N_ACTIONS:
             pi = np.asarray(res[0], dtype=np.float32)
             action = int(res[1])
@@ -413,7 +373,7 @@ class AZSearchPolicy(Policy):
         except Exception as exc:  # noqa: BLE001 - task-2 尚未完成时给出可读错误
             raise RuntimeError(
                 "hsbg.az 搜索原型不可用（task-2 未完成或 import 失败）："
-                f"{exc!r}；可先用 --policies search_rust/search_py 兜底"
+                f"{exc!r}；可先用 --policies search_rust/search_az 兜底"
             ) from exc
         self._search = az_search
         self.SearchConfig = SearchConfig
@@ -456,7 +416,7 @@ def make_policy(name: str, **kwargs: Any) -> Policy:
     """按名字构造策略。
 
     支持：``random`` / ``bot``(engine_bot) / ``heuristic`` / ``net`` /
-    ``search_rust`` / ``search_rust_rollout`` / ``search_py`` / ``search_az``。
+    ``search_rust`` / ``search_rust_rollout`` / ``search_az``。
     """
     key = str(name).strip().lower()
     if key in ("random", "rand"):
@@ -482,11 +442,6 @@ def make_policy(name: str, **kwargs: Any) -> Policy:
                        "dirichlet_alpha", "dirichlet_epsilon")}
         kw["rollout"] = True
         return RustMCTSPolicy(**kw)
-    if key in ("search_py", "python", "mcts_py"):
-        return PythonMCTSPolicy(**{k: v for k, v in kwargs.items()
-                                   if k in ("simulations", "c_puct", "temperature", "seed",
-                                            "evaluator", "dirichlet_alpha",
-                                            "dirichlet_epsilon")})
     if key in ("search_az", "az", "mcts_az"):
         return AZSearchPolicy(**{k: v for k, v in kwargs.items()
                                  if k in ("simulations", "determinizations", "c_puct",
@@ -504,7 +459,6 @@ __all__ = [
     "HeuristicPolicy",
     "NetworkPolicy",
     "RustMCTSPolicy",
-    "PythonMCTSPolicy",
     "AZSearchPolicy",
     "make_policy",
     "_rust_eval_adapter",

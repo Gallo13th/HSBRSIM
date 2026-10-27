@@ -455,12 +455,12 @@ mod tests {
 
     #[test]
     fn pool_counts_match_bundle() {
-        // HSBRSIM P2：数据已换成官方 37.0.0.255130（AutoTavern schema，单人池口径）。
+        // HSBRSIM P2：数据已换成官方 37.0.0.255790（AutoTavern schema，单人池口径）。
         // 池计数由 tools/p2_data/gen_carddb_37.py 的 MANIFEST.pools 保证：
-        // minion 255（当前版本不含 Naga，含 Dark Paradox 5 形态）/ hero 118 / spell 73（全量 76 剔除 3 张 Duos-only）/
+        // minion 256（37.0.0.255790：含 Dark Paradox 5 形态 + 1 张 DRAGON/NAGA 双种族卡）/ hero 118 / spell 73（全量 76 剔除 3 张 Duos-only）/
         // trinket 236（37 轮换视图未入库，T2 继承并登记 MANIFEST.t2_inherited）。
         let d = db();
-        assert_eq!(d.iter().filter(|c| c.pools.minion).count(), 255);
+        assert_eq!(d.iter().filter(|c| c.pools.minion).count(), 256);
         assert_eq!(d.iter().filter(|c| c.pools.hero).count(), 118);
         assert_eq!(d.iter().filter(|c| c.pools.spell).count(), 73);
         assert_eq!(d.iter().filter(|c| c.pools.trinket).count(), 236);

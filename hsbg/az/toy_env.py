@@ -6,7 +6,7 @@
   观测里只有公开的血量/等级 + **上一次见到的战团强度**；
 - `determinize_world(seat, rng)` 只从公开信息采样隐藏世界（bootstrap 版 belief sampler）。
 
-不是规则精确的 BG 模拟器（也不是 hsrl2 替代品）：只保留搜索需要的结构
+不是规则精确的 BG 模拟器：只保留搜索需要的结构
 （信息集、chance、终局名次、合法动作、确定性 seed）。
 """
 

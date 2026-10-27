@@ -1,5 +1,5 @@
 //! Validation cases T01-T30 of the rules reference the card data was compiled with (written for
-//! 36.6.1). 当前数据 37.0.0.255130：随轮换变化的内容断言已按 37 数据重算，并在用例旁注明
+//! 36.6.1). 当前数据 37.0.0.255790：随轮换变化的内容断言已按 37 数据重算，并在用例旁注明
 //! 口径来源；未变的规则数值保持 36.6.3 基线。
 
 use hsbg_engine::actions::Action;
@@ -132,10 +132,10 @@ fn t10_dark_gift_button_limits() {
     assert!(!g.can_dark_gift(0), "three per game");
 }
 
-/// 当前版本 Naga 不在随从池：历史 Naga 卡仍在 db()（用于内容/兼容），
-/// 但任何 `pools.minion` / `pools.tier7` 都不应包含 Naga 或双种族含 Naga 的卡。
+/// 37.0.0.255790：池内只有 1 张含 NAGA 的双种族卡（BG32_820，DRAGON/NAGA）；
+/// NAGA 仍不作为大厅种族开放。历史 Naga-only 卡仍可在 db() 中用于内容/兼容。
 #[test]
-fn t19_naga_minions_are_out_of_the_current_pool() {
+fn t19_naga_minions_in_current_pool() {
     let in_pool: Vec<&str> = db()
         .iter()
         .filter(|c| {
@@ -145,7 +145,7 @@ fn t19_naga_minions_are_out_of_the_current_pool() {
         })
         .map(|c| c.id.as_str())
         .collect();
-    assert!(in_pool.is_empty(), "Naga 不应在随从池: {in_pool:?}");
+    assert_eq!(in_pool, vec!["BG32_820"], "only the DRAGON/NAGA dual-type card is in pool");
 }
 
 /// A Y'Shaarj lobby bans four heroes and the Tier 5 / 6 Dark Paradox forms.

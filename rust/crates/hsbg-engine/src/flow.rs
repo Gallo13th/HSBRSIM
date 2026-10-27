@@ -113,7 +113,7 @@ impl Game {
         let mut k = cfg.lobby_races;
         optional.push(Races::ABERRATION);
         let forced = cfg.lobby_types.iter().filter_map(|t| {
-            // 当前版本没有 Naga 随从池；即使外部配置写 NAGA，也不能重新打开。
+            // 37.0.0.255790 只有 1 张 DRAGON/NAGA 双种族池内卡；NAGA 不作为大厅种族开放。
             if t == "NAGA" {
                 return None;
             }
@@ -165,9 +165,8 @@ impl Game {
                 }
                 c.races.is_none() || c.races == Races::ALL || c.races.intersects(lobby)
             })
-            // 当前版本 Naga 不在随从池：即使 data 表仍有历史 Naga 卡（含双种族），
-            // 也不进入本局 universe。ALL 种族的聚合卡不算 Naga 随从。
-            .filter(|c| c.races.is_none() || c.races == Races::ALL || !c.races.intersects(Races::NAGA))
+            // 37.0.0.255790：池内存在 DRAGON/NAGA 双种族卡（BG32_820）；按官方池数据保留，
+            // 但不把 NAGA 作为大厅种族开放。ALL 种族的聚合卡不在此过滤。
             // Typeless minions tied to a type (Nadina the Red: Dragons, Disguised
             // Graverobber: Undead; client subset tag) need that type in the lobby.
             .filter(|c| c.assoc.is_none() || c.assoc.intersects(lobby))

@@ -6,10 +6,10 @@ from pathlib import Path
 
 #: 仓库根目录（pyproject.toml 所在目录）
 ROOT = Path(__file__).resolve().parent.parent
-#: 引擎卡牌数据（hsrl2.db.CardDB.load 读取）
+#: 官方 37.0.0.255790 派生数据
 DATA_DIR = ROOT / "data"
-#: 原始 CardDefs.xml（数值唯一权威，数据更新时使用）
-HSDATA_DIR = ROOT / "hsdata"
+#: 原始 hsdata（CardDefs.Bacon.xml 等；数据更新时使用）
+HSDATA_DIR = ROOT / "reversed"
 #: 运行产物：checkpoint / 训练日志 / 评测结果
 RUNS_DIR = ROOT / "runs"
 #: 文档

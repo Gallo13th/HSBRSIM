@@ -3,9 +3,9 @@
 
 数据源: HearthSim/hsdata（从官方客户端 `Data/Win/dbf.unity3d` 等资源提取的
 CardXML/DBF 转储），每个游戏 build 对应一个 git tag。本机安装版本
-`37.0.0.255130.254477` ↔ tag `255130`。
+当前数据 `37.0.0.255790` ↔ tag `255790`。
 
-**重要**：从 build 255130 起，hsdata 把 CardDefs 拆成多个文件——
+**重要**：从 build 拆分后，hsdata 把 CardDefs 拆成多个文件——
     CardDefs.xml          构筑模式卡（constructed）
     CardDefs.Bacon.xml    酒馆战棋卡（**本项目的核心数据**）
     CardDefs.Lettuce.xml  佣兵战纪卡
@@ -13,8 +13,8 @@ CardXML/DBF 转储），每个游戏 build 对应一个 git tag。本机安装�
 文件清单自适应：先探测 `CardDefs.xml`，再探测 Bacon/Lettuce/RaceTagMap/README。
 
 用法:
-    python tools/rea_fetch_hsdata.py --tag 255130
-    python tools/rea_fetch_hsdata.py --tag 255130 --deep     # 额外完整解析校验
+    python tools/rea_fetch_hsdata.py --tag 255790
+    python tools/rea_fetch_hsdata.py --tag 255790 --deep     # 额外完整解析校验
     python tools/rea_fetch_hsdata.py --tag 249896            # 旧布局（单文件）
     python tools/rea_fetch_hsdata.py --check                 # 只校验，不下载
     python tools/rea_fetch_hsdata.py --with-lettuce          # 额外抓佣兵（19MB）
@@ -63,26 +63,7 @@ CANDIDATES = [
 
 #: 首次抓取后记录，用于"同一 tag 内容永不变"的强断言。
 #: 键 = "tag/文件名"；值 = {"size": int, "sha256": str}
-KNOWN_HASHES: dict[str, dict] = {
-    # 2026-10-18 首次抓取记录（37.0.0.255130.254477）
-    "255130/CardDefs.xml": {
-        "size": 70509381,
-        "sha256": "c7863b8fc7dd109d3e67230bf2efda319b175f8bd9ddfa955b5f4cb5cb267f0f",
-    },
-    # 酒馆战棋卡（build 255130 起拆分；本项目核心数据）
-    "255130/CardDefs.Bacon.xml": {
-        "size": 15826018,
-        "sha256": "c60d62b350f2d0361cd88b12e4941bfe6a9f24125c1af003858adb7728b3f413",
-    },
-    "255130/RaceTagMap.xml": {
-        "size": 1443,
-        "sha256": "3e3df0413390d8e47ce783812e8f56e3cd0f23c14bf9f67237659a55ebb5f0e9",
-    },
-    "255130/README.md": {
-        "size": 291,
-        "sha256": "36c8c8ed94d6a909cf5634d79e9883cd05c82c9f501cbb5673fd23aaf4e695e7",
-    },
-}
+KNOWN_HASHES: dict[str, dict] = {}
 
 MIN_ENTITIES = 5000
 
@@ -247,8 +228,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--tag", default="255130",
-                    help="HearthSim/hsdata build tag（默认 255130）")
+    ap.add_argument("--tag", default="255790",
+                    help="HearthSim/hsdata build tag（默认 255790）")
     ap.add_argument("--dest", default=None,
                     help="覆盖输出目录（默认 reversed/hsdata_<tag>/）")
     ap.add_argument("--check", action="store_true", help="只校验不下载")
@@ -314,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
             },
             "previous": old.get("files", {}),
             "source": "HearthSim/hsdata（从官方客户端提取的 CardXML/DBF 转储）",
-            "note": "build 255130 起 CardDefs 拆分为 constructed/bacon/lettuce "
+            "note": "build 拆分后 CardDefs 拆分为 constructed/bacon/lettuce "
                     "三份；酒馆战棋数据在 CardDefs.Bacon.xml",
             "usage": "仅供本项目内部规则核对/数据生成，不修改游戏目录",
             "deep": deep,

@@ -2,7 +2,7 @@
 //!
 //! 负责人：content-delta-analyst（写范围：本文件 + `tests/p3_cards_b.rs`）。
 //! 卡表/取值/参考：`docs/PORTING_37_PLAN.md` §4.1/§4.3/§5.2。
-//! 数值/文本以 37 数据为准（data/cards.json meta 37.0.0.255130）；本批 8 张均无
+//! 数值/文本以 37 数据为准（data/cards.json meta 37.0.0.255790）；本批 8 张均无
 //! `script_data_num` 导出（AT schema 无该字段），故数值按卡面文本字面量，金色行为用
 //! `me.g()` 表达（金色独立 CardDef 的文本差异：twice / 4 次 / +4/+6 等）。
 //!

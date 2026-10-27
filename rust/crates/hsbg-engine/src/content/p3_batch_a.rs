@@ -2,7 +2,7 @@
 //!
 //! 负责人：engine-fixer（写范围：本文件 + `tests/p3_cards_a.rs`）。
 //! 卡表/取值/参考：`docs/PORTING_37_PLAN.md` §4.1/§5.2；hsrl2 参考脚本见各卡注释。
-//! 文本/数值以 37 数据（`crates/hsbg-engine/data/cards.json`，meta 37.0.0.255130）为准。
+//! 文本/数值以 37 数据（`crates/hsbg-engine/data/cards.json`，meta 37.0.0.255790）为准。
 //!
 //! 批次 A 卡（8 张，全部 M 级，均为 Naga/Spellcraft 族）：
 //! - `BG23_002` Shell Collector（Battlecry: Get a Tavern Coin；金 2 枚）

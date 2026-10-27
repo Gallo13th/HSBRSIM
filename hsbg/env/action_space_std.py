@@ -7,13 +7,11 @@ P2 决策：HSBRSIM 的**标准动作 profile** 直接采用 AutoTavern（AT）T
 
 1. 与 AT 引擎/策略/数据**逐位可比**（同一动作索引在两边含义相同）；
 2. 固定动作空间 + 精确 mask 的训练/搜索实现（不再依赖动态候选列表）；
-3. 旧 ``hsbg.env.spec.CandidateAction`` 动态候选接口保留为 **legacy profile**
-   （Lead 在 ``docs/ENV_SPEC.md`` 集成；本模块不修改 ``spec.py``）。
+3. 训练/搜索只使用固定 245 动作 + mask；旧动态候选接口已删除。
 
-本模块**不依赖** ``taverngym``：常量与编码规则来自上游源码
-``crates/taverngym/src/actions.rs``（版本 36.6.3 / taverngym 1.0.0），
-金标测试 ``tests/test_action_space_std.py`` 在装有 ``taverngym`` 时逐项对照
-``taverngym.action_name(i)``（0..244）与 ``taverngym.layout()``。
+本模块常量与编码规则来自 AutoTavern 源码 ``crates/taverngym/src/actions.rs``
+（TavernGym v1.0.0）；金标测试 ``tests/test_action_space_std.py`` 逐项对照
+``hsbg_engine.action_name(i)``（0..244）。
 
 动作段（前 245 = AT ``N_ACTIONS``）
 -----------------------------------
@@ -41,73 +39,33 @@ P2 决策：HSBRSIM 的**标准动作 profile** 直接采用 AutoTavern（AT）T
 
 扩展动作段（索引 ≥ 245，**不影响**前 245 语义）
 -----------------------------------------------
-AT 只有 ``Freeze``，**没有解冻**；真实游戏可以点掉整馆冻结，且 HSBRSIM 引擎
-已有对称 API ``hsrl2.game.Game.unfreeze_tavern(hero) -> bool``（F-23），
-但两边环境层都没有把它作为动作——因此作为扩展动作。
+AT 只有 ``Freeze``（整馆 toggle），没有单向解冻；真实游戏可以点掉整馆冻结，
+因此把 Unfreeze 作为扩展动作。
 
 =====================  ========  ==========================================
 索引                    数量      动作 / 依据
 =====================  ========  ==========================================
 245                    1         Unfreeze：整馆解冻。AT 的 Freeze(2) 是
-                                 **整馆 toggle**（P2-C §6.4：已全冻时即解冻），
-                                 std 拆成单向动作便于掩码；HSBRSIM legacy
-                                 候选只生成单向 freeze → 用 245 表达解冻。
+                                 **整馆 toggle**（已全冻时即解冻），
+                                 std 拆成单向动作便于掩码；245 表达解冻。
 246..249               4         HeroPower(2..5) 预留：HSBRSIM
                                  ``game.hero_power_ids(hero)`` 是**列表**，
-                                 驱动按 slot 枚举；AT 仅 2 槽（主+1 副），
-                                 预留未来 3+ 技能（Genn/Reinvigorating Light
-                                 类效果继续扩展时）。
+                                 预留未来 3+ 技能槽。
 250..265               16        Choose(16..31) 预留：AT 固定 16 选项；
-                                 HSBRSIM ``PendingChoice.options`` 无固定上限
-                                 （env 当前 ``CHOICE_OPTION_MAX=5``），为
-                                 未来大选项池（发现/饰品/任务）预留。
+                                 为未来 >16 选项池预留。
 266..273               8         FreezeSlot(0..7)：**按槽位**冻结/解冻酒馆
                                  展示位（toggle；8 槽 = 7 随从 + 1 酒馆法术
                                  槽）。依据：37.0.0 卡面 ``BG22_HERO_004p``
                                  "copy its highest-Tier minion and **Freeze
-                                 them both**"（P2-C ops_probe OPS-02 唯一新增
-                                 语义缺口）。
+                                 them both**"。
 =====================  ========  ==========================================
 
 扩展段编号 = 245 + 段内偏移；``N_TOTAL_ACTIONS = 245 + 1 + 4 + 16 + 8 = 274``。
 已消费扩展段后仍有新增时，**只能追加**在 ``N_TOTAL_ACTIONS`` 之后（禁止插入/
 重排），并同步升本模块与文档；前 245 项永远冻结。
 
-**P2-C 操作探针交叉引用（2026-10-26）**：``runs/p2_delta/ops_probe.json``
-17 项核对结论 ``gap_summary.gaps = [OPS-02, OPS-09, OPS-11]``，与本 profile
-一致——OPS-02（单槽位冻结）→ 本文件 ``FreezeSlot`` 266..273；OPS-09
-（第 3+ 英雄技能槽）→ 246..249 预留 ``HeroPower(2..5)``；OPS-11（异变系统）
-不新增动作（配置注入/系统层，P3）。其余已覆盖/已由观测迁移处置的项见
-``docs/PORTING_37_PLAN.md`` §6。整馆冻结/解冻（OPS-01）是"整馆 toggle"，
-本 profile 用 ``Freeze(2)`` + 单向 ``Unfreeze(245)`` 表达。
-
-与 ``CandidateAction``（legacy profile）的转换
----------------------------------------------
-:func:`candidate_to_std` / :func:`std_to_candidate` 提供双向投影，**语义并非
-一一对应**（AT 把"目标选择"建模成后续 ``Choose`` 决策步，而 legacy 候选把
-目标折叠进 ``play_spell`` / ``play_minion`` / ``hero_power`` 的参数）：
-
-* ``play_spell`` + 目标 → ``Play{hand, 0}`` +（后续）``Choose(target)``；
-  :func:`candidate_to_std_sequence` 可返回 ``(Play, Choose)`` 两步，
-  但目标在 AT ``Choose`` 里的 option 下标需由调用方提供
-  （``CandidateContext.target_option``，来自 AT 观测的 pending options）。
-* ``play_minion`` 的磁力吸附（legacy：``tgt_zone=board`` + ``position=-1``）
-  → ``Magnetize{hand, board}``；战吼目标 → ``Play`` + 后续 ``Choose``。
-* ``hero_power``：legacy ``CandidateAction`` **不携带技能槽位**（驱动只把
-  ``power_id`` 放在 ``ActionDescriptor`` 上），因此转标准动作需要
-  ``CandidateContext.hero_power_slot``（默认 0）；反向转换会丢失槽位信息
-  （文档已注明）。
-* ``freeze``：legacy 只生成"未冻结 → 冻结"单向候选；标准 profile 的
-  ``Freeze``(2) 与扩展 ``Unfreeze``(245) 是**两个独立动作**。
-* ``cancel`` / ``unfreeze`` / ``freeze_slot``：legacy ``ActionKind`` 没有这些
-  值，本模块用字符串 kind ``"cancel"`` / ``"unfreeze"`` / ``"freeze_slot"``
-  表示（``freeze_slot`` 约定 ``src_zone="tavern", src_slot=槽位``，toggle 语义；
-  与 TavernGym 参照后端 ``hsbg/backends/taverngym_env.py`` 的约定一致）。
-* ``position=-1``（legacy 表示"追加到最右"）→ ``pos = context.board_size``
-  （AT ``pos`` 取值范围 0..7，``pos == 场上随从数`` 即追加）。
-
 确定性：全部函数纯函数、无 I/O、无随机；常量在导入时自检（见模块底部
-``_validate_constants()``），布局漂移会立刻报错。
+``validate_layout()``），布局漂移会立刻报错。
 """
 
 from __future__ import annotations
@@ -136,9 +94,6 @@ __all__ = [
     # 编解码
     "encode", "decode", "action_name", "is_std_index", "is_extension_index",
     "segment_of",
-    # CandidateAction 转换
-    "CandidateContext", "make_context", "candidate_to_std",
-    "candidate_to_std_sequence", "std_to_candidate",
     # 校验
     "validate_layout",
 ]
@@ -151,7 +106,7 @@ __all__ = [
 A_END = 0
 #: 刷新酒馆
 A_REFRESH = 1
-#: 冻结酒馆（AT：切换冻结；HSBRSIM legacy 为单向）
+#: 冻结酒馆（AT：切换冻结）
 A_FREEZE = 2
 #: 升级酒馆
 A_UPGRADE = 3
@@ -189,7 +144,7 @@ N_STD_ACTIONS = N_ACTIONS
 # ── 扩展段（索引 ≥ 245）─────────────────────────────────────────────
 #: 扩展段起点（= ``N_ACTIONS``）
 A_EXT_BASE = N_ACTIONS
-#: 解冻整馆（游戏支持、AT/HSBRSIM 环境均未实现；HSBRSIM 引擎 F-23）
+#: 解冻整馆（游戏支持，AT 只有 toggle；本 profile 显式拆成单向）
 A_UNFREEZE = A_EXT_BASE
 #: 备用英雄技能槽（slot 2..5 → 246..249）
 A_EXTRA_POWER = A_UNFREEZE + 1
@@ -198,7 +153,7 @@ N_EXTRA_POWER_SLOTS = 4
 A_EXTRA_CHOOSE = A_EXTRA_POWER + N_EXTRA_POWER_SLOTS
 N_EXTRA_CHOICE_SLOTS = 16
 #: 按槽位冻结/解冻酒馆展示位（toggle；8 槽 = 7 随从 + 1 酒馆法术槽）。
-#: P2-C ops_probe OPS-02：AT/HSBRSIM 都只有整馆 toggle，而 37.0.0 卡面
+#: AT 只有整馆 toggle，而 37.0.0 卡面
 #: ``BG22_HERO_004p`` "Freeze them both" 证明冻结是**按随从粒度**的状态。
 A_FREEZE_SLOT = A_EXTRA_CHOOSE + N_EXTRA_CHOICE_SLOTS   # = 266
 N_FREEZE_SLOTS = 8
@@ -265,7 +220,7 @@ class Refresh:
 
 @dataclass(frozen=True)
 class Freeze:
-    """冻结酒馆（索引 2；AT 语义为切换，HSBRSIM legacy 单向）。"""
+    """冻结酒馆（索引 2；AT 语义为整馆切换）。"""
 
 
 @dataclass(frozen=True)
@@ -354,7 +309,7 @@ class FreezeSlot:
     ``slot`` ∈ 0..7（8 个酒馆展示位 = 7 随从槽 + 1 酒馆法术槽）；
     语义 = 对酒馆第 ``slot`` 张卡**切换**其单卡冻结状态（与整馆
     ``Freeze(2)`` / ``Unfreeze(245)`` 相互独立）。依据：37.0.0 卡面
-    ``BG22_HERO_004p`` "Freeze them both"（P2-C OPS-02）。
+    ``BG22_HERO_004p`` "Freeze them both"。
     """
 
     slot: int = 0
@@ -497,7 +452,7 @@ def decode(index: int) -> StdAction:
 
 
 def action_name(action: Union[int, StdAction]) -> str:
-    """动作名（与上游 ``taverngym.action_name`` **逐字一致**：0..244）。
+    """动作名（与 ``hsbg_engine.action_name`` **逐字一致**：0..244）。
 
     扩展段（245..265）返回本 profile 自己的名字（``Unfreeze`` /
     ``HeroPower(2..5)`` / ``Choose(16..31)``）。
@@ -562,292 +517,6 @@ def segment_of(index: int) -> str:
         if lo <= index < hi:
             return name
     raise ValueError(f"动作索引 {index} 越界（允许 0..{N_TOTAL_ACTIONS - 1}）")
-
-
-# ══════════════════════════════════════════════════════════════════════
-# 与 legacy ``CandidateAction`` 的转换
-# ══════════════════════════════════════════════════════════════════════
-
-#: legacy 候选里表示"取消目标选择"的扩展 kind（spec ``ActionKind`` 无此项）
-CANDIDATE_KIND_CANCEL = "cancel"
-#: legacy 候选里表示"解冻整馆"的扩展 kind（spec ``ActionKind`` 无此项）
-CANDIDATE_KIND_UNFREEZE = "unfreeze"
-#: legacy 候选里表示"按槽位冻结/解冻"的扩展 kind（spec ``ActionKind`` 无此项；
-#: ``src_zone="tavern", src_slot=槽位``，toggle 语义）
-CANDIDATE_KIND_FREEZE_SLOT = "freeze_slot"
-
-
-@dataclass(frozen=True)
-class CandidateContext:
-    """legacy ``CandidateAction`` ↔ 标准动作转换所需的上下文。
-
-    legacy 候选把目标/槽位信息折叠进 ``src/tgt/position/option`` 字段且
-    ``CandidateAction`` 不携带"卡牌类型/技能槽位"等元数据，因此部分反向
-    转换需要上下文；缺省值保证"能转就转，不能转返回 None"。
-
-    ``board_size``
-        当前棋盘随从数（legacy ``position=-1`` = 追加 → ``pos=board_size``）。
-    ``hand_card_types``
-        手牌槽位的卡牌类型（``"minion"`` / ``"spell"``，顺序 = hand 槽位），
-        用于把 ``Play{hand,pos}`` 反解成 ``play_minion`` / ``play_spell``。
-    ``hero_power_slot``
-        ``hero_power`` 候选对应的技能槽（legacy 候选不含槽位；默认主槽 0）。
-    ``target_option``
-        目标在 AT ``Choose`` 步的选项下标（``-1`` = 未知/不提供）；
-        仅用于 :func:`candidate_to_std_sequence` 生成 ``(Play, Choose)``。
-    """
-
-    board_size: int = 0
-    hand_card_types: Tuple[str, ...] = ()
-    hero_power_slot: int = 0
-    target_option: int = -1
-
-
-def make_context(value: Any = None) -> CandidateContext:
-    """把 ``None`` / ``CandidateContext`` / ``Observation`` 归一成上下文。
-
-    支持直接传 ``hsbg.env.spec.Observation``（鸭子类型：用 ``obs.board`` 的
-    长度与 ``obs.hand`` 的 ``card_type`` 填上下文），对应上游接口习惯
-    ``std_to_candidate(idx, obs)``。
-    """
-    if value is None:
-        return CandidateContext()
-    if isinstance(value, CandidateContext):
-        return value
-    board = getattr(value, "board", None)
-    hand = getattr(value, "hand", None)
-    if board is None and hand is None:
-        raise TypeError(
-            f"context 需要 None/CandidateContext/Observation，得到 "
-            f"{type(value).__name__}")
-    board_size = len(board) if board is not None else 0
-    hand_types: Tuple[str, ...] = ()
-    if hand is not None:
-        hand_types = tuple(
-            str(getattr(tok, "card_type", "")) for tok in hand)
-    return CandidateContext(board_size=board_size, hand_card_types=hand_types)
-
-
-def _cand_kind(candidate: Any) -> str:
-    kind = getattr(candidate, "kind", None)
-    if kind is None:
-        return ""
-    return str(getattr(kind, "value", kind))
-
-
-def _cand_int(candidate: Any, name: str, default: int = -1) -> int:
-    value = getattr(candidate, name, default)
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def candidate_to_std(
-    candidate: Any, context: Any = None
-) -> Optional[StdAction]:
-    """legacy ``CandidateAction`` → 标准动作（``None`` = 无法表示/非法）。
-
-    语义差异（详见模块 docstring）：
-
-    * ``play_spell``（含目标）→ ``Play{hand, 0}``；目标由后续 ``Choose``
-      决策表达（单项映射会丢弃目标信息，需要时用
-      :func:`candidate_to_std_sequence`）。
-    * ``play_minion`` 磁力吸附（``tgt_zone="board"`` 且 ``position=-1``）
-      → ``Magnetize``；战吼目标 → ``Play``（目标同样丢弃）。
-    * ``position=-1`` 追加 → ``pos = context.board_size``。
-    * ``hero_power`` 槽位来自 ``context.hero_power_slot``。
-    """
-    ctx = make_context(context)
-    kind = _cand_kind(candidate)
-    if not kind:
-        return None
-    if kind == "end_turn":
-        return EndTurn()
-    if kind == "reroll":
-        return Refresh()
-    if kind == "freeze":
-        return Freeze()
-    if kind == "upgrade":
-        return Upgrade()
-    if kind == "use_dark_gift":
-        return DarkGift()
-    if kind == CANDIDATE_KIND_CANCEL:
-        return Cancel()
-    if kind == CANDIDATE_KIND_UNFREEZE:
-        return Unfreeze()
-    if kind == CANDIDATE_KIND_FREEZE_SLOT:
-        slot = _cand_int(candidate, "src_slot")
-        return FreezeSlot(slot) if 0 <= slot < N_FREEZE_SLOTS else None
-    if kind == "hero_power":
-        slot = _cand_int(candidate, "src_slot", -1)
-        if not 0 <= slot < N_EXTRA_POWER_SLOTS_MAX:
-            slot = int(ctx.hero_power_slot)
-        if not 0 <= slot < N_EXTRA_POWER_SLOTS_MAX:
-            return None
-        return HeroPower(slot)
-    if kind == "buy":
-        slot = _cand_int(candidate, "src_slot")
-        return Buy(slot) if 0 <= slot < N_SHOP else None
-    if kind == "sell":
-        slot = _cand_int(candidate, "src_slot")
-        return Sell(slot) if 0 <= slot < N_BOARD else None
-    if kind == "activate":
-        slot = _cand_int(candidate, "src_slot")
-        return Activate(slot) if 0 <= slot < N_BOARD else None
-    if kind == "choose":
-        option = _cand_int(candidate, "option")
-        return Choose(option) if 0 <= option < N_CHOICES_TOTAL else None
-    if kind == "move_minion":
-        src = _cand_int(candidate, "src_slot")
-        to = _cand_int(candidate, "position")
-        if not (0 <= src < N_BOARD and 0 <= to < N_BOARD):
-            return None
-        return Move(src=src, to=to)
-    if kind == "play_minion":
-        hand = _cand_int(candidate, "src_slot")
-        if not 0 <= hand < N_HAND:
-            return None
-        tgt_zone = str(getattr(candidate, "tgt_zone", "") or "")
-        tgt_slot = _cand_int(candidate, "tgt_slot")
-        position = _cand_int(candidate, "position")
-        if tgt_zone == "board" and tgt_slot >= 0 and position < 0:
-            # 磁力吸附（legacy 约定：吸附变体 position=-1 + tgt=棋盘）
-            return (Magnetize(hand=hand, board=tgt_slot)
-                    if tgt_slot < N_BOARD else None)
-        if position < 0:
-            position = int(ctx.board_size)
-        if not 0 <= position < N_POS:
-            return None
-        return Play(hand=hand, pos=position)
-    if kind == "play_spell":
-        hand = _cand_int(candidate, "src_slot")
-        if not 0 <= hand < N_HAND:
-            return None
-        # AT 语义：法术统一 Play{hand, pos=0}；目标走后续 Choose
-        return Play(hand=hand, pos=0)
-    return None
-
-
-def candidate_to_std_sequence(
-    candidate: Any, context: Any = None
-) -> Tuple[StdAction, ...]:
-    """legacy 候选 → 标准动作**序列**（含 AT 的后续 ``Choose`` 目标步）。
-
-    - 普通动作 → ``(action,)``；
-    - 定向法术 / 有目标的战吼：``(Play, Choose(target_option))``
-      （需要 ``context.target_option >= 0``；否则退化为 ``(Play,)``）。
-    """
-    ctx = make_context(context)
-    action = candidate_to_std(candidate, ctx)
-    if action is None:
-        return ()
-    kind = _cand_kind(candidate)
-    if isinstance(action, Play) and ctx.target_option >= 0:
-        if kind in ("play_spell", "play_minion"):
-            tgt_zone = str(getattr(candidate, "tgt_zone", "") or "")
-            tgt_slot = _cand_int(candidate, "tgt_slot")
-            if tgt_zone and tgt_slot >= 0:
-                return (action, Choose(option=int(ctx.target_option)))
-    return (action,)
-
-
-def std_to_candidate(
-    action: Union[int, StdAction], context: Any = None
-) -> Optional[Any]:
-    """标准动作（索引或对象）→ legacy ``CandidateAction``（``None`` = 不适用）。
-
-    ``Play{hand,pos}`` 需要 ``context.hand_card_types`` 才能区分
-    ``play_minion`` / ``play_spell``（缺省按随从处理）。``HeroPower(slot)``
-    的槽位在 legacy ``CandidateAction`` 中**不可表示**（驱动把 ``power_id``
-    放在 ``ActionDescriptor`` 上），反向转换会丢弃槽位（文档已注明）。
-    """
-    from hsbg.env.spec import (
-        CARD_TYPE_SPELL,
-        CandidateAction,
-        ZONE_BOARD,
-        ZONE_HAND,
-        ZONE_NONE,
-        ZONE_POWER,
-        ZONE_TAVERN,
-    )
-
-    ctx = make_context(context)
-    if isinstance(action, int):
-        try:
-            action = decode(action)
-        except (TypeError, ValueError):
-            return None
-    if isinstance(action, EndTurn):
-        return CandidateAction(kind="end_turn")
-    if isinstance(action, Refresh):
-        return CandidateAction(kind="reroll")
-    if isinstance(action, Freeze):
-        return CandidateAction(kind="freeze")
-    if isinstance(action, Upgrade):
-        return CandidateAction(kind="upgrade")
-    if isinstance(action, DarkGift):
-        return CandidateAction(kind="use_dark_gift")
-    if isinstance(action, Cancel):
-        return CandidateAction(kind=CANDIDATE_KIND_CANCEL)
-    if isinstance(action, Unfreeze):
-        return CandidateAction(kind=CANDIDATE_KIND_UNFREEZE)
-    if isinstance(action, FreezeSlot):
-        if not 0 <= action.slot < N_FREEZE_SLOTS:
-            return None
-        return CandidateAction(kind=CANDIDATE_KIND_FREEZE_SLOT,
-                               src_zone=ZONE_TAVERN, src_slot=int(action.slot))
-    if isinstance(action, HeroPower):
-        # 槽位不可表示（documented）；主槽按 legacy 约定不带 src 字段
-        if action.slot >= N_POWERS:
-            return CandidateAction(kind="hero_power", src_zone=ZONE_POWER,
-                                   src_slot=int(action.slot))
-        return CandidateAction(kind="hero_power")
-    if isinstance(action, Buy):
-        if not 0 <= action.slot < N_SHOP:
-            return None
-        return CandidateAction(kind="buy", src_zone=ZONE_TAVERN,
-                               src_slot=int(action.slot))
-    if isinstance(action, Sell):
-        if not 0 <= action.slot < N_BOARD:
-            return None
-        return CandidateAction(kind="sell", src_zone=ZONE_BOARD,
-                               src_slot=int(action.slot))
-    if isinstance(action, Activate):
-        if not 0 <= action.slot < N_BOARD:
-            return None
-        return CandidateAction(kind="activate", src_zone=ZONE_BOARD,
-                               src_slot=int(action.slot))
-    if isinstance(action, Choose):
-        if not 0 <= action.option < N_CHOICES_TOTAL:
-            return None
-        return CandidateAction(kind="choose", option=int(action.option))
-    if isinstance(action, Move):
-        if not (0 <= action.src < N_BOARD and 0 <= action.to < N_BOARD):
-            return None
-        return CandidateAction(kind="move_minion", src_zone=ZONE_BOARD,
-                               src_slot=int(action.src),
-                               position=int(action.to))
-    if isinstance(action, Magnetize):
-        if not (0 <= action.hand < N_HAND and 0 <= action.board < N_BOARD):
-            return None
-        return CandidateAction(kind="play_minion", src_zone=ZONE_HAND,
-                               src_slot=int(action.hand), tgt_zone=ZONE_BOARD,
-                               tgt_slot=int(action.board), position=-1)
-    if isinstance(action, Play):
-        if not (0 <= action.hand < N_HAND and 0 <= action.pos < N_POS):
-            return None
-        card_type = ""
-        if 0 <= action.hand < len(ctx.hand_card_types):
-            card_type = str(ctx.hand_card_types[action.hand])
-        if card_type == CARD_TYPE_SPELL:
-            # legacy 法术候选：position 不参与寻址（引擎按 src 卡施放）
-            return CandidateAction(kind="play_spell", src_zone=ZONE_HAND,
-                                   src_slot=int(action.hand))
-        return CandidateAction(kind="play_minion", src_zone=ZONE_HAND,
-                               src_slot=int(action.hand),
-                               position=int(action.pos), tgt_zone=ZONE_NONE)
-    return None
 
 
 # ══════════════════════════════════════════════════════════════════════
