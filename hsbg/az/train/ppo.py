@@ -805,6 +805,11 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     # 保持 eval（关闭 dropout）：old_logprob 是采集时 eval 前向算出的，若 PPO 前向
     # 打开 dropout 会让 ratio 起点偏离 1、approx_kl 虚高（entity 默认 dropout=0.1）。
     model.eval()
+    if optimizer is not None:
+        model_ids = {id(p) for p in model.parameters()}
+        opt_ids = {id(p) for group in optimizer.param_groups for p in group["params"]}
+        if not opt_ids.issubset(model_ids):
+            raise ValueError("外部 optimizer 含不属于当前 model 的参数")
     opt = (optimizer if optimizer is not None
            else torch.optim.Adam(model.parameters(), lr=float(cfg.lr)))
     mb = max(1, int(cfg.minibatch))
@@ -824,9 +829,6 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
             out = ppo_losses(model, batch, cfg, indices=sel)
             out["total"].backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), float(cfg.max_grad_norm))
-            opt.step()
-            updates += 1
-            nb += 1
             step_metrics = {k: float(v.detach().cpu()) for k, v in out.items()}
             for k, v in step_metrics.items():
                 acc.setdefault(k, []).append(v)
@@ -837,12 +839,15 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                       f"policy={step_metrics['policy_loss']:.4f} "
                       f"value={step_metrics['value_loss']:.4f} "
                       f"kl={step_metrics['approx_kl']:.5f}", flush=True)
-            # 标准 PPO：逐 minibatch 监控近似 KL，超过 1.5*target 立即停止本 epoch
+            # 标准 PPO：逐 minibatch 监控近似 KL；超阈的这一步不执行更新
             if cfg.kl_early_stop and float(cfg.target_kl) > 0.0 and \
                     step_metrics["approx_kl"] > 1.5 * float(cfg.target_kl):
                 stopped_early = True
                 epoch_stopped = True
                 break
+            opt.step()
+            updates += 1
+            nb += 1
         rec: Dict[str, Any] = {"epoch": epoch + 1, "steps": nb}
         rec.update({k: float(np.mean(v)) for k, v in acc.items()})
         rec["elapsed_s"] = time.time() - t0
@@ -858,12 +863,14 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
             break
     model.eval()
     elapsed = time.time() - t0
+    processed = int(updates * mb)
     return {
         "epochs": logs,
         "updates": int(updates),
         "samples": n,
+        "processed_samples": processed,
         "seconds": float(elapsed),
-        "samples_per_s": float(n * len(logs) / max(elapsed, 1e-9)),
+        "samples_per_s": float(processed / max(elapsed, 1e-9)),
         "stopped_early": bool(stopped_early),
         "target_kl": float(cfg.target_kl),
         "kl_early_stop": bool(cfg.kl_early_stop),

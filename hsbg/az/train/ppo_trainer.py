@@ -45,6 +45,7 @@ class PPOTrainer:
         )
         self.rng = np.random.default_rng(int(self.config.seed))
         self.updates = 0
+        self.extra: Dict[str, Any] = {}
         if state is not None:
             self.load_state_dict(state)
 
@@ -67,20 +68,37 @@ class PPOTrainer:
             "lr_min_ratio": float(self.lr_min_ratio),
             "max_updates": int(self.max_updates),
             "config": dict(self.config.__dict__),
+            "extra": dict(self.extra),
         }
 
     def load_state_dict(self, state: Dict[str, Any]) -> None:
         self.model.load_state_dict(state["model"])
         self.optimizer.load_state_dict(state["optimizer"])
+        # 恢复 scheduler 的超参后再重建，避免新实例参数覆盖旧 schedule
+        self.lr_min_ratio = float(state.get("lr_min_ratio", self.lr_min_ratio))
+        self.max_updates = int(state.get("max_updates", self.max_updates))
+        torch = _torch()
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(
+            self.optimizer,
+            lr_lambda=lambda step: max(
+                self.lr_min_ratio,
+                1.0 - (1.0 - self.lr_min_ratio) * float(step) / float(self.max_updates)),
+        )
         self.scheduler.load_state_dict(state["scheduler"])
+        # LambdaLR.load_state_dict 只恢复 last_epoch，不会重算 lr；显式对齐
+        for group, lr in zip(self.optimizer.param_groups, self.scheduler.get_last_lr()):
+            group["lr"] = float(lr)
         self.rng.bit_generator.state = state["rng"]
         self.updates = int(state.get("updates", 0))
+        self.extra = dict(state.get("extra") or {})
 
     def save(self, path: str) -> str:
         import os
         torch = _torch()
         os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
-        torch.save(self.state_dict(), path)
+        tmp = path + ".tmp"
+        torch.save(self.state_dict(), tmp)
+        os.replace(tmp, path)
         return path
 
     @classmethod
@@ -92,6 +110,7 @@ class PPOTrainer:
         except TypeError:  # torch < 2.0
             state = torch.load(path, map_location=device)
         cfg = config or PPOConfig(**state.get("config", {}))
+        cfg.device = str(device)
         return cls(model, cfg, lr_min_ratio=float(state.get("lr_min_ratio", 0.1)),
                    max_updates=int(state.get("max_updates", 100000)), state=state)
 

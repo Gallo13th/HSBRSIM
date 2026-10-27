@@ -492,6 +492,10 @@ def test_ppo_trainer_state_roundtrip(tmp_path):
     loaded = PPOTrainer.load(model2, path, device="cpu")
     assert loaded.updates == 1
     assert loaded.scheduler.last_epoch == 1
+    assert loaded.lr_min_ratio == trainer.lr_min_ratio
+    assert loaded.max_updates == trainer.max_updates
+    assert loaded.optimizer.param_groups[0]["lr"] == pytest.approx(
+        trainer.optimizer.param_groups[0]["lr"])
     assert loaded.rng.bit_generator.state == trainer.rng.bit_generator.state
     # 继续更新，optimizer/scheduler 状态延续
     loaded.update(batch)

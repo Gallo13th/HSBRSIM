@@ -79,6 +79,14 @@ def main() -> int:
         print("[error] torch 不可用", file=sys.stderr)
         return 2
     import torch
+    if args.minutes <= 0 or args.games <= 0 or args.iterations < 0:
+        print("[error] minutes/games 必须 >0，iterations 必须 >=0", file=sys.stderr)
+        return 2
+    if args.trainer_state and not os.path.isfile(args.trainer_state):
+        print(f"[error] trainer-state 不存在: {args.trainer_state}", file=sys.stderr)
+        return 2
+    torch.manual_seed(int(args.seed))
+    np.random.seed(int(args.seed) % (2 ** 32))
     os.makedirs(args.out, exist_ok=True)
     eng = engine_info()
     print(f"[engine] {json.dumps(eng, ensure_ascii=False)}", flush=True)
@@ -118,6 +126,22 @@ def main() -> int:
         trainer = PPOTrainer(model, p_cfg, lr_min_ratio=float(args.lr_min_ratio),
                              max_updates=int(args.max_updates))
 
+    history = []
+    history_path = os.path.join(args.out, "history.json")
+    if args.trainer_state and os.path.isfile(history_path):
+        try:
+            history = json.load(open(history_path, encoding="utf-8")).get("history", [])
+        except Exception:
+            history = []
+    if trainer.extra.get("norm_mean") is not None:
+        norm_mean = np.asarray(trainer.extra["norm_mean"], dtype=np.float32)
+    if trainer.extra.get("norm_std") is not None:
+        norm_std = np.asarray(trainer.extra["norm_std"], dtype=np.float32)
+    trainer.extra["norm_mean"] = (None if norm_mean is None else norm_mean.tolist())
+    trainer.extra["norm_std"] = (None if norm_std is None else norm_std.tolist())
+    start_i = int(trainer.updates)
+    print(f"[resume] start_iter={start_i} updates={trainer.updates}", flush=True)
+
     search_fn = search_cfg = None
     if int(args.sims) > 0:
         try:
@@ -134,11 +158,11 @@ def main() -> int:
                              norm_mean=norm_mean, norm_std=norm_std)
     t0 = time.time()
     deadline = t0 + float(args.minutes) * 60.0
-    i = 0
+    i = int(start_i)
+    end_i = (int(start_i) + int(args.iterations)) if int(args.iterations) > 0 else 0
     last_len = 0.0
-    history = []
     while time.time() < deadline:
-        if args.iterations > 0 and i >= args.iterations:
+        if end_i > 0 and i >= end_i:
             break
         if last_len > 0 and (deadline - time.time()) < max(60.0, last_len):
             print("[loop] remaining time < last iteration; stop", flush=True)
@@ -164,15 +188,34 @@ def main() -> int:
         print(f"[iter {i}] samples={len(batch)} updates={stats['trainer_updates']} "
               f"lr={stats['lr']:.3g} total={stats['epochs'][-1]['total']:.4f}",
               flush=True)
-        # 原子保存 model + trainer
-        ckpt = os.path.join(args.out, "model.pt")
+        # 版本化快照：trainer 为权威，model 为导出；manifest 最后原子发布
+        ver = int(trainer.updates)
+        snap = os.path.join(args.out, "snapshots", f"step_{ver:06d}")
+        os.makedirs(snap, exist_ok=True)
+        trainer.save(os.path.join(snap, "trainer.pt"))
+        ckpt = os.path.join(snap, "model.pt")
         tmp_ckpt = ckpt + ".tmp"
         save_checkpoint(model, tmp_ckpt,
-                        meta={**meta, "arch": arch, "trainer_updates": trainer.updates},
+                        meta={**meta, "arch": arch, "trainer_updates": ver},
                         norm_mean=norm_mean, norm_std=norm_std)
         os.replace(tmp_ckpt, ckpt)
+        # 兼容旧路径
         trainer.save(os.path.join(args.out, "trainer.pt"))
-        with open(os.path.join(args.out, "history.json"), "w", encoding="utf-8") as f:
+        ckpt_flat = os.path.join(args.out, "model.pt")
+        save_checkpoint(model, ckpt_flat + ".tmp",
+                        meta={**meta, "arch": arch, "trainer_updates": ver},
+                        norm_mean=norm_mean, norm_std=norm_std)
+        os.replace(ckpt_flat + ".tmp", ckpt_flat)
+        manifest = {"version": ver, "trainer": os.path.join(snap, "trainer.pt"),
+                    "model": os.path.join(snap, "model.pt"),
+                    "arch": arch, "seed": int(args.seed),
+                    "elapsed_s": time.time() - t0,
+                    "history_len": len(history)}
+        with open(os.path.join(args.out, "latest.json.tmp"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+        os.replace(os.path.join(args.out, "latest.json.tmp"),
+                   os.path.join(args.out, "latest.json"))
+        with open(history_path, "w", encoding="utf-8") as f:
             json.dump({"args": vars(args), "history": history,
                        "elapsed_s": time.time() - t0}, f, ensure_ascii=False, indent=2)
         last_len = time.time() - iter_start
