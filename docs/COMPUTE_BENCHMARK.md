@@ -220,3 +220,18 @@ PYTHONPATH=rust/python:. python scripts/bench_process_pool.py \
   （仅采集，不含 PPO/评测/IO）。
 - 旧污染数据（50.9–56.0 dec/s）**作废**，不再作为结论或预算依据。
 - 未测：4 进程 × 32 线程、每卡 1 进程等其它配比；Rust `NeedEval` 批式回调可进一步抬升 util。
+
+### sims=0 vs sims=4（同配置，2026-10-27 23:0x，GPU 0/5/6/7）
+
+`--sims 0`（纯网络、关掉 MCTS，`runs/bench/process_4gpu_sims0_3min.json`）：3 分钟 22 轮、
+**377,230 decisions / 102 s = 3,698.7 dec/s**（p50 4,092 / p95 4,808；稳态轮次 4,500–5,300）。
+
+| 配置 | decisions/s | 1M decisions 采集 | 每 iter（128 games ≈17k dec） |
+|---|---:|---:|---:|
+| sims=4（8×16，本文上表） | 684.9 | 24.4 min | ~22–25 s |
+| **sims=0（同配置）** | **3,698.7** | **4.5 min** | **~4 s** |
+| 倍率 | **5.4×**（稳态 6.7–7.7×） | 5.4× | — |
+
+代价：sims=0 丢掉 MCTS visit π（辅助 CE 目标），数据分布变成纯网络；GPU util 反而降到
+25–40% → 瓶颈仍在 CPU/GIL，不在 GPU。按论文 310M decisions/stage 折算：sims=4 ≈ 126 h、
+sims=0 ≈ 23 h（4 GPU 独占，仅采集）。
