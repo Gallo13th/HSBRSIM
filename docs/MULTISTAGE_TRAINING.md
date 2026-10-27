@@ -241,3 +241,49 @@ PYTHONPATH=rust/python:. python scripts/train_entity_sync.py \
 
 产物：`runs/az_entity_ppoproc_1m/{model.pt,history.json,summary.json,snapshots/,c0_512.json}`
 （`runs/` 不入库）。
+
+## 11. pi_coef 消融 + 采样/贪心评测分歧（2026-10-27 22:30）
+
+§10 猜测「退化来自 MCTS π 蒸馏」。用**同 seed（700）、同初始化、同数据顺序**只改
+`--pi-coef 0.1 → 0.0` 复跑 60 iter / 1,095,390 decisions（2,010.6 s，采集 p50 703.3 dec/s），
+并在**同一 64 局面板**（seed_base 410000、8 seat × 8）上评测各检查点：
+
+| 模型 | 约 decisions | mean rank | bot | top4 | Δ(model−bot) |
+|---|---:|---:|---:|---:|---:|
+| PPO 之前（1M sims=0 基线） | 0 | **4.781** | 4.391 | 46.9% | +0.391 |
+| pi_coef=0 · step016 | 290k | 4.906 | 4.391 | 37.5% | +0.516 |
+| pi_coef=0 · step031 | 560k | 5.078 | 4.391 | 32.8% | +0.688 |
+| pi_coef=0 · step046 | 830k | 5.594 | 4.391 | 23.4% | +1.203 |
+| pi_coef=0 · final | 1.095M | **6.172** | 4.391 | 12.5% | +1.781 |
+| pi_coef=0.1 · step046 | ~830k | 5.266 | 4.391 | 34.4% | +0.875 |
+| pi_coef=0.1 · step051 | ~930k | 5.266 | 4.391 | 35.9% | +0.875 |
+| pi_coef=0.1 · step056 | ~1.02M | 5.609 | 4.391 | 26.6% | +1.219 |
+
+**结论 1：退化不是 π 蒸馏造成的。** `pi_coef=0` 同样单调退化（4.78 → 6.17），而且比
+`pi_coef=0.1` **更差**（512 局：5.465 vs 6.17@64局同趋势）——MCTS π 在这里反而起到轻微的
+正则/教师作用，与 §10 的猜测相反。
+
+**结论 2：采样策略也在变差，不只是贪心。** 用 `behavior=net`（temperature 1.0、sims=0）
+在同一 seed 上评 64 局：基线 **4.531**（top4 48.4%）→ pi_coef=0 final **5.188**（top4 32.8%）。
+所以不是「只有 argmax 变坏」，而是策略整体在退化，贪心退化更多（+1.39 vs +0.66）。
+
+**结论 3：C0 的 greedy 协议低估了模型。** 同一基线 checkpoint：贪心 4.781 / 采样 **4.531**；
+训练温度 1.0 的策略熵仍有 0.41–0.43，greedy argmax 对 logit 微小变化很脆。用单一 greedy
+协议选 checkpoint 会系统性低估，也会掩盖采样侧的改善。
+
+**判读**：在「1 learner vs 7 个固定 bot、约 130 decisions/局、终局单一 rank 奖励、γ=1」的设定下，
+lr=1e-5 的 PPO 每轮都能把 critic 拟合得更好（value_loss 1.78→1.60），但策略侧只拿到极弱且
+高方差的 advantage；没有 KL anchor，60×17 次更新后净效果是**离 BC 初始解越来越远**。
+这解释了历史上「50k 有改善、1M 反退化、第二轮 4.72→5.27」的重复模式。
+
+**下一步（修订 §10 的建议）**：
+
+1. **停止用「加步数」提升强度**；当前最强仍是 `runs/az_entity_1m_s0/model.pt`（512 局 4.709）。
+2. 实作 **KL anchor**（冻结 stage 起点，β 0.1→0）+ **每 100k 做 512 局评测**，按评测选
+   checkpoint（而非取最后一次）。若 anchor 后仍退化，判定为「PPO 目标不适配」，转 3。
+3. 若要继续这条线，先解决信号问题：更深的搜索教师（sims 32–64）或历史 checkpoint 池，
+   让 advantage 不再是「8 座同 rank 的零均值噪声」。
+4. 评测协议统一成 **greedy + 采样两栏**，避免用单一协议下结论。
+
+产物：`runs/az_entity_ppoproc_1m_pi0/{model.pt,history.json,summary.json,snapshots/step_*}`、
+`runs/az_entity_ppoproc_1m{,_pi0}/c0_64_*.json`（含基线锚点）。
