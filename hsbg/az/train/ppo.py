@@ -275,6 +275,9 @@ class PPOConfig:
     value_coef: float = 0.5
     #: MCTS visit π 辅助交叉熵权重 alpha（0 = 关闭，退化为纯 PPO）
     pi_coef: float = 0.5
+    #: KL anchor 到 stage 起点的系数 β（论文 Table 7：0.1，前 100 个 iteration 后放开）。
+    #: >0 时必须由 trainer 提供 anchor 分布（见 PPOTrainer.set_anchor）。
+    anchor_coef: float = 0.0
     #: rank=名次 CE；mse=value MSE（critic=E[u(rank)]）
     value_loss: str = "rank"
     #: entity 有标量 value 头时的辅助 MSE 权重（tiny 无此头，忽略）
@@ -695,13 +698,16 @@ class PPOGreedyPolicy(Policy):
 # 6. PPO loss / 训练
 # ══════════════════════════════════════════════════════════════════════════
 def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
-               indices: Optional[np.ndarray] = None) -> Dict[str, Any]:
+               indices: Optional[np.ndarray] = None,
+               anchor_logp: Any = None) -> Dict[str, Any]:
     """计算一个 minibatch 的 PPO 损失（返回 torch 张量字典）。
 
     - policy: ``-min(r*A, clip(r,1±ε)*A).mean()``；
     - value: ``rank``（名次 CE）或 ``mse``（``E[u(rank)]`` vs returns）；
     - aux: ``pi_coef * CE(π_MCTS, π_θ)``（仅 ``has_pi`` 样本）；
     - entropy: masked 策略熵（鼓励探索）；
+    - anchor: ``anchor_coef * KL(π_θ ‖ π_anchor)``（``anchor_logp`` 为 stage 起点在整批
+      样本上的 masked log-prob，形状 ``[len(batch), 245]``）；
     - 非法动作：logits 在 loss 内重新 masked，概率严格 0（``illegal_prob_max`` 可验证）。
     """
     torch = _torch()
@@ -764,6 +770,15 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     total = (policy_loss + float(config.value_coef) * value_loss
              + float(config.pi_coef) * aux_pi_loss
              - float(config.entropy_coef) * entropy)
+    anchor_kl = torch.zeros((), device=dev)
+    beta = float(config.anchor_coef)
+    if beta > 0.0 and anchor_logp is not None:
+        # KL(π_θ ‖ π_anchor) = Σ_a π_θ(a) · (log π_θ(a) − log π_anchor(a))，只对合法动作求和
+        a_lp = anchor_logp[idx] if anchor_logp.shape[0] > idx.max() else anchor_logp
+        a_safe = torch.where(m, a_lp, torch.zeros_like(a_lp))
+        kl_all = (probs * (safe_logp - a_safe)).sum(dim=-1)
+        anchor_kl = (kl_all * valid).sum() / valid.sum().clamp_min(1.0)
+        total = total + beta * anchor_kl
     approx_kl = ((old_logp - action_logp) * valid).sum() / valid.sum().clamp_min(1.0)
     illegal_prob_max = (probs * (~m).to(probs.dtype)).max()
     return {
@@ -771,6 +786,7 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         "policy_loss": policy_loss,
         "value_loss": value_loss,
         "aux_pi_loss": aux_pi_loss,
+        "anchor_kl": anchor_kl,
         "entropy": entropy,
         "approx_kl": approx_kl,
         "clip_frac": clip_frac,
@@ -783,8 +799,8 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
 
 def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
               *, on_step: Optional[Callable[[Dict[str, Any]], None]] = None,
-              optimizer: Any = None, rng: Optional[np.random.Generator] = None
-              ) -> Dict[str, Any]:
+              optimizer: Any = None, rng: Optional[np.random.Generator] = None,
+              anchor_logp: Any = None) -> Dict[str, Any]:
     """执行 PPO 更新（minibatch × epochs，clip、entropy、KL 早停）。
 
     返回可 JSON 序列化的统计字典。
@@ -828,7 +844,7 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         for start in range(0, n, mb):
             sel = base_idx[order[start:start + mb]]
             opt.zero_grad(set_to_none=True)
-            out = ppo_losses(model, batch, cfg, indices=sel)
+            out = ppo_losses(model, batch, cfg, indices=sel, anchor_logp=anchor_logp)
             out["total"].backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), float(cfg.max_grad_norm))
             step_metrics = {k: float(v.detach().cpu()) for k, v in out.items()}

@@ -500,3 +500,46 @@ def test_ppo_trainer_state_roundtrip(tmp_path):
     # 继续更新，optimizer/scheduler 状态延续
     loaded.update(batch)
     assert loaded.updates == 2
+
+
+def test_kl_anchor_zero_at_stage_start_and_penalizes_drift():
+    """KL anchor：stage 起点 KL≈0；策略漂移后 KL>0；anchor 参数自身不被更新。"""
+    torch = _needs_torch()
+    from hsbg.az.train.model import build_net
+    from hsbg.az.train.ppo import forward_model, masked_log_softmax_torch, split_model_outputs
+    from hsbg.az.train.ppo_trainer import PPOTrainer
+
+    torch.manual_seed(0)
+    model = build_net(16)
+    batch = _batch_from_model(model)
+    cfg = PPOConfig(device="cpu", value_loss="rank", pi_coef=0.0, anchor_coef=0.1)
+    trainer = PPOTrainer(model, cfg)
+    trainer.set_anchor()
+    anchor_params = [p.detach().clone() for p in trainer.anchor_model.parameters()]
+
+    mask_t = torch.from_numpy(np.ascontiguousarray(batch.masks.astype(bool)))
+    cards_t = torch.from_numpy(np.ascontiguousarray(batch.cards.astype(np.int64)))
+    feat_t = torch.from_numpy(np.ascontiguousarray(batch.features.astype(np.float32)))
+
+    def _cur_logp() -> "torch.Tensor":
+        with torch.no_grad():
+            logits, _, _ = split_model_outputs(forward_model(model, feat_t, cards_t, mask_t))
+            return masked_log_softmax_torch(logits, mask_t)
+
+    def _kl(cur) -> float:
+        a = trainer._anchor_logp(batch)
+        kl = (cur.exp() * (cur - a)).masked_fill(~mask_t, 0.0).sum(dim=-1)
+        return float(kl.mean())
+
+    # 1) 起点：当前策略 == anchor -> KL ≈ 0
+    assert _kl(_cur_logp()) == pytest.approx(0.0, abs=1e-4)
+    # 2) 走一步 PPO：anchor 参数必须不变
+    stats = trainer.update(batch)
+    assert "anchor_kl" in stats["epochs"][0]
+    for before, after in zip(anchor_params, trainer.anchor_model.parameters()):
+        assert torch.equal(before, after), "anchor 不应被训练"
+    # 3) 人为漂移后 KL 显著 > 0
+    with torch.no_grad():
+        for p in model.parameters():
+            p.add_(torch.randn_like(p) * 0.05)
+    assert _kl(_cur_logp()) > 1e-3

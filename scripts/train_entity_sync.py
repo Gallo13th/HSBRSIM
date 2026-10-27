@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 from typing import Any, Dict, Optional
@@ -66,6 +67,9 @@ def main() -> int:
     ap.add_argument("--max-updates", type=int, default=100000)
     ap.add_argument("--clip", type=float, default=0.2)
     ap.add_argument("--target-kl", type=float, default=0.05)
+    ap.add_argument("--lam", type=float, default=0.95, help="GAE λ（论文 0.995）")
+    ap.add_argument("--max-grad-norm", type=float, default=0.5,
+                    help="梯度裁剪范数（论文 1.0）")
     ap.add_argument("--pi-coef", type=float, default=0.1)
     ap.add_argument("--entropy-coef", type=float, default=0.005)
     ap.add_argument("--max-actions-per-turn", type=int, default=40)
@@ -84,6 +88,15 @@ def main() -> int:
                     help="每 N 个 iteration 落一次快照（进程 actor 下建议 5）")
     ap.add_argument("--keep-snapshots", type=int, default=3,
                     help="只保留最近 K 个 snapshot 目录（0=不清理）")
+    ap.add_argument("--anchor-beta", type=float, default=0.0,
+                    help="KL anchor 系数 β（论文 Table 7 = 0.1；0=关闭）")
+    ap.add_argument("--anchor-iterations", type=int, default=100,
+                    help="β 生效的前 N 个 iteration（论文 300 个中的前 100）")
+    ap.add_argument("--eval-every-decisions", type=int, default=0,
+                    help="每累计 N decisions 做一次 C0 评测（0=关闭）")
+    ap.add_argument("--eval-games", type=int, default=512)
+    ap.add_argument("--eval-seats", type=int, default=8)
+    ap.add_argument("--eval-seed-base", type=int, default=420000)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--checkpoint", default="")
     ap.add_argument("--trainer-state", default="")
@@ -137,6 +150,7 @@ def main() -> int:
         epochs=int(args.epochs), minibatch=int(args.minibatch), lr=float(args.lr),
         clip=float(args.clip), target_kl=float(args.target_kl),
         entropy_coef=float(args.entropy_coef), pi_coef=float(args.pi_coef),
+        max_grad_norm=float(args.max_grad_norm),
         device=str(args.device), seed=int(args.seed),
         log_every=int(args.log_every))
     trainer: Optional[PPOTrainer] = None
@@ -164,6 +178,71 @@ def main() -> int:
     trainer.extra["norm_std"] = (None if norm_std is None else norm_std.tolist())
     start_i = int(trainer.updates)
     print(f"[resume] start_iter={start_i} updates={trainer.updates}", flush=True)
+
+    # ---- KL anchor（AutoTavern Table 7：β=0.1，仅前 100 个 iteration）----
+    if float(args.anchor_beta) > 0.0:
+        trainer.set_anchor()
+        print(f"[anchor] beta={args.anchor_beta} for first "
+              f"{int(args.anchor_iterations)} iters (stage-start policy frozen)",
+              flush=True)
+
+    # ---- 周期 C0 评测（监控曲线；avg rank<=3.0 触发镜像库）----
+    evals: list = []
+    eval_dir = os.path.join(args.out, "eval")
+
+    def _run_eval(decisions_done: int) -> None:
+        os.makedirs(eval_dir, exist_ok=True)
+        tag = f"{int(decisions_done):09d}"
+        ckpt = os.path.join(eval_dir, f"ckpt_{tag}.pt")
+        save_checkpoint(model, ckpt, meta={**meta, "arch": arch},
+                        norm_mean=norm_mean, norm_std=norm_std)
+        out_json = os.path.join(eval_dir, f"c0_{tag}.json")
+        log_path = os.path.join(eval_dir, f"c0_{tag}.log")
+        cmd = [sys.executable, os.path.join(ROOT, "scripts", "c0_gate.py"),
+               "--checkpoint", ckpt, "--arch", str(arch), "--device", str(args.device),
+               "--games", str(int(args.eval_games)), "--seats", str(int(args.eval_seats)),
+               "--seed-base", str(int(args.eval_seed_base)), "--smoke",
+               "--bootstrap", "1000", "--out", out_json]
+        t_eval = time.time()
+        print(f"[eval] dec={int(decisions_done)} start games={args.eval_games}", flush=True)
+        with open(log_path, "w", encoding="utf-8") as lf:
+            rc = subprocess.call(cmd, cwd=ROOT, stdout=lf, stderr=lf)
+        rec: Dict[str, Any] = {"decisions": int(decisions_done), "rc": int(rc),
+                               "seconds": round(time.time() - t_eval, 1)}
+        try:
+            with open(out_json, encoding="utf-8") as f:
+                d = json.load(f)
+            p = d["panels"][0]
+            rec.update({
+                "mean_rank": float(p["model_mean_rank"]),
+                "bot_mean_rank": float(p["bot_mean_rank"]),
+                "top4": float(p["model_top4"]), "win": float(p["model_win"]),
+                "mean_diff": float(p["mean_diff"]),
+                "ci_low": float(p["ci_low"]), "ci_high": float(p["ci_high"]),
+                "illegal": int(p["illegal"]), "truncated": int(p["truncated"]),
+                "passed": bool(d.get("passed")),
+            })
+        except Exception as exc:  # noqa: BLE001
+            rec["error"] = repr(exc)
+        evals.append(rec)
+        with open(os.path.join(eval_dir, "history.json"), "w", encoding="utf-8") as f:
+            json.dump({"evals": evals}, f, ensure_ascii=False, indent=2)
+        if rec.get("mean_rank") is not None:
+            print(f"[eval] dec={int(decisions_done)} mean_rank={rec['mean_rank']:.3f} "
+                  f"bot={rec['bot_mean_rank']:.3f} top4={rec['top4']:.3f} "
+                  f"win={rec['win']:.3f} ({rec['seconds']}s)", flush=True)
+            if rec["mean_rank"] <= 3.0:
+                trig = os.path.join(args.out, "TRIGGER_library.json")
+                with open(trig, "w", encoding="utf-8") as f:
+                    json.dump({"decisions": int(decisions_done),
+                               "mean_rank": rec["mean_rank"],
+                               "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z")}, f,
+                              ensure_ascii=False, indent=2)
+                print(f"[TRIGGER] avg rank {rec['mean_rank']:.3f} <= 3.0 -> "
+                      f"构建高质量对局镜像库 ({trig})", flush=True)
+        else:
+            print(f"[eval] dec={int(decisions_done)} FAILED rc={rc} "
+                  f"error={rec.get('error')} log={log_path}", flush=True)
 
     search_fn = search_cfg = None
     if int(args.sims) > 0:
@@ -209,6 +288,9 @@ def main() -> int:
                                  norm_mean=norm_mean, norm_std=norm_std)
     t0 = time.time()
     deadline = t0 + float(args.minutes) * 60.0
+    cum_decisions = 0
+    next_eval = (int(args.eval_every_decisions)
+                 if int(args.eval_every_decisions) > 0 else 10 ** 18)
     i = int(start_i)
     end_i = (int(start_i) + int(args.iterations)) if int(args.iterations) > 0 else 0
     last_len = 0.0
@@ -231,24 +313,27 @@ def main() -> int:
             pool.reload_weights(pool_ckpt, updates=int(trainer.updates))
             batch, collect_meta = pool.collect(
                 c_cfg, int(args.games), return_records=True, progress=True,
-                seed=int(c_cfg.seed))
+                seed=int(c_cfg.seed), gamma=1.0, lam=float(args.lam))
         elif args.workers > 1:
             batch, collect_meta = collect_ppo_batch_parallel(
                 model, c_cfg, workers=int(args.workers),
                 search_fn=search_fn, search_config=search_cfg,
                 eval_fn=evaluator, device=str(args.device),
-                seed=int(args.seed) + i * 1000, gamma=1.0, lam=0.95,
+                seed=int(args.seed) + i * 1000, gamma=1.0, lam=float(args.lam),
                 norm_mean=norm_mean, norm_std=norm_std, progress=True)
         else:
             batch, collect_meta = collect_ppo_batch(
                 model, c_cfg, search_fn=search_fn, search_config=search_cfg,
                 eval_fn=evaluator, device=str(args.device),
-                seed=int(args.seed) + i * 1000, gamma=1.0, lam=0.95,
+                seed=int(args.seed) + i * 1000, gamma=1.0, lam=float(args.lam),
                 norm_mean=norm_mean, norm_std=norm_std, progress=True)
         errs = batch.validate()
         if errs:
             print(f"[error] batch invalid: {errs}", file=sys.stderr)
             return 3
+        # KL anchor 只在前 --anchor-iterations 个 iteration 生效（论文：前 100/300）
+        trainer.config.anchor_coef = (float(args.anchor_beta)
+                                      if i < int(args.anchor_iterations) else 0.0)
         stats = trainer.update(batch)
         rec = {"iter": i, "collect": collect_meta, "ppo": stats,
                "batch_server": (dict(batch_server.stats) if batch_server is not None else None),
@@ -296,6 +381,12 @@ def main() -> int:
         with open(history_path, "w", encoding="utf-8") as f:
             json.dump({"args": vars(args), "history": history,
                        "elapsed_s": time.time() - t0}, f, ensure_ascii=False, indent=2)
+        # 累计 decisions + 周期评测（512 局 C0，暂停采集）
+        cum_decisions += int(collect_meta.get("decisions", 0))
+        if cum_decisions >= next_eval:
+            _run_eval(cum_decisions)
+            while next_eval <= cum_decisions:
+                next_eval += int(args.eval_every_decisions)
         last_len = time.time() - iter_start
         i += 1
 

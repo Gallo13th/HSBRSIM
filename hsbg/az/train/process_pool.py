@@ -339,7 +339,8 @@ class ProcessActorPool:
     def collect(self, cfg: CollectConfig, games: int, *,
                 return_records: bool = True, timeout: float = 3600.0,
                 progress: bool = False,
-                seed: Optional[int] = None) -> Tuple[PPOBatch, Dict[str, Any]]:
+                seed: Optional[int] = None,
+                gamma: float = 1.0, lam: float = 0.95) -> Tuple[PPOBatch, Dict[str, Any]]:
         n = max(1, int(games))
         per = (n + self.processes - 1) // self.processes
         shards: List[Dict[str, Any]] = []
@@ -359,7 +360,7 @@ class ProcessActorPool:
                 "kind": "collect", "task_id": task_id,
                 "seed": seed_i, "threads": self.threads,
                 "return_records": bool(return_records),
-                "tmpdir": self.tmpdir, "gamma": 1.0, "lam": 0.95,
+                "tmpdir": self.tmpdir, "gamma": float(gamma), "lam": float(lam),
                 "cfg": {**asdict(cfg), "games": gcount,
                         "seed": seed_i, "game_id_offset": g0},
             }
@@ -497,7 +498,8 @@ class ProcessActorPool:
             raise RuntimeError(
                 f"process pool 无有效轨迹（truncated={agg['truncated']}, "
                 f"invalid={agg['invalid']}, decisions={agg['decisions']}）")
-        batch = build_batch_from_records(records, gamma=1.0, lam=0.95, meta=meta)
+        batch = build_batch_from_records(records, gamma=float(gamma),
+                                         lam=float(lam), meta=meta)
         batch.meta.update({"collect_seconds": wall,
                            "collect": {k: v for k, v in meta.items()
                                        if k != "worker_meta"}})

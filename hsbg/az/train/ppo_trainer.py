@@ -7,6 +7,10 @@
 - 持有 model / Adam / LambdaLR / numpy Generator；
 - ``update(batch)`` 调用 ``train_ppo(..., optimizer=..., rng=...)``；
 - ``state_dict()/load_state_dict()`` 持久化优化器、调度器、RNG 和 update 计数；
+- **KL anchor**：``set_anchor()`` 冻结 stage 起点策略，``config.anchor_coef`` > 0 时
+  在损失里加 ``β·KL(π_θ ‖ π_anchor)``（AutoTavern 论文 Table 7：β=0.1，前 100 个
+  iteration）。anchor 分布对整个 batch 只算一次（no_grad），再按 minibatch 切片，
+  因此额外开销 ≈ 每 iteration 一次前向，而不是每个 minibatch 一次；
 - 不建议跨进程“伪续训”：每个进程必须 load 完整 trainer state。
 
 注意：短实验可接受每轮重置 Adam；P0 baseline 用本类。
@@ -14,11 +18,13 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Any, Dict, Optional
 
 import numpy as np
 
-from .ppo import PPOConfig, PPOBatch, _torch, train_ppo
+from .ppo import (PPOConfig, PPOBatch, _torch, forward_model,
+                  masked_log_softmax_torch, split_model_outputs, train_ppo)
 
 
 class PPOTrainer:
@@ -46,16 +52,59 @@ class PPOTrainer:
         self.rng = np.random.default_rng(int(self.config.seed))
         self.updates = 0
         self.extra: Dict[str, Any] = {}
+        #: KL anchor（stage 起点策略的冻结副本）；由 ``set_anchor()`` 建立
+        self.anchor_model: Optional[Any] = None
         if state is not None:
             self.load_state_dict(state)
 
+    # -- KL anchor ---------------------------------------------------------
+    def set_anchor(self) -> None:
+        """把当前策略冻结为 stage 起点 anchor（不参与梯度、不进 optimizer）。"""
+        torch = _torch()
+        self.anchor_model = copy.deepcopy(self.model).to(self.device)
+        self.anchor_model.eval()
+        for p in self.anchor_model.parameters():
+            p.requires_grad_(False)
+        self.extra["anchor_set"] = True
+
+    def clear_anchor(self) -> None:
+        self.anchor_model = None
+        self.extra["anchor_set"] = False
+
+    def _anchor_logp(self, batch: PPOBatch, chunk: int = 4096) -> Any:
+        """整个 batch 上的 anchor masked log-prob，形状 ``[n, 245]``（no_grad）。"""
+        torch = _torch()
+        if self.anchor_model is None:
+            raise RuntimeError("anchor_coef>0 但未 set_anchor()")
+        outs = []
+        device = self.device
+        with torch.no_grad():
+            for start in range(0, len(batch), int(chunk)):
+                sl = slice(start, start + int(chunk))
+                x = torch.from_numpy(
+                    np.ascontiguousarray(batch.features[sl].astype(np.float32))).to(device)
+                c = torch.from_numpy(
+                    np.ascontiguousarray(batch.cards[sl].astype(np.int64))).to(device)
+                m = torch.from_numpy(
+                    np.ascontiguousarray(batch.masks[sl].astype(bool))).to(device)
+                out = forward_model(self.anchor_model, x, c, m)
+                logits, _rank_logits, _scalar = split_model_outputs(out)
+                outs.append(masked_log_softmax_torch(logits, m))
+        return torch.cat(outs, dim=0) if len(outs) > 1 else outs[0]
+
+    # -- update ------------------------------------------------------------
     def update(self, batch: PPOBatch) -> Dict[str, Any]:
+        anchor_logp = None
+        if float(self.config.anchor_coef) > 0.0:
+            anchor_logp = self._anchor_logp(batch)
         stats = train_ppo(self.model, batch, self.config,
-                          optimizer=self.optimizer, rng=self.rng)
+                          optimizer=self.optimizer, rng=self.rng,
+                          anchor_logp=anchor_logp)
         self.scheduler.step()
         self.updates += 1
         stats["trainer_updates"] = int(self.updates)
         stats["lr"] = float(self.optimizer.param_groups[0]["lr"])
+        stats["anchor_coef"] = float(self.config.anchor_coef)
         return stats
 
     def state_dict(self) -> Dict[str, Any]:
