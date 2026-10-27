@@ -55,12 +55,15 @@ class BatchLeafServer:
         self.temperature = float(temperature)
         self._q: "queue.Queue[LeafRequest]" = queue.Queue(maxsize=int(queue_size))
         self._stop = threading.Event()
+        self._state = "open"  # open | closing | closed
+        self._state_lock = threading.Lock()
         self._next_id = 0
         self._id_lock = threading.Lock()
         self._stats_lock = threading.Lock()
         self.stats: Dict[str, Any] = {
             "requests": 0, "batches": 0, "leafs": 0, "max_batch": 0,
-            "wait_s": 0.0, "forward_s": 0.0, "errors": 0,
+            "queue_wait_s": 0.0, "batch_wait_s": 0.0, "forward_s": 0.0,
+            "enqueue_failures": 0, "errors": 0,
         }
         self._thread = threading.Thread(target=self._worker, name="batch-leaf",
                                         daemon=True)
@@ -71,14 +74,31 @@ class BatchLeafServer:
             self._next_id += 1
             return self._next_id
 
-    def submit(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray) -> LeafRequest:
-        req = LeafRequest(self._new_id(), np.asarray(features, dtype=np.float32),
-                          np.asarray(cards, dtype=np.int64),
-                          np.asarray(mask, dtype=bool))
-        self._q.put(req)
-        with self._stats_lock:
-            self.stats["requests"] += 1
+    def submit(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
+               timeout: float = 0.5) -> LeafRequest:
+        with self._state_lock:
+            if self._state != "open":
+                raise RuntimeError(f"BatchLeafServer is {self._state}")
+            req = LeafRequest(self._new_id(),
+                              np.array(features, dtype=np.float32, copy=True),
+                              np.array(cards, dtype=np.int64, copy=True),
+                              np.array(mask, dtype=bool, copy=True))
+            req.submit_t = time.monotonic()
+            try:
+                self._q.put(req, timeout=float(timeout))
+            except queue.Full as exc:
+                with self._stats_lock:
+                    self.stats["enqueue_failures"] += 1
+                raise TimeoutError("batch leaf enqueue timeout") from exc
+            with self._stats_lock:
+                self.stats["requests"] += 1
         return req
+
+    def reset_stats(self) -> None:
+        with self._stats_lock:
+            for k in ("requests", "batches", "leafs", "max_batch", "queue_wait_s",
+                      "batch_wait_s", "forward_s", "enqueue_failures", "errors"):
+                self.stats[k] = 0.0 if k.endswith("_s") else 0
 
     def call(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
              seat: int = 0, timeout: float = 30.0) -> Tuple[np.ndarray, float]:
@@ -120,25 +140,52 @@ class BatchLeafServer:
         return batch
 
     def _worker(self) -> None:
-        while not self._stop.is_set():
+        while True:
             try:
-                batch = self._take_batch()
+                first = self._q.get(timeout=0.1)
             except queue.Empty:
+                if self._stop.is_set():
+                    break
                 continue
-            if not batch:
-                continue
-            t0 = time.time()
+            if first is None:  # sentinel
+                break
+            batch = [first]
+            t_start = time.monotonic()
+            # 固定等待窗口聚批；不再阻塞到无限
+            deadline = t_start + self.max_wait_s
+            while len(batch) < self.batch_size:
+                rem = deadline - time.monotonic()
+                if rem <= 0:
+                    break
+                try:
+                    nxt = self._q.get(timeout=rem)
+                except queue.Empty:
+                    break
+                if nxt is None:
+                    self._stop.set()
+                    break
+                batch.append(nxt)
             try:
                 f = np.stack([r.features.reshape(-1) for r in batch], axis=0)
                 c = np.stack([r.cards.reshape(-1) for r in batch], axis=0)
                 m = np.stack([r.mask.reshape(-1) for r in batch], axis=0)
+                t0 = time.monotonic()
                 plog, rlog = self.evaluator.logits(f, c, m)
+                fwd = time.monotonic() - t0
                 for i, r in enumerate(batch):
                     p = masked_probs_np(plog[i], m[i], self.temperature)
                     p = p / max(float(p.sum()), 1e-12)
                     r.prior = p.astype(np.float32)
                     r.value = float(value_from_rank_logits_np(rlog[i])[0])
                     r.event.set()
+                with self._stats_lock:
+                    self.stats["batches"] += 1
+                    self.stats["leafs"] += len(batch)
+                    self.stats["max_batch"] = max(self.stats["max_batch"], len(batch))
+                    self.stats["forward_s"] += fwd
+                    self.stats["batch_wait_s"] += max(0.0, t0 - t_start)
+                    self.stats["queue_wait_s"] += sum(
+                        max(0.0, t_start - getattr(r, "submit_t", t_start)) for r in batch)
             except BaseException as exc:  # 线程内异常必须回传
                 for r in batch:
                     if not r.event.is_set():
@@ -146,17 +193,29 @@ class BatchLeafServer:
                         r.event.set()
                 with self._stats_lock:
                     self.stats["errors"] += len(batch)
-            finally:
-                with self._stats_lock:
-                    self.stats["batches"] += 1
-                    self.stats["leafs"] += len(batch)
-                    self.stats["max_batch"] = max(self.stats["max_batch"], len(batch))
-                    self.stats["wait_s"] += time.time() - t0
-                    self.stats["forward_s"] += time.time() - t0
+        # 退出一律失败未完成请求
+        while True:
+            try:
+                r = self._q.get_nowait()
+            except queue.Empty:
+                break
+            if r is not None and not r.event.is_set():
+                r.error = RuntimeError("BatchLeafServer closed")
+                r.event.set()
 
     def close(self) -> None:
-        self._stop.set()
+        with self._state_lock:
+            if self._state == "closed":
+                return
+            self._state = "closing"
+            self._stop.set()
+            try:
+                self._q.put_nowait(None)
+            except queue.Full:
+                pass
         self._thread.join(timeout=5.0)
+        with self._state_lock:
+            self._state = "closed"
 
     def __enter__(self) -> "BatchLeafServer":
         return self

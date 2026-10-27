@@ -80,3 +80,17 @@ def test_batch_server_concurrent_forms_batches():
         assert np.isfinite(v)
     finally:
         server.close()
+
+
+def test_batch_server_close_rejects_and_fails_pending():
+    _needs_torch()
+    model = build_net(16)
+    server = BatchLeafServer(model, device="cpu", batch_size=8, max_wait_ms=20)
+    rng = np.random.default_rng(2)
+    f, c, m = _sample(rng, n=4)
+    server.close()
+    with pytest.raises(RuntimeError):
+        server.submit(f[0], c[0], m[0])
+    with pytest.raises(RuntimeError):
+        server.call(f[0], c[0], m[0])
+    server.close()  # idempotent

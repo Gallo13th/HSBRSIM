@@ -68,6 +68,7 @@ def main() -> int:
         try:
             for _ in range(min(8, len(f))):
                 server.call(f[0], c[0], m[0])
+            server.reset_stats()
             t0 = time.time()
             # 先全部 submit，再等待：单线程也能形成 batch
             server.call_many(f, c, m)
@@ -76,7 +77,8 @@ def main() -> int:
             rows.append({"mode": "batch_server", "batch": b, "leafs": len(f),
                          "seconds": dt, "leafs_per_s": len(f) / dt,
                          "max_batch": st["max_batch"], "batches": st["batches"],
-                         "requests": st["requests"], "wait_s": st["wait_s"]})
+                         "requests": st["requests"], "queue_wait_s": st["queue_wait_s"],
+                         "batch_wait_s": st["batch_wait_s"], "forward_s": st["forward_s"]})
         finally:
             server.close()
     peak = None
