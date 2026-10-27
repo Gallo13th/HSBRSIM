@@ -23,3 +23,7 @@ reversed/hsdata_*/
 rust/target/
 rust/python/**/*.so
 *.so
+
+# 竞技场密钥（本地，不进库）
+.arena_key
+*.arena_key
