@@ -33,9 +33,12 @@ if True:  # 命名空间占位：TinyAZNet 在下方用 torch.nn 定义（需要
     pass
 
 
-def build_net(hidden: int = 256, *, obs_floats: int = OBS_FLOATS,
-              n_actions: int = N_ACTIONS, n_ranks: int = N_RANKS):
-    """构造 ``TinyAZNet``（torch 模块，惰性导入 torch）。"""
+def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FLOATS,
+              n_actions: int = N_ACTIONS, n_ranks: int = N_RANKS, **kwargs):
+    """构造策略网络：tiny（MLP）或 entity（AutoTavern 风格实体 Transformer）。"""
+    if arch == "entity":
+        from .entity_model import build_entity_net
+        return build_entity_net(**kwargs)
     torch = _torch()
     nn = torch.nn
 
@@ -88,14 +91,21 @@ class NetEvaluator:
             x = x / self.std
         return x
 
-    def logits(self, features: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """批量前向：features [B,3227] -> (policy_logits [B,245], rank_logits [B,8])。"""
+    def logits(self, features: np.ndarray, cards: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray]:
+        """批量前向：features [B,3227] (+cards) -> (policy_logits, rank_logits)。"""
         torch = self.torch
         x = self._normalize(np.atleast_2d(features))
         with torch.no_grad():
             t = torch.from_numpy(np.ascontiguousarray(x)).to(self.device)
-            plog, rlog = self.model(t)
-        return plog.detach().cpu().numpy(), rlog.detach().cpu().numpy()
+            if getattr(self.model, "uses_cards", False):
+                if cards is None:
+                    cards = np.zeros((t.shape[0], 124), dtype=np.int64)
+                card_t = torch.from_numpy(np.ascontiguousarray(
+                    np.atleast_2d(cards).astype(np.int64))).to(self.device)
+                out = self.model(t, card_t)
+            else:
+                out = self.model(t)
+        return out[0].detach().cpu().numpy(), out[1].detach().cpu().numpy()
 
     def value_from_rank_logits(self, rank_logits: np.ndarray) -> np.ndarray:
         z = np.asarray(rank_logits, dtype=np.float64)
@@ -106,7 +116,7 @@ class NetEvaluator:
 
     def __call__(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
                  seat: int = 0) -> tuple[np.ndarray, float]:
-        plog, rlog = self.logits(features)
+        plog, rlog = self.logits(features, cards)
         m = None if mask is None else np.asarray(mask, dtype=bool).reshape(-1)
         prior = plog[0]
         pi = masked_normalize(prior, m) if m is not None else _softmax(prior)
@@ -161,6 +171,12 @@ def save_checkpoint(model: Any, path: str, *, meta: Optional[Dict[str, Any]] = N
         payload["norm_mean"] = [float(v) for v in np.asarray(norm_mean, dtype=np.float32).tolist()]
     if norm_std is not None:
         payload["norm_std"] = [float(v) for v in np.asarray(norm_std, dtype=np.float32).tolist()]
+    payload["meta"].setdefault("arch", getattr(model, "arch", "tiny"))
+    if hasattr(model, "d_model"):
+        payload["meta"].setdefault("d_model", int(model.d_model))
+        payload["meta"].setdefault("n_layers", int(getattr(model.trunk, "num_layers", 8)))
+        payload["meta"].setdefault("n_heads", int(getattr(model.trunk.layers[0], "nhead", 8))
+                                  if hasattr(model.trunk, "layers") else 8)
     if hasattr(model, "obs_floats"):
         payload["meta"].setdefault("obs_floats", int(model.obs_floats))
         payload["meta"].setdefault("n_actions", int(model.n_actions))
@@ -179,7 +195,13 @@ def load_checkpoint(path: str, device: str = "cpu") -> tuple[Any, Dict[str, Any]
         payload = torch.load(path, map_location=device)
     meta = dict(payload.get("meta") or {})
     hidden = int(meta.get("hidden", 256))
-    model = build_net(hidden)
+    arch = str(meta.get("arch", "tiny"))
+    if arch == "entity":
+        model = build_net(arch="entity", d_model=int(meta.get("d_model", 384)),
+                          n_layers=int(meta.get("n_layers", 8)),
+                          n_heads=int(meta.get("n_heads", 8)))
+    else:
+        model = build_net(hidden)
     model.load_state_dict(payload["state_dict"])
     model.to(torch.device(device))
     model.eval()

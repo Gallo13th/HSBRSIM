@@ -61,7 +61,7 @@ def _repro_command(args: argparse.Namespace) -> Dict[str, Any]:
 
 def _engine_bot_bootstrap(games: int, seed: int, sample_stride: int,
                           device: str, epochs: int, batch_size: int, lr: float,
-                          max_samples: int) -> tuple[Optional[AZDataset], Optional[Any], Dict[str, Any]]:
+                          max_samples: int, arch: str = "tiny") -> tuple[Optional[AZDataset], Optional[Any], Dict[str, Any]]:
     """引擎 bot 全座位 BC 冷启动数据 + 初始网络（AlphaZero 从零冷启动的常用做法）。
 
     说明：bot 读取完整状态（特权），这里只用它产生**演示数据**，训练好的网络本身
@@ -79,7 +79,7 @@ def _engine_bot_bootstrap(games: int, seed: int, sample_stride: int,
           f"{meta.get('elapsed_s', 0):.2f}s", flush=True)
     if len(ds) == 0:
         return ds, None, meta
-    net = build_net(256)
+    net = build_net(256, arch=args.arch)
     train = train_policy_value(net, ds, epochs=max(1, int(epochs)), batch_size=int(batch_size),
                                lr=float(lr), device=device, seed=0,
                                max_samples=int(max_samples))
@@ -117,6 +117,8 @@ def main() -> int:
     ap.add_argument("--batch-size", type=int, default=256)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--max-train-samples", type=int, default=20000)
+    ap.add_argument("--arch", default="tiny", choices=["tiny", "entity"],
+                    help="网络结构：tiny=MLP；entity=AutoTavern 风格实体 Transformer")
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--eval-games", type=int, default=5, help="训练后 net(search-off) vs bot 局数")
     ap.add_argument("--eval-search-games", type=int, default=0,
@@ -166,7 +168,8 @@ def main() -> int:
     else:
         bootstrap_ds, net, bootstrap_meta = _engine_bot_bootstrap(
             args.bootstrap_games, args.selfplay_seed, args.sample_stride,
-            args.device, args.epochs, args.batch_size, args.lr, args.max_train_samples)
+            args.device, args.epochs, args.batch_size, args.lr, args.max_train_samples,
+            arch=args.arch)
         evaluator = (NetEvaluator(net, device=args.device) if net is not None
                      else make_evaluator("heuristic"))
 
@@ -226,7 +229,7 @@ def main() -> int:
     # ── 3) 训练（搜索数据 + 可选冷启动数据）──
     train_ds = dataset if bootstrap_ds is None else AZDataset.concat([bootstrap_ds, dataset])
     if net is None:
-        net = build_net(256)
+        net = build_net(256, arch=args.arch)
     t_train = time.time()
     train_meta = train_policy_value(
         net, train_ds, epochs=int(args.epochs), batch_size=int(args.batch_size),

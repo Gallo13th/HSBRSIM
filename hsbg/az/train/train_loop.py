@@ -43,9 +43,11 @@ def train_policy_value(model: Any, ds: AZDataset, *, epochs: int = 2, batch_size
         rng0 = np.random.default_rng(seed)
         usable = rng0.choice(usable, size=int(max_samples), replace=False)
     features = ds.arrays["features"][usable]
+    cards = ds.arrays.get("cards")[usable] if "cards" in ds.arrays else None
     masks = ds.arrays["masks"][usable].astype(bool)
     pi = ds.arrays["pi"][usable].astype(np.float32)
     ranks = ds.arrays["ranks"][usable].astype(np.int64)
+    utility = ds.arrays.get("utility", np.zeros(len(usable), np.float32))[usable].astype(np.float32)
 
     norm_mean, norm_std = feature_stats(features)
     x_all = (features - norm_mean) / norm_std
@@ -73,7 +75,13 @@ def train_policy_value(model: Any, ds: AZDataset, *, epochs: int = 2, batch_size
             target_rank = torch.from_numpy(ranks[sel] - 1).to(dev)
             m = torch.from_numpy(np.ascontiguousarray(masks[sel])).to(dev)
             opt.zero_grad(set_to_none=True)
-            plog, rlog = model(x)
+            if getattr(model, "uses_cards", False):
+                card_t = torch.from_numpy(np.ascontiguousarray(cards[sel])).to(dev)
+                out = model(x, card_t)
+            else:
+                out = model(x)
+            plog, rlog = out[0], out[1]
+            scalar_value = out[2] if len(out) > 2 else None
             logp = F.log_softmax(plog, dim=-1)
             # 只在合法动作上算 CE（pi 在非法位为 0，mask 后归一）
             logp = torch.where(m, logp, torch.full_like(logp, -1e9))
@@ -82,6 +90,10 @@ def train_policy_value(model: Any, ds: AZDataset, *, epochs: int = 2, batch_size
             loss_p = -(target * logp).sum(dim=-1).mean()
             loss_v = F.cross_entropy(rlog, target_rank)
             loss = loss_p + float(value_weight) * loss_v
+            if scalar_value is not None:
+                util_t = torch.from_numpy(np.ascontiguousarray(
+                    utility[sel] if 'utility' in ds.arrays else np.zeros(len(sel), np.float32))).to(dev)
+                loss = loss + 0.1 * F.mse_loss(scalar_value, util_t)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
             opt.step()
@@ -134,6 +146,7 @@ def evaluate_supervised(model: Any, ds: AZDataset, *, norm_mean: Optional[np.nda
     if usable.size > limit:
         usable = usable[np.linspace(0, usable.size - 1, int(limit)).astype(np.int64)]
     features = ds.arrays["features"][usable]
+    cards = ds.arrays.get("cards")[usable] if "cards" in ds.arrays else None
     masks = ds.arrays["masks"][usable].astype(bool)
     pi = ds.arrays["pi"][usable].astype(np.float32)
     ranks = ds.arrays["ranks"][usable].astype(np.int64)
@@ -148,9 +161,12 @@ def evaluate_supervised(model: Any, ds: AZDataset, *, norm_mean: Optional[np.nda
     with torch.no_grad():
         for start in range(0, len(usable), int(batch_size)):
             x = torch.from_numpy(np.ascontiguousarray(x_all[start:start + int(batch_size)])).to(dev)
-            plog, rlog = model(x)
-            plog = plog.detach().cpu().numpy()
-            rlog = rlog.detach().cpu().numpy()
+            if getattr(model, "uses_cards", False):
+                card_t = torch.from_numpy(np.ascontiguousarray(cards[start:start + int(batch_size)])).to(dev)
+                out = model(x, card_t)
+            else:
+                out = model(x)
+            plog, rlog = out[0].detach().cpu().numpy(), out[1].detach().cpu().numpy()
             m = masks[start:start + int(batch_size)]
             z = rlog - rlog.max(axis=-1, keepdims=True)
             p = np.exp(z)
