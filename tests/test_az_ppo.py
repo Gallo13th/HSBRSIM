@@ -448,3 +448,51 @@ def test_forced_endturn_excluded_from_policy_objective():
     loss, _ = clipped_surrogate(ratio, adv, 0.2, weight=torch.tensor([0.0, 1.0]))
     solo, _ = clipped_surrogate(ratio[1:], adv[1:], 0.2)
     assert torch.allclose(loss, solo)
+
+
+# ── 6. persistent PPOTrainer（Adam/LR/RNG 跨 update）────────────────────
+def test_ppo_trainer_persists_adam_and_scheduler():
+    _needs_torch()
+    from hsbg.az.train.model import build_net
+    from hsbg.az.train.ppo_trainer import PPOTrainer
+
+    model = build_net(16)
+    cfg = PPOConfig(device="cpu", epochs=1, minibatch=8, seed=11,
+                    kl_early_stop=False, target_kl=0.0)
+    trainer = PPOTrainer(model, cfg, lr_min_ratio=0.5, max_updates=10)
+    batch = _batch_from_model(model, n_games=2, decisions_per_seat=3)
+    lr0 = trainer.optimizer.param_groups[0]["lr"]
+    s1 = trainer.update(batch)
+    assert trainer.updates == 1
+    assert s1["trainer_updates"] == 1
+    assert s1["lr"] < lr0
+    # Adam 状态已产生，不是每轮重建
+    assert len(trainer.optimizer.state_dict()["state"]) > 0
+    s2 = trainer.update(batch)
+    assert trainer.updates == 2
+    assert s2["trainer_updates"] == 2
+    assert trainer.scheduler.last_epoch == 2
+
+
+def test_ppo_trainer_state_roundtrip(tmp_path):
+    _needs_torch()
+    from hsbg.az.train.model import build_net
+    from hsbg.az.train.ppo_trainer import PPOTrainer
+
+    model = build_net(16)
+    cfg = PPOConfig(device="cpu", epochs=1, minibatch=8, seed=23,
+                    kl_early_stop=False, target_kl=0.0)
+    trainer = PPOTrainer(model, cfg, lr_min_ratio=0.5, max_updates=10)
+    batch = _batch_from_model(model, n_games=1, decisions_per_seat=2)
+    trainer.update(batch)
+    path = str(tmp_path / "trainer.pt")
+    trainer.save(path)
+
+    model2 = build_net(16)
+    loaded = PPOTrainer.load(model2, path, device="cpu")
+    assert loaded.updates == 1
+    assert loaded.scheduler.last_epoch == 1
+    assert loaded.rng.bit_generator.state == trainer.rng.bit_generator.state
+    # 继续更新，optimizer/scheduler 状态延续
+    loaded.update(batch)
+    assert loaded.updates == 2

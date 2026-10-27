@@ -781,7 +781,9 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
 
 
 def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
-              *, on_step: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
+              *, on_step: Optional[Callable[[Dict[str, Any]], None]] = None,
+              optimizer: Any = None, rng: Optional[np.random.Generator] = None
+              ) -> Dict[str, Any]:
     """执行 PPO 更新（minibatch × epochs，clip、entropy、KL 早停）。
 
     返回可 JSON 序列化的统计字典。
@@ -791,7 +793,7 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     errs = batch.validate()
     if errs:
         raise ValueError("PPO 批次校验失败: " + "; ".join(errs))
-    rng = np.random.default_rng(int(cfg.seed))
+    rng = rng if rng is not None else np.random.default_rng(int(cfg.seed))
     base_idx = np.arange(len(batch), dtype=np.int64)
     if cfg.max_samples is not None and int(cfg.max_samples) < base_idx.size:
         base_idx = np.sort(rng.choice(base_idx, size=int(cfg.max_samples), replace=False))
@@ -803,7 +805,8 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     # 保持 eval（关闭 dropout）：old_logprob 是采集时 eval 前向算出的，若 PPO 前向
     # 打开 dropout 会让 ratio 起点偏离 1、approx_kl 虚高（entity 默认 dropout=0.1）。
     model.eval()
-    opt = torch.optim.Adam(model.parameters(), lr=float(cfg.lr))
+    opt = (optimizer if optimizer is not None
+           else torch.optim.Adam(model.parameters(), lr=float(cfg.lr)))
     mb = max(1, int(cfg.minibatch))
     epochs = max(1, int(cfg.epochs))
     logs: List[Dict[str, Any]] = []
