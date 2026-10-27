@@ -84,5 +84,6 @@ python scripts/run_tavernbench.py --check
 - `docs/AZ_MCTS_SELFPLAY_DESIGN.md` / `docs/AZ_IMPERFECT_SEARCH_DESIGN.md` — MCTS/自对弈设计
 - `docs/TRAINING.md` — MCTS + 自对弈 + PPO 快速指南
 - `docs/TRAINING_DESIGN.md` — **完整训练系统设计**（搜索/叶评估/吞吐/剪枝/PPO）
+- `docs/TRAINING_PLAN_V2.md` — **v2 计划**（entity 14.8M / 异步 actor-learner / 重搜做题 / 冷启动联赛）
 - `docs/VERIFICATION.md` — 门禁与预期
 - `docs/TAVERNBENCH.md` — 决策基准

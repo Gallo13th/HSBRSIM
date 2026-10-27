@@ -1,7 +1,7 @@
 # 训练：不完全信息 MCTS + 自对弈 + PPO
 
 > 完整设计（吞吐、批量叶评估、剪枝、PPO/搜索结合、实现计划）见
-> [TRAINING_DESIGN.md](TRAINING_DESIGN.md)。本文是快速指南。
+> [TRAINING_DESIGN.md](TRAINING_DESIGN.md) 与 [TRAINING_PLAN_V2.md](TRAINING_PLAN_V2.md)。本文是快速指南。
 
 唯一训练栈：`hsbg/az/train`（不完全信息 MCTS + 自对弈 + PPO）。
 
