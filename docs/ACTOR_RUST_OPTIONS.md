@@ -140,3 +140,8 @@ decisions/s, leaf/s, GPU util, queue p95, actor CPU%, 显存, 失败率
 4. C 作为长期选项，不作为 6–12h 长训练前置。
 
 当前结论：**Rust 是正确方向，但必须改“逐叶 Python 回调”为“批式/异步推理”，否则只是把 GIL 换个地方。**
+
+> 状态（2026-10-27 21:00）：方案 A（进程级 actor pool）**已实现并实测** —— 8 进程 × 16 线程 /
+> GPU 0/5/6/7，sims=4，684.9 decisions/s（3.6× 单进程），queue wait p95 13.3ms，
+> 详见 [COMPUTE_BENCHMARK.md](COMPUTE_BENCHMARK.md) §10；方案 B（Rust `NeedEval` 批式回调）
+> 仍待做，也是把 GPU util 从 32% 抬上去的下一步。

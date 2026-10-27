@@ -194,3 +194,50 @@
 结论：**PPO 1M 的 scaling 不成立**，不要用 64 局曲线选 checkpoint。
 
 > 多 GPU / 多 CPU / 6–12h 预算见 [COMPUTE_PLAN_4GPU.md](COMPUTE_PLAN_4GPU.md)。
+
+## 10. 进程级 actor + sims=4 PPO 1.08M（2026-10-27 21:30，**负结果**）
+
+背景：进程级 actor pool 修复后（[COMPUTE_BENCHMARK.md](COMPUTE_BENCHMARK.md) §10：
+684.9 decisions/s，3.6×），用 8 进程 × 16 线程在 GPU 0/5/6/7 上续训，验证
+「同算力下 sims=4 的 PPO 能否把 C0 从 4.709 推过 bot」。
+
+```bash
+PYTHONPATH=rust/python:. python scripts/train_entity_sync.py \
+  --checkpoint runs/az_entity_1m_s0/model.pt --arch entity --device cuda:0 \
+  --processes 8 --gpus 0,5,6,7 --threads 16 --games 128 \
+  --sims 4 --determinizations 1 --opponent bot --behavior net \
+  --epochs 1 --minibatch 1024 --lr 1e-5 --target-kl 0.1 \
+  --pi-coef 0.1 --entropy-coef 0.005 --max-steps 10000 \
+  --iterations 60 --snapshot-every 5 --keep-snapshots 3 --seed 700 \
+  --out runs/az_entity_ppoproc_1m
+```
+
+| 项目 | 结果 |
+|---|---|
+| 迭代 / decisions / wall-clock | 60 / **1,081,079** / 1,874 s（31.2 min，含 PPO 更新） |
+| 采集吞吐 | p50 **719.6** dec/s（min 553 / max 863）；端到端 576.8 dec/s |
+| queue wait p95 | 中位 13.5 ms，最差 14.4 ms；worker 重启 0 |
+| PPO 稳定性 | approx_kl 0.0016→0.0040，clip_frac 1.9%→3.6%，entropy 0.43→0.27 |
+| C0 512 局（seed_base 410000，与基线同协议） | mean rank **5.465**，bot 4.506，top4 **29.5%**，win 4.5% |
+| 配对 Δ（model−bot） | **+0.959**，95% CI **[+0.693, +1.227]** → 显著**更差** |
+
+判读：**工程链路成功（1M/31min、零重启、可续训），但强度明显退化**——同 seed 同协议下
+从续训前的 4.709 掉到 5.465，退 **0.76 名**且 CI 不含 0。可能原因（按优先级）：
+
+1. `pi_coef=0.1` 把 sims=4、W=1 的 MCTS visit π 蒸馏进策略；而 4 次模拟的 π 本身不比网络强
+   （见 [AZ_IMPERFECT_SEARCH_DESIGN.md](AZ_IMPERFECT_SEARCH_DESIGN.md) §5.3），等于用更差的
+   教师反复教策略；
+2. 没有 KL anchor（本文 §5 已标未实现），60 次更新累计漂移；
+3. 采集用采样行为（temperature 1.0）、C0 用 greedy argmax，分布偏移；
+4. 8 人局单 learner 时终局 rank 信号方差大，advantage 近 0。
+
+下一步（建议按序，**不要再单纯加步数**）：
+
+- **A（最便宜）**：同配置 `--pi-coef 0`（纯 PPO，不蒸馏 MCTS），每 250k 做一次 512 局评测，
+  确认退化是否来自 π 蒸馏；
+- **B**：加 KL anchor（β 0.1→0）后重复 A；
+- **C**：若 A/B 仍退化，说明 sims=4 的搜索数据对 greedy 网络没有正收益，应转向更深搜索
+  （sims 32–64）/更强教师或历史池课程，而不是继续加 PPO 步数。
+
+产物：`runs/az_entity_ppoproc_1m/{model.pt,history.json,summary.json,snapshots/,c0_512.json}`
+（`runs/` 不入库）。
