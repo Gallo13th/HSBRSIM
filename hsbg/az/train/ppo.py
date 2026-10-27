@@ -247,7 +247,8 @@ class CollectConfig:
     seed: int = 0
     max_steps: int = 20000
     game_id_offset: int = 0
-    #: self=8 座自对弈（selfplay.play_selfplay_game）；bot=1 学习座 vs 7 引擎 bot
+    #: self=8 座自对弈；bot=1 学习座 vs 7 引擎 bot；
+    #: weak=1 学习座 vs 7 个弱随机/结束回合混合对手（冷启动课程）
     opponent: str = "self"
     learner_seat: int = 0
     #: net=网络采样（严格 on-policy）；mcts=visit π 采样；mixed=混合
@@ -1082,6 +1083,20 @@ def _attach_rank(records: List[Dict[str, Any]], rank: int) -> None:
         rec["utility"] = util
 
 
+def _weak_bot_action(game: Any, seat: int, rng: np.random.Generator) -> int:
+    """弱对手：30% 合法 EndTurn（若可用），否则随机合法动作。
+
+    只用于 C0 冷启动课程；主评测仍是对完整引擎 bot。
+    """
+    mask = mask_from_bytes(game.legal_mask(int(seat)))
+    legal = np.flatnonzero(mask)
+    if legal.size == 0:
+        return 0
+    if bool(mask[0]) and float(rng.random()) < 0.90:
+        return 0
+    return int(legal[int(rng.integers(0, legal.size))])
+
+
 def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                       search_fn: Optional[Callable[..., Any]] = None,
                       search_config: Any = None,
@@ -1101,7 +1116,7 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
     """
     cfg = config or CollectConfig()
     mode = str(cfg.opponent).strip().lower()
-    if mode not in ("self", "bot"):
+    if mode not in ("self", "bot", "weak"):
         raise ValueError(f"opponent 只能是 self|bot，得到 {cfg.opponent!r}")
     policy = PPOSelfPlayPolicy(
         model, device=device, config=cfg, search_fn=search_fn,
@@ -1145,6 +1160,7 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                       flush=True)
     else:
         E = load_engine()
+        weak_rng = np.random.default_rng(int(cfg.seed))
         for gi in range(int(cfg.games)):
             gid = int(cfg.game_id_offset) + gi
             policy.game_id = gid
@@ -1168,6 +1184,8 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                             action = int(np.flatnonzero(mask)[0]) if mask.any() else 0
                         game.step(int(p), action)
                         game_decisions += 1
+                    elif mode == "weak":
+                        game.step(int(p), _weak_bot_action(game, int(p), weak_rng))
                     else:
                         game.bot_play(int(p))
                     steps += 1
@@ -1198,7 +1216,7 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                       flush=True)
 
     collect_meta: Dict[str, Any] = {
-        "mode": "vs_bot" if mode == "bot" else "selfplay",
+        "mode": ("vs_bot" if mode == "bot" else ("vs_weak" if mode == "weak" else "selfplay")),
         "requested_games": int(cfg.games),
         "games": int(len(games_meta) - truncated),
         "truncated_games": int(truncated),

@@ -55,7 +55,7 @@ def main() -> int:
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--sims", type=int, default=4)
     ap.add_argument("--determinizations", type=int, default=1)
-    ap.add_argument("--opponent", default="bot", choices=["bot", "self"])
+    ap.add_argument("--opponent", default="bot", choices=["bot", "self", "weak"])
     ap.add_argument("--behavior", default="net", choices=["net", "mcts", "mixed"])
     ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--minibatch", type=int, default=128)

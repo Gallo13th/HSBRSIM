@@ -22,7 +22,7 @@ import numpy as np
 from .common import (N_ACTIONS, N_PLAYERS, load_engine, mask_from_bytes,
                      to_jsonable)
 from .ppo import (CollectConfig, PPOBatch, PPOSelfPlayPolicy, _attach_rank,
-                  build_batch_from_records)
+                  build_batch_from_records, _weak_bot_action)
 
 
 def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
@@ -60,6 +60,7 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
     else:
         E = load_engine()
         policy.reset()
+        weak_rng = np.random.default_rng(int(seed) + gi)
         game = E.Game(seed=int(cfg.seed) + gi)
         steps = 0
         while not game.is_over() and steps < int(cfg.max_steps):
@@ -76,6 +77,8 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
                         action = int(np.flatnonzero(mask)[0]) if mask.any() else 0
                     game.step(int(p), action)
                     decisions += 1
+                elif gamemode == "weak":
+                    game.step(int(p), _weak_bot_action(game, int(p), weak_rng))
                 else:
                     game.bot_play(int(p))
                 steps += 1
@@ -121,8 +124,8 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
                                progress: bool = False) -> Tuple[PPOBatch, Dict[str, Any]]:
     cfg = config or CollectConfig()
     mode = str(cfg.opponent).strip().lower()
-    if mode not in ("self", "bot"):
-        raise ValueError(f"opponent 只能是 self|bot，得到 {cfg.opponent!r}")
+    if mode not in ("self", "bot", "weak"):
+        raise ValueError(f"opponent 只能是 self|bot|weak，得到 {cfg.opponent!r}")
     workers = max(1, int(workers))
     t0 = time.time()
     results: List[Tuple[List[Dict[str, Any]], Dict[str, Any]]] = []
@@ -158,7 +161,7 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
     if not records:
         raise RuntimeError(f"并行采集无有效轨迹（{truncated}/{len(games_meta)} 截断）")
     meta_out: Dict[str, Any] = {
-        "mode": "vs_bot" if mode == "bot" else "selfplay",
+        "mode": ("vs_bot" if mode == "bot" else ("vs_weak" if mode == "weak" else "selfplay")),
         "parallel_workers": workers,
         "requested_games": int(cfg.games),
         "games": len(games_meta) - truncated,
