@@ -67,6 +67,7 @@ def main() -> int:
     ap.add_argument("--pi-coef", type=float, default=0.1)
     ap.add_argument("--entropy-coef", type=float, default=0.005)
     ap.add_argument("--max-actions-per-turn", type=int, default=40)
+    ap.add_argument("--max-steps", type=int, default=20000)
     ap.add_argument("--log-every", type=int, default=10)
     ap.add_argument("--workers", type=int, default=1,
                     help=">1 时使用并行采集 + 共享批量叶 server")
@@ -188,7 +189,8 @@ def main() -> int:
         c_cfg = CollectConfig(
             games=int(args.games), seed=int(args.seed) + i * 1000,
             opponent=str(args.opponent), behavior=str(args.behavior),
-            max_actions_per_turn=int(args.max_actions_per_turn))
+            max_actions_per_turn=int(args.max_actions_per_turn),
+            max_steps=int(args.max_steps))
         iter_start = time.time()
         if args.workers > 1:
             batch, collect_meta = collect_ppo_batch_parallel(

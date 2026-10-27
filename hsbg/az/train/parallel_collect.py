@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -128,16 +128,21 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
         raise ValueError(f"opponent 只能是 self|bot|weak，得到 {cfg.opponent!r}")
     workers = max(1, int(workers))
     t0 = time.time()
-    results: List[Tuple[List[Dict[str, Any]], Dict[str, Any]]] = []
+    results: List[Any] = [None] * int(cfg.games)
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = [ex.submit(_one_game, model, cfg, gi, search_fn=search_fn,
+        futs = {ex.submit(_one_game, model, cfg, gi, search_fn=search_fn,
                           search_config=search_config, eval_fn=eval_fn,
                           engine_backend=engine_backend, device=device,
                           seed=int(seed), gamemode=mode,
-                          norm_mean=norm_mean, norm_std=norm_std)
-                for gi in range(int(cfg.games))]
-        for f in futs:
-            results.append(f.result())
+                          norm_mean=norm_mean, norm_std=norm_std): gi
+                for gi in range(int(cfg.games))}
+        for f in as_completed(futs):
+            gi = futs[f]
+            results[gi] = f.result()
+            if progress:
+                meta = results[gi][1]
+                print(f"[parallel] gid={gi} decisions={meta.get('decisions')} "
+                      f"trunc={meta.get('truncated')}", flush=True)
     records: List[Dict[str, Any]] = []
     games_meta: List[Dict[str, Any]] = []
     decisions = illegal = truncated = search_calls = search_fail = forced = 0
@@ -155,9 +160,6 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
         search_calls += int(meta.get("search_calls", 0))
         search_fail += int(meta.get("search_failures", 0))
         forced += int(meta.get("forced_end_turns", 0))
-        if progress:
-            print(f"[parallel] gid={meta.get('game_id')} decisions={meta.get('decisions')} "
-                  f"trunc={meta.get('truncated')}", flush=True)
     if not records:
         raise RuntimeError(f"并行采集无有效轨迹（{truncated}/{len(games_meta)} 截断）")
     meta_out: Dict[str, Any] = {
