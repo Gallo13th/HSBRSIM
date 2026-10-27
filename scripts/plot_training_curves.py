@@ -120,7 +120,10 @@ def main() -> int:
     ax = axes[1, 1]
     dec = np.array([1e5, 2.5e5, 5e5, 1e6, 5e6, 1e7, 1e8])
     sec = dec / 249.0
-    ax.plot(dec, sec / 3600.0, "o-", color="#2ca02c")
+    ax.plot(dec, sec / 3600.0, "o-", color="#2ca02c", label="sims=4: 249 dec/s")
+    ax.scatter([1.259447e6], [910.0 / 3600.0], color="#d62728", zorder=4,
+               label="measured 1.26M / 15.2min (sims=0)")
+    ax.legend(fontsize=7)
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("decisions")
