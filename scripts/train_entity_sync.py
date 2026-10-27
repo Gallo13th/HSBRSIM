@@ -67,6 +67,7 @@ def main() -> int:
     ap.add_argument("--pi-coef", type=float, default=0.1)
     ap.add_argument("--entropy-coef", type=float, default=0.005)
     ap.add_argument("--max-actions-per-turn", type=int, default=40)
+    ap.add_argument("--log-every", type=int, default=10)
     ap.add_argument("--workers", type=int, default=1,
                     help=">1 时使用并行采集 + 共享批量叶 server")
     ap.add_argument("--batch-size", type=int, default=64)
@@ -123,7 +124,8 @@ def main() -> int:
         epochs=int(args.epochs), minibatch=int(args.minibatch), lr=float(args.lr),
         clip=float(args.clip), target_kl=float(args.target_kl),
         entropy_coef=float(args.entropy_coef), pi_coef=float(args.pi_coef),
-        device=str(args.device), seed=int(args.seed))
+        device=str(args.device), seed=int(args.seed),
+        log_every=int(args.log_every))
     trainer: Optional[PPOTrainer] = None
     if args.trainer_state and os.path.isfile(args.trainer_state):
         trainer = PPOTrainer.load(model, args.trainer_state, config=p_cfg,

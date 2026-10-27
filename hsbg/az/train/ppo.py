@@ -816,6 +816,7 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     epochs = max(1, int(cfg.epochs))
     logs: List[Dict[str, Any]] = []
     updates = 0
+    processed = 0
     stopped_early = False
     t0 = time.time()
     for epoch in range(epochs):
@@ -847,6 +848,7 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                 break
             opt.step()
             updates += 1
+            processed += int(sel.size)
             nb += 1
         rec: Dict[str, Any] = {"epoch": epoch + 1, "steps": nb}
         rec.update({k: float(np.mean(v)) for k, v in acc.items()})
@@ -863,12 +865,12 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
             break
     model.eval()
     elapsed = time.time() - t0
-    processed = int(updates * mb)
     return {
         "epochs": logs,
         "updates": int(updates),
         "samples": n,
-        "processed_samples": processed,
+        "processed_samples": int(processed),
+        "forced_samples": int(np.asarray(batch.forced, dtype=bool).sum()),
         "seconds": float(elapsed),
         "samples_per_s": float(processed / max(elapsed, 1e-9)),
         "stopped_early": bool(stopped_early),

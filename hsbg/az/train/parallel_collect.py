@@ -98,6 +98,10 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
                     "truncated": 1, "records": 0, "rank": None}
     meta["illegal_actions"] = int(illegal)
     meta["truncated"] = int(truncated)
+    if illegal:
+        # 非法动作兜底会改写真实 action/logprob；该局整局丢弃，禁止进入 PPO。
+        records = []
+        meta["dropped_invalid"] = 1
     meta["search_calls"] = int(policy.search_calls)
     meta["search_failures"] = int(policy.search_failures)
     meta["forced_end_turns"] = int(policy.forced_actions)
@@ -134,10 +138,15 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
     records: List[Dict[str, Any]] = []
     games_meta: List[Dict[str, Any]] = []
     decisions = illegal = truncated = search_calls = search_fail = forced = 0
+    invalid_games = 0
+    dropped_decisions = 0
     for recs, meta in results:
         records.extend(recs)
         games_meta.append(meta)
         decisions += int(meta.get("decisions", 0))
+        if int(meta.get("dropped_invalid", 0)):
+            invalid_games += 1
+            dropped_decisions += int(meta.get("decisions", 0))
         illegal += int(meta.get("illegal_actions", 0))
         truncated += int(meta.get("truncated", 0))
         search_calls += int(meta.get("search_calls", 0))
@@ -156,6 +165,8 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
         "truncated_games": truncated,
         "decisions": decisions,
         "illegal_actions": illegal,
+        "invalid_games": int(invalid_games),
+        "dropped_decisions": int(dropped_decisions),
         "seed": int(seed),
         "behavior": str(cfg.behavior),
         "search_calls": search_calls,
