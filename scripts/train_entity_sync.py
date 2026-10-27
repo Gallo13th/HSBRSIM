@@ -34,6 +34,8 @@ from hsbg.az.train.ppo import (  # noqa: E402
     torch_available,
 )
 from hsbg.az.train.ppo_trainer import PPOTrainer  # noqa: E402
+from hsbg.az.train.batch_eval import BatchLeafServer, BatchPPOEvaluator  # noqa: E402
+from hsbg.az.train.parallel_collect import collect_ppo_batch_parallel  # noqa: E402
 
 
 def _atomic_torch_save(obj: Any, path: str) -> None:
@@ -65,6 +67,9 @@ def main() -> int:
     ap.add_argument("--pi-coef", type=float, default=0.1)
     ap.add_argument("--entropy-coef", type=float, default=0.005)
     ap.add_argument("--max-actions-per-turn", type=int, default=40)
+    ap.add_argument("--workers", type=int, default=1,
+                    help=">1 时使用并行采集 + 共享批量叶 server")
+    ap.add_argument("--batch-size", type=int, default=64)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--checkpoint", default="")
     ap.add_argument("--trainer-state", default="")
@@ -81,6 +86,9 @@ def main() -> int:
     import torch
     if args.minutes <= 0 or args.games <= 0 or args.iterations < 0:
         print("[error] minutes/games 必须 >0，iterations 必须 >=0", file=sys.stderr)
+        return 2
+    if args.workers <= 0 or args.batch_size <= 0:
+        print("[error] workers/batch-size 必须 >0", file=sys.stderr)
         return 2
     if args.trainer_state and not os.path.isfile(args.trainer_state):
         print(f"[error] trainer-state 不存在: {args.trainer_state}", file=sys.stderr)
@@ -154,8 +162,16 @@ def main() -> int:
                                   seed=int(args.seed))
         search_fn = az_search
 
-    evaluator = PPOEvaluator(model, device=args.device,
-                             norm_mean=norm_mean, norm_std=norm_std)
+    batch_server = None
+    if args.workers > 1:
+        batch_server = BatchLeafServer(model, device=args.device,
+                                       batch_size=int(args.batch_size),
+                                       max_wait_ms=2.0, queue_size=8192,
+                                       norm_mean=norm_mean, norm_std=norm_std)
+        evaluator = BatchPPOEvaluator(batch_server)
+    else:
+        evaluator = PPOEvaluator(model, device=args.device,
+                                 norm_mean=norm_mean, norm_std=norm_std)
     t0 = time.time()
     deadline = t0 + float(args.minutes) * 60.0
     i = int(start_i)
@@ -172,11 +188,19 @@ def main() -> int:
             opponent=str(args.opponent), behavior=str(args.behavior),
             max_actions_per_turn=int(args.max_actions_per_turn))
         iter_start = time.time()
-        batch, collect_meta = collect_ppo_batch(
-            model, c_cfg, search_fn=search_fn, search_config=search_cfg,
-            eval_fn=evaluator, device=str(args.device),
-            seed=int(args.seed) + i * 1000, gamma=1.0, lam=0.95,
-            norm_mean=norm_mean, norm_std=norm_std, progress=True)
+        if args.workers > 1:
+            batch, collect_meta = collect_ppo_batch_parallel(
+                model, c_cfg, workers=int(args.workers),
+                search_fn=search_fn, search_config=search_cfg,
+                eval_fn=evaluator, device=str(args.device),
+                seed=int(args.seed) + i * 1000, gamma=1.0, lam=0.95,
+                norm_mean=norm_mean, norm_std=norm_std, progress=True)
+        else:
+            batch, collect_meta = collect_ppo_batch(
+                model, c_cfg, search_fn=search_fn, search_config=search_cfg,
+                eval_fn=evaluator, device=str(args.device),
+                seed=int(args.seed) + i * 1000, gamma=1.0, lam=0.95,
+                norm_mean=norm_mean, norm_std=norm_std, progress=True)
         errs = batch.validate()
         if errs:
             print(f"[error] batch invalid: {errs}", file=sys.stderr)
@@ -221,6 +245,8 @@ def main() -> int:
         last_len = time.time() - iter_start
         i += 1
 
+    if batch_server is not None:
+        batch_server.close()
     summary = {"iterations": i, "updates": trainer.updates,
                "elapsed_s": time.time() - t0, "config": vars(args),
                "history": history}
