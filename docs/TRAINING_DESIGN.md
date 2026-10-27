@@ -71,7 +71,8 @@
 
 PIMC（第一阶段）：
 - 从公开观测 `o` 采样 `W` 个隐藏世界 `{s_w}`（`belief.EnginePublicPriorSampler`）；
-- 注入后断言 `observe(seat)` 字节不变（信息隔离不变量）；
+- 注入后断言 `observe(seat)` 字节不变（信息隔离不变量）；**校验失败 = 拒绝该 world/shard**，
+  不能像当前实现那样只记 info 后继续；
 - 每个世界独立一棵 PUCT 树；根 visit 跨世界聚合。
 
 已知偏差：
@@ -103,7 +104,9 @@ Q(s,a)    = W(s,a) / N(s,a)          (N=0 -> 0)
 `EndTurn` 之后引擎内部推进 7 座 + 配对 + 战斗 RNG + 刷新 + 淘汰；它不是普通动作，而是一个**随机宏转移**。
 
 两种实现：
-- Rust `mcts_search`：宏转移折叠在边内（快，但树内不显式建模 chance）；
+- Rust `mcts_search`：宏转移折叠在边内（快，但树内不显式建模 chance）；Rust 侧
+  `max_depth` 不存在（只有 Python），达到 step/guard 上限会返回 0；必须把截断率单独报告，
+  不能当作终端/失败样本混入训练。
 - Python 后端：`resample_on_end_turn=True` 时，EndTurn 后重新采隐藏世界，作为 chance 节点对照（慢，用于校准）。
 
 设计选择与限制：
@@ -144,6 +147,8 @@ adversarial rare-action 测试。硬规则：
 - 预算按**时间**而非固定 sims：`max_ms_per_decision`（训练 20–50ms，评估 100ms）；
 - 根搜索与树复用：同一局下一步可复用子树（同世界、同 seat、动作未变）；新世界则丢弃或只复用公共部分；
 - 搜索缓存：`(state_json, seat, world_id)` → `(π, v)`；只在同一世界/同一树内复用。
+- `search_coverage` 只统计**有效搜索**（成功返回 π 且通过信息隔离/合法 mask）；网络回退/
+  异常样本不计入覆盖率，并单独报告 fallback 率。
 
 ### 3.6 搜索伪代码
 
