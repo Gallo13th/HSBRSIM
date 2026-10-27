@@ -49,6 +49,7 @@ def main() -> int:
     ap.add_argument("--sims", type=int, default=4)
     ap.add_argument("--determinizations", type=int, default=1)
     ap.add_argument("--minutes", type=float, default=30.0)
+    ap.add_argument("--max-steps", type=int, default=1000)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default="runs/bench/process_pool.json")
     args = ap.parse_args()
@@ -65,7 +66,7 @@ def main() -> int:
         try:
             batch, meta = pool.collect(
                 CollectConfig(games=int(args.games), opponent="bot",
-                              max_steps=3000),
+                              max_steps=int(args.max_steps)),
                 games=int(args.games), progress=False)
         except Exception as exc:  # noqa: BLE001
             rounds.append({"error": repr(exc), "seconds": time.time() - r0})

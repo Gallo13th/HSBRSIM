@@ -143,3 +143,32 @@ $P scripts/train_entity_sync.py --iterations 1 --games 64 --workers 64 \
 - 训练 actor 仍受 Python 线程/GIL 限制，GPU util <32%；
 - **长训练不应在 actor 重构前启动**；
 - 等用户明确通知后，先做 30–60 分钟 4 GPU + CPU 扫描，再跑 6–12h。
+
+## 10. 进程级 actor pool 扫描状态（未通过）
+
+`ProcessActorPool` + `bench_process_pool.py` 已实现：
+
+- multiprocessing spawn，每进程绑定 GPU；
+- 每进程独立 model/evaluator/Game；
+- 返回 records 给 learner；
+- 4 GPU / sims=4 / 8 games per round 扫描尝试。
+
+**结果：扫描未完成。** 运行约 2 分钟后出现：
+
+```text
+BrokenPipeError: [Errno 32] Broken pipe
+SpawnPoolWorker ... multiprocessing/pool.py ... put(...)
+```
+
+没有生成有效 `runs/bench/process_4gpu_30min.json`。  
+因此不能报告 4 GPU 进程级 actor 的 30min 稳定吞吐；需要先修 worker 生命周期/结果传输。
+
+已有可用的 4 GPU **推理**基准（见 §3）和单进程线程 actor 基准（§4），但二者都不能替代
+进程级 actor 扫描。
+
+### 下一步修法
+
+1. 用 `concurrent.futures.ProcessPoolExecutor` 或显式 `Process` + `Queue` 替代反复 `Pool`；
+2. 每轮 worker 结果用文件/共享队列，失败 worker 可重启；
+3. 先跑 2–5 分钟短测，确认无 BrokenPipe，再跑 30min；
+4. 记录每轮 decisions/s、GPU util、显存、失败/重启次数。
