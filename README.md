@@ -89,5 +89,6 @@ python scripts/run_tavernbench.py --check
 - `docs/COMPUTE_PLAN_4GPU.md` — **4 GPU / 多 CPU / 6–12h 长训练计算计划**
 - `docs/COMPUTE_BENCHMARK.md` — **18M/56+1、4 GPU、worker/sims 吞吐实测**
 - `docs/AT_LAYOUT_CONTRACT.md` — **AT 3227/124/245 数据与动作契约**
+- `docs/ACTOR_RUST_OPTIONS.md` — **Rust actor / GIL 分析与方案**
 - `docs/VERIFICATION.md` — 门禁与预期
 - `docs/TAVERNBENCH.md` — 决策基准
