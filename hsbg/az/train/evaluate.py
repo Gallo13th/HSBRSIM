@@ -114,6 +114,7 @@ def evaluate_policy(policy: Policy, config: EvalConfig) -> Dict[str, Any]:
         "win_rate": float((known == 1).mean()) if n_known else None,
         "mean_utility": float(util.mean()) if n_known else None,
         "rank_counts": rank_counts,
+        "rank_sequence": [int(r) for r in ranks],
         "decisions": int(decisions),
         "decisions_per_game": float(decisions / max(config.games, 1)),
         "illegal_actions": int(illegal),
