@@ -9,7 +9,7 @@
 | 维度 | 目标 |
 |---|---|
 | 正确性 | 只用公开观测做决策；同 seed 轨迹逐位一致；动作 mask 精确 |
-| 吞吐 | 单次训练 iteration 采集 **1M decisions**；采集/训练/评估流水线可并行 |
+| 吞吐 | 目标 **1M seat decisions/iteration**（≈278 局 8 座 self-play）；P0 先 50k、P1 250k，端到端验收后升级 |
 | 样本效率 | 同等 decisions 下，MCTS-guided PPO ≥ 纯 PPO；同等算力下评估名次更优 |
 | 推理效率 | 评估时单决策 ≤ 100 ms（CPU/单 GPU 小 batch），训练 actor 不成为瓶颈 |
 | 可复现 | 数据/引擎/模型/搜索配置/seed 全部进报告；checkpoint 可重放 |
@@ -226,7 +226,9 @@ Actor 收集叶子请求 (features, cards, mask) → 本地队列
 ### 5.1 计算模型
 
 设：
-- `D` = 每局决策数（约 450）；
+- `D` = **每座位每局决策数**（约 450）；8 座自对弈一局约 `8D ≈ 3,600` 个 seat decisions；
+  1M decisions ≈ **278 局**（8 座 self-play）；若 1 学习座 vs 7 bot，则 ≈2,222 局。
+- `D_iter` = 本 iteration 的 seat decisions；
 - `S` = 每决策叶子评估数（sims）；
 - `G` = 并行局数；
 - `B` = 叶评估 batch；
@@ -266,8 +268,12 @@ throughput_decisions ≈ min(
 
 结论：
 - 单叶前向只有 **220 samples/s**；B≥64 后可达 **1.3–2.0 万 samples/s**（约 **60–90×**）。
-- 1M decisions × sims 8 = 8M leaf evals：GPU 侧约 **7 分钟**（19k/s）；sims 32 约 **28 分钟**。
-- 因此 **1M decisions/iter 是可达的**，前提是批量叶评估 + actor 并行；当前 0.03 games/s 的瓶颈是“逐叶 Python 前向”，不是 GPU。
+- 1M seat decisions × sims 8 = 8M leaf evals：GPU 侧约 **7 分钟**（19k/s）；sims 32 约 **28 分钟**。
+  若 W=4，每决策还有约 W 次根 eval，实际是 12M（sims8）→ ~10.5min；仍未计树选择/引擎/copy。
+- 因此 **1M decisions/iter 只是“GPU 裸前向”的可达下界**；端到端必须由 benchmark 证明。
+  当前 0.03 self-play games/s 的瓶颈是逐叶 Python 前向 + 串行座位，不是 GPU。
+- 当前 `selfplay.py` 的 Game 路径是**逐座位串行**；`BatchEnv` 只支持 `act_batch`，不接 MCTS/PPO records。
+  设计中的“8 座并行”需要新的 actor/search 调度，不能假设现有代码已支持。
 
 > 注意：上表是**仅叶前向**的理想值。端到端还包含 `W` 次 determinization、根 eval、树选择、
 > 引擎 step、Python↔Rust 拷贝、batch 等待；PIMC 的根 eval 约 `W` 次/决策。1M decisions
@@ -278,9 +284,9 @@ throughput_decisions ≈ min(
 | 阶段 | decisions/iter | sims/decision | 预计采集 | 说明 |
 |---|---:|---:|---:|---|
 | Smoke | 10k | 4 | 分钟级 | CPU |
-| P0 | 250k | 8 | 10–30 min | 单 GPU + 多 actor |
-| P1 | **1M** | 8–16 | 1–2 h | 批量叶 + 多 actor |
-| P2 | 1M | 0（纯 PPO） | 20–40 min | 论文式高吞吐 |
+| P0 | **50k** | 4 | 先测 | Rust sims=4, W=1/2；端到端 benchmark |
+| P1 | **250k** | 4–8 | 先测 | 批量叶 + 多 actor；验收后再谈 1M |
+| P2 | 1M（目标） | 4–8 / 0 | 条件性 | 只有 P1 达到 decisions/s 目标才升级 |
 | Eval | 500–1000 局 | 32–64 | 小时级 | 固定 seed |
 
 > 当前实测（4 局 entity self-play，sims=4）约 **0.03 games/s**，对应 ~13 decisions/s；
@@ -438,7 +444,7 @@ L = E[ min(ρ A, clip(ρ, 1-ε, 1+ε) A) ]
 | 245 动作 / 3227+124 观测 | ✅ |
 | PIMC/PUCT 搜索（Rust/Python） | ✅ 基础版；无批量叶、无 ISMCTS、无显式 chance 训练 |
 | Entity transformer 14.8M + pointer | ✅ |
-| 自对弈 | ✅ 8 座 / bot；无 library |
+| 自对弈 | ✅ Game 逐座串行 / BatchEnv act_batch；无 MCTS 批量/无 library |
 | PPO | ✅ `hsbg/az/train/ppo.py`；仅 1 局 smoke |
 | 批量叶评估 | ❌ |
 | KL anchor / 多 stage | ❌（仅 batch KL 早停） |
@@ -448,7 +454,8 @@ L = E[ min(ρ A, clip(ρ, 1-ε, 1+ε) A) ]
 ## 11. 实现计划
 
 ### P0（先做，决定可行性）
-1. `hsbg/az/search_batched.py`：多树 + 叶子 batch 队列 + 批量网络前向；端到端基准
+1. `hsbg/az/search_batched.py`：多树 + 叶子 batch 队列 + 批量网络前向；**同时修
+   selfplay 的串行座位**（BatchEnv 目前只有 act_batch，不接 MCTS/PPO records）；端到端基准
    B=1/64/128/256、W=1/2/4、sims=4/8；验收 ≥10× 当前，报告 decisions/s、leaf/s、GPU 利用率、p50/p95；
 2. `hsbg/az/train/ppo.py`：`anchor_model`/`anchor_coef`（冻结上一 stage 的 masked KL）、
    `search_every`、`batch_leaf`；forced 样本排除 policy/aux（已修）；
