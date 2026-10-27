@@ -32,7 +32,8 @@ def test_gate_passes_on_significant_improvement():
     bot = (rng.integers(1, 9, size=512) + 1).clip(1, 8).tolist()
     # 强制模型更好
     model = [max(1, b - 1) for b in bot]
-    res = evaluate_gate(model, bot, config=C0GateConfig(games=512, bootstrap=500))
+    res = evaluate_gate(model, bot, config=C0GateConfig(games=512, bootstrap=500),
+                        illegal=0, truncated=0, truncated_combats=0)
     assert res.mean_diff < 0
     assert res.ci_high < 0
     assert res.passed
@@ -42,7 +43,7 @@ def test_gate_fails_on_truncation_or_no_improvement():
     model = [8] * 512
     bot = [4] * 512
     res = evaluate_gate(model, bot, config=C0GateConfig(games=512, bootstrap=500),
-                        truncated=1)
+                        illegal=0, truncated=1, truncated_combats=0)
     assert not res.passed
     assert any("CI" in r for r in res.reasons)
     assert any("truncated" in r for r in res.reasons)
@@ -51,7 +52,8 @@ def test_gate_fails_on_truncation_or_no_improvement():
 def test_gate_fails_on_wrong_sample_count():
     model = [4] * 10
     bot = [5] * 10
-    res = evaluate_gate(model, bot, config=C0GateConfig(games=512, bootstrap=100))
+    res = evaluate_gate(model, bot, config=C0GateConfig(games=512, bootstrap=100),
+                        illegal=0, truncated=0, truncated_combats=0)
     assert not res.passed
     assert any("有效配对局数" in r for r in res.reasons)
 
@@ -60,7 +62,8 @@ def test_gate_rejects_out_of_range_rank():
     model = [4] * 512
     model[0] = 99
     bot = [5] * 512
-    res = evaluate_gate(model, bot, config=C0GateConfig(games=512, bootstrap=100))
+    res = evaluate_gate(model, bot, config=C0GateConfig(games=512, bootstrap=100),
+                        illegal=0, truncated=0, truncated_combats=0)
     assert not res.passed
     assert any("越界" in r for r in res.reasons)
 
@@ -68,7 +71,8 @@ def test_gate_rejects_out_of_range_rank():
 def test_gate_rejects_non_integer_rank():
     model = [4.5] * 512
     bot = [5] * 512
-    res = evaluate_gate(model, bot, config=C0GateConfig(games=512, bootstrap=100))
+    res = evaluate_gate(model, bot, config=C0GateConfig(games=512, bootstrap=100),
+                        illegal=0, truncated=0, truncated_combats=0)
     assert not res.passed
     assert any("整数" in r for r in res.reasons)
 
@@ -77,7 +81,8 @@ def test_gate_rejects_missing_pair():
     model = [4] * 512
     bot = [5] * 512
     model[0] = 0
-    res = evaluate_gate(model, bot, config=C0GateConfig(games=512, bootstrap=100))
+    res = evaluate_gate(model, bot, config=C0GateConfig(games=512, bootstrap=100),
+                        illegal=0, truncated=0, truncated_combats=0)
     assert not res.passed
     assert any("截断" in r or "有效配对" in r for r in res.reasons)
 
@@ -86,7 +91,7 @@ def test_gate_rejects_truncated_combats():
     model = [4] * 512
     bot = [5] * 512
     res = evaluate_gate(model, bot, config=C0GateConfig(games=512, bootstrap=100),
-                        truncated_combats=1)
+                        illegal=0, truncated=0, truncated_combats=1)
     assert not res.passed
     assert any("truncated_combats" in r for r in res.reasons)
 
@@ -94,5 +99,6 @@ def test_gate_rejects_truncated_combats():
 def test_smoke_mode_can_skip_protocol():
     res = evaluate_gate([4] * 8, [5] * 8,
                         config=C0GateConfig(games=8, seats=8, bootstrap=100,
-                                            require_protocol=False))
+                                            require_protocol=False),
+                        illegal=0, truncated=0, truncated_combats=0)
     assert res.passed

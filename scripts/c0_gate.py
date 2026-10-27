@@ -54,6 +54,24 @@ def _error(out: str, msg: str, code: int = 2) -> int:
     return code
 
 
+def _find_out(argv: List[str]) -> str:
+    for i, a in enumerate(argv):
+        if a == "--out" and i + 1 < len(argv):
+            return argv[i + 1]
+        if a.startswith("--out="):
+            return a.split("=", 1)[1]
+    return ""
+
+
+class _Parser(argparse.ArgumentParser):
+    def error(self, message: str):  # argparse 类型/必填错误也要落 JSON
+        out = _find_out(sys.argv)
+        if out:
+            _dump(out, {"passed": False, "error": f"argparse: {message}",
+                        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")})
+        super().error(message)
+
+
 def _engine_info() -> Dict[str, Any]:
     try:
         import hsbg_engine as E
@@ -127,7 +145,7 @@ def _panel(seed_base: int, games: int, seats: int, per_seat: int, *,
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="C0 单模型 vs bot 严格配对 gate")
+    ap = _Parser(description="C0 单模型 vs bot 严格配对 gate")
     ap.add_argument("--checkpoint", required=True)
     ap.add_argument("--arch", default="entity", choices=["tiny", "entity"])
     ap.add_argument("--device", default="cuda")
@@ -145,6 +163,8 @@ def main() -> int:
                     help="开发自检：小样本、单面板，不产生晋级结论")
     ap.add_argument("--out", default="")
     args = ap.parse_args()
+    if args.out and os.path.isfile(args.out):
+        os.unlink(args.out)
 
     if args.smoke:
         args.confirmations = 1

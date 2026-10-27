@@ -99,8 +99,8 @@ def bootstrap_ci(diffs: Iterable[float], *, n_boot: int = 5000, alpha: float = 0
 
 def evaluate_gate(model_ranks: Sequence[int], bot_ranks: Sequence[int], *,
                   config: Optional[C0GateConfig] = None,
-                  illegal: int = 0, truncated: int = 0,
-                  truncated_combats: int = 0,
+                  illegal: int, truncated: int,
+                  truncated_combats: int,
                   extra: Optional[Dict[str, object]] = None) -> C0GateResult:
     cfg = config or C0GateConfig()
     # 协议/rank 合法性（防 99、缺失、浮点截断后误通过）
