@@ -27,11 +27,13 @@ from .ppo import (CollectConfig, PPOBatch, PPOSelfPlayPolicy, _attach_rank,
 
 def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
               search_config: Any, eval_fn: Any, engine_backend: str, device: str,
-              seed: int, gamemode: str) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+              seed: int, gamemode: str, norm_mean: Any = None,
+              norm_std: Any = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     policy = PPOSelfPlayPolicy(
         model, device=device, config=cfg, search_fn=search_fn,
         search_config=search_config, eval_fn=eval_fn,
-        engine_backend=engine_backend, seed=int(seed) + gi)
+        engine_backend=engine_backend, seed=int(seed) + gi,
+        norm_mean=norm_mean, norm_std=norm_std)
     policy.game_id = int(cfg.game_id_offset) + gi
     records: List[Dict[str, Any]] = []
     illegal = 0
@@ -124,7 +126,8 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
         futs = [ex.submit(_one_game, model, cfg, gi, search_fn=search_fn,
                           search_config=search_config, eval_fn=eval_fn,
                           engine_backend=engine_backend, device=device,
-                          seed=int(seed), gamemode=mode)
+                          seed=int(seed), gamemode=mode,
+                          norm_mean=norm_mean, norm_std=norm_std)
                 for gi in range(int(cfg.games))]
         for f in futs:
             results.append(f.result())

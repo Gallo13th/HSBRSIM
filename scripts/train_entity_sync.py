@@ -207,6 +207,7 @@ def main() -> int:
             return 3
         stats = trainer.update(batch)
         rec = {"iter": i, "collect": collect_meta, "ppo": stats,
+               "batch_server": (dict(batch_server.stats) if batch_server is not None else None),
                "seconds": time.time() - t0}
         history.append(rec)
         print(f"[iter {i}] samples={len(batch)} updates={stats['trainer_updates']} "

@@ -951,7 +951,17 @@ class PPOSelfPlayPolicy(Policy):
 
     # ── 网络前向（单条决策）──
     def _net_predict(self, features: np.ndarray, cards: np.ndarray,
-                     mask: np.ndarray) -> Tuple[np.ndarray, float]:
+                     mask: np.ndarray, seat: int = 0) -> Tuple[np.ndarray, float]:
+        # 如果注入 eval_fn（例如共享 BatchPPOEvaluator），网络决策也走批量叶服务；
+        # 否则退化为单条 model 前向。
+        if self.eval_fn is not None:
+            prior, value = self.eval_fn(np.asarray(features, np.float32),
+                                        np.asarray(cards, np.int64),
+                                        np.asarray(mask, bool), int(seat))
+            p = np.asarray(prior, dtype=np.float64).reshape(-1)
+            p = p / max(float(p.sum()), 1e-12)
+            logits = np.log(np.maximum(p, 1e-12)).astype(np.float32)
+            return logits, float(value)
         torch = self.torch
         x_arr = np.asarray(features, np.float32).reshape(-1)
         if self.norm_mean is not None:
@@ -993,7 +1003,7 @@ class PPOSelfPlayPolicy(Policy):
         seat = int(seat)
         f, c = obs_arrays(game.observe(seat))
         mask = mask_from_bytes(game.legal_mask(seat))
-        logits, value = self._net_predict(f, c, mask)
+        logits, value = self._net_predict(f, c, mask, seat)
         p_net = masked_probs_np(logits, mask, float(self.config.temperature))
         target_pi = self._run_search(game, seat, mask)
 
