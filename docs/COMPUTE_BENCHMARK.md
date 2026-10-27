@@ -140,9 +140,9 @@ $P scripts/train_entity_sync.py --iterations 1 --games 64 --workers 64 \
 - 18M/57 token 结构已实现，参数量 17.98M；
 - 18M 前向仅慢 8–24%，显存 355MB；
 - 4 GPU 推理可扩展；
-- 训练 actor 仍受 Python 线程/GIL 限制，GPU util <32%；
-- **长训练不应在 actor 重构前启动**；
-- 等用户明确通知后，先做 30–60 分钟 4 GPU + CPU 扫描，再跑 6–12h。
+- 训练 actor 仍受 Python 线程/GIL 限制，GPU util <32%（单进程）；
+- 进程级 actor pool 已修复并在 GPU 0/5/6/7 跑满 30min：**684.9 decisions/s（3.6×）**，见 §10；
+- 长训练前仍建议先在 4 张空闲卡上复核该扫描（本文 §10 已给出配置与结果）。
 
 ## 10. 进程级 actor pool 扫描状态（数据被污染，结论未成立）
 
@@ -182,7 +182,41 @@ GPU1–4 仍被该任务 4 个进程占用 78–82%，只有 GPU 0/5/6/7 空闲�
 4. 记录每轮 decisions/s、GPU util、显存、失败/重启次数；
 5. 扫描前后各记录一次 `nvidia-smi` 全卡占用，确保 4 张卡上没有其它任务（有则换卡重跑）。
 
-> 正在 **GPU 0 / 5 / 6 / 7（当前空闲卡）** 上用持久化 worker（显式 `Process` + 队列，替代
-> 反复 `Pool`）重跑 30min 扫描；结果追加到本节末尾。
+### 2026-10-27 21:00 干净 30min 扫描（GPU 0/5/6/7，持久化 worker）
 
-<!-- LEAD-APPEND: clean-scan-results -->
+修复后的实现（`hsbg/az/train/process_pool.py`，commit `d527459`）：worker 常驻（spawn 一次、
+模型只加载一次）、PPO 更新用 `reload_weights` 热加载、**records 落盘**回传取代 `Pool` 管道
+（旧 BrokenPipe 根因）、worker 死亡自动重启。扫描命令：
+
+```bash
+PYTHONPATH=rust/python:. python scripts/bench_process_pool.py \
+  --checkpoint runs/az_entity_1m_s0/model.pt --arch entity \
+  --processes 8 --gpus 0,5,6,7 --threads 16 --games 128 --sims 4 \
+  --warmup-rounds 0 --minutes 30 \
+  --out runs/bench/process_4gpu_30min_clean.json
+```
+
+结果（`runs/bench/process_4gpu_30min_clean.json`，72 轮全部计入）：
+
+| 指标 | 实测 |
+|---|---:|
+| 轮数 / 总 decisions / 总时长 | 72 / 1,237,086 / 1,806.4 s |
+| **decisions/s** | **684.9**（p50 694.3，p95 755.8） |
+| 相对单进程（§5：191 dec/s，sims=4/64 线程） | **3.6×** |
+| leaf/s | 4,500（p50） |
+| queue wait p50 / p95 / 最差 | 0.22 ms / **13.26 ms** / 14.09 ms |
+| batch size p50 / fill | ≈7 / **0.11**（B=64） |
+| GPU util 均值 / p50 / p95 / 峰值 | 32.1% / 39% / 52% / 62%（每卡 1,207 MB） |
+| illegal / truncated / worker 重启 | 0 / 0 / 0 |
+| 1M decisions 采集时间 | ≈ **24.4 min** |
+
+解读与边界：
+
+- 吞吐提升来自**多进程绕开单进程 GIL**，不是单进程变快；进程内 16 线程仍受 GIL 限制。
+- **GPU util 只有 32%**，batch fill 0.11 → GPU 远未饱和；瓶颈已从「跑不起来」变成
+  「每决策 CPU 侧成本（GIL 内 `mcts_search` + 引擎推进）」。
+- 仍是同步模式、每进程一份模型、无跨进程共享 inference server（不是完整 topology A）。
+- 因此 6–12h 预算应按 **684.9 dec/s × 4 GPU 组**重算：6h ≈ 14.8M、12h ≈ 29.6M decisions
+  （仅采集，不含 PPO/评测/IO）。
+- 旧污染数据（50.9–56.0 dec/s）**作废**，不再作为结论或预算依据。
+- 未测：4 进程 × 32 线程、每卡 1 进程等其它配比；Rust `NeedEval` 批式回调可进一步抬升 util。
