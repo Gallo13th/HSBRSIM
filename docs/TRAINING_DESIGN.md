@@ -9,7 +9,7 @@
 | 维度 | 目标 |
 |---|---|
 | 正确性 | 只用公开观测做决策；同 seed 轨迹逐位一致；动作 mask 精确 |
-| 吞吐 | 目标 **1M seat decisions/iteration**（≈278 局 8 座 self-play）；P0 先 50k、P1 250k，端到端验收后升级 |
+| 吞吐 | 目标 **1M decisions/iteration**（口径 = `selfplay` 的 `meta.decisions`，全座累计；约 2,222 局 @450）；P0 先 50k、P1 250k，端到端验收后升级 |
 | 样本效率 | 同等 decisions 下，MCTS-guided PPO ≥ 纯 PPO；同等算力下评估名次更优 |
 | 推理效率 | 评估时单决策 ≤ 100 ms（CPU/单 GPU 小 batch），训练 actor 不成为瓶颈 |
 | 可复现 | 数据/引擎/模型/搜索配置/seed 全部进报告；checkpoint 可重放 |
@@ -226,9 +226,9 @@ Actor 收集叶子请求 (features, cards, mask) → 本地队列
 ### 5.1 计算模型
 
 设：
-- `D` = **每座位每局决策数**（约 450）；8 座自对弈一局约 `8D ≈ 3,600` 个 seat decisions；
-  1M decisions ≈ **278 局**（8 座 self-play）；若 1 学习座 vs 7 bot，则 ≈2,222 局。
-- `D_iter` = 本 iteration 的 seat decisions；
+- `D` = **每局所有座位决策合计**（约 450；以 `selfplay` 的 `meta.decisions` 实测为准）；
+  `1M decisions ≈ 2,222 局 @450`。注意：`meta.decisions` 已全座累加，不要再乘 8。
+- `D_iter` = 本 iteration 的 decisions（全座累计）；
 - `S` = 每决策叶子评估数（sims）；
 - `G` = 并行局数；
 - `B` = 叶评估 batch；
@@ -237,8 +237,8 @@ Actor 收集叶子请求 (features, cards, mask) → 本地队列
 
 近似（工程口径）：
 ```text
-active_seats   = G * 8（G 局并行、每局 8 座）
-decisions/s    ≈ active_seats / 单决策平均耗时
+active_slots   = 实际并发 seat slots（由 actor 拓扑决定，不等于 G*8；串行 Game 路径只有 1 个）
+decisions/s    ≈ active_slots / 单决策平均耗时
 leaf_evals/s   ≈ decisions/s * S
 leaf_batches/s ≈ leaf_evals/s / B
 ```
@@ -455,7 +455,8 @@ L = E[ min(ρ A, clip(ρ, 1-ε, 1+ε) A) ]
 
 ### P0（先做，决定可行性）
 1. `hsbg/az/search_batched.py`：多树 + 叶子 batch 队列 + 批量网络前向；**同时修
-   selfplay 的串行座位**（BatchEnv 目前只有 act_batch，不接 MCTS/PPO records）；端到端基准
+   selfplay 的串行座位**（BatchEnv 目前只有 act_batch，不接 MCTS/PPO records）；吞吐口径统一用
+   `meta.decisions`（全座累计），不要用 `G*8` 推断并发；端到端基准
    B=1/64/128/256、W=1/2/4、sims=4/8；验收 ≥10× 当前，报告 decisions/s、leaf/s、GPU 利用率、p50/p95；
 2. `hsbg/az/train/ppo.py`：`anchor_model`/`anchor_coef`（冻结上一 stage 的 masked KL）、
    `search_every`、`batch_leaf`；forced 样本排除 policy/aux（已修）；
