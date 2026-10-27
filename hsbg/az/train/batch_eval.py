@@ -64,6 +64,7 @@ class BatchLeafServer:
             "requests": 0, "batches": 0, "leafs": 0, "max_batch": 0,
             "queue_wait_s": 0.0, "batch_wait_s": 0.0, "forward_s": 0.0,
             "enqueue_failures": 0, "errors": 0,
+            "batch_sizes": [], "queue_waits": [],
         }
         self._thread = threading.Thread(target=self._worker, name="batch-leaf",
                                         daemon=True)
@@ -99,6 +100,8 @@ class BatchLeafServer:
             for k in ("requests", "batches", "leafs", "max_batch", "queue_wait_s",
                       "batch_wait_s", "forward_s", "enqueue_failures", "errors"):
                 self.stats[k] = 0.0 if k.endswith("_s") else 0
+            self.stats["batch_sizes"] = []
+            self.stats["queue_waits"] = []
 
     def call(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
              seat: int = 0, timeout: float = 30.0) -> Tuple[np.ndarray, float]:
@@ -183,9 +186,11 @@ class BatchLeafServer:
                     self.stats["leafs"] += len(batch)
                     self.stats["max_batch"] = max(self.stats["max_batch"], len(batch))
                     self.stats["forward_s"] += fwd
+                    qw = [max(0.0, t_start - getattr(r, "submit_t", t_start)) for r in batch]
                     self.stats["batch_wait_s"] += max(0.0, t0 - t_start)
-                    self.stats["queue_wait_s"] += sum(
-                        max(0.0, t_start - getattr(r, "submit_t", t_start)) for r in batch)
+                    self.stats["queue_wait_s"] += sum(qw)
+                    self.stats["batch_sizes"].append(len(batch))
+                    self.stats["queue_waits"].extend(qw)
             except BaseException as exc:  # 线程内异常必须回传
                 for r in batch:
                     if not r.event.is_set():
@@ -202,6 +207,25 @@ class BatchLeafServer:
             if r is not None and not r.event.is_set():
                 r.error = RuntimeError("BatchLeafServer closed")
                 r.event.set()
+
+    @staticmethod
+    def _pct(xs, q: float) -> float:
+        if not xs:
+            return 0.0
+        ys = sorted(float(x) for x in xs)
+        i = min(len(ys) - 1, max(0, int(round(q * (len(ys) - 1)))))
+        return float(ys[i])
+
+    def profile(self) -> Dict[str, Any]:
+        with self._stats_lock:
+            bs = list(self.stats.get("batch_sizes", []))
+            qw = list(self.stats.get("queue_waits", []))
+        return {
+            "batch_p50": self._pct(bs, 0.5), "batch_p95": self._pct(bs, 0.95),
+            "batch_max": (max(bs) if bs else 0),
+            "queue_wait_ms_p50": 1000.0 * self._pct(qw, 0.5),
+            "queue_wait_ms_p95": 1000.0 * self._pct(qw, 0.95),
+        }
 
     def close(self) -> None:
         with self._state_lock:
