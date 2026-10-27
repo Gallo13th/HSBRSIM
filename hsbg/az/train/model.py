@@ -39,6 +39,13 @@ def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FL
     if arch == "entity":
         from .entity_model import build_entity_net
         return build_entity_net(**kwargs)
+    if arch == "entity18m":
+        from .entity_model import build_entity_net
+        kwargs.setdefault("dim_ff", 2048)
+        kwargs.setdefault("n_extra_tokens", 8)
+        kwargs.setdefault("pos_size", 24)
+        kwargs.setdefault("arch", "entity18m")
+        return build_entity_net(**kwargs)
     torch = _torch()
     nn = torch.nn
 
@@ -196,7 +203,9 @@ def load_checkpoint(path: str, device: str = "cpu") -> tuple[Any, Dict[str, Any]
     meta = dict(payload.get("meta") or {})
     hidden = int(meta.get("hidden", 256))
     arch = str(meta.get("arch", "tiny"))
-    if arch == "entity":
+    if arch == "entity18m":
+        model = build_net(arch="entity18m")
+    elif arch == "entity":
         model = build_net(arch="entity", d_model=int(meta.get("d_model", 384)),
                           n_layers=int(meta.get("n_layers", 8)),
                           n_heads=int(meta.get("n_heads", 8)))

@@ -62,7 +62,7 @@ def main() -> int:
     ap.add_argument("--iterations", type=int, default=0)
     ap.add_argument("--games", type=int, default=16)
     ap.add_argument("--epochs", type=int, default=2)
-    ap.add_argument("--arch", default="tiny", choices=["tiny", "entity"])
+    ap.add_argument("--arch", default="tiny", choices=["tiny", "entity", "entity18m"])
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--sims", type=int, default=4)
     ap.add_argument("--determinizations", type=int, default=1)

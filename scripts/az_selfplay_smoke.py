@@ -117,7 +117,7 @@ def main() -> int:
     ap.add_argument("--batch-size", type=int, default=256)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--max-train-samples", type=int, default=20000)
-    ap.add_argument("--arch", default="tiny", choices=["tiny", "entity"],
+    ap.add_argument("--arch", default="tiny", choices=["tiny", "entity", "entity18m"],
                     help="网络结构：tiny=MLP；entity=AutoTavern 风格实体 Transformer")
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--eval-games", type=int, default=5, help="训练后 net(search-off) vs bot 局数")

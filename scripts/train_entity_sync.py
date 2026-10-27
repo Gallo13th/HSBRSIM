@@ -51,7 +51,7 @@ def main() -> int:
     ap.add_argument("--minutes", type=float, default=30.0)
     ap.add_argument("--iterations", type=int, default=0)
     ap.add_argument("--games", type=int, default=4)
-    ap.add_argument("--arch", default="entity", choices=["tiny", "entity"])
+    ap.add_argument("--arch", default="entity", choices=["tiny", "entity", "entity18m"])
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--sims", type=int, default=4)
     ap.add_argument("--determinizations", type=int, default=1)

@@ -38,7 +38,7 @@ def _sample(rng, n):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arch", default="entity", choices=["tiny", "entity"])
+    ap.add_argument("--arch", default="entity", choices=["tiny", "entity", "entity18m"])
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--leafs", type=int, default=1024)
     ap.add_argument("--batches", default="1,64,128,256")

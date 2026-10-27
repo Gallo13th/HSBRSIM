@@ -33,7 +33,7 @@ def main() -> int:
     ap.add_argument("--games", type=int, default=120)
     ap.add_argument("--max-samples", type=int, default=20000)
     ap.add_argument("--epochs", type=int, default=2)
-    ap.add_argument("--arch", default="entity", choices=["tiny", "entity"])
+    ap.add_argument("--arch", default="entity", choices=["tiny", "entity", "entity18m"])
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--batch", type=int, default=256)

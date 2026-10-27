@@ -31,7 +31,7 @@ from hsbg.az.train.profiling import GPUSampler, io_counters  # noqa: E402
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arch", default="entity", choices=["tiny", "entity"])
+    ap.add_argument("--arch", default="entity", choices=["tiny", "entity", "entity18m"])
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--games", type=int, default=64, help="总对局数")
     ap.add_argument("--parallel", type=int, default=8, help="并发 actor 数")

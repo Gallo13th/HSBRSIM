@@ -66,7 +66,7 @@ def _parse_args() -> argparse.Namespace:
     # 主参数
     ap.add_argument("--games", type=int, default=2, help="自对弈局数（采集）")
     ap.add_argument("--epochs", type=int, default=2, help="PPO 训练 epoch 数")
-    ap.add_argument("--arch", default="tiny", choices=["tiny", "entity"],
+    ap.add_argument("--arch", default="tiny", choices=["tiny", "entity", "entity18m"],
                     help="网络结构：tiny=MLP（快）；entity=AutoTavern 实体 Transformer")
     ap.add_argument("--device", default="cpu", help="torch 设备（默认 cpu）")
     ap.add_argument("--out", default="runs/az_ppo/ppo_smoke", help="输出目录")

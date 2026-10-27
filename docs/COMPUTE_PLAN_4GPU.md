@@ -257,3 +257,5 @@ nvidia-smi --query-gpu=index,utilization.gpu,memory.used --format=csv -l 5
 4. 长训练预算：**6h** 还是 **12h**？
 
 确认后先做 **30–60 分钟 4 GPU + CPU 扫描**，再锁定 6–12h 预算；不会直接在没有吞吐数据的情况下承诺长训练结果。
+
+> 网络已选 **entity18m（17.98M / 57 token）**；实测吞吐见 [COMPUTE_BENCHMARK.md](COMPUTE_BENCHMARK.md)。

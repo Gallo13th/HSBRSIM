@@ -106,7 +106,9 @@ def load_card_tables(engine=None, data_path: Optional[str] = None) -> CardTables
 
 def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
                      dim_ff: Optional[int] = None, dropout: float = 0.1,
-                     card_dim: int = 48, tables: Optional[CardTables] = None):
+                     card_dim: int = 48, tables: Optional[CardTables] = None,
+                     n_extra_tokens: int = 0, pos_size: int = 16,
+                     arch: str = "entity"):
     """构造 EntityAZNet（torch 模块）。"""
     torch = _torch()
     nn = torch.nn
@@ -115,6 +117,7 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
     dim_ff = int(dim_ff or 4 * d)
     tables = tables or load_card_tables()
     n_cards = int(tables.n_cards)
+    model_arch = str(arch)
     static_t = torch.from_numpy(tables.static.copy())
     text_t = torch.from_numpy(tables.text.copy())
 
@@ -135,7 +138,7 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
 
     class EntityAZNet(nn.Module):
         uses_cards = True
-        arch = "entity"
+        arch = model_arch
 
         def __init__(self):
             super().__init__()
@@ -147,8 +150,10 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             self.card_static_proj = nn.Linear(int(tables.static.shape[1]), card_dim)
             self.card_text_proj = nn.Linear(TEXT_DIM, card_dim)
             self.card_to_d = nn.Linear(card_dim, d)
-            self.type_emb = nn.Embedding(6, d)
-            self.pos_emb = nn.Embedding(16, d)
+            self.n_extra = int(n_extra_tokens)
+            self.type_emb = nn.Embedding(7 if self.n_extra else 6, d)
+            self.pos_emb = nn.Embedding(int(pos_size), d)
+            self.extra_proj = (nn.Linear(GLOBAL_F + 1, d) if self.n_extra else None)
             self.global_proj = nn.Linear(GLOBAL_F + 3 * O.QUEST_F + O.PENDING_KINDS, d)
             self.minion_proj = nn.Linear(MINION_F, d)
             self.item_proj = nn.Linear(ITEM_F, d)
@@ -243,8 +248,19 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             op = op + self.type_emb(torch.full((B, N_OPP), 5, dtype=torch.long, device=dev)) \
                 + self.pos_emb(torch.arange(N_OPP, device=dev).view(1, -1))
             tok.append(op)
+            # entity18m: 8 pending-context tokens -> 56 entity tokens + global
+            if self.n_extra:
+                pend = x[:, S["pending"]]
+                for i in range(self.n_extra):
+                    ex = self.extra_proj(torch.cat([x[:, S["global"]],
+                                                    pend[:, i:i + 1]], dim=-1))
+                    ex = ex + self.type_emb(torch.full((B,), 6, dtype=torch.long,
+                                                       device=dev)) \
+                        + self.pos_emb(torch.full((B,), 16 + i, dtype=torch.long,
+                                                  device=dev))
+                    tok.append(ex.unsqueeze(1))
 
-            tokens = torch.cat(tok, dim=1)  # [B,49,d]
+            tokens = torch.cat(tok, dim=1)  # entity 49 / entity18m 57
             hs = self.trunk(self.drop(tokens))
             g = hs[:, 0]
             base = 1

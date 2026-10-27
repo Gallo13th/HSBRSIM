@@ -147,7 +147,7 @@ def _panel(seed_base: int, games: int, seats: int, per_seat: int, *,
 def main() -> int:
     ap = _Parser(description="C0 单模型 vs bot 严格配对 gate")
     ap.add_argument("--checkpoint", required=True)
-    ap.add_argument("--arch", default="entity", choices=["tiny", "entity"])
+    ap.add_argument("--arch", default="entity", choices=["tiny", "entity", "entity18m"])
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--games", type=int, default=512)
     ap.add_argument("--seats", type=int, default=8)

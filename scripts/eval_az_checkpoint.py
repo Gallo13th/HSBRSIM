@@ -39,7 +39,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="AZ checkpoint 固定 seed 评测")
     ap.add_argument("--checkpoint", default="")
     ap.add_argument("--policy", default="net", choices=["net", "random", "bot"])
-    ap.add_argument("--arch", default="tiny", choices=["tiny", "entity"])
+    ap.add_argument("--arch", default="tiny", choices=["tiny", "entity", "entity18m"])
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--games", type=int, default=100)
     ap.add_argument("--seed", type=int, default=90000)
