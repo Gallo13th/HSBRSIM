@@ -192,3 +192,5 @@
 - 64 局的 4.36 是**噪声**；1M 内没有 checkpoint 能通过 C0 gate。
 
 结论：**PPO 1M 的 scaling 不成立**，不要用 64 局曲线选 checkpoint。
+
+> 多 GPU / 多 CPU / 6–12h 预算见 [COMPUTE_PLAN_4GPU.md](COMPUTE_PLAN_4GPU.md)。

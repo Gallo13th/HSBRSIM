@@ -86,5 +86,6 @@ python scripts/run_tavernbench.py --check
 - `docs/TRAINING_DESIGN.md` — **完整训练系统设计**（搜索/叶评估/吞吐/剪枝/PPO）
 - `docs/TRAINING_PLAN_V2.md` — **v2 计划**（entity 14.8M / 异步 actor-learner / 重搜做题 / 冷启动联赛）
 - `docs/TRAINING_RUNTIME_HANDOFF.md` — **接手文档**（BC 数据来源 / 对手课程 / actor 架构 / 决策与评分示例）
+- `docs/COMPUTE_PLAN_4GPU.md` — **4 GPU / 多 CPU / 6–12h 长训练计算计划**
 - `docs/VERIFICATION.md` — 门禁与预期
 - `docs/TAVERNBENCH.md` — 决策基准
