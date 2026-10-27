@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 import time
 from typing import Any, Dict, Optional
@@ -36,6 +37,7 @@ from hsbg.az.train.ppo import (  # noqa: E402
 from hsbg.az.train.ppo_trainer import PPOTrainer  # noqa: E402
 from hsbg.az.train.batch_eval import BatchLeafServer, BatchPPOEvaluator  # noqa: E402
 from hsbg.az.train.parallel_collect import collect_ppo_batch_parallel  # noqa: E402
+from hsbg.az.train.process_pool import ProcessActorPool  # noqa: E402
 
 
 def _atomic_torch_save(obj: Any, path: str) -> None:
@@ -72,6 +74,16 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=1,
                     help=">1 时使用并行采集 + 共享批量叶 server")
     ap.add_argument("--batch-size", type=int, default=64)
+    ap.add_argument("--processes", type=int, default=1,
+                    help=">1 时用进程级 actor pool（每进程绑定一张 GPU，同步模式）")
+    ap.add_argument("--gpus", default="",
+                    help="actor pool 使用的物理 GPU 序号，如 0,5,6,7（不要设 CUDA_VISIBLE_DEVICES）")
+    ap.add_argument("--threads", type=int, default=16,
+                    help="每个 actor 进程内的采集线程数（每轮 games 应 >= processes*threads）")
+    ap.add_argument("--snapshot-every", type=int, default=1,
+                    help="每 N 个 iteration 落一次快照（进程 actor 下建议 5）")
+    ap.add_argument("--keep-snapshots", type=int, default=3,
+                    help="只保留最近 K 个 snapshot 目录（0=不清理）")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--checkpoint", default="")
     ap.add_argument("--trainer-state", default="")
@@ -165,14 +177,34 @@ def main() -> int:
                                   seed=int(args.seed))
         search_fn = az_search
 
+    pool: Optional[ProcessActorPool] = None
+    pool_ckpt = os.path.join(args.out, "_pool_weights.pt")
+    if int(args.processes) > 1:
+        if not str(args.gpus).strip():
+            print("[error] --processes>1 需要 --gpus（物理 GPU 序号）", file=sys.stderr)
+            return 2
+        if os.environ.get("CUDA_VISIBLE_DEVICES"):
+            print("[error] 请 unset CUDA_VISIBLE_DEVICES：--gpus 用物理序号", file=sys.stderr)
+            return 2
+        gpus = [int(x) for x in str(args.gpus).split(",") if x.strip()]
+        save_checkpoint(model, pool_ckpt, meta={**meta, "arch": arch},
+                        norm_mean=norm_mean, norm_std=norm_std)
+        pool = ProcessActorPool(
+            int(args.processes), gpus, pool_ckpt, arch=arch,
+            sims=int(args.sims), determinizations=int(args.determinizations),
+            seed=int(args.seed), threads=int(args.threads),
+            batch_size=int(args.batch_size),
+            tmpdir=os.path.join(args.out, "_proc_tmp"))
+        print(f"[pool] {json.dumps(pool.describe(), ensure_ascii=False)}", flush=True)
     batch_server = None
-    if args.workers > 1:
+    evaluator = None
+    if pool is None and args.workers > 1:
         batch_server = BatchLeafServer(model, device=args.device,
                                        batch_size=int(args.batch_size),
                                        max_wait_ms=2.0, queue_size=8192,
                                        norm_mean=norm_mean, norm_std=norm_std)
         evaluator = BatchPPOEvaluator(batch_server)
-    else:
+    elif pool is None:
         evaluator = PPOEvaluator(model, device=args.device,
                                  norm_mean=norm_mean, norm_std=norm_std)
     t0 = time.time()
@@ -192,7 +224,15 @@ def main() -> int:
             max_actions_per_turn=int(args.max_actions_per_turn),
             max_steps=int(args.max_steps))
         iter_start = time.time()
-        if args.workers > 1:
+        if pool is not None:
+            # 同步模式：先把最新权重推到每个 actor 进程（不重建进程）
+            save_checkpoint(model, pool_ckpt, meta={**meta, "arch": arch},
+                            norm_mean=norm_mean, norm_std=norm_std)
+            pool.reload_weights(pool_ckpt, updates=int(trainer.updates))
+            batch, collect_meta = pool.collect(
+                c_cfg, int(args.games), return_records=True, progress=True,
+                seed=int(c_cfg.seed))
+        elif args.workers > 1:
             batch, collect_meta = collect_ppo_batch_parallel(
                 model, c_cfg, workers=int(args.workers),
                 search_fn=search_fn, search_config=search_cfg,
@@ -219,31 +259,40 @@ def main() -> int:
               flush=True)
         # 版本化快照：trainer 为权威，model 为导出；manifest 最后原子发布
         ver = int(trainer.updates)
-        snap = os.path.join(args.out, "snapshots", f"step_{ver:06d}")
-        os.makedirs(snap, exist_ok=True)
-        trainer.save(os.path.join(snap, "trainer.pt"))
-        ckpt = os.path.join(snap, "model.pt")
-        tmp_ckpt = ckpt + ".tmp"
-        save_checkpoint(model, tmp_ckpt,
-                        meta={**meta, "arch": arch, "trainer_updates": ver},
-                        norm_mean=norm_mean, norm_std=norm_std)
-        os.replace(tmp_ckpt, ckpt)
-        # 兼容旧路径
-        trainer.save(os.path.join(args.out, "trainer.pt"))
-        ckpt_flat = os.path.join(args.out, "model.pt")
-        save_checkpoint(model, ckpt_flat + ".tmp",
-                        meta={**meta, "arch": arch, "trainer_updates": ver},
-                        norm_mean=norm_mean, norm_std=norm_std)
-        os.replace(ckpt_flat + ".tmp", ckpt_flat)
-        manifest = {"version": ver, "trainer": os.path.join(snap, "trainer.pt"),
-                    "model": os.path.join(snap, "model.pt"),
-                    "arch": arch, "seed": int(args.seed),
-                    "elapsed_s": time.time() - t0,
-                    "history_len": len(history)}
-        with open(os.path.join(args.out, "latest.json.tmp"), "w", encoding="utf-8") as f:
-            json.dump(manifest, f, ensure_ascii=False, indent=2)
-        os.replace(os.path.join(args.out, "latest.json.tmp"),
-                   os.path.join(args.out, "latest.json"))
+        do_snap = (int(args.snapshot_every) <= 1) or ((i % int(args.snapshot_every)) == 0)
+        if do_snap:
+            snap = os.path.join(args.out, "snapshots", f"step_{ver:06d}")
+            os.makedirs(snap, exist_ok=True)
+            trainer.save(os.path.join(snap, "trainer.pt"))
+            ckpt = os.path.join(snap, "model.pt")
+            tmp_ckpt = ckpt + ".tmp"
+            save_checkpoint(model, tmp_ckpt,
+                            meta={**meta, "arch": arch, "trainer_updates": ver},
+                            norm_mean=norm_mean, norm_std=norm_std)
+            os.replace(tmp_ckpt, ckpt)
+            # 兼容旧路径
+            trainer.save(os.path.join(args.out, "trainer.pt"))
+            ckpt_flat = os.path.join(args.out, "model.pt")
+            save_checkpoint(model, ckpt_flat + ".tmp",
+                            meta={**meta, "arch": arch, "trainer_updates": ver},
+                            norm_mean=norm_mean, norm_std=norm_std)
+            os.replace(ckpt_flat + ".tmp", ckpt_flat)
+            manifest = {"version": ver, "trainer": os.path.join(snap, "trainer.pt"),
+                        "model": os.path.join(snap, "model.pt"),
+                        "arch": arch, "seed": int(args.seed),
+                        "elapsed_s": time.time() - t0,
+                        "history_len": len(history)}
+            with open(os.path.join(args.out, "latest.json.tmp"), "w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+            os.replace(os.path.join(args.out, "latest.json.tmp"),
+                       os.path.join(args.out, "latest.json"))
+            keep = int(args.keep_snapshots)
+            if keep > 0:
+                snap_root = os.path.join(args.out, "snapshots")
+                olds = sorted(d for d in os.listdir(snap_root)
+                              if d.startswith("step_") and os.path.isdir(os.path.join(snap_root, d)))
+                for d in olds[:-keep]:
+                    shutil.rmtree(os.path.join(snap_root, d), ignore_errors=True)
         with open(history_path, "w", encoding="utf-8") as f:
             json.dump({"args": vars(args), "history": history,
                        "elapsed_s": time.time() - t0}, f, ensure_ascii=False, indent=2)
@@ -252,6 +301,17 @@ def main() -> int:
 
     if batch_server is not None:
         batch_server.close()
+    if pool is not None:
+        pool.close()
+    # 收尾：最后一个 iteration 若不在快照点，也导出最终模型（评测/续训都要用）
+    try:
+        save_checkpoint(model, os.path.join(args.out, "model.pt"),
+                        meta={**meta, "arch": arch,
+                              "trainer_updates": int(trainer.updates)},
+                        norm_mean=norm_mean, norm_std=norm_std)
+        trainer.save(os.path.join(args.out, "trainer.pt"))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[warn] final save failed: {exc!r}", flush=True)
     summary = {"iterations": i, "updates": trainer.updates,
                "elapsed_s": time.time() - t0, "config": vars(args),
                "history": history}

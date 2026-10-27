@@ -9,6 +9,12 @@
 - 引擎 Game 独立；模型只读；
 - 这是采集并行；Rust MCTS 仍逐叶回调，但多个搜索线程可共享 batch eval；
 - 截断/非法仍按单局汇总。
+
+对外两个入口：
+
+- `collect_ppo_records_parallel(...)`：只返回 `records` 与 meta（进程级 actor pool
+  用它把轨迹落盘回传，避免在 worker 里白建 batch）；
+- `collect_ppo_batch_parallel(...)`：records -> `PPOBatch`（GAE 在这里算）的包装。
 """
 
 from __future__ import annotations
@@ -111,17 +117,18 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
     return records, meta
 
 
-def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = None, *,
-                               workers: int = 16,
-                               search_fn: Optional[Callable[..., Any]] = None,
-                               search_config: Any = None,
-                               eval_fn: Optional[Callable[..., Any]] = None,
-                               engine_backend: str = "auto", device: str = "cpu",
-                               seed: int = 0, gamma: float = 1.0, lam: float = 0.95,
-                               step_penalty: float = 0.0,
-                               norm_mean: Optional[np.ndarray] = None,
-                               norm_std: Optional[np.ndarray] = None,
-                               progress: bool = False) -> Tuple[PPOBatch, Dict[str, Any]]:
+def collect_ppo_records_parallel(
+        model: Any, config: Optional[CollectConfig] = None, *,
+        workers: int = 16,
+        search_fn: Optional[Callable[..., Any]] = None,
+        search_config: Any = None,
+        eval_fn: Optional[Callable[..., Any]] = None,
+        engine_backend: str = "auto", device: str = "cpu",
+        seed: int = 0,
+        norm_mean: Optional[np.ndarray] = None,
+        norm_std: Optional[np.ndarray] = None,
+        progress: bool = False) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """多线程采集轨迹，返回 ``(records, meta)``；不构建 PPOBatch。"""
     cfg = config or CollectConfig()
     mode = str(cfg.opponent).strip().lower()
     if mode not in ("self", "bot", "weak"):
@@ -182,6 +189,26 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
         "samples_per_game": len(records) / max(len(games_meta) - truncated, 1),
         "games_meta": to_jsonable(games_meta),
     }
+    return records, meta_out
+
+
+def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = None, *,
+                               workers: int = 16,
+                               search_fn: Optional[Callable[..., Any]] = None,
+                               search_config: Any = None,
+                               eval_fn: Optional[Callable[..., Any]] = None,
+                               engine_backend: str = "auto", device: str = "cpu",
+                               seed: int = 0, gamma: float = 1.0, lam: float = 0.95,
+                               step_penalty: float = 0.0,
+                               norm_mean: Optional[np.ndarray] = None,
+                               norm_std: Optional[np.ndarray] = None,
+                               progress: bool = False) -> Tuple[PPOBatch, Dict[str, Any]]:
+    t0 = time.time()
+    records, meta_out = collect_ppo_records_parallel(
+        model, config, workers=workers, search_fn=search_fn,
+        search_config=search_config, eval_fn=eval_fn,
+        engine_backend=engine_backend, device=device, seed=seed,
+        norm_mean=norm_mean, norm_std=norm_std, progress=progress)
     batch = build_batch_from_records(records, gamma=gamma, lam=lam,
                                      step_penalty=step_penalty, meta=meta_out)
     batch.meta.update({"collect_seconds": time.time() - t0,
@@ -190,4 +217,4 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
     return batch, batch.meta
 
 
-__all__ = ["collect_ppo_batch_parallel"]
+__all__ = ["collect_ppo_records_parallel", "collect_ppo_batch_parallel"]
