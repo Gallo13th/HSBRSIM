@@ -108,4 +108,5 @@ Tiny MLP；但**搜索叶评估（14.8M 网络逐叶前向）使 self-play 慢 ~
 - 未实现 attachment/global 的全部细节，token 数 49 vs 56；
 - 我们的评测是 seat0 vs bot，不是 7 座 library；与论文的完整对局不可直接横比；
 - PPO 代码已就绪（2026-10-27），但只做过 1 局 smoke，未做论文规模的 actor-learner/库/课程/迭代；
+- `hsbg/bridge`/`live` 与旧轨迹已在重构中删除；reality-calibrated library 需重新引入只读数据适配层；
 - 当前评测仍是 seat0 vs bot，不是 7 座 library；不要用 4 局 stage 判断强弱。
