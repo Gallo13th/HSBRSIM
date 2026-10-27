@@ -110,14 +110,18 @@ Q(s,a)    = W(s,a) / N(s,a)          (N=0 -> 0)
 - Python 后端：`resample_on_end_turn=True` 时，EndTurn 后重新采隐藏世界，作为 chance 节点对照（慢，用于校准）。
 
 设计选择与限制：
-- **现状**：Rust `mcts_search` 的 `advance_to_seat()` 对其余 7 座调用固定 `bot::play_turn`，
-  并把战斗/RNG 折叠进边；这是“bot 对手 + 宏转移”，**不是**真正的对手策略/机会分支。
+- **现状**：Rust `mcts_search` 只为被搜索座位建树；`advance_to_seat()` 对其余 7 座调用
+  固定 `bot::play_turn`，并把战斗/RNG 折叠进边。注意：`selfplay.play_selfplay_game` 确实会
+  让 8 座都调用策略，但**搜索内部对手是 bot，与真实 self-play 策略不一致**；不能把
+  “8 座都用搜索”与“搜索内对手=bot”混为一谈。
 - 训练默认仍用 Rust 宏动作，但把它标为 **P0 近似**；P0 的 root value 必须对终局 utility
   做校准检验，不能直接当无偏证据。
 - 每 `K` 个 iteration 用 Python chance 后端做一致性抽查；生产训练**只允许 Rust 后端**，
   Python 失败不得静默降级混入数据。
-- 对战斗方差大的局面（高 tier/高攻击），P1 显式采样 `C` 个战斗结果作为 chance 子节点；
-  P1 再比较 ISMCTS（单树/信息集）与 PIMC。
+- 固定 world 的随机转移可以视为 Monte-Carlo 情景近似，本身不是“数学不成立”；问题是
+  当前每个 action 只固化一个 child、Python `resample_on_end_turn` 只在 child 首次生成时
+  发生，并不是显式 chance 多子树。P1 对高方差局面显式采样 `C` 个战斗结果作为 chance
+  子节点，再比较 ISMCTS（单树/信息集）与 PIMC。
 
 ### 3.4 动作剪枝（安全优先）
 
@@ -178,7 +182,9 @@ def search(game, seat, cfg):
 - trunk：Transformer `d=384, 8 layers, 8 heads, FF=4d`；
 - 输出：pointer head 245 masked logits + rank 8 logits + 可选 scalar value；
 - 实测 **14.8M** 参数；论文 18M。18M/56-token 只有在固定数据/FLOPs/延迟门禁下胜出才采用。
-- 对手 token 参与 transformer 注意力并汇入 global；当前 pointer 头没有“直接指向对手”的分支（245 动作里也没有对手目标动作），不要把它说成独立的对手建模。
+- 对手 token 参与 transformer 全注意力并影响 global/动作 token，并非无效；当前缺陷是
+  `opp_boards` 的 card id 序列只被 mean/max 数值投影，顺序/身份信息丢失；这不是“对手
+  token 没用”，而是对手战团编码过于粗糙。
 - 输入做 `sign(x)·log1p(|x|)`；LayerNorm；dropout（训练）/eval（推理）。
 
 合理性：
@@ -219,9 +225,11 @@ Actor 收集叶子请求 (features, cards, mask) → 本地队列
 ### 4.4 价值校准
 
 - 训练目标：rank CE（主）+ scalar utility MSE（辅助，权重 0.1–0.5）；
-- **注意**：rank CE 与 utility-MSE 不等价；PPO 的 GAE 使用 `E_{p(r)}[u(r)]`，必须报告
-  rank 分布校准（Brier/ECE）与 value-rank corr；若校准差，GAE 的 value baseline 会偏。
-  P1 可改为双头：rank 分布（辅助）+ scalar utility critic（GAE 主用），两者都记录。
+- **口径**：在 `gamma=1`、仅终局 rank 奖励、且 rank 分布校准良好时，
+  `E_{p(r)}[u(r)]` 就是合法的 utility critic，rank CE 与 utility 目标**可以一致**；
+  rank CE 是分布监督，不是 MSE。只有当 `step_penalty != 0`、`gamma<1`、return/bootstrap
+  目标改变时，两者才不等价。必须报告 rank 分布校准（Brier/ECE）与 value-rank corr；
+  P1 可选独立 scalar utility head，但不是前置正确性要求。
 - 评估：rank 分布 Brier / ECE、value-rank corr、按 turn/tier 分层校准；
 - 若 value 过自信：温度缩放/直方图校准，再用于 PUCT 的 Q 初始化（P1）；
 - 不做“价值剪枝”直到校准误差低于阈值。
@@ -401,7 +409,12 @@ L = E[ min(ρ A, clip(ρ, 1-ε, 1+ε) A) ]
 2. **Search-distill PPO**：MCTS 生成数据，网络蒸馏 π；PPO 再用网络行为微调；两阶段，吞吐更好。
 3. **Search-as-behavior**：MCTS 直接选动作；off-policy ratio；只用于冷启动/教师，不作为主训练。
 
-### 7.2 搜索调度（吞吐关键）
+### 7.2 搜索调度（吞吐关键；对 D6 的显式变更）
+
+> **与 D6 的差异**：`AZ_MCTS_SELFPLAY_DESIGN` D6 要求“每座每决策搜索”。本文默认的
+> `behavior=net` + `search_every>1` 是**吞吐优先的设计变更**；若严格执行 D6，必须设
+> `search_every=1`、`behavior=mcts`（或每步都跑 MCTS 仅用其 π），并单独报告吞吐/强度。
+> 两种模式都保留，不能把稀疏搜索的结果冒充 D6 全搜索。
 
 - 训练早期：每 `k=4–8` 个决策做一次 MCTS（sims 8），其余网络行为；
 - 训练后期：每 `k=16` 或只在高熵/高 legal 状态做 MCTS；
@@ -449,7 +462,7 @@ L = E[ min(ρ A, clip(ρ, 1-ε, 1+ε) A) ]
 | 245 动作 / 3227+124 观测 | ✅ |
 | PIMC/PUCT 搜索（Rust/Python） | ✅ 基础版；无批量叶、无 ISMCTS、无显式 chance 训练 |
 | Entity transformer 14.8M + pointer | ✅ |
-| 自对弈 | ✅ Game 逐座串行 / BatchEnv act_batch；无 MCTS 批量/无 library |
+| 自对弈 | ✅ `play_selfplay_game` 8 座都调用策略；Game 路径逐座串行；搜索内对手=bot；无 MCTS 批量/无 library |
 | PPO | ✅ `hsbg/az/train/ppo.py`；仅 1 局 smoke |
 | 批量叶评估 | ❌ |
 | KL anchor / 多 stage | ❌（仅 batch KL 早停） |
