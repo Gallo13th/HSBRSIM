@@ -951,6 +951,10 @@ class PPOSelfPlayPolicy(Policy):
         self._n = 0
         self._turn_counts = {}
 
+    def reseed(self, seed: int) -> None:
+        """每局固定 RNG：并行/串行都按 seed+game_id 重建，保证可复现。"""
+        self._rng = np.random.default_rng(int(seed))
+
     # ── 网络前向（单条决策）──
     def _net_predict(self, features: np.ndarray, cards: np.ndarray,
                      mask: np.ndarray, seat: int = 0) -> Tuple[np.ndarray, float]:
@@ -1117,6 +1121,7 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
         for gi in range(int(cfg.games)):
             gid = int(cfg.game_id_offset) + gi
             policy.game_id = gid
+            policy.reseed(int(cfg.seed) + gi)
             _samples, meta = play_selfplay_game(
                 policy, seed=int(cfg.seed) + gi, game_id=gid,
                 sample_stride=1, max_steps=int(cfg.max_steps))
@@ -1143,6 +1148,7 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
         for gi in range(int(cfg.games)):
             gid = int(cfg.game_id_offset) + gi
             policy.game_id = gid
+            policy.reseed(int(cfg.seed) + gi)
             policy.reset()
             game = E.Game(seed=int(cfg.seed) + gi)
             steps = 0
