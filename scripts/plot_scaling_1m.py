@@ -22,6 +22,7 @@ def main() -> int:
         rows.append({"step": k, "decisions": k * 125944.7,
                      "mean": r.get("model_mean_rank"), "bot": r.get("bot_mean_rank"),
                      "top4": r.get("model_top4")})
+    rows.sort(key=lambda r: r["step"])
     fig, ax = plt.subplots(1, 2, figsize=(12, 4.5))
     x = [r["decisions"] / 1e6 for r in rows]
     ax[0].plot(x, [r["mean"] for r in rows], "o-", color="#d62728")
