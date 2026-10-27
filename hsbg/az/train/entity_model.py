@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
@@ -171,6 +172,7 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             self.magnetize_bias = nn.Parameter(torch.zeros(N_HAND, N_BOARD))
             self.move_bias = nn.Parameter(torch.zeros(N_BOARD, N_BOARD))
             self.pos_play = nn.Parameter(torch.zeros(8, d))
+            self.pointer_scale = 1.0 / math.sqrt(float(d))
             self.rank_head = nn.Linear(d, N_PLAYERS)
             self.value_head = nn.Linear(d, 1)
 
@@ -256,22 +258,22 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             scalar = self.scalar_head(g)  # 0..7
             logits[:, 0:8] = scalar
             # buy 8..15
-            logits[:, 8:16] = (hs_shop * self.q_buy(g).unsqueeze(1)).sum(-1) + self.buy_bias
+            logits[:, 8:16] = self.pointer_scale * (hs_shop * self.q_buy(g).unsqueeze(1)).sum(-1) + self.buy_bias
             # sell/activate 16..22 / 23..29
             qb = self.q_board(g).unsqueeze(1)
-            logits[:, 16:23] = (hb * qb).sum(-1) + self.sell_bias
-            logits[:, 23:30] = (hb * qb).sum(-1) + self.activate_bias
+            logits[:, 16:23] = self.pointer_scale * (hb * qb).sum(-1) + self.sell_bias
+            logits[:, 23:30] = self.pointer_scale * (hb * qb).sum(-1) + self.activate_bias
             # choose 30..45
-            logits[:, 30:46] = (hc * self.q_buy(g).unsqueeze(1)).sum(-1) + self.choose_bias
+            logits[:, 30:46] = self.pointer_scale * (hc * self.q_buy(g).unsqueeze(1)).sum(-1) + self.choose_bias
             # play 46..125: hand 10 × pos 8
             play = torch.einsum("bhd,pd->bhp", hh, self.pos_play)
-            logits[:, 46:126] = play.reshape(B, N_HAND * 8) + self.play_bias.reshape(1, -1)
+            logits[:, 46:126] = self.pointer_scale * play.reshape(B, N_HAND * 8) + self.play_bias.reshape(1, -1)
             # magnetize 126..195: hand 10 × board 7
             mag = torch.einsum("bhd,bjd->bhj", hh, hb)
-            logits[:, 126:196] = mag.reshape(B, N_HAND * N_BOARD) + self.magnetize_bias.reshape(1, -1)
+            logits[:, 126:196] = self.pointer_scale * mag.reshape(B, N_HAND * N_BOARD) + self.magnetize_bias.reshape(1, -1)
             # move 196..244: board from × board to
             mv = torch.einsum("bid,bjd->bij", hb, hb)
-            logits[:, 196:245] = mv.reshape(B, N_BOARD * N_BOARD) + self.move_bias.reshape(1, -1)
+            logits[:, 196:245] = self.pointer_scale * mv.reshape(B, N_BOARD * N_BOARD) + self.move_bias.reshape(1, -1)
             if mask is not None:
                 logits = logits.masked_fill(~mask.bool(), -1e9)
             rank = self.rank_head(g)
