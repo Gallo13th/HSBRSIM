@@ -74,7 +74,9 @@ def main() -> int:
             server.call_many(f, c, m)
             dt = max(time.time() - t0, 1e-9)
             st = dict(server.stats)
+            prof = server.profile()
             rows.append({"mode": "batch_server", "batch": b, "leafs": len(f),
+                         "profile": prof,
                          "seconds": dt, "leafs_per_s": len(f) / dt,
                          "max_batch": st["max_batch"], "batches": st["batches"],
                          "requests": st["requests"], "queue_wait_s": st["queue_wait_s"],
