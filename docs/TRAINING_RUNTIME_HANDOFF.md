@@ -409,6 +409,7 @@ CI 上界 0.459 > 0 → **不通过**。
 | BC+PPO 50k | 4.72（64局），4.77（512局） |
 | 1M sims=0 | 1,259,447 decisions / 910s，C0 4.709（512局） |
 | **1M sims=4（进程 actor）** | 1,081,079 decisions / 1,874s（719.6 dec/s 采集），C0 **5.465** → 退化 0.76 名 |
+| **stage-1（anchor+sims0，30M）** | 30.08M decisions / 318 min，C0 **3.516**（未见面板 3.63–3.65），top4 70.7% |
 | 进程级 actor pool | 8 进程 × 16 线程 / 4 GPU：684.9 dec/s（3.6×），queue p95 13.3ms |
 | 1M sims=4 | 1000 局 shard >21.5min，1M 推算 >3.5h，未完成 |
 | C0 gate | 未通过 |

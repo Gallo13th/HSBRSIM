@@ -287,3 +287,77 @@ lr=1e-5 的 PPO 每轮都能把 critic 拟合得更好（value_loss 1.78→1.60�
 
 产物：`runs/az_entity_ppoproc_1m_pi0/{model.pt,history.json,summary.json,snapshots/step_*}`、
 `runs/az_entity_ppoproc_1m{,_pi0}/c0_64_*.json`（含基线锚点）。
+
+## 12. **stage-1（KL anchor + sims=0 + 30M）：本项目第一次稳定正收益**
+
+> 2026-10-28 04:36 完成。run：`runs/az_entity_kl_30m`，起点 = `runs/az_entity_1m_s0/model.pt`。
+
+### 12.1 配置（对齐 AutoTavern Table 7）
+
+```bash
+python scripts/train_entity_sync.py --checkpoint runs/az_entity_1m_s0/model.pt \
+  --arch entity --device cuda:0 --processes 8 --gpus 0,5,6,7 --threads 16 --games 192 \
+  --sims 0 --determinizations 1 --opponent bot --behavior net \
+  --epochs 1 --minibatch 1024 --grad-accum 8 --lr 6e-6 --lr-min-ratio 0.833 \
+  --max-updates 1160 --clip 0.2 --target-kl 0.05 --lam 0.995 --max-grad-norm 1.0 \
+  --entropy-coef 0.002 --pi-coef 0.0 --max-steps 10000 \
+  --anchor-beta 0.1 --anchor-iterations 100 \
+  --iterations 1160 --minutes 420 --snapshot-every 100 --keep-snapshots 5 \
+  --eval-every-decisions 5000000 --eval-games 512 --eval-seats 8 \
+  --eval-seed-base 420000 --eval-device cuda:5 --seed 900 --out runs/az_entity_kl_30m
+```
+
+- **KL anchor**：β=0.1，仅前 100 iteration（≈2.6M decisions；论文是 300 个 iteration 中的前 100，
+  我们一个 iteration 只有 ~29k decisions 而不是 1.05M，因此按绝对 iteration 数对齐）；
+- 有效 minibatch 8192（微批 1024 × 梯度累积 8）、lr 6e-6→5e-6、clip 0.2、target KL 0.05、
+  λ=0.995、entropy 0.002、grad-clip 1.0；**MCTS 关闭**（sims=0，π 辅助项随之失效）；
+- 规模：**1,029 iteration / 30.08M decisions / 318 min → 1,577 decisions/s**（采集瞬时 ~7,000，
+  瓶颈是 PPO 更新与 records 落盘）。
+
+### 12.2 结果（512 局，8 seat；监控面板 seed_base 420000，配对 bootstrap 4000）
+
+| decisions | mean rank | bot | top4 | win | 配对 Δ vs 起始基线 | 95% CI |
+|---:|---:|---:|---:|---:|---:|---|
+| 0（起始基线） | 4.701 | 4.535 | 44.9% | 7.8% | — | — |
+| 5.03M | 4.594 | 4.535 | 48.6% | 11.5% | −0.107 | [−0.322, +0.113] |
+| 10.01M | 4.404 | 4.535 | 52.7% | 12.1% | −0.297 | [−0.543, −0.053] |
+| 15.02M | 4.182 | 4.535 | 59.4% | 11.9% | −0.520 | [−0.758, −0.285] |
+| 20.02M | 4.193 | 4.535 | 56.2% | 13.9% | −0.508 | [−0.760, −0.258] |
+| 25.02M | 4.082 | 4.535 | 60.2% | 14.1% | −0.619 | [−0.877, −0.371] |
+| **30.02M** | **3.516** | 4.535 | **70.7%** | **19.3%** | **−1.186** | **[−1.445, −0.936]** |
+
+**独立面板复核（G4，防 winner's curse；这两个面板从未参与监控/选择）**：
+
+| 面板 | mean rank | bot | top4 | win | 配对 Δ vs bot | CI |
+|---|---:|---:|---:|---:|---:|---|
+| seed_base 430000 | **3.650** | 4.584 | 68.8% | 13.9% | −0.934 | [−1.176, −0.695] |
+| seed_base 440000 | **3.629** | 4.684 | 69.7% | 19.9% | −1.055 | [−1.301, −0.791] |
+
+两个未见面板一致落在 **3.63–3.65**，说明 30M 的跳变是真实强度提升，不是面板过拟合。
+
+### 12.3 判读
+
+1. **PPO 目标本身没问题**：同一算法在 1M/无 anchor 时退化，在 30M + KL anchor + 论文超参下
+   稳定改善到 3.6，历史「PPO 不适用」的结论应改为「预算/锚/超参错配」。
+2. **KL anchor 之外，预算是主因**：前 10M 只拿到 −0.30，15–25M 进入 −0.5 平台，25→30M 又跳
+   到 −1.19（未见面板 −0.93/−1.06）。曲线非单调，符合 RL 的 phase transition，而不是线性缩放。
+3. **仍未达到 3.0 触发线**：未见面板 3.63/3.65 > 3.0，因此**没有触发镜像库构建**；镜像库
+   原型已就绪（见 `docs/LIBRARY_SEATS.md`，采集/抽样/注入已测，注入的卡 id 保真度待引擎
+   `set_player_state` 修复）。
+4. 训练侧仍有明显浪费：records 落盘 + 每 iteration 权重回传把端到端压到 1,577 dec/s
+   （采集瞬时 ~7,000），下一轮应改为共享内存/worker 内构 batch。
+
+### 12.4 产物
+
+- 最佳权重：`runs/az_entity_kl_30m/model_30m.pt`（= `eval/ckpt_030019160.pt`，30.02M）；
+- 曲线数据：`eval/history.json`、`eval/stage1_summary.json`、`eval/stage1_curves.png`；
+- 训练日志：`runs/az_entity_kl_30m/history.json`（1,029 iteration 全部字段）；
+- 评测原始结果：`eval/c0_*.json`、`eval/g4_seed43|440000.json`。
+
+### 12.5 下一步（建议）
+
+1. **stage-2：同配置再跑 30M**（继续从 30M 权重起，anchor 重新按本节口径设 β=0.1/前 100 iter），
+   目标把未见面板推进到 ≤3.3；若到 3.0 即触发镜像库构建；
+2. **修吞吐**：records 走共享内存、worker 内直接构 batch，预计把端到端从 1,577 提到 2,500+；
+3. **镜像库前置**：先给引擎加 `set_player_state`（Rust），把注入保真度修到 100%，再做
+   「bot 库 vs 现 7-bot」的同预算消融。
