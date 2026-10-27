@@ -4,7 +4,7 @@
 - 己方随从(7)/手牌(10)/酒馆(8)/待选(16)/对手(7) 都是 token（+1 global），最多 49 个；
 - 卡牌表示 = identity embedding + 静态特征投影 + 规则文本 embedding（字符 n-gram 哈希近似）；
 - 牌面附件/全局状态汇入对应 token / global token；
-- Transformer trunk（默认 d=384, 8 层, 8 头, ~18M 参数）；
+- Transformer trunk（默认 d=384, 8 层, 8 头，本实现实测 14.8M 参数；18M 需单独 ablation）；
 - **pointer head** 组合 245 个 masked action logits（Buy/Sell/Activate/Choose/Play/
   Magnetize/Move 用 token 点积 + 位置/类型 embedding；标量动作来自 global）；
 - 输出 policy、rank（placement）与 value（可作辅助）；输入做 symmetric log 压缩。

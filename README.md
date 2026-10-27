@@ -82,6 +82,7 @@ python scripts/run_tavernbench.py --check
 - `docs/ENGINE.md` — `hsbg_engine` fork/数据/构建
 - `docs/ACTION_OBS.md` — 动作/观测契约
 - `docs/AZ_MCTS_SELFPLAY_DESIGN.md` / `docs/AZ_IMPERFECT_SEARCH_DESIGN.md` — MCTS/自对弈设计
-- `docs/TRAINING.md` — MCTS + 自对弈 + PPO
+- `docs/TRAINING.md` — MCTS + 自对弈 + PPO 快速指南
+- `docs/TRAINING_DESIGN.md` — **完整训练系统设计**（搜索/叶评估/吞吐/剪枝/PPO）
 - `docs/VERIFICATION.md` — 门禁与预期
 - `docs/TAVERNBENCH.md` — 决策基准

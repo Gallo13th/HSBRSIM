@@ -431,3 +431,20 @@ def test_engine_mcts_selfplay_ppo_smoke():
     assert res["games_finished"] + res["truncated_games"] == 1
     assert res["legal_action_rate"] == pytest.approx(1.0)
     assert res["decisions"] > 0
+
+def test_forced_endturn_excluded_from_policy_objective():
+    """forced EndTurn 是确定性守卫：记录 logprob=0，且 policy/aux 目标排除。"""
+    records = _synthetic_records(n_games=1, decisions_per_seat=2)
+    for rec in records:
+        rec["forced"] = False
+    records[0]["forced"] = True
+    batch = build_batch_from_records(records)
+    assert bool(batch.forced[0])
+    assert not bool(batch.has_pi[0])
+    # weighted clip surrogate：weight=0 的 forced 样本不影响 policy loss
+    import torch
+    ratio = torch.tensor([1.5, 1.2], dtype=torch.float32)
+    adv = torch.tensor([1.0, 2.0], dtype=torch.float32)
+    loss, _ = clipped_surrogate(ratio, adv, 0.2, weight=torch.tensor([0.0, 1.0]))
+    solo, _ = clipped_surrogate(ratio[1:], adv[1:], 0.2)
+    assert torch.allclose(loss, solo)

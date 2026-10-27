@@ -203,10 +203,12 @@ def compute_gae(rewards: Any, values: Any, dones: Any, *,
     return adv.astype(np.float32), returns.astype(np.float32)
 
 
-def clipped_surrogate(ratio: Any, advantages: Any, clip: float):
+def clipped_surrogate(ratio: Any, advantages: Any, clip: float,
+                      weight: Any = None):
     """PPO clip 目标：``-mean(min(r*A, clip(r,1±ε)*A))`` 与裁剪比例。
 
-    返回 ``(loss, clipped_fraction)``，两者都是 torch 张量（0 维）。
+    ``weight`` 可选（0/1 或实数）：用于把确定性守卫样本（forced EndTurn）
+    从策略梯度中排除，同时保留 value/critic 链。返回 ``(loss, clipped_fraction)``。
     """
     torch = _torch()
     eps = float(clip)
@@ -214,9 +216,13 @@ def clipped_surrogate(ratio: Any, advantages: Any, clip: float):
         raise ValueError(f"clip 必须 > 0，得到 {clip!r}")
     unclipped = ratio * advantages
     clipped = torch.clamp(ratio, 1.0 - eps, 1.0 + eps) * advantages
-    loss = -torch.min(unclipped, clipped).mean()
-    frac = ((ratio < 1.0 - eps) | (ratio > 1.0 + eps)).to(ratio.dtype).mean()
-    return loss, frac
+    per = -torch.min(unclipped, clipped)
+    frac_per = ((ratio < 1.0 - eps) | (ratio > 1.0 + eps)).to(ratio.dtype)
+    if weight is None:
+        return per.mean(), frac_per.mean()
+    w = weight.to(per.dtype).clamp_min(0.0)
+    denom = w.sum().clamp_min(1e-8)
+    return (per * w).sum() / denom, (frac_per * w).sum() / denom
 
 
 def normalize_advantages(advantages: np.ndarray, eps: float = 1e-8) -> np.ndarray:
@@ -295,7 +301,7 @@ class PPOConfig:
 BATCH_FIELDS: Tuple[str, ...] = (
     "features", "cards", "masks", "actions", "old_logprobs", "values", "rewards",
     "dones", "advantages", "returns", "seats", "game_ids", "ranks", "turns",
-    "target_pi", "has_pi", "episode_ids",
+    "target_pi", "has_pi", "episode_ids", "forced",
 )
 
 
@@ -310,6 +316,7 @@ class PPOBatch:
         rewards f32[n]        dones f32[n]        advantages/returns f32[n]
         seats int32[n]        game_ids int64[n]   ranks int64[n]  turns int32[n]
         target_pi f32[n,245]  has_pi bool[n]      episode_ids int32[n]
+        forced bool[n]（确定性守卫样本：只参与 value/critic，不参与 policy/aux）
     """
 
     features: np.ndarray
@@ -329,7 +336,14 @@ class PPOBatch:
     target_pi: np.ndarray
     has_pi: np.ndarray
     episode_ids: np.ndarray
+    forced: Optional[np.ndarray] = None
     meta: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.forced is None:
+            self.forced = np.zeros(len(self.actions), dtype=bool)
+        else:
+            self.forced = np.asarray(self.forced, dtype=bool).reshape(-1)
 
     def __len__(self) -> int:
         return int(self.actions.shape[0])
@@ -345,7 +359,7 @@ class PPOBatch:
             "old_logprobs": (n,), "values": (n,), "rewards": (n,), "dones": (n,),
             "advantages": (n,), "returns": (n,), "seats": (n,), "game_ids": (n,),
             "ranks": (n,), "turns": (n,), "target_pi": (n, N_ACTIONS),
-            "has_pi": (n,), "episode_ids": (n,),
+            "has_pi": (n,), "episode_ids": (n,), "forced": (n,),
         }
         for name, shape in expected.items():
             arr = getattr(self, name)
@@ -370,6 +384,8 @@ class PPOBatch:
             errs.append("rewards/values 含 NaN/Inf")
         if not np.isin(self.dones.astype(np.int64), (0, 1)).all():
             errs.append("dones 必须为 0/1")
+        if not np.isin(self.forced.astype(np.int64), (0, 1)).all():
+            errs.append("forced 必须为 0/1")
         ranks = self.ranks.astype(np.int64)
         if ((ranks < 1) | (ranks > N_RANKS)).any():
             errs.append("ranks 必须在 1..8（截断局应已丢弃）")
@@ -484,6 +500,7 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
     ranks = np.asarray([int(r["rank"]) for r in recs], dtype=np.int64)
     turns = np.asarray([int(r.get("turn", -1)) for r in recs], dtype=np.int32)
 
+    forced = np.asarray([bool(r.get("forced", False)) for r in recs], dtype=bool)
     target_pi = np.zeros((n, N_ACTIONS), dtype=np.float32)
     has_pi = np.zeros(n, dtype=bool)
     for i, r in enumerate(recs):
@@ -495,7 +512,7 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
             continue
         pi_arr = masked_normalize(pi_arr, masks[i])
         s = float(pi_arr.sum())
-        if s > 1e-8:
+        if s > 1e-8 and not bool(forced[i]):
             target_pi[i] = pi_arr / s
             has_pi[i] = True
 
@@ -528,7 +545,7 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
         old_logprobs=old_logprobs, values=values, rewards=rewards, dones=dones,
         advantages=advantages, returns=returns, seats=seats, game_ids=game_ids,
         ranks=ranks, turns=turns, target_pi=target_pi, has_pi=has_pi,
-        episode_ids=episode_ids, meta=merged_meta)
+        episode_ids=episode_ids, forced=forced, meta=merged_meta)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -709,6 +726,9 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         np.ascontiguousarray(batch.target_pi[idx].astype(np.float32))).to(dev)
     has_pi = torch.from_numpy(
         np.ascontiguousarray(batch.has_pi[idx].astype(bool))).to(dev)
+    forced = torch.from_numpy(
+        np.ascontiguousarray(batch.forced[idx].astype(bool))).to(dev)
+    valid = (~forced).to(torch.float32)
     if config.normalize_advantage:
         std = adv.std(unbiased=False)
         adv = (adv - adv.mean()) / std.clamp_min(1e-8)
@@ -718,11 +738,12 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     logp = masked_log_softmax_torch(logits, m)
     action_logp = logp.gather(1, actions.unsqueeze(1)).squeeze(1)
     ratio = torch.exp(action_logp - old_logp)
-    policy_loss, clip_frac = clipped_surrogate(ratio, adv, config.clip)
+    policy_loss, clip_frac = clipped_surrogate(ratio, adv, config.clip, weight=valid)
 
     probs = logp.exp()
     safe_logp = torch.where(m, logp, torch.zeros_like(logp))
-    entropy = -(probs * safe_logp).sum(dim=-1).mean()
+    entropy_all = -(probs * safe_logp).sum(dim=-1)
+    entropy = (entropy_all * valid).sum() / valid.sum().clamp_min(1.0)
 
     value_pred = value_from_rank_logits_torch(rank_logits)
     if config.value_loss == "rank":
@@ -733,7 +754,7 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         value_loss = value_loss + float(config.value_head_coef) * F.mse_loss(
             scalar_value, returns_t)
 
-    if bool(has_pi.any()) and float(config.pi_coef) > 0.0:
+    if bool((has_pi & (valid > 0)).any()) and float(config.pi_coef) > 0.0:
         aux_all = -(target_pi * safe_logp).sum(dim=-1)
         aux_pi_loss = aux_all[has_pi].mean()
     else:
@@ -742,7 +763,7 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     total = (policy_loss + float(config.value_coef) * value_loss
              + float(config.pi_coef) * aux_pi_loss
              - float(config.entropy_coef) * entropy)
-    approx_kl = (old_logp - action_logp).mean()
+    approx_kl = ((old_logp - action_logp) * valid).sum() / valid.sum().clamp_min(1.0)
     illegal_prob_max = (probs * (~m).to(probs.dtype)).max()
     return {
         "total": total,
@@ -752,7 +773,7 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         "entropy": entropy,
         "approx_kl": approx_kl,
         "clip_frac": clip_frac,
-        "ratio_mean": ratio.mean(),
+        "ratio_mean": (ratio * valid).sum() / valid.sum().clamp_min(1.0),
         "illegal_prob_max": illegal_prob_max,
         "adv_mean": adv.mean(),
         "value_pred_mean": value_pred.mean(),
@@ -988,12 +1009,11 @@ class PPOSelfPlayPolicy(Policy):
             action = 0
             logprob = 0.0
         elif forced:
-            # 守卫动作：按**行为分布下 EndTurn 的概率**记录 old_logprob（而不是 0）。
-            # 否则确定性守卫会被当成 off-policy 样本，把 approx_kl 拉爆、污染 PPO 梯度；
-            # 这里把守卫视为"环境约束下从行为分布强制选取 EndTurn"的工程近似。
+            # 守卫动作是**环境确定性约束**（delta 在 EndTurn 上），不是行为分布采样。
+            # 记录 logprob=0 且 forced=True；PPO 的策略/aux loss 会排除这些样本，
+            # 只保留 value/critic/回报链，避免伪造 on-policy ratio。
             action = 0
-            mu_forced = np.asarray(mu, dtype=np.float64).reshape(-1)
-            logprob = float(math.log(max(float(mu_forced[action]), LOGPROB_FLOOR)))
+            logprob = 0.0
             self.forced_actions += 1
         else:
             mu64 = np.maximum(np.asarray(mu, dtype=np.float64), 0.0)
