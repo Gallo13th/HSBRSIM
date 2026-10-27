@@ -140,6 +140,35 @@ def runs_payload(limit: int = 40) -> Dict[str, Any]:
     return {"ok": True, "rows": rows}
 
 
+def replay_payload() -> Dict[str, Any]:
+    """Load the latest search+BotPrior demo replay saved under runs/webui/."""
+    path = WEB_RUNS / "search_botprior_demo.json"
+    data = _read_json(path)
+    if not isinstance(data, dict):
+        return {"ok": False, "error": f"missing replay: {_rel(path)}",
+                "hint": "先运行 scripts/az_webui_match.py，再复制到 runs/webui/"}
+    trace = []
+    for row in data.get("trace") or []:
+        if not isinstance(row, dict):
+            continue
+        item = dict(row)
+        for key in ("state", "after"):
+            state = item.get(key)
+            if isinstance(state, dict):
+                state = dict(state)
+                state.pop("combats", None)
+                item[key] = state
+        trace.append(item)
+    return {
+        "ok": True,
+        "path": _rel(path),
+        "seed": data.get("seed"),
+        "config": data.get("config"),
+        "result": data.get("result"),
+        "trace": trace,
+    }
+
+
 def evaluate(payload: Dict[str, Any]) -> Dict[str, Any]:
     policy = str(payload.get("policy") or "heuristic").strip()
     if not policy or len(policy) > 500:
@@ -253,6 +282,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, status())
             elif path == "/api/runs":
                 self._json(200, runs_payload())
+            elif path == "/api/replay":
+                self._json(200, replay_payload())
             elif path == "/api/checkpoints":
                 self._json(200, {"ok": True, "rows": [
                     {"path": _rel(p), "mtime": time.strftime(

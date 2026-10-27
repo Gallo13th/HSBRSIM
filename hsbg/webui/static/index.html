@@ -62,6 +62,7 @@ pre { background:#0d1117; border:1px solid var(--line); border-radius:6px; paddi
     <button class="active" data-tab="overview">概览 / 状态</button>
     <button data-tab="evaluate">评测训练结果</button>
     <button data-tab="runs">Runs / Checkpoints</button>
+    <button data-tab="replay">对战回放</button>
     <button data-tab="bench">TavernBench</button>
   </nav>
 
@@ -116,6 +117,22 @@ pre { background:#0d1117; border:1px solid var(--line); border-radius:6px; paddi
     </div>
   </section>
 
+  <section id="tab-replay">
+    <div class="card">
+      <h2>搜索 + Bot 先验对战回放</h2>
+      <p class="muted">单局演示：seat0 = <code>search_az + BotPriorEvaluator</code>（特权先验，仅演示/诊断），其余 7 座 = 引擎 bot。回放来自 <code>runs/webui/search_botprior_demo.json</code>。</p>
+      <button class="ghost" onclick="loadReplay()">重新加载</button>
+      <div id="replay-summary"></div>
+      <div class="row" style="margin-top:12px;align-items:end">
+        <div><label>decision</label><input id="replay-pos" type="range" min="0" max="0" value="0" oninput="renderReplay(+this.value)"></div>
+        <div><button class="ghost" onclick="stepReplay(-1)">上一步</button></div>
+        <div><button class="ghost" onclick="stepReplay(1)">下一步</button></div>
+      </div>
+      <div id="replay-state"></div>
+      <div id="replay-trace"></div>
+    </div>
+  </section>
+
   <section id="tab-bench">
     <div class="card">
       <h2>TavernBench 已发布评分（vendored 快照）</h2>
@@ -140,6 +157,7 @@ function setTab(name) {
   document.querySelectorAll("section").forEach(s => s.classList.toggle("active", s.id==="tab-"+name));
   if (name==="runs") loadRuns();
   if (name==="bench") loadBench();
+  if (name==="replay") loadReplay();
 }
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => setTab(b.dataset.tab));
 
@@ -230,8 +248,68 @@ async function runBenchCheck() {
     $("bench").innerHTML = `<pre>${esc((d.stdout||"") + (d.stderr||""))}</pre>`;
   } catch (err) { statusBox("bench-status", err.message, false); }
 }
-function refreshAll() { loadStatus(); loadRuns(); loadBench(); }
+let REPLAY = null;
+let REPLAY_I = 0;
+function boardHtml(title, arr) {
+  const items = (arr || []).map(m =>
+    `<span class="badge">${esc(m.name)} ${m.atk}/${m.hp}</span>`).join(" ");
+  return `<div class="kv"><div class="k">${esc(title)}</div><div class="v">${items || "—"}</div></div>`;
+}
+function renderReplay(i) {
+  if (!REPLAY || !REPLAY.trace.length) return;
+  REPLAY_I = Math.max(0, Math.min(i, REPLAY.trace.length - 1));
+  $("replay-pos").value = String(REPLAY_I);
+  const r = REPLAY.trace[REPLAY_I];
+  const st = r.state || {};
+  const me = st.me || {};
+  const ops = (st.opponents || []).map(o =>
+    `<tr><td>${esc(o.hero || "")}</td><td class="num">${esc(o.health)}</td>
+     <td class="num">${esc(o.tier)}</td><td class="num">${esc(o.board_size)}</td>
+     <td>${esc((o.last_warband && JSON.stringify(o.last_warband)) || "—")}</td></tr>`).join("");
+  $("replay-state").innerHTML = `
+    <div class="grid">
+      <div class="kv"><div class="k">turn / phase</div><div class="v">T${esc(st.turn)} / ${esc(st.phase)}</div></div>
+      <div class="kv"><div class="k">hero / health / tier / gold</div><div class="v">${esc(me.hero)} · ${esc(me.health)} · T${esc(me.tier)} · ${esc(me.gold)}g</div></div>
+      ${boardHtml("board", me.board)}
+      ${boardHtml("hand", me.hand)}
+      ${boardHtml("shop", me.shop)}
+    </div>
+    <div class="card" style="margin-top:12px">
+      <b>decision ${REPLAY_I + 1}/${REPLAY.trace.length}</b>：
+      <code>${esc(r.action_name)}</code> (action ${esc(r.action)})
+      · value ${esc(Number(r.value).toFixed(3))} · visits ${esc(r.visits)}
+    </div>
+    <table><thead><tr><th>opponent</th><th>hp</th><th>tier</th><th>board size</th><th>last warband</th></tr></thead>
+      <tbody>${ops}</tbody></table>`;
+}
+function stepReplay(delta) { renderReplay(REPLAY_I + delta); }
+async function loadReplay() {
+  try {
+    const d = await api("/api/replay");
+    if (!d.ok) { $("replay-summary").innerHTML = `<div class="status err">${esc(d.error)}</div>`; return; }
+    REPLAY = d;
+    const r = d.result || {};
+    $("replay-summary").innerHTML = `
+      <div class="status ok">rank ${esc(r.rank)} · turns ${esc(r.turns)} · decisions ${esc(r.decisions)} · ${esc(r.seconds)}s</div>
+      <div class="grid">
+        <div class="kv"><div class="k">seed</div><div class="v">${esc(d.seed)}</div></div>
+        <div class="kv"><div class="k">agent</div><div class="v">${esc(d.config && d.config.agent)}</div></div>
+        <div class="kv"><div class="k">sims / det</div><div class="v">${esc(d.config && d.config.simulations)} / ${esc(d.config && d.config.determinizations)}</div></div>
+        <div class="kv"><div class="k">placements</div><div class="v">${esc(JSON.stringify(r.placements || []))}</div></div>
+      </div>`;
+    $("replay-pos").max = String(Math.max(0, d.trace.length - 1));
+    $("replay-pos").value = "0";
+    const firstRecruit = d.trace.findIndex(x => Number(x.turn) >= 1);
+    $("replay-trace").innerHTML = `<table><thead><tr><th>#</th><th>turn</th><th>action</th><th>value</th></tr></thead><tbody>` +
+      d.trace.map((x, i) => `<tr><td class="num">${i}</td><td class="num">${esc(x.turn)}</td>
+        <td>${esc(x.action_name)}</td><td class="num">${esc(Number(x.value).toFixed(3))}</td></tr>`).join("") +
+      `</tbody></table>`;
+    renderReplay(firstRecruit >= 0 ? firstRecruit : 0);
+  } catch (err) { $("replay-summary").innerHTML = `<div class="status err">${esc(err.message)}</div>`; }
+}
+function refreshAll() { loadStatus(); loadRuns(); loadBench(); loadReplay(); }
 refreshAll();
+if (location.hash === "#replay") setTab("replay");
 </script>
 </body>
 </html>

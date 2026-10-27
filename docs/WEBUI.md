@@ -42,3 +42,32 @@ python -m hsbg.webui.server --port 8765
 - 评测是同步子进程（timeout 900s），页面会等待；大 episodes 建议用 CLI/后台。
 - Rust 主引擎未安装时页面显示 `hsrl2-legacy`，评测 backend=`auto` 自动走可用后端。
 - TavernBench 页面只读发布快照；真正重打分用 `scripts/run_tavernbench.py`。
+
+## 对战回放（搜索 + Bot 先验）
+
+页面新增「对战回放」标签，读取：
+
+```text
+runs/webui/search_botprior_demo.json
+```
+
+生成回放（需在已构建 `hsbg_engine` 的机器上运行；当前本地 Web 页面只负责展示）：
+
+```bash
+cd ~/projects/HSBRSIM
+PYTHONPATH=$PWD:$PWD/rust/python python scripts/az_webui_match.py   --seed 90004 --simulations 32 --determinizations 2   --out runs/webui/search_botprior_demo.json
+```
+
+回放内容：
+
+- seat0：`search_az + BotPriorEvaluator`（特权先验，仅演示/诊断；不是 AZ 训练输入）；
+- 其余 7 座：引擎 bot；
+- 展示 rank、回合、决策数、耗时、每步动作/搜索根价值/visits；
+- 可逐步查看 seat0 的 board/hand/shop、对手公开血量/tier/最近战团。
+
+本机示例（2026-10-27）：
+
+```text
+seed=90004, rank=1, turns=15, decisions=244, 6.2s
+placements=[1,3,8,4,6,2,5,7]
+```
