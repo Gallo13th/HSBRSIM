@@ -66,6 +66,7 @@ ARENA_API_KEY=... PYTHONPATH=rust/python:.:scripts $P scripts/arena_client.py \
 | 2026-10-28 | `runs/az_entity_kl_30m/model_30m.pt`（30M stage-1） | practice | 1 | 2nd | 首次接入，14 turns / 41.6 s |
 | 2026-10-28 | 同上 | practice | 10 | `[5,1,2,1,5,3,4,5,5,4]` → **mean 3.50 / top4 60% / first 20%** | 每局 58 s，7 个规则机器人 |
 | 2026-10-28 | 同上 | arena（计分） | 3（按用户要求中止） | `[6,8,1]` | 60 s 队列倒计时，7 个机器人；未满 5 场，**没有上榜**（bots 榜需 ≥5 场有效对局） |
+| 2026-10-28 | **`runs/champion_c0_3004.pt`**（stage-2 在 10.03M 的冠军，C0 3.004） | practice | 10 | `[2,3,6,5,1,2,3,2,6,1]` → **均名 3.10 / 前四 70% / 吃鸡 20%** | 平均 14.7 回合；对照 stage-1 的 30M 模型 3.50 / 60% / 20% |
 
 **10 局练习汇总**：名次 `[5,1,2,1,5,3,4,5,5,4]` → 均名 **3.50**、前四 **60%**、吃鸡 **20%**，
 平均每局 58 s；对局记录原始 JSON 在 `runs/arena/practice10_results.json`（`runs/` 不入库）。

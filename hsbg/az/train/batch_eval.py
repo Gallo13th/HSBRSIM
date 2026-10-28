@@ -75,15 +75,31 @@ class BatchLeafServer:
             self._next_id += 1
             return self._next_id
 
+    @staticmethod
+    def _pack(x: Any, dtype: Any) -> np.ndarray:
+        """零拷贝打包：dtype/连续已满足时直接复用原数组（调用方不得再改它）。
+
+        采集侧每次决策都会新建 features/cards/mask（obs_arrays / mask_from_bytes），
+        因此复用安全；MCTS 路径若复用缓冲区，请显式传拷贝。
+        """
+        a = np.asarray(x, dtype=dtype)
+        return a if a.flags.c_contiguous else np.ascontiguousarray(a)
+
     def submit(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
-               timeout: float = 0.5) -> LeafRequest:
+               timeout: float = 0.5, copy: bool = False) -> LeafRequest:
         with self._state_lock:
             if self._state != "open":
                 raise RuntimeError(f"BatchLeafServer is {self._state}")
-            req = LeafRequest(self._new_id(),
-                              np.array(features, dtype=np.float32, copy=True),
-                              np.array(cards, dtype=np.int64, copy=True),
-                              np.array(mask, dtype=bool, copy=True))
+            if copy:
+                req = LeafRequest(self._new_id(),
+                                  np.array(features, dtype=np.float32, copy=True),
+                                  np.array(cards, dtype=np.int64, copy=True),
+                                  np.array(mask, dtype=bool, copy=True))
+            else:
+                req = LeafRequest(self._new_id(),
+                                  self._pack(features, np.float32),
+                                  self._pack(cards, np.int64),
+                                  self._pack(mask, bool))
             req.submit_t = time.monotonic()
             try:
                 self._q.put(req, timeout=float(timeout))
