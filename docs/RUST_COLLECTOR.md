@@ -92,3 +92,33 @@ env -u CUDA_VISIBLE_DEVICES $P scripts/train_entity_sync.py \
   --pipeline 1 --lockstep 0 --rust-collector 1 --rc-threads 8 \
   --iterations 10 --out runs/ab_rc_rust
 ```
+
+
+## 4c. 第三轮：整批 torch 采样（真实提速）
+
+**根因**：`BatchLeafServer` 的 batch 分支原来**逐行**做 `masked_probs_np` + `np.random.default_rng`
+（每行新建 Generator）+ `value_from_rank_logits_np`，约 0.1–0.2 ms/行，比 forward 本身还贵。
+
+**改法**：整批一次 torch（`batch_eval._act_batched`）：`masked_log_softmax_torch(logits/temp)` →
+`torch.multinomial`（一个 Generator）→ `gather().log()`，value 用 `value_from_rank_logits_torch`。
+
+**收益（单进程、单卡 cuda:1、entity、raw lock-step 采集）**：
+
+| games/collector | 改前 dec/s | 改后 dec/s |
+|---|---:|---:|
+| 16 | 1,056 | 1,056 |
+| 64 | 2,255–2,691 | **2,989** |
+| 96 | — | **4,527** |
+| 192 | 3,109 | **6,063** |
+
+每决策成本 0.95 ms（16 局）→ 0.16 ms（192 局）。**但 pool 里同负载仍慢 ~2–3×**：
+P=3（64 局/worker）collect 13.26 s，而 standalone 同负载 4.18–5.99 s；
+
+pool 单 worker 实测（P=3）：`workers=10–13 s`，与 standalone(64 局)=4.18 s 矛盾
+→ 待查：worker 侧 `_maybe_reload`（61 MB）、`torch.set_num_threads(1)`、batch_size=64/max_wait=2 ms。
+已确认**不是** batch 采样（改后 pool 同负载几乎没变：P=12 6.35 → 6.07 s）。
+
+> 目标 2 s：按单卡 6,063 dec/s（192 局）估算，**1 卡 40k 决策≈6.4 s**；3 卡各 192 局可到
+> ~115k 决策/6.4 s。若每轮只需 40k 决策，则**单卡 192 局已是最优形态**（6.4 s），
+> 要再快只能减少「每次前向 5 ms 固定延迟」——把 logits 计算改成常驻 GPU 张量、避免
+> 每次 numpy→GPU 拷贝，或让多个 collector 共享一次大前向（128–256 行）。

@@ -24,7 +24,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from .common import OBS_CARDS
-from .ppo import (PPOEvaluator, masked_probs_np, value_from_rank_logits_np)
+from .ppo import (PPOEvaluator, masked_log_softmax_torch, masked_probs_np,
+                  value_from_rank_logits_np, value_from_rank_logits_torch)
 
 
 @dataclass
@@ -190,6 +191,32 @@ class BatchLeafServer:
             out.append((r.prior, float(r.value)))  # type: ignore[arg-type]
         return out
 
+    def _act_batched(self, plog: Any, m: Any, rlog: Any, reqs: List["LeafRequest"]):
+        """整批 torch 采样：masked softmax + multinomial + gather，一次算完所有行。"""
+        import torch
+        dev = torch.device(self.evaluator.device)
+        n = int(np.shape(plog)[0])
+        temps = np.ones(n, dtype=np.float32)
+        off = 0
+        for r in reqs:
+            k = int(np.atleast_2d(r.features).shape[0])
+            temps[off:off + k] = float(r.temperature) if r.temperature else self.temperature
+            off += k
+        logits = torch.from_numpy(np.asarray(plog, dtype=np.float32)).to(dev)
+        mask_t = torch.from_numpy(np.asarray(m, dtype=bool)).to(dev)
+        t = torch.from_numpy(temps).to(dev).unsqueeze(1)
+        probs = masked_log_softmax_torch(logits / t, mask_t).exp()
+        with torch.no_grad():
+            vals = value_from_rank_logits_torch(
+                torch.from_numpy(np.asarray(rlog, dtype=np.float32)).to(dev))
+        seed = int(reqs[0].seed) if reqs[0].seed is not None else 0
+        g = torch.Generator(device=dev).manual_seed(seed)
+        idx = torch.multinomial(probs, 1, generator=g).squeeze(1)
+        lps = probs.gather(1, idx.unsqueeze(1)).squeeze(1).clamp_min(1e-12).log()
+        return (idx.detach().cpu().numpy().astype(np.int64),
+                lps.detach().cpu().numpy().astype(np.float32),
+                vals.detach().cpu().numpy().astype(np.float32))
+
     def _take_batch(self) -> List[LeafRequest]:
         first = self._q.get()
         batch = [first]
@@ -235,30 +262,30 @@ class BatchLeafServer:
                 c = np.concatenate([np.atleast_2d(r.cards) for r in batch], axis=0)
                 m = np.concatenate([np.atleast_2d(r.mask) for r in batch], axis=0)
                 owner = []
+                _off = 0
                 for ri, r in enumerate(batch):
                     k = int(np.atleast_2d(r.features).shape[0])
                     owner.extend([ri] * k)
+                    if r.batch_mode:
+                        r._row_off = _off       # 在「所有 batch_mode 行」里的偏移
+                    _off += k if r.batch_mode else 0
                 t0 = time.monotonic()
                 plog, rlog = self.evaluator.logits(f, c, m)
                 fwd = time.monotonic() - t0
                 off = 0
+                batched = [r for r in batch if r.batch_mode]
+                if batched:
+                    acts_all, lps_all, vals_all = self._act_batched(plog, m, rlog, batched)
+                else:
+                    acts_all = lps_all = vals_all = None
                 for i, r in enumerate(batch):
                     temp = float(r.temperature) if r.temperature else self.temperature
                     if r.batch_mode:
                         k = int(np.atleast_2d(r.features).shape[0])
-                        acts = np.empty(k, dtype=np.int64)
-                        lps = np.empty(k, dtype=np.float32)
-                        vals = np.empty(k, dtype=np.float32)
-                        for j in range(k):
-                            p = masked_probs_np(plog[off + j], m[off + j], temp)
-                            p = p / max(float(p.sum()), 1e-12)
-                            seed = None if r.seed is None else int(r.seed) + j
-                            rng = np.random.default_rng(seed if seed is not None else 0)
-                            a = int(rng.choice(p.size, p=p))
-                            acts[j] = a
-                            lps[j] = float(np.log(max(float(p[a]), 1e-12)))
-                            vals[j] = float(value_from_rank_logits_np(rlog[off + j])[0])
-                        r.actions, r.logprobs, r.values = acts, lps, vals
+                        a0 = int(getattr(r, "_row_off", off))
+                        r.actions = acts_all[a0:a0 + k]
+                        r.logprobs = lps_all[a0:a0 + k]
+                        r.values = vals_all[a0:a0 + k]
                         off += k
                         r.event.set()
                         continue
