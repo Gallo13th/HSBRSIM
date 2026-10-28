@@ -113,7 +113,7 @@
 | 量 | 实测/估计 | 来源 |
 |---|---:|---|
 | C3（12 worker / 3 actor 卡） | **6.98 s** | `runs/ab_l4v2` |
-| C2（8 worker / 2 actor 卡） | **7.06 s** | `runs/ab_c2`（几乎相同 → **collect 不是 GPU 瓶颈**） |
+| C2（8 worker / 2 actor 卡） | **7.06 s** | `runs/ab_c2`（与 C3 相差 0.08 s，在噪声内、且 worker 数混杂 → 证据不足以断言 GPU 是否瓶颈） |
 | P1（1 卡 learner） | 4.58 s | 同上 |
 | P2（2 卡 DDP，估计） | ≈2.9 s（4.58/2 + 通信/共享内存开销） | 估计 |
 

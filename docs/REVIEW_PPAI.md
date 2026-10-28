@@ -108,7 +108,7 @@ EOF
 | 已 ack 的 worker 之后死亡 → 重启后加载构造期旧权重 | ✅ 记录每个 worker 的 pid，`_check_alive` 后发现 pid 变化即重新加入 pending 并重发目标权重 |
 | collect 丢弃外任务消息 | ✅ collect 也用 `accept=task_id`，外任务消息留在队列里给对应等待者 |
 | `_spawn_one` 忽略同 worker 的非 ready/fatal 消息 | ⚠️ 保留（上一轮任务已超时，属过期消息；契约写入代码注释） |
-| RSS 单位错误（MiB 标成 GB） | ✅ 输出 `_mib/_gib/_gb` 三个字段 + caveats；实测 16,820 MiB ≈ 16.43 GiB ≈ 17.6 GB |
+| RSS 单位错误（MiB 标成 GB） | ✅ 输出 `_mib/_gib/_gb` 三个字段 + caveats；修正后重测 16,630 MiB ≈ 16.24 GiB ≈ 17.4 GB |
 | 报告多处措辞冲突 | ✅ 已改：DDP 改「证据不足」、collect 口径、L4 不再列为下一步、`ab_c2`=10 iter 标注 |
 
 
@@ -131,3 +131,20 @@ EOF
 
 > 第四轮评审结论原文：「有条件通过（核心阻断已消除）……加速计划可收尾：是，
 > 条件是修正 REVIEW RSS/措辞并把 pytest.raises 改精确断言」。以上条件已全部满足。
+
+
+## 10. 最终收尾状态（HEAD `a263d06`）
+
+第四轮评审给出的三条剩余项，均在第四轮快照（`0beabb9`）之后修复：
+
+| 第四轮剩余项 | 状态 | 位置 |
+|---|---|---|
+| reload「ack 后死亡」竞态（只在 `queue.Empty` 才检查存活） | ✅ 已修：**每收到一条消息即 `_resync()`**（存活 + pid 变化 → 重入 pending + 重发）；回归 `test_reload_detects_worker_death_after_ack` | `5597cf8`、`a263d06` |
+| `pytest.raises(Exception)` 宽断言 | ✅ 改为精确 `queue.Empty` | `5597cf8` |
+| 报告数据/措辞矛盾（RSS 旧值、`_spawn_one` 自相矛盾、GPU 瓶颈措辞） | ✅ 全部统一 | `5597cf8` + 本条修订 |
+
+`pytest tests` 全绿（含 6 个 pool 用例）。评审原话「加速计划可收尾：是，条件是修正 REVIEW
+RSS/措辞并把 pytest.raises 改精确断言」——条件已全部满足，加速计划**收尾**。
+
+后续独立项目（不在本轮范围）：Rust 全采集器（目标 collect ~2 s，需 1 周 spike）、
+DDP learner（按 `max(C2,P2) < max(C3,P1)` 重新评估）。
