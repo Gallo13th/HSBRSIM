@@ -415,6 +415,18 @@ class ProcessActorPool:
                 if i < len(self._task_qs):
                     self._task_qs[i].put(dict(payload))
 
+        def _resync() -> bool:
+            """检查存活/重启；被重启（pid 变化）的 worker 重新加入 pending。"""
+            self._check_alive()
+            changed = False
+            for i in range(len(self._task_qs)):
+                pid = (self._info[i] or {}).get("pid")
+                if pid is not None and pid != pids.get(i):
+                    pids[i] = pid
+                    pending.add(i)
+                    changed = True
+            return changed
+
         _resend()
         while pending:
             remaining = deadline - time.time()
@@ -425,14 +437,8 @@ class ProcessActorPool:
                 msg = self._take_msg(min(5.0, remaining),
                                      accept=lambda m: m.get("task_id") == task_id)
             except queue.Empty:
-                self._check_alive()
-                # 被重启的 worker（pid 变化）必须重新加载目标权重
-                for i in range(len(self._task_qs)):
-                    pid = (self._info[i] or {}).get("pid")
-                    if pid is not None and pid != pids.get(i):
-                        pids[i] = pid
-                        pending.add(i)
-                _resend()
+                if _resync():
+                    _resend()
                 continue
             w = int(msg.get("worker", -1))
             if msg["type"] == "reload_done":
@@ -443,6 +449,9 @@ class ProcessActorPool:
                 if w in pending:
                     pending.discard(w)
                     errors.append(f"worker{w}: {msg.get('error')}")
+            # 收到任何消息后都检查：ack 之后立刻死亡的 worker 必须重启并重发目标权重
+            if _resync():
+                _resend()
         if errors:
             raise RuntimeError(f"reload_weights 失败: {errors}")
         return len(acked)

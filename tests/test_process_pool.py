@@ -95,7 +95,8 @@ def test_take_msg_defers_stray_messages_without_starvation(tmp_path, monkeypatch
     m2 = pool._take_msg(0.1)                 # 不限 worker：取剩余
     assert m2["type"] == "weights_loaded"
     assert pool._deferred == []
-    with pytest.raises(Exception):
+    import queue as _queue
+    with pytest.raises(_queue.Empty):
         pool._take_msg(0.05, want_worker=0)  # 没有消息 → 超时而不是死等
 
 

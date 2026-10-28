@@ -16,7 +16,7 @@
 | L4 混合回退协议（raw shard 先补齐再合并） | ✅ 已修 |
 | advantage 归一化只用 valid 子集 | ✅ 已修 |
 | worker 自愈竞态 | ✅ 已修（`_take_msg(accept=task_id)` 过滤 + reload 重启重发 + acked 去重），4 个 pool 测试通过 |
-| RSS 峰值实测 | ✅ 16,820 MiB ≈ 16.43 GiB（采样窗口近似峰值，父 3.38 GiB + 12×~1.17 GiB），**不据此断言无泄漏** |
+| RSS 峰值实测 | ✅ **16,630 MiB ≈ 16.24 GiB ≈ 17.4 GB**（采样窗口近似峰值，父 ~3.3 GiB + 12×~1.15 GiB），**不据此断言无泄漏** |
 | CUDA bf16 dtype 单测 | ✅ `test_bf16_autocast_keeps_loss_side_fp32` 通过 |
 | DDP 决策 | ✅ 用实测 C2=7.06 s / C3=6.98 s / P1=4.58 s 代入条件式 → step 不变，暂不实现 |
 | 报告口径（worker / 父进程 / 总 collect 分开） | ✅ 已改 |
@@ -110,3 +110,18 @@ EOF
 | `_spawn_one` 忽略同 worker 的非 ready/fatal 消息 | ⚠️ 保留（上一轮任务已超时，属过期消息；契约写入代码注释） |
 | RSS 单位错误（MiB 标成 GB） | ✅ 输出 `_mib/_gib/_gb` 三个字段 + caveats；实测 16,820 MiB ≈ 16.43 GiB ≈ 17.6 GB |
 | 报告多处措辞冲突 | ✅ 已改：DDP 改「证据不足」、collect 口径、L4 不再列为下一步、`ab_c2`=10 iter 标注 |
+
+
+## 9. 第四轮复审（针对 `0beabb9`）：有条件通过 → 已修
+
+| 第四轮发现 | 处理 |
+|---|---|
+| 外任务消息活锁、重复 done、ack 后死亡重发 | ✅ 评审确认核心阻断已消除（`accept` 过滤 + `acked` + pid 重发） |
+| `pytest.raises(Exception)` 宽断言 | ✅ 改为精确 `queue.Empty` |
+| **reload 的 pid 检测只在 `queue.Empty` 分支**：ack 后立刻死亡 + 其它 worker done 持续到达 → 永不调用 `_check_alive`，可带着旧权重返回 | ✅ 改为**每收到一条消息就 `_resync()`**（存活检查 + pid 变化重新入 pending + 重发），并在 `queue.Empty` 分支同样 resync |
+| 文档 RSS 数值两处旧值（16,820/16.43） | ✅ 统一为 16,630 MiB = 16.24 GiB = 17.4 GB |
+| `_spawn_one` 非 ready 消息「已修 vs 保留」自相矛盾 | ✅ 明确为：**过期消息忽略属已记录契约**（上一任务已超时），不算缺陷 |
+| THROUGHPUT 116 行「collect 不是 GPU 瓶颈」措辞 | ✅ 改为「未观察到让卡收益（证据不足）」 |
+
+> 第四轮评审结论原文：「有条件通过（核心阻断已消除）……加速计划可收尾：是，
+> 条件是修正 REVIEW RSS/措辞并把 pytest.raises 改精确断言」。以上条件已全部满足。
