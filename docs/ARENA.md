@@ -82,3 +82,5 @@ ARENA_API_KEY=... PYTHONPATH=rust/python:.:scripts $P scripts/arena_client.py \
 4. 若要做「和真人对战」的评估，用 `--mode standard`（严格 8 个账号，无机器人补位）或
    `--mode arena --wait-for-human`（至少 1 个真人账号，其余仍可补机器人）；
 5. 跨版本失配的根治办法：把我们引擎升到 36.6.3 的数据重建模型，或按竞技场 patch 重训。
+
+| 2026-10-29 | **`runs/champion_c0_2760.pt`**（stage-3 30M，C0 2.760 / top4 84.2% / 吃鸡 25.0%） | **arena（计分/ranked）** | 10 | `[1,2,4,6,3,1,3,5,5,2]` → **均名 3.20 / 前四 70% / 吃鸡 20%** | 10 局全部有效完成、无 forfeit；日志无可解析的 score/elo 字段，未确认是否上榜（bots 榜需 ≥5 场，本机已知条件不满足解析） |
