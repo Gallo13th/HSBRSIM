@@ -28,14 +28,32 @@ data/                   # 官方 37.0.0.255790 派生 + AutoTavern schema（data
 benchmarks/tavernbench/ # vendored TavernBench（960/368）
 ```
 
-## 安装
+## 安装（一键）
 
 ```bash
-python -m pip install -e .
-cd rust && python -m pip install -e . && cd ..    # 需要 Rust 1.98 + maturin
+git clone https://github.com/Gallo13th/HSBRSIM.git && cd HSBRSIM
+bash scripts/bootstrap.sh        # 装 Python 依赖 + 编译 Rust 引擎 + 跑门禁
+```
+
+手动等价：
+
+```bash
+python -m pip install -e ".[train,dev,plot]"
+cd rust && python -m pip install -e . && cd ..    # 需要 Rust 1.98 + maturin（自动装）
 python -c "import hsbg_engine as E; print(E.game_version(), E.data_info())"
 # 37.0.0.255790 {'cards': 3983, ...}
 ```
+
+## 一键开始训练
+
+```bash
+bash scripts/train_stage1.sh --smoke             # 冒烟（tiny，2 分钟）
+bash scripts/train_stage1.sh --gpus 0 --decisions 5M
+bash scripts/train_stage1.sh --gpus 0,5,6,7 --decisions 30M   # 完整 stage-1
+```
+
+没有现成 checkpoint 时会**自动先跑 BC 冷启动**，所以不需要任何私有权重。
+完整说明（要求、预期曲线、常见问题）见 [`docs/QUICKSTART.md`](docs/QUICKSTART.md)。
 
 ## 快速开始
 

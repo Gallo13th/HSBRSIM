@@ -13,6 +13,7 @@ dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
 torch = ["torch>=2.0"]
+train = ["torch>=2.0", "matplotlib>=3.5"]
 dev = ["pytest>=7.0"]
 plot = ["matplotlib>=3.5"]
 
