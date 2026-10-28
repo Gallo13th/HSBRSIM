@@ -28,6 +28,7 @@ Python 胶水：`hsbg/az/train/rust_collect.py::collect_ppo_rust`（约 100 行�
 | Rust 采集器，P=6（32 局/worker） | 4,120 | 8.45 s | 4.51 s | 8.70 s |
 | Rust 采集器，P=4（48 局/worker） | 3,456 | 10.50 s | 4.53 s | 10.47 s |
 | Rust 采集器，P=3（64 局/worker） | 2,953 | 12.56 s | 4.44 s | 12.66 s |
+| Rust 采集器，P=2（96 局/worker） | 2,172 | 17.41 s | 4.48 s | 16.99 s |
 
 单 worker（16 局、cuda:1、entity）：3,330 decisions / 2.53 s = 1,317 dec/s，其中
 **GPU 前向占 1.72 s（68%）**。
@@ -59,8 +60,12 @@ leaf forward 微基准（entity，cuda:1，`BatchLeafServer.logits`）：
   加引擎与拼装 ≈ **1.5–2 s** —— 这才是达到目标 collect ≈2 s 的路径。
 - 实现方式（下一轮）：worker 侧 `BatchLeafServer` 改为「连接到常驻推理服务」（Unix socket 或
   共享内存 + 事件），服务端在每张 GPU 上一个进程，按 `max_wait_ms` 聚合多 worker 请求。
-  也可以先用 **1 个 worker 独占 1 张卡 + 96–192 局**（batch 96–192 行）验证「大 batch 能否到 2 s」，
-  这是最便宜的验证（无需新组件）。
+  **已排除**「单 worker 大 batch」这条路：P=2（96 局/worker）实测 collect **17.41 s**，
+  P=3 12.56 s、P=4 10.50 s、P=6 8.45 s —— worker 越少越慢。说明每轮的固定成本
+  （`pending()` 与 `record_actions()` 各自一次全量 `BatchEnv.observe()` + `step` 推进全部局，
+  单 worker 内串行）远大于 forward 的均摊收益。
+  因此下一轮必须做**共享推理服务 + 去掉重复 observe**（`record_actions` 复用 `pending()` 的
+  mask/turn，避免第二次全量观测），而不是继续调 worker 数。
 
 ## 5. 复现命令
 
