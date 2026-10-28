@@ -1260,8 +1260,14 @@ def pack_records_arrays(records: Sequence[Dict[str, Any]]) -> Dict[str, np.ndarr
         out["forced"][i] = bool(r.get("forced", False))
         pi = r.get("target_pi")
         if pi is not None and has_pi and not out["forced"][i]:
-            out["has_pi"][i] = True
-            out["target_pi"][i] = pi
+            pi = np.asarray(pi, dtype=np.float32).reshape(-1)
+            m_i = out["masks"][i].astype(np.float32)
+            if pi.size == m_i.size:                 # 与 records 侧一致：非法清零 + 归一
+                pi = pi * m_i
+                s_pi = float(pi.sum())
+                pi = pi / s_pi if s_pi > 1e-8 else (m_i / max(float(m_i.sum()), 1.0))
+                out["has_pi"][i] = True
+                out["target_pi"][i] = pi
     return out
 
 

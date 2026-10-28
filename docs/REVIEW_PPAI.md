@@ -3,6 +3,23 @@
 > 评审对象：HSBRSIM 吞吐加速计划（HEAD `455ad3b` + 本轮修复）
 > 评审模型：`ppai/gpt-6-astra`（通过 DSH subagent，独立读代码/跑只读命令，未占 GPU）
 
+## 0. 评审闭环（终版）
+
+评审方最终结论：**有条件通过**（原话：「有条件通过，但不能宣称『数组路径严格等价、L4 已回退、
+自愈已可靠验证』」）。本轮据此修复了全部「阻断/重要」项并复验：
+
+| 评审项 | 状态 |
+|---|---|
+| 数组路径 rank 过滤、forced π、aux loss、target π 归一 | ✅ 已修（`f0874e6` + 最后一次 pi 归一化补丁） |
+| `target_pi` 全 1 场景与 records 逐字段一致 | ✅ 复验 `max|diff| = 0.0`、`has_pi` 一致、`validate()` 通过 |
+| episode 计数用 unique、int64 全局 key | ✅ 已修 |
+| L4 混合回退协议（raw shard 先补齐再合并） | ✅ 已修 |
+| advantage 归一化只用 valid 子集 | ✅ 已修 |
+| worker 自愈竞态 | ⛔ 未修（既有健壮性缺陷，已登记为下一步） |
+| RSS 峰值实测、CUDA bf16 dtype 单测 | ⛔ 未做（已登记） |
+| 报告口径（worker / 父进程 / 总 collect 分开） | ✅ 已改 |
+| DDP 阈值论证 | ✅ 已按评审条件式改正（不再用 2.5s 门槛） |
+
 ## 1. 终审结论：**有条件通过**
 
 - 主链路（history jsonl、流水线版本钉死、bf16 fp32-loss 侧、lock-step、L2/L3/L4）方向与实现都被认可；
