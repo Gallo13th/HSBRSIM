@@ -64,7 +64,8 @@ ARENA_API_KEY=... PYTHONPATH=rust/python:.:scripts $P scripts/arena_client.py \
 | 日期 | 模型 | 模式 | 局数 | 名次分布 | 备注 |
 |---|---|---|---:|---|---|
 | 2026-10-28 | `runs/az_entity_kl_30m/model_30m.pt`（30M stage-1） | practice | 1 | 2nd | 首次接入，14 turns / 41.6 s |
-| 2026-10-28 | 同上 | practice | 10 | 见运行日志 `/tmp/arena_practice10.log` | 每局 55–60 s，7 个规则机器人 |
+| 2026-10-28 | 同上 | practice | 10 | `[5,1,2,1,5,3,4,5,5,4]` → **mean 3.50 / top4 60% / first 20%** | 每局 58 s，7 个规则机器人 |
+| 2026-10-28 | 同上 | arena（计分） | 5 | 见 `/tmp/arena_ranked5.log` | 60 s 队列倒计时 + 机器人补位 |
 
 ## 5. 已知限制 / 下一步
 

@@ -306,6 +306,9 @@ def main() -> int:
         if last_len > 0 and (deadline - time.time()) < max(60.0, last_len):
             print("[loop] remaining time < last iteration; stop", flush=True)
             break
+        _reload_s = 0.0
+        _collect_s = 0.0
+        _history_s_prev = locals().get("_history_s", 0.0)
         c_cfg = CollectConfig(
             games=int(args.games), seed=int(args.seed) + i * 1000,
             opponent=str(args.opponent), behavior=str(args.behavior),
@@ -314,12 +317,16 @@ def main() -> int:
         iter_start = time.time()
         if pool is not None:
             # 同步模式：先把最新权重推到每个 actor 进程（不重建进程）
+            _t0 = time.time()
             save_checkpoint(model, pool_ckpt, meta={**meta, "arch": arch},
                             norm_mean=norm_mean, norm_std=norm_std)
             pool.reload_weights(pool_ckpt, updates=int(trainer.updates))
+            _reload_s = time.time() - _t0
+            _t1 = time.time()
             batch, collect_meta = pool.collect(
                 c_cfg, int(args.games), return_records=True, progress=True,
                 seed=int(c_cfg.seed), gamma=1.0, lam=float(args.lam))
+            _collect_s = time.time() - _t1
         elif args.workers > 1:
             batch, collect_meta = collect_ppo_batch_parallel(
                 model, c_cfg, workers=int(args.workers),
@@ -340,8 +347,17 @@ def main() -> int:
         # KL anchor 只在前 --anchor-iterations 个 iteration 生效（论文：前 100/300）
         trainer.config.anchor_coef = (float(args.anchor_beta)
                                       if i < int(args.anchor_iterations) else 0.0)
+        _t_ppo = time.time()
         stats = trainer.update(batch)
+        _ppo_s = time.time() - _t_ppo
         rec = {"iter": i, "collect": collect_meta, "ppo": stats,
+               "profile": {"reload_s": round(_reload_s, 3),
+                           "collect_s": round(_collect_s, 3),
+                           "ppo_s": round(_ppo_s, 3),
+                           "build_batch_s": round(float(collect_meta.get("build_batch_s", 0.0)), 3),
+                           "parent_read_s": round(float(collect_meta.get("parent_read_s", 0.0)), 3),
+                           "records_mb": round(float(collect_meta.get("records_bytes", 0)) / 1e6, 1),
+                           "history_prev_s": round(float(_history_s_prev), 3)},
                "batch_server": (dict(batch_server.stats) if batch_server is not None else None),
                "seconds": time.time() - t0}
         history.append(rec)
@@ -384,9 +400,11 @@ def main() -> int:
                               if d.startswith("step_") and os.path.isdir(os.path.join(snap_root, d)))
                 for d in olds[:-keep]:
                     shutil.rmtree(os.path.join(snap_root, d), ignore_errors=True)
+        _th0 = time.time()
         with open(history_path, "w", encoding="utf-8") as f:
             json.dump({"args": vars(args), "history": history,
                        "elapsed_s": time.time() - t0}, f, ensure_ascii=False, indent=2)
+        _history_s = time.time() - _th0
         # 累计 decisions + 周期评测（512 局 C0，暂停采集）
         cum_decisions += int(collect_meta.get("decisions", 0))
         if cum_decisions >= next_eval:

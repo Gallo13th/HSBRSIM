@@ -419,6 +419,7 @@ class ProcessActorPool:
                               "dropped", "search_calls", "search_failures",
                               "forced", "errors")}
         forward_s = batch_wait_s = 0.0
+        t_read = records_bytes = 0.0
         for i in sorted(results):
             msg = results[i]
             m = dict(msg.get("meta") or {})
@@ -446,8 +447,14 @@ class ProcessActorPool:
             batch_wait_s += float(msg.get("batch_wait_s", 0.0))
             f = msg.get("records_file")
             if f:
+                t_r0 = time.time()
                 with open(f, "rb") as fh:
                     records.extend(pickle.load(fh))
+                t_read += time.time() - t_r0
+                try:
+                    records_bytes += os.path.getsize(f)
+                except OSError:
+                    pass
                 try:
                     os.remove(f)
                 except OSError:
@@ -498,8 +505,13 @@ class ProcessActorPool:
             raise RuntimeError(
                 f"process pool 无有效轨迹（truncated={agg['truncated']}, "
                 f"invalid={agg['invalid']}, decisions={agg['decisions']}）")
+        t_b0 = time.time()
         batch = build_batch_from_records(records, gamma=float(gamma),
                                          lam=float(lam), meta=meta)
+        build_batch_s = time.time() - t_b0
+        meta["parent_read_s"] = float(t_read)
+        meta["records_bytes"] = int(records_bytes)
+        meta["build_batch_s"] = float(build_batch_s)
         batch.meta.update({"collect_seconds": wall,
                            "collect": {k: v for k, v in meta.items()
                                        if k != "worker_meta"}})
