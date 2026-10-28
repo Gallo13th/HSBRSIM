@@ -134,6 +134,35 @@ bf16 与 fp32 的差距 **CI 覆盖 0**，两者都远好于起点（4.70）；a
 逐 iteration 信号也一致：`ratio@epoch起点` 1.00004、`pre_ratio` 0.99950、
 entropy/value 轨迹同带 → 1 个 batch 的策略滞后在 lr 6e-6 下可忽略。
 
+## 3.9 lock-step 批量 actor（L1 落地，实测 +28%）
+
+问题：逐局路径里每个决策都是一次「提交→队列→worker 前向→唤醒」的往返，16 线程/进程时
+每次往返 1.55 ms，其中真实计算只占 ~0.22 ms，其余全在等批与 GIL 切换；batch fill 只有 0.11。
+
+做法（`collect_ppo_lockstep`）：**每 worker 内 N 局同步推进**——一轮把所有「需要 learner 决策」
+的局拼成一个 2D 批，`act_batch()` 一次前向 + 逐行采样（`seed+j`，可复现），再各自 step。
+记录仍按 `game_id` 分组回填名次；turn 守卫键改成 `(game_id, seat, turn)`，多局互不污染。
+
+实测（12 iteration/组、同 seed 1900、pipeline+bf16、GPU 0/2/3 + learner cuda:1）：
+
+| 配置 | dec/s | collect | ppo | iter | lag/ratio |
+|---|---:|---:|---:|---:|---|
+| 逐局（8 进程 × 16 线程） | 4,638 | 8.03 s | 4.51 s | 7.74 s | 1 / 0.9958 |
+| lockstep P=8 | 5,139 | 7.34 s | 4.56 s | 7.47 s | 1 / 0.9872 |
+| **lockstep P=12** | **5,921** | **6.12 s** | 4.70 s | 6.1 s | 1 / 0.9926 |
+| lockstep P=16 | 5,859 | 6.16 s | 4.44 s | 6.07 s | 1 / 0.9926 |
+| lockstep P=20 | 4,928 | 7.04 s | 4.53 s | — | 1 / — |
+| lockstep P=24 | 4,616 | 7.60 s | 4.59 s | — | 1 / 0.9971 |
+
+- **端到端 4,638 → 5,921（+27.7%）**，collect **−24%**；
+- 最优点是 **12 个 worker × 3 张 actor 卡（4/卡）**；再往上（20/24）GPU 侧开始互相拖慢；
+- 学习信号不变：lag=1、ratio 0.99、entropy 0.47–0.50 与逐局同带；
+- `train_stage1.sh` 默认 `LOCKSTEP=1`，进程数自动设为 `4 × actor 卡数`。
+
+> 注意：lock-step 后 collect 的瓶颈从「线程握手」变成「单 worker 的 Python/引擎成本」
+> （~0.22 ms/决策），所以下一步要再快只能加 worker（CPU 还有 77% 余量）或把
+> obs/record 打包搬进 Rust；PPO 4.5–4.7 s 已是并行的另一半墙。
+
 ## 4. 让流水线「可靠」的契约（S2/S3 必做）
 
 1. **版本钉死**：每个 batch 记录 `policy_version`；worker 在整轮采集期间不得换权重（现在是每轮 reload，

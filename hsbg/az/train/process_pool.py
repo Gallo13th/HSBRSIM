@@ -57,7 +57,7 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
     import torch
     from .model import load_checkpoint
     from .batch_eval import BatchLeafServer, BatchPPOEvaluator
-    from .parallel_collect import collect_ppo_records_parallel
+    from .parallel_collect import collect_ppo_lockstep, collect_ppo_records_parallel
 
     # 进程内不需要 torch 的 CPU 线程池（GPU 前向 + 多线程采集已经够并行）
     torch.set_num_threads(1)
@@ -184,12 +184,20 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
         try:
             cfg = CollectConfig(**task["cfg"])
             server.reset_stats()
-            records, cmeta = collect_ppo_records_parallel(
-                model, cfg, workers=int(task.get("threads", 4)),
-                search_fn=search_fn,
-                search_config=(_search_config(int(task["seed"])) if search_fn else None),
-                eval_fn=evaluator, device=device, seed=int(task["seed"]),
-                norm_mean=norm_mean, norm_std=norm_std, progress=False)
+            if bool(task.get("lockstep", False)) and search_fn is None:
+                # lock-step：每 worker 内 N 局同步推进，每轮一次批量前向
+                records, cmeta = collect_ppo_lockstep(
+                    model, cfg, eval_fn=evaluator, device=device,
+                    seed=int(task["seed"]), games=int(cfg.games),
+                    gamemode=str(cfg.opponent), norm_mean=norm_mean,
+                    norm_std=norm_std)
+            else:
+                records, cmeta = collect_ppo_records_parallel(
+                    model, cfg, workers=int(task.get("threads", 4)),
+                    search_fn=search_fn,
+                    search_config=(_search_config(int(task["seed"])) if search_fn else None),
+                    eval_fn=evaluator, device=device, seed=int(task["seed"]),
+                    norm_mean=norm_mean, norm_std=norm_std, progress=False)
             records_file = None
             n_records = int(len(records))
             if bool(task.get("return_records", True)):
@@ -400,6 +408,7 @@ class ProcessActorPool:
                 "return_records": bool(return_records),
                 "tmpdir": self.tmpdir, "gamma": float(gamma), "lam": float(lam),
                 "weights_version": weights_version, "weights_path": weights_path,
+                "lockstep": bool(getattr(cfg, "lockstep", False)),
                 "cfg": {**asdict(cfg), "games": gcount,
                         "seed": seed_i, "game_id_offset": g0},
             }

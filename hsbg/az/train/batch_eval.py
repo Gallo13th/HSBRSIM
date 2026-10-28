@@ -278,7 +278,7 @@ class BatchLeafServer:
                     r.event.set()
                 with self._stats_lock:
                     self.stats["batches"] += 1
-                    self.stats["leafs"] += len(batch)
+                    self.stats["leafs"] += int(f.shape[0])  # 按行计（lock-step 一批多行）
                     self.stats["max_batch"] = max(self.stats["max_batch"], len(batch))
                     self.stats["forward_s"] += fwd
                     qw = [max(0.0, t_start - getattr(r, "submit_t", t_start)) for r in batch]

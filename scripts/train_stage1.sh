@@ -29,6 +29,7 @@ SMOKE="0"
 BC_SAMPLES="500000"
 PIPELINE="${PIPELINE:-1}"      # 1=double-buffer 流水线（实测 +44%）；0=串行
 AMP="${AMP:-bf16}"             # bf16=PPO 用 bf16 autocast（实测 +34%，学习等价）；off=fp32
+LOCKSTEP="${LOCKSTEP:-1}"      # 1=lock-step 批量 actor（实测 collect -24%、e2e +28%）；0=逐局
 LEARNER_GPU="${LEARNER_GPU:-0}"
 EXTRA=()
 
@@ -102,6 +103,12 @@ esac
 ITER=$(python3 -c "import math;print(max(1, math.ceil($TARGET / ($GAMES * 155))))")
 say "预算 ${TARGET} decisions ≈ ${ITER} iterations（每 iter ${GAMES} 局）"
 
+# lock-step：每个 worker 单线程推进多局，12 个 worker（4/卡）是实测最优点
+if [ "$LOCKSTEP" = "1" ]; then
+  NGPU=$(python3 -c "print(len([g for g in '$GPUS'.split(',') if g.strip()]))")
+  PROCESSES=${PROCESSES_OVERRIDE:-$((NGPU * 4))}
+fi
+
 # 流水线：actor 不能与 learner 同卡（实测同卡会互相拖慢），自动从 --gpus 里剔除 learner 卡
 ACTOR_GPUS="$GPUS"
 if [ "$PIPELINE" = "1" ]; then
@@ -119,11 +126,11 @@ PY
 fi
 
 # ---- 4) 训练 ---------------------------------------------------------------
-say "开始阶段训练：entity 14.8M / sims=0 / KL anchor / 流水线=${PIPELINE} / amp=${AMP} / actor GPU=${ACTOR_GPUS} / learner GPU=${LEARNER_GPU}"
+say "开始阶段训练：entity 14.8M / sims=0 / KL anchor / 流水线=${PIPELINE} / amp=${AMP} / lockstep=${LOCKSTEP} / procs=${PROCESSES} / actor GPU=${ACTOR_GPUS} / learner GPU=${LEARNER_GPU}"
 "$PY" scripts/train_entity_sync.py \
   --checkpoint "$INIT" --arch entity --device "cuda:${LEARNER_GPU}" \
   --processes "$PROCESSES" --gpus "$ACTOR_GPUS" --threads "$THREADS" --games "$GAMES" \
-  --pipeline "$PIPELINE" --amp "$AMP" \
+  --pipeline "$PIPELINE" --amp "$AMP" --lockstep "$LOCKSTEP" \
   --sims 0 --determinizations 1 --opponent bot --behavior net \
   --epochs 1 --minibatch 1024 --grad-accum 8 \
   --lr 6e-6 --lr-min-ratio 0.833 --max-updates "$ITER" \

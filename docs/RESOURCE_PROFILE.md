@@ -134,3 +134,18 @@ PYTHONPATH=rust/python:. $P scripts/plot_resource_profile.py --run runs/az_entit
    - 或者结构性的「lock-step 批量 actor」（一轮把 N 局拼成一个 batch，把每决策的线程握手摊薄 N 倍）。
 4. **测量纪律**：跑吞吐前先 `nvidia-smi` 确认 4 张卡都是自己的；本机是共享集群，
    邻居任务会让结果偏差 15–20%。
+
+
+## 7. lock-step 批量 actor 实测（2026-10-28）
+
+见 `docs/THROUGHPUT_TIMELINE.md` §3.9。要点：
+
+| 配置 | dec/s | collect | 备注 |
+|---|---:|---:|---|
+| 逐局 8 进程 × 16 线程 | 4,638 | 8.03 s | fill 0.11–0.15，握手主导 |
+| **lockstep 12 worker** | **5,921** | **6.12 s** | fill≈1，握手消失 |
+| lockstep 20/24 worker | 4.9k / 4.6k | 7.0/7.6 s | GPU 侧过载 |
+
+结论：**每决策 ~0.22 ms 的 Python/引擎成本成为 collect 的新地板**；要再降只能把
+obs 拼装与 record 打包搬进 Rust（`docs/ACTOR_RUST_OPTIONS.md` 方案 B），或者继续加 worker
+（CPU 中位 23%，仍有空间，但 3 张卡的 GPU 侧会先饱和）。

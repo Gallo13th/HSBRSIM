@@ -218,3 +218,112 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
 
 
 __all__ = ["collect_ppo_records_parallel", "collect_ppo_batch_parallel"]
+
+
+def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
+                         device: str = "cpu", seed: int = 0,
+                         games: Optional[int] = None, gamemode: str = "bot",
+                         engine_backend: str = "auto",
+                         norm_mean: Any = None, norm_std: Any = None
+                         ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """lock-step 采集：N 局同步推进，每轮把所有待决策局拼成一个 batch 前向一次。
+
+    与 ``_one_game`` 的逐局循环等价（同样的对手推进、守卫、截断与名次回填），
+    区别只在调度：决策请求摊薄成「每轮一次批量前向」，batch fill 从 ~0.1 提到 ~1.0。
+
+    只支持 ``gamemode in {"bot", "weak"}``（自对弈 8 座仍走逐局路径）。
+    """
+    if str(gamemode) not in ("bot", "weak"):
+        raise ValueError(f"lockstep 只支持 bot/weak，收到 {gamemode!r}")
+    E = load_engine()
+    n = int(games if games is not None else cfg.games)
+    policy = PPOSelfPlayPolicy(
+        model, device=device, config=cfg, search_fn=None, search_config=None,
+        eval_fn=eval_fn, engine_backend=engine_backend, seed=int(seed),
+        norm_mean=norm_mean, norm_std=norm_std, move_model=False)
+    policy.reset()
+    seat = int(cfg.learner_seat)
+    max_steps = int(cfg.max_steps)
+    states: List[Dict[str, Any]] = []
+    for gi in range(n):
+        states.append({
+            "gi": gi, "gid": int(cfg.game_id_offset) + gi,
+            "game": E.Game(seed=int(cfg.seed) + gi),
+            "rng": np.random.default_rng(int(seed) + gi),
+            "steps": 0, "decisions": 0, "illegal": 0, "done": False, "truncated": 0,
+            "rec_start": 0,
+        })
+    rounds = 0
+    while True:
+        pending = []
+        for st in states:
+            if st["done"]:
+                continue
+            g = st["game"]
+            guard = 0
+            while (not g.is_over()) and (not g.needs_action(seat)) and guard < 10 ** 6:
+                q = next((p for p in range(N_PLAYERS) if g.needs_action(p)), None)
+                if q is None:
+                    break
+                if str(gamemode) == "weak":
+                    g.step(int(q), _weak_bot_action(g, int(q), st["rng"]))
+                else:
+                    g.bot_play(int(q))
+                st["steps"] += 1
+                guard += 1
+            if g.is_over() or st["steps"] >= max_steps:
+                st["done"] = True
+                st["truncated"] = int(not g.is_over())
+                continue
+            if not g.needs_action(seat):
+                # 没有任何座位需要动作但局未结束：上层语义按截断处理（与 _one_game 一致）
+                st["done"] = True
+                st["truncated"] = int(not g.is_over())
+                continue
+            pending.append(st)
+        if not pending:
+            break
+        for st in pending:
+            st["rec_start"] = len(policy.records)
+        decisions = policy.decide_batch([(st["game"], seat, st["gid"]) for st in pending])
+        for st, dec in zip(pending, decisions):
+            g = st["game"]
+            mask = mask_from_bytes(g.legal_mask(seat))
+            a = int(dec.action)
+            if not (0 <= a < N_ACTIONS and bool(mask[a])):
+                st["illegal"] += 1
+                a = int(np.flatnonzero(mask)[0]) if mask.any() else 0
+            g.step(seat, a)
+            st["steps"] += 1
+            st["decisions"] += 1
+        rounds += 1
+        if rounds > 10 * max_steps:
+            break
+
+    records: List[Dict[str, Any]] = []
+    metas = []
+    illegal = truncated = decisions_total = 0
+    by_game: Dict[int, List[Dict[str, Any]]] = {}
+    for r in policy.records:
+        by_game.setdefault(int(r["game_id"]), []).append(r)
+    for st in states:
+        g = st["game"]
+        recs = by_game.get(int(st["gid"]), [])
+        n_rec = len(recs)
+        rank = int(list(g.placements())[seat]) if g.is_over() else 0
+        if recs and rank:
+            _attach_rank(recs, rank)
+        records.extend(recs)
+        illegal += int(st["illegal"])
+        truncated += int(st["truncated"])
+        decisions_total += int(st["decisions"])
+        metas.append({"game_id": st["gid"], "seed": int(cfg.seed) + st["gi"],
+                      "steps": int(st["steps"]), "decisions": int(st["decisions"]),
+                      "truncated": int(st["truncated"]), "records": int(n_rec),
+                      "rank": rank, "illegal_actions": int(st["illegal"])})
+    meta = {"mode": "lockstep", "games": n, "pool_games": n,
+            "rounds": int(rounds), "decisions": int(decisions_total),
+            "records": int(len(records)), "illegal_actions": int(illegal),
+            "truncated_games": int(truncated),
+            "games_meta": metas, "forced_end_turns": int(policy.forced_actions)}
+    return records, meta

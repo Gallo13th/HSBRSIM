@@ -261,6 +261,8 @@ class CollectConfig:
     max_actions_per_turn: int = 40
     #: worker 侧采样（L2）：sims=0 + behavior=net 时跳过 245 维 prior 回传。
     fast_act: bool = True
+    #: lock-step 批量 actor：每 worker 内 N 局同步推进（每轮一次批量前向）。
+    lockstep: bool = False
 
 
 @dataclass
@@ -1070,63 +1072,34 @@ class PPOSelfPlayPolicy(Policy):
                 and hasattr(self.eval_fn, "act")
                 and float(self.config.temperature) > 0.0)
 
-    def decide(self, game: Any, seat: int) -> Decision:
+    def _observe(self, game: Any, seat: int):
+        """取观测与合法动作掩码（与 decide 一致）。"""
+        f, c = obs_arrays(game.observe(int(seat)))
+        mask = mask_from_bytes(game.legal_mask(int(seat)))
+        return f, c, mask
+
+    def _finish(self, game: Any, seat: int, f: Any, c: Any, mask: Any, *,
+                action: int, logprob: float, value: float,
+                target_pi: Optional[np.ndarray], out_pi: Optional[np.ndarray]) -> Decision:
+        """收尾：回合守卫 → 写 record → 构造 Decision（decide/decide_batch 共用）。"""
         seat = int(seat)
-        f, c = obs_arrays(game.observe(seat))
-        mask = mask_from_bytes(game.legal_mask(seat))
-        fast = self._can_fast_act()
-        preset = None
-        if fast:
-            # worker 侧采样：省掉 prior 回传 + 调用方 numpy softmax/采样
-            seed = int(self._rng.integers(0, 2 ** 63 - 1))
-            a, lp, value = self.eval_fn.act(f, c, mask,
-                                            float(self.config.temperature), seed)
-            preset = (int(a), float(lp))
-            p_net = target_pi = None
-        else:
-            logits, value = self._net_predict(f, c, mask, seat)
-            p_net = masked_probs_np(logits, mask, float(self.config.temperature))
-            target_pi = self._run_search(game, seat, mask)
-
-        behavior = str(self.config.behavior).strip().lower()
-        if behavior == "net" or target_pi is None:
-            mu = p_net
-        elif behavior == "mcts":
-            mu = target_pi
-        else:  # mixed: (1-eps)*π_MCTS + eps*π_net
-            eps = float(np.clip(self.config.pi_epsilon, 0.0, 1.0))
-            mu = masked_normalize((1.0 - eps) * target_pi + eps * p_net, mask)
-
-        # 单回合决策数守卫：未训练网络可能陷入 Play/Cancel 循环；强制 EndTurn
         turn = int(getattr(game, "turn", -1))
         limit = int(getattr(self.config, "max_actions_per_turn", 0) or 0)
-        key = (seat, turn)
+        # 守卫计数必须按「局」隔离：lock-step 下同一个 policy 服务多局
+        key = (int(self.game_id), seat, turn)
         n_turn = self._turn_counts.get(key, 0) + 1
         self._turn_counts[key] = n_turn
         forced = bool(limit > 0 and n_turn > limit and bool(mask[0]))
 
         legal = np.flatnonzero(mask)
         if legal.size == 0:
-            action = 0
-            logprob = 0.0
+            action, logprob = 0, 0.0
         elif forced:
             # 守卫动作是**环境确定性约束**（delta 在 EndTurn 上），不是行为分布采样。
             # 记录 logprob=0 且 forced=True；PPO 的策略/aux loss 会排除这些样本，
             # 只保留 value/critic/回报链，避免伪造 on-policy ratio。
-            action = 0
-            logprob = 0.0
+            action, logprob = 0, 0.0
             self.forced_actions += 1
-        elif preset is not None:
-            action, logprob = preset
-        else:
-            mu64 = np.maximum(np.asarray(mu, dtype=np.float64), 0.0)
-            s = float(mu64.sum())
-            mu64 = (mu64 / s) if s > 0 else (mask.astype(np.float64) / float(legal.size))
-            action = int(self._rng.choice(N_ACTIONS, p=mu64))
-            if not bool(mask[action]):  # 数值兜底：只在合法动作上取 max
-                action = int(legal[int(np.argmax(mu64[legal]))])
-            logprob = float(math.log(max(float(mu64[action]), LOGPROB_FLOOR)))
-
         self.records.append({
             "features": (f.astype(np.float32, copy=True)
                          if self.norm_mean is None else np.asarray(
@@ -1139,17 +1112,90 @@ class PPOSelfPlayPolicy(Policy):
             "old_logprob": float(logprob),
             "value": float(value),
             "target_pi": None if target_pi is None else target_pi.astype(np.float32),
-            "seat": int(seat),
-            "turn": int(turn),
+            "seat": seat,
+            "turn": turn,
             "game_id": int(self.game_id),
             "forced": bool(forced),
         })
-        out_pi = target_pi if target_pi is not None else (
-            mu if preset is None else mask.astype(np.float32) / max(float(mask.sum()), 1.0))
+        if out_pi is None:
+            out_pi = (target_pi if target_pi is not None
+                      else mask.astype(np.float32) / max(float(mask.sum()), 1.0))
         return Decision(int(action), np.asarray(out_pi, dtype=np.float32),
                         {"search": target_pi is not None, "policy": self.name,
                          "logprob": float(logprob), "value": float(value),
                          "forced": bool(forced)})
+
+    def decide(self, game: Any, seat: int) -> Decision:
+        seat = int(seat)
+        f, c, mask = self._observe(game, seat)
+        if self._can_fast_act():
+            # worker 侧采样：省掉 prior 回传 + 调用方 numpy softmax/采样
+            seed = int(self._rng.integers(0, 2 ** 63 - 1))
+            a, lp, value = self.eval_fn.act(f, c, mask,
+                                            float(self.config.temperature), seed)
+            return self._finish(game, seat, f, c, mask, action=int(a), logprob=float(lp),
+                                value=float(value), target_pi=None, out_pi=None)
+
+        logits, value = self._net_predict(f, c, mask, seat)
+        p_net = masked_probs_np(logits, mask, float(self.config.temperature))
+        target_pi = self._run_search(game, seat, mask)
+        behavior = str(self.config.behavior).strip().lower()
+        if behavior == "net" or target_pi is None:
+            mu = p_net
+        elif behavior == "mcts":
+            mu = target_pi
+        else:  # mixed: (1-eps)*π_MCTS + eps*π_net
+            eps = float(np.clip(self.config.pi_epsilon, 0.0, 1.0))
+            mu = masked_normalize((1.0 - eps) * target_pi + eps * p_net, mask)
+        legal = np.flatnonzero(mask)
+        if legal.size == 0:
+            action, logprob = 0, 0.0
+        else:
+            mu64 = np.maximum(np.asarray(mu, dtype=np.float64), 0.0)
+            s = float(mu64.sum())
+            mu64 = (mu64 / s) if s > 0 else (mask.astype(np.float64) / float(legal.size))
+            action = int(self._rng.choice(N_ACTIONS, p=mu64))
+            if not bool(mask[action]):  # 数值兜底：只在合法动作上取 max
+                action = int(legal[int(np.argmax(mu64[legal]))])
+            logprob = float(math.log(max(float(mu64[action]), LOGPROB_FLOOR)))
+        return self._finish(game, seat, f, c, mask, action=action, logprob=logprob,
+                            value=float(value), target_pi=target_pi, out_pi=mu)
+
+    def decide_batch(self, pairs: Sequence[Any]) -> List[Decision]:
+        """lock-step：对若干 ``(game, seat)`` 一次批量前向，再逐个收尾。"""
+        items = []
+        for it in pairs:
+            if len(it) == 3:
+                items.append((it[0], int(it[1]), int(it[2])))
+            else:
+                items.append((it[0], int(it[1]), None))
+        out: List[Decision] = []
+        if not items:
+            return out
+        if not (self._can_fast_act() and hasattr(self.eval_fn, "act_batch")):
+            res = []
+            for g, s, gid in items:
+                if gid is not None:
+                    self.game_id = int(gid)
+                res.append(self.decide(g, s))
+            return res
+        prepared = []
+        for g, s, gid in items:
+            f, c, mask = self._observe(g, s)
+            prepared.append((g, s, gid, f, c, mask))
+        F = np.stack([p[3] for p in prepared]).astype(np.float32, copy=False)
+        C = np.stack([p[4] for p in prepared]).astype(np.int64, copy=False)
+        M = np.stack([p[5] for p in prepared]).astype(bool, copy=False)
+        seed = int(self._rng.integers(0, 2 ** 63 - 1))
+        acts, lps, vals = self.eval_fn.act_batch(F, C, M,
+                                                 float(self.config.temperature), seed)
+        for i, (g, s, gid, f, c, mask) in enumerate(prepared):
+            if gid is not None:
+                self.game_id = int(gid)
+            out.append(self._finish(g, s, f, c, mask, action=int(acts[i]),
+                                    logprob=float(lps[i]), value=float(vals[i]),
+                                    target_pi=None, out_pi=None))
+        return out
 
 
 def _attach_rank(records: List[Dict[str, Any]], rank: int) -> None:

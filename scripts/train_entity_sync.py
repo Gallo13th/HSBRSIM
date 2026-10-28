@@ -86,6 +86,8 @@ def main() -> int:
                     help="梯度裁剪范数（论文 1.0）")
     ap.add_argument("--grad-accum", type=int, default=1,
                     help="梯度累积步数：有效 minibatch = minibatch * grad_accum（论文 8192）")
+    ap.add_argument("--lockstep", type=int, default=0,
+                    help="1=lock-step 批量 actor（每 worker 内多局同步推进）")
     ap.add_argument("--fast-act", type=int, default=1,
                     help="1=worker 侧采样（省 245 维 prior 回传）；0=旧路径（A/B 用）")
     ap.add_argument("--amp", default="off", choices=["off", "bf16"],
@@ -367,7 +369,8 @@ def main() -> int:
             games=int(args.games), seed=int(args.seed) + idx * 1000,
             opponent=str(args.opponent), behavior=str(args.behavior),
             max_actions_per_turn=int(args.max_actions_per_turn),
-            max_steps=int(args.max_steps), fast_act=bool(int(args.fast_act)))
+            max_steps=int(args.max_steps), fast_act=bool(int(args.fast_act)),
+            lockstep=bool(int(args.lockstep)))
         t_c = time.time()
         if pool is not None:
             batch, collect_meta = pool.collect(
