@@ -105,6 +105,32 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
             return
         search_fn = az_search
 
+    weights_version = int(payload.get("checkpoint_version", 0))
+    weights_path = str(payload["checkpoint"])
+
+    def _maybe_reload(version: Any, path: Any) -> None:
+        """按版本号懒加载权重（流水线用；不经过结果队列，避免与 collect 抢消息）。"""
+        nonlocal model, norm_mean, norm_std, weights_version, weights_path
+        if version is None:
+            return
+        v = int(version)
+        p = str(path or weights_path)
+        if v == weights_version and p == weights_path:
+            return
+        payload_ckpt = torch.load(p, map_location=device, weights_only=True)
+        model.load_state_dict(payload_ckpt["state_dict"])
+        model.to(torch.device(device))
+        model.eval()
+        server.evaluator.model = model
+        if "norm_mean" in payload_ckpt:
+            norm_mean = np.asarray(payload_ckpt["norm_mean"], dtype=np.float32)
+            server.evaluator.mean = norm_mean
+        if "norm_std" in payload_ckpt:
+            norm_std = np.asarray(payload_ckpt["norm_std"], dtype=np.float32)
+            server.evaluator.std = norm_std
+        weights_version, weights_path = v, p
+        _report({"type": "weights_loaded", "version": v, "path": p})
+
     _report({"type": "ready", "pid": os.getpid(), "arch": meta.get("arch"),
              "params": int(sum(p.numel() for p in model.parameters())),
              "cuda": cuda, "device": device})
@@ -145,6 +171,13 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
             continue
 
         # ---- collect ----
+        try:
+            _maybe_reload(task.get("weights_version"), task.get("weights_path"))
+        except BaseException as exc:  # noqa: BLE001
+            _report({"type": "collect_error", "task_id": task_id,
+                     "error": f"weights reload failed: {exc!r}",
+                     "traceback": traceback.format_exc(), "seconds": 0.0})
+            continue
         _t_start = time.monotonic()
         t0 = time.time()
         try:
@@ -342,7 +375,9 @@ class ProcessActorPool:
                 return_records: bool = True, timeout: float = 3600.0,
                 progress: bool = False,
                 seed: Optional[int] = None,
-                gamma: float = 1.0, lam: float = 0.95) -> Tuple[PPOBatch, Dict[str, Any]]:
+                gamma: float = 1.0, lam: float = 0.95,
+                weights_version: Optional[int] = None,
+                weights_path: Optional[str] = None) -> Tuple[PPOBatch, Dict[str, Any]]:
         n = max(1, int(games))
         per = (n + self.processes - 1) // self.processes
         shards: List[Dict[str, Any]] = []
@@ -363,6 +398,7 @@ class ProcessActorPool:
                 "seed": seed_i, "threads": self.threads,
                 "return_records": bool(return_records),
                 "tmpdir": self.tmpdir, "gamma": float(gamma), "lam": float(lam),
+                "weights_version": weights_version, "weights_path": weights_path,
                 "cfg": {**asdict(cfg), "games": gcount,
                         "seed": seed_i, "game_id_offset": g0},
             }
@@ -503,6 +539,7 @@ class ProcessActorPool:
             "forward_s": forward_s,
             "batch_wait_s": batch_wait_s,
             "restarts": self.restarts,
+            "policy_version": weights_version,
             "workers": profiles,
             "worker_meta": to_jsonable(metas),
             "elapsed_s": wall,

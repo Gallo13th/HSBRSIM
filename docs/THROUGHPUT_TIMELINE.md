@@ -61,6 +61,38 @@
 - 于是 `max(4.3, 3.29) + 0.3 ≈ 4.6 s/iter`，≈ **6,700 dec/s**（比现状 4.3×），30M ≈ **1h15m**；
 - 此时限速步重新变成**采集**（4.3 s），要再快就得上 Rust 批式回调（`docs/ACTOR_RUST_OPTIONS.md` 方案 B）。
 
+## 3.5 实测：S1（jsonl）与 S2（double-buffer）已落地
+
+实现：`history.jsonl` 追加写（`hsbg/az/train/runlog.py`，单条 ~43 KB、O(1)，并把从不使用的
+`worker_meta`/`games_meta` 剪掉）+ `--pipeline 1` 双缓冲；权重改成**版本化文件**
+（`_weights/w_XXXXXX.pt`，worker 在任务开始时按 `weights_version` 懒加载），因此不经过结果队列、
+不会与 collect 抢消息，且**每批数据的策略版本被钉死**。
+
+2×2 实测（entity 14.8M、sims=0、8 进程 × 16 线程、192 games/iter、40 iteration、同 seed 1500）：
+
+| 配置 | dec/s | iter_s | p90 | collect_s | ppo_s |
+|---|---:|---:|---:|---:|---:|
+| 串行（learner 与 actor 同卡） | 2,143 | 14.82 | 15.64 | 6.02 | 8.50 |
+| 流水线（同卡） | 2,552 | 11.24 | 17.13 | 8.57（+42%） | 10.80（+27%） |
+| 串行（learner 独占 GPU0，actor 5,6,7） | 2,148 | 14.52 | 15.44 | 5.90 | 8.45 |
+| **流水线 + learner 独占（推荐）** | **3,100** | **9.21** | **13.52** | 6.72 | 8.87 |
+
+三点结论：
+
+1. **流水线本身有效**：同卡 2,143 → 2,552（+19%），隔离后 → **3,100（+44%）**；
+2. **必须隔离 learner 的卡**：同卡时 collect +42%、PPO +27%（GPU 与 CPU 互抢），
+   只抵消出 19% 的收益；隔离后 step ≈ ppo_s + 0.34 s，几乎只剩 PPO；
+3. **PPO 重新成为限速步**（8.87 s ≫ collect 6.72 s）→ 下一步要快只能动 PPO
+   （bf16 2.03×，按你的要求暂缓）或减 epoch/样本。
+
+学习信号（同一批 40 iteration）：`ratio@epoch起点` 1.00004（串行 0.99994）、
+`pre_ratio`（lag=1 采样均值）0.99950、approx KL 0.00072（串行 0.00024）、entropy 与
+value loss 轨迹一致 → 滞后带来的越策略程度**可忽略**（lr 6e-6 下单次更新极小）。
+
+脚本会在这两种情况下打印告警：`--pipeline 1` 但 learner 卡在 `--gpus` 里；
+`--pipeline 1` 但 `--processes=1`（退回串行）。`scripts/train_stage1.sh` 默认
+`PIPELINE=1` 并**自动把 learner 卡从 actor 列表里剔除**。
+
 ## 4. 让流水线「可靠」的契约（S2/S3 必做）
 
 1. **版本钉死**：每个 batch 记录 `policy_version`；worker 在整轮采集期间不得换权重（现在是每轮 reload，
@@ -77,7 +109,7 @@
 
 | 项目 | 门槛 |
 |---|---|
-| 端到端 dec/s | S2 ≥ 4,000；S3 ≥ 6,000（分母=训练 wall-clock） |
+| 端到端 dec/s | S2 已实测 3,100（同卡 2,552）；S3（+bf16）目标 ≥ 5,500 |
 | `ratio_mean`（epoch 起点） | 0.85–1.15 |
 | `clip_frac` | < 0.35 |
 | 2M 同 seed 对照 | KL/entropy/value loss 曲线与串行版同带；C0（512 局未见面板）配对 Δ 的 CI 覆盖 0 或更好 |

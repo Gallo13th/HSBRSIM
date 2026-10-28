@@ -27,12 +27,15 @@ INIT=""
 OUT="runs/stage1"
 SMOKE="0"
 BC_SAMPLES="500000"
+PIPELINE="${PIPELINE:-1}"      # 1=double-buffer 流水线（实测 +44%）；0=串行
+LEARNER_GPU="${LEARNER_GPU:-0}"
 EXTRA=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --smoke) SMOKE=1; shift ;;
     --gpus) GPUS="$2"; shift 2 ;;
+    --pipeline) PIPELINE="$2"; shift 2 ;;
     --processes) PROCESSES="$2"; shift 2 ;;
     --threads) THREADS="$2"; shift 2 ;;
     --decisions) DECISIONS="$2"; shift 2 ;;
@@ -98,11 +101,28 @@ esac
 ITER=$(python3 -c "import math;print(max(1, math.ceil($TARGET / ($GAMES * 155))))")
 say "预算 ${TARGET} decisions ≈ ${ITER} iterations（每 iter ${GAMES} 局）"
 
+# 流水线：actor 不能与 learner 同卡（实测同卡会互相拖慢），自动从 --gpus 里剔除 learner 卡
+ACTOR_GPUS="$GPUS"
+if [ "$PIPELINE" = "1" ]; then
+  ACTOR_GPUS=$(python3 - "$GPUS" "$LEARNER_GPU" <<'PY'
+import sys
+gpus = [g.strip() for g in sys.argv[1].split(",") if g.strip()]
+learner = sys.argv[2].strip()
+rest = [g for g in gpus if g != learner]
+print(",".join(rest) if rest else ",".join(gpus))
+PY
+)
+  if [ "$ACTOR_GPUS" = "$GPUS" ]; then
+    say "警告：只有一张卡，actor 与 learner 必须共用（流水线收益会打折）"
+  fi
+fi
+
 # ---- 4) 训练 ---------------------------------------------------------------
-say "开始阶段训练：entity 14.8M / sims=0 / KL anchor / bf16 关闭 / 8×2 进程"
+say "开始阶段训练：entity 14.8M / sims=0 / KL anchor / 流水线=${PIPELINE} / actor GPU=${ACTOR_GPUS} / learner GPU=${LEARNER_GPU}"
 "$PY" scripts/train_entity_sync.py \
-  --checkpoint "$INIT" --arch entity --device cuda:0 \
-  --processes "$PROCESSES" --gpus "$GPUS" --threads "$THREADS" --games "$GAMES" \
+  --checkpoint "$INIT" --arch entity --device "cuda:${LEARNER_GPU}" \
+  --processes "$PROCESSES" --gpus "$ACTOR_GPUS" --threads "$THREADS" --games "$GAMES" \
+  --pipeline "$PIPELINE" \
   --sims 0 --determinizations 1 --opponent bot --behavior net \
   --epochs 1 --minibatch 1024 --grad-accum 8 \
   --lr 6e-6 --lr-min-ratio 0.833 --max-updates "$ITER" \

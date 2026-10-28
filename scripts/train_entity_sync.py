@@ -1,25 +1,34 @@
 #!/usr/bin/env python3
-"""Entity 同步 PPO 基线（单进程、持久 Adam/LR/RNG）。
+"""Entity PPO 训练入口（持久 trainer + 进程级 actor pool + 可选 double-buffer 流水线）。
 
-与 `train_az_ppo.py` 的区别：
-- 默认 `arch=entity`（14.8M）；
-- 同一个进程跨 iteration 保留 model / Adam / LambdaLR / numpy RNG；
-- 同时原子保存 `model.pt`（给评测）与 `trainer.pt`（优化器/调度器/RNG）；
-- 支持 `--trainer-state` 精确续训；不再每轮重建 Adam。
+三条执行模式：
 
-仍使用当前串行采集（P0 第 2 轮）；批量叶/并发 actor 在 P0 第 3 轮。
+1. **串行**（默认）：collect → update → 快照/日志，语义最简单；
+2. **流水线**（`--pipeline 1`，需要 `--processes > 1`）：`collect(B_{k+1})` 与 `update(B_k)`
+   并行；actor 用**版本化权重文件**（任务开始时按 `weights_version` 懒加载），因此一批数据
+   始终由同一个版本采集 → 滞后恒为 1，可断言；
+3. 多线程采集（`--workers > 1 --processes 1`）：老路径，保留兼容。
+
+日志：`history.jsonl`（逐 iteration 追加，O(1)；不再全量重写 `history.json`），
+`summary.json` 只存聚合信息；`--trainer-state` 可精确续训。
+
+超参照 `docs/MULTISTAGE_TRAINING.md` §12（AutoTavern 论文 Table 7 对齐）：
+sims=0 / clip 0.2 / target KL 0.05 / λ=0.995 / entropy 0.002 / grad-clip 1.0 /
+lr 6e-6→5e-6 / 有效 minibatch = minibatch × grad_accum（8192）/ KL anchor β=0.1 前 100 iter。
 """
 
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import shutil
 import subprocess
 import sys
 import time
-from typing import Any, Dict, Optional
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -33,12 +42,17 @@ from hsbg.az.train.ppo import (  # noqa: E402
     PPOConfig,
     PPOEvaluator,
     collect_ppo_batch,
+    forward_model,
+    masked_log_softmax_torch,
+    split_model_outputs,
     torch_available,
 )
 from hsbg.az.train.ppo_trainer import PPOTrainer  # noqa: E402
 from hsbg.az.train.batch_eval import BatchLeafServer, BatchPPOEvaluator  # noqa: E402
 from hsbg.az.train.parallel_collect import collect_ppo_batch_parallel  # noqa: E402
 from hsbg.az.train.process_pool import ProcessActorPool  # noqa: E402
+from hsbg.az.train.runlog import (append_record, read_run, slim_collect,  # noqa: E402
+                                  write_header, write_summary)
 
 
 def _atomic_torch_save(obj: Any, path: str) -> None:
@@ -50,7 +64,7 @@ def _atomic_torch_save(obj: Any, path: str) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Entity 同步 PPO 基线（持久 trainer）")
+    ap = argparse.ArgumentParser(description="Entity PPO（持久 trainer + 进程 pool + 流水线）")
     ap.add_argument("--minutes", type=float, default=30.0)
     ap.add_argument("--iterations", type=int, default=0)
     ap.add_argument("--games", type=int, default=4)
@@ -78,14 +92,20 @@ def main() -> int:
     ap.add_argument("--max-steps", type=int, default=20000)
     ap.add_argument("--log-every", type=int, default=10)
     ap.add_argument("--workers", type=int, default=1,
-                    help=">1 时使用并行采集 + 共享批量叶 server")
+                    help=">1 时使用并行采集 + 共享批量叶 server（非 pool 路径）")
     ap.add_argument("--batch-size", type=int, default=64)
     ap.add_argument("--processes", type=int, default=1,
-                    help=">1 时用进程级 actor pool（每进程绑定一张 GPU，同步模式）")
+                    help=">1 时用进程级 actor pool（每进程绑定一张 GPU）")
     ap.add_argument("--gpus", default="",
                     help="actor pool 使用的物理 GPU 序号，如 0,5,6,7（不要设 CUDA_VISIBLE_DEVICES）")
     ap.add_argument("--threads", type=int, default=16,
                     help="每个 actor 进程内的采集线程数（每轮 games 应 >= processes*threads）")
+    ap.add_argument("--pipeline", type=int, default=0,
+                    help="1=double-buffer：collect(k+1) 与 update(k) 并行（需 --processes>1）")
+    ap.add_argument("--pipeline-guard", default="warn", choices=["warn", "abort"],
+                    help="流水线的 ratio 守卫触发时：warn 只记录，abort 立即保存并退出")
+    ap.add_argument("--keep-versions", type=int, default=3,
+                    help="保留几个历史权重文件（流水线用；每个 61 MB）")
     ap.add_argument("--snapshot-every", type=int, default=1,
                     help="每 N 个 iteration 落一次快照（进程 actor 下建议 5）")
     ap.add_argument("--keep-snapshots", type=int, default=3,
@@ -137,7 +157,6 @@ def main() -> int:
         norm_mean, norm_std = meta.get("norm_mean"), meta.get("norm_std")
         print(f"[net] checkpoint={args.checkpoint} arch={arch}", flush=True)
     elif args.trainer_state and os.path.isfile(args.trainer_state):
-        # 只能先有同结构模型再 load_state；trainer state 内含 model state
         model = build_net(arch=args.arch)
         meta = {"arch": args.arch}
         arch = args.arch
@@ -168,13 +187,17 @@ def main() -> int:
         trainer = PPOTrainer(model, p_cfg, lr_min_ratio=float(args.lr_min_ratio),
                              max_updates=int(args.max_updates))
 
-    history = []
-    history_path = os.path.join(args.out, "history.json")
-    if args.trainer_state and os.path.isfile(history_path):
-        try:
-            history = json.load(open(history_path, encoding="utf-8")).get("history", [])
-        except Exception:
-            history = []
+    # ---- 日志：history.jsonl 追加（兼容旧 history.json）----
+    history: List[Dict[str, Any]] = []
+    history_path = os.path.join(args.out, "history.jsonl")
+    legacy_history = os.path.join(args.out, "history.json")
+    if args.trainer_state:
+        if os.path.isfile(history_path):
+            _, history = read_run(history_path)
+        elif os.path.isfile(legacy_history):
+            _, history = read_run(legacy_history)
+    write_header(history_path, {k: v for k, v in vars(args).items()})
+
     if trainer.extra.get("norm_mean") is not None:
         norm_mean = np.asarray(trainer.extra["norm_mean"], dtype=np.float32)
     if trainer.extra.get("norm_std") is not None:
@@ -262,6 +285,7 @@ def main() -> int:
                                   seed=int(args.seed))
         search_fn = az_search
 
+    # ---- actor pool / 单进程采集 ----
     pool: Optional[ProcessActorPool] = None
     pool_ckpt = os.path.join(args.out, "_pool_weights.pt")
     if int(args.processes) > 1:
@@ -292,6 +316,95 @@ def main() -> int:
     elif pool is None:
         evaluator = PPOEvaluator(model, device=args.device,
                                  norm_mean=norm_mean, norm_std=norm_std)
+
+    # ---- 权重版本文件（流水线：worker 在任务开始时按版本懒加载）----
+    weights_dir = os.path.join(args.out, "_weights")
+    os.makedirs(weights_dir, exist_ok=True)
+    published: Dict[str, Any] = {"version": None, "path": None, "history": {}}
+
+    def _publish_weights(version: int) -> str:
+        path = os.path.join(weights_dir, f"w_{int(version):06d}.pt")
+        tmp = path + ".tmp"
+        save_checkpoint(model, tmp, meta={**meta, "arch": arch},
+                        norm_mean=norm_mean, norm_std=norm_std)
+        os.replace(tmp, path)
+        published["version"], published["path"] = int(version), path
+        keep = max(2, int(args.keep_versions))
+        olds = sorted(glob.glob(os.path.join(weights_dir, "w_*.pt")))
+        for old in olds[:-keep]:
+            try:
+                os.remove(old)
+            except OSError:
+                pass
+        return path
+
+    if pool is not None:
+        _publish_weights(int(trainer.updates))
+
+    pipeline_on = bool(int(args.pipeline)) and pool is not None
+    if int(args.pipeline) and pool is None:
+        print("[warn] --pipeline 需要 --processes>1，已退回串行", flush=True)
+    if pipeline_on:
+        # 实测：learner 与 actor 共用一张卡时两者互相拖慢（collect +42%、PPO +27%），
+        # 流水线整体只快 19%；把 learner 放到独立卡可到 +44%。
+        learner_idx = None
+        if str(args.device).startswith("cuda"):
+            learner_idx = int(str(args.device).split(":")[1]) if ":" in str(args.device) else 0
+        actor_gpus = [int(x) for x in str(args.gpus).split(",") if x.strip()]
+        if learner_idx is not None and learner_idx in actor_gpus:
+            suggest = ",".join(str(g) for g in actor_gpus if g != learner_idx) or "（无其它卡）"
+            print(f"[warn] 流水线开启但 learner 与 actor 共用 GPU{learner_idx}："
+                  f"实测会互抢（2,552 vs 隔离后 3,100 dec/s）。"
+                  f"建议 --gpus {suggest} 或 --device cuda:<空闲卡>。", flush=True)
+
+    def _collect_for(idx: int, wv: Optional[int] = None,
+                     wp: Optional[str] = None) -> Tuple[Any, Dict[str, Any], CollectConfig, float]:
+        c_cfg = CollectConfig(
+            games=int(args.games), seed=int(args.seed) + idx * 1000,
+            opponent=str(args.opponent), behavior=str(args.behavior),
+            max_actions_per_turn=int(args.max_actions_per_turn),
+            max_steps=int(args.max_steps))
+        t_c = time.time()
+        if pool is not None:
+            batch, collect_meta = pool.collect(
+                c_cfg, int(args.games), return_records=True, progress=not pipeline_on,
+                seed=int(c_cfg.seed), gamma=1.0, lam=float(args.lam),
+                weights_version=(published["version"] if wv is None else wv),
+                weights_path=(published["path"] if wp is None else wp))
+        elif args.workers > 1:
+            batch, collect_meta = collect_ppo_batch_parallel(
+                model, c_cfg, workers=int(args.workers),
+                search_fn=search_fn, search_config=search_cfg,
+                eval_fn=evaluator, device=str(args.device),
+                seed=int(args.seed) + idx * 1000, gamma=1.0, lam=float(args.lam),
+                norm_mean=norm_mean, norm_std=norm_std, progress=True)
+        else:
+            batch, collect_meta = collect_ppo_batch(
+                model, c_cfg, search_fn=search_fn, search_config=search_cfg,
+                eval_fn=evaluator, device=str(args.device),
+                seed=int(args.seed) + idx * 1000, gamma=1.0, lam=float(args.lam),
+                norm_mean=norm_mean, norm_std=norm_std, progress=True)
+        return batch, collect_meta, c_cfg, time.time() - t_c
+
+    def _pre_ratio(batch: Any, n: int = 2048) -> float:
+        """用当前参数对 batch 抽样算 mean ratio（流水线的越策略守卫）。"""
+        total = len(batch.actions)
+        idx = np.arange(total)
+        if total > n:
+            idx = np.random.default_rng(0).choice(total, size=n, replace=False)
+        dev = torch.device(args.device)
+        x = torch.from_numpy(np.ascontiguousarray(batch.features[idx])).to(dev)
+        c = torch.from_numpy(np.ascontiguousarray(batch.cards[idx].astype(np.int64))).to(dev)
+        m = torch.from_numpy(np.ascontiguousarray(batch.masks[idx].astype(bool))).to(dev)
+        a = torch.from_numpy(np.ascontiguousarray(batch.actions[idx].astype(np.int64))).to(dev)
+        old = torch.from_numpy(
+            np.ascontiguousarray(batch.old_logprobs[idx].astype(np.float32))).to(dev)
+        with torch.no_grad():
+            logits, _r, _s = split_model_outputs(forward_model(model, x, c, m))
+            logp = masked_log_softmax_torch(logits, m).gather(1, a.unsqueeze(1)).squeeze(1)
+            ratio = torch.exp(logp - old)
+        return float(ratio.mean())
+
     t0 = time.time()
     deadline = t0 + float(args.minutes) * 60.0
     cum_decisions = 0
@@ -300,133 +413,164 @@ def main() -> int:
     i = int(start_i)
     end_i = (int(start_i) + int(args.iterations)) if int(args.iterations) > 0 else 0
     last_len = 0.0
-    while time.time() < deadline:
-        if end_i > 0 and i >= end_i:
-            break
-        if last_len > 0 and (deadline - time.time()) < max(60.0, last_len):
-            print("[loop] remaining time < last iteration; stop", flush=True)
-            break
-        _reload_s = 0.0
-        _collect_s = 0.0
-        _history_s_prev = locals().get("_history_s", 0.0)
-        c_cfg = CollectConfig(
-            games=int(args.games), seed=int(args.seed) + i * 1000,
-            opponent=str(args.opponent), behavior=str(args.behavior),
-            max_actions_per_turn=int(args.max_actions_per_turn),
-            max_steps=int(args.max_steps))
-        iter_start = time.time()
-        _tl = {"t_iter_start": time.monotonic()}
-        if pool is not None:
-            # 同步模式：先把最新权重推到每个 actor 进程（不重建进程）
-            _t0 = time.time()
-            save_checkpoint(model, pool_ckpt, meta={**meta, "arch": arch},
-                            norm_mean=norm_mean, norm_std=norm_std)
-            pool.reload_weights(pool_ckpt, updates=int(trainer.updates))
-            _reload_s = time.time() - _t0
-            _tl["t_reload_done"] = time.monotonic()
-            _t1 = time.time()
-            batch, collect_meta = pool.collect(
-                c_cfg, int(args.games), return_records=True, progress=True,
-                seed=int(c_cfg.seed), gamma=1.0, lam=float(args.lam))
-            _collect_s = time.time() - _t1
-            _tl["t_collect_done"] = time.monotonic()
-        elif args.workers > 1:
-            batch, collect_meta = collect_ppo_batch_parallel(
-                model, c_cfg, workers=int(args.workers),
-                search_fn=search_fn, search_config=search_cfg,
-                eval_fn=evaluator, device=str(args.device),
-                seed=int(args.seed) + i * 1000, gamma=1.0, lam=float(args.lam),
-                norm_mean=norm_mean, norm_std=norm_std, progress=True)
-        else:
-            batch, collect_meta = collect_ppo_batch(
-                model, c_cfg, search_fn=search_fn, search_config=search_cfg,
-                eval_fn=evaluator, device=str(args.device),
-                seed=int(args.seed) + i * 1000, gamma=1.0, lam=float(args.lam),
-                norm_mean=norm_mean, norm_std=norm_std, progress=True)
-        errs = batch.validate()
-        if errs:
-            print(f"[error] batch invalid: {errs}", file=sys.stderr)
-            return 3
-        # KL anchor 只在前 --anchor-iterations 个 iteration 生效（论文：前 100/300）
-        trainer.config.anchor_coef = (float(args.anchor_beta)
-                                      if i < int(args.anchor_iterations) else 0.0)
-        _t_ppo = time.time()
-        _tl["t_ppo_start"] = time.monotonic()
-        stats = trainer.update(batch)
-        _ppo_s = time.time() - _t_ppo
-        _tl["t_ppo_done"] = time.monotonic()
-        rec = {"iter": i, "collect": collect_meta, "ppo": stats,
-               "profile": {"reload_s": round(_reload_s, 3),
-                           "collect_s": round(_collect_s, 3),
-                           "ppo_s": round(_ppo_s, 3),
-                           "build_batch_s": round(float(collect_meta.get("build_batch_s", 0.0)), 3),
-                           "parent_read_s": round(float(collect_meta.get("parent_read_s", 0.0)), 3),
-                           "records_mb": round(float(collect_meta.get("records_bytes", 0)) / 1e6, 1),
-                           "history_prev_s": round(float(_history_s_prev), 3)},
-               "batch_server": (dict(batch_server.stats) if batch_server is not None else None),
-               "seconds": time.time() - t0}
-        history.append(rec)
-        print(f"[iter {i}] samples={len(batch)} updates={stats['trainer_updates']} "
-              f"lr={stats['lr']:.3g} total={stats['epochs'][-1]['total']:.4f}",
-              flush=True)
-        # 版本化快照：trainer 为权威，model 为导出；manifest 最后原子发布
-        ver = int(trainer.updates)
-        do_snap = (int(args.snapshot_every) <= 1) or ((i % int(args.snapshot_every)) == 0)
-        if do_snap:
-            snap = os.path.join(args.out, "snapshots", f"step_{ver:06d}")
-            os.makedirs(snap, exist_ok=True)
-            trainer.save(os.path.join(snap, "trainer.pt"))
-            ckpt = os.path.join(snap, "model.pt")
-            tmp_ckpt = ckpt + ".tmp"
-            save_checkpoint(model, tmp_ckpt,
-                            meta={**meta, "arch": arch, "trainer_updates": ver},
-                            norm_mean=norm_mean, norm_std=norm_std)
-            os.replace(tmp_ckpt, ckpt)
-            # 兼容旧路径
-            trainer.save(os.path.join(args.out, "trainer.pt"))
-            ckpt_flat = os.path.join(args.out, "model.pt")
-            save_checkpoint(model, ckpt_flat + ".tmp",
-                            meta={**meta, "arch": arch, "trainer_updates": ver},
-                            norm_mean=norm_mean, norm_std=norm_std)
-            os.replace(ckpt_flat + ".tmp", ckpt_flat)
-            manifest = {"version": ver, "trainer": os.path.join(snap, "trainer.pt"),
-                        "model": os.path.join(snap, "model.pt"),
-                        "arch": arch, "seed": int(args.seed),
-                        "elapsed_s": time.time() - t0,
-                        "history_len": len(history)}
-            with open(os.path.join(args.out, "latest.json.tmp"), "w", encoding="utf-8") as f:
-                json.dump(manifest, f, ensure_ascii=False, indent=2)
-            os.replace(os.path.join(args.out, "latest.json.tmp"),
-                       os.path.join(args.out, "latest.json"))
-            keep = int(args.keep_snapshots)
-            if keep > 0:
-                snap_root = os.path.join(args.out, "snapshots")
-                olds = sorted(d for d in os.listdir(snap_root)
-                              if d.startswith("step_") and os.path.isdir(os.path.join(snap_root, d)))
-                for d in olds[:-keep]:
-                    shutil.rmtree(os.path.join(snap_root, d), ignore_errors=True)
-        _th0 = time.time()
-        with open(history_path, "w", encoding="utf-8") as f:
-            json.dump({"args": vars(args), "history": history,
-                       "elapsed_s": time.time() - t0}, f, ensure_ascii=False, indent=2)
-        _history_s = time.time() - _th0
-        _tl["t_history_done"] = time.monotonic()
-        rec["profile"]["timeline"] = {k: v for k, v in _tl.items()}
-        rec["profile"]["collect_timeline"] = collect_meta.get("timeline")
-        # 累计 decisions + 周期评测（512 局 C0，暂停采集）
-        cum_decisions += int(collect_meta.get("decisions", 0))
-        if cum_decisions >= next_eval:
-            _run_eval(cum_decisions)
-            while next_eval <= cum_decisions:
-                next_eval += int(args.eval_every_decisions)
-        last_len = time.time() - iter_start
-        i += 1
+    executor = ThreadPoolExecutor(max_workers=1) if pipeline_on else None
+    pending = None
+    if executor is not None:
+        pending = executor.submit(_collect_for, i, published["version"], published["path"])
+        print(f"[pipeline] on：collect(k+1) 与 update(k) 并行；"
+              f"每 batch 版本钉死（lag<=1）；guard={args.pipeline_guard}", flush=True)
 
-    if batch_server is not None:
-        batch_server.close()
-    if pool is not None:
-        pool.close()
-    # 收尾：最后一个 iteration 若不在快照点，也导出最终模型（评测/续训都要用）
+    try:
+        while time.time() < deadline:
+            if end_i > 0 and i >= end_i:
+                break
+            if last_len > 0 and (deadline - time.time()) < max(60.0, last_len):
+                print("[loop] remaining time < last iteration; stop", flush=True)
+                break
+            _history_s_prev = locals().get("_history_s", 0.0)
+            iter_start = time.time()
+            _tl = {"t_iter_start": time.monotonic()}
+            _reload_s = 0.0
+
+            if pending is not None:
+                batch, collect_meta, c_cfg, _collect_s = pending.result()
+                pending = None
+            else:
+                batch, collect_meta, c_cfg, _collect_s = _collect_for(i)
+            _tl["t_collect_done"] = time.monotonic()
+
+            errs = batch.validate()
+            if errs:
+                print(f"[error] batch invalid: {errs}", file=sys.stderr)
+                return 3
+
+            batch_version = int(collect_meta.get("policy_version", -1))
+            if batch_version < 0:  # 非 pool 路径
+                batch_version = int(trainer.updates)
+            lag = int(trainer.updates) - batch_version
+            if lag < 0 or lag > 1:
+                raise RuntimeError(
+                    f"流水线滞后异常：batch_version={batch_version} "
+                    f"trainer_version={trainer.updates} lag={lag}（上限 1）")
+
+            # 先发起下一轮采集（用当前已发布权重），再跑 update —— 这是流水的关键顺序
+            if executor is not None and (end_i <= 0 or i + 1 < end_i) \
+                    and (deadline - time.time()) > 60.0:
+                pending = executor.submit(_collect_for, i + 1,
+                                          published["version"], published["path"])
+
+            pre_ratio = 1.0
+            guard_tripped = False
+            if pipeline_on and lag >= 1:
+                pre_ratio = _pre_ratio(batch)
+                if not (0.8 <= pre_ratio <= 1.25):
+                    guard_tripped = True
+                    print(f"[pipeline] ratio guard tripped: pre_ratio_mean={pre_ratio:.3f} "
+                          f"(lag={lag}); guard={args.pipeline_guard}", flush=True)
+
+            trainer.config.anchor_coef = (float(args.anchor_beta)
+                                          if i < int(args.anchor_iterations) else 0.0)
+            _t_ppo = time.time()
+            _tl["t_ppo_start"] = time.monotonic()
+            stats = trainer.update(batch)
+            _ppo_s = time.time() - _t_ppo
+            _tl["t_ppo_done"] = time.monotonic()
+
+            # 发布新权重（供下一轮 collect 的 *下一次* 使用；lag 恒为 1）
+            if pool is not None:
+                _publish_weights(int(trainer.updates))
+
+            slim = slim_collect(collect_meta)
+            rec = {"iter": i, "collect": slim, "ppo": stats,
+                   "pipeline": {"enabled": pipeline_on, "lag": int(lag),
+                                "batch_version": int(batch_version),
+                                "pre_ratio_mean": round(float(pre_ratio), 4),
+                                "guard_tripped": bool(guard_tripped)},
+                   "profile": {"reload_s": round(_reload_s, 3),
+                               "collect_s": round(_collect_s, 3),
+                               "ppo_s": round(_ppo_s, 3),
+                               "build_batch_s": round(float(slim.get("build_batch_s", 0.0)), 3),
+                               "parent_read_s": round(float(slim.get("parent_read_s", 0.0)), 3),
+                               "records_mb": round(float(slim.get("records_bytes", 0)) / 1e6, 1),
+                               "history_prev_s": round(float(_history_s_prev), 3)},
+                   "batch_server": (dict(batch_server.stats) if batch_server is not None else None),
+                   "seconds": time.time() - t0}
+            history.append(rec)
+            print(f"[iter {i}] samples={len(batch)} updates={stats['trainer_updates']} "
+                  f"lr={stats['lr']:.3g} total={stats['epochs'][-1]['total']:.4f}"
+                  + (f" lag={lag} ratio={pre_ratio:.3f}" if pipeline_on else ""),
+                  flush=True)
+
+            # 版本化快照：trainer 为权威，model 为导出；manifest 最后原子发布
+            ver = int(trainer.updates)
+            do_snap = (int(args.snapshot_every) <= 1) or ((i % int(args.snapshot_every)) == 0)
+            if do_snap:
+                snap = os.path.join(args.out, "snapshots", f"step_{ver:06d}")
+                os.makedirs(snap, exist_ok=True)
+                trainer.save(os.path.join(snap, "trainer.pt"))
+                ckpt = os.path.join(snap, "model.pt")
+                tmp_ckpt = ckpt + ".tmp"
+                save_checkpoint(model, tmp_ckpt,
+                                meta={**meta, "arch": arch, "trainer_updates": ver},
+                                norm_mean=norm_mean, norm_std=norm_std)
+                os.replace(tmp_ckpt, ckpt)
+                trainer.save(os.path.join(args.out, "trainer.pt"))
+                ckpt_flat = os.path.join(args.out, "model.pt")
+                save_checkpoint(model, ckpt_flat + ".tmp",
+                                meta={**meta, "arch": arch, "trainer_updates": ver},
+                                norm_mean=norm_mean, norm_std=norm_std)
+                os.replace(ckpt_flat + ".tmp", ckpt_flat)
+                manifest = {"version": ver, "trainer": os.path.join(snap, "trainer.pt"),
+                            "model": os.path.join(snap, "model.pt"),
+                            "arch": arch, "seed": int(args.seed),
+                            "elapsed_s": time.time() - t0,
+                            "history_len": len(history)}
+                with open(os.path.join(args.out, "latest.json.tmp"), "w",
+                          encoding="utf-8") as f:
+                    json.dump(manifest, f, ensure_ascii=False, indent=2)
+                os.replace(os.path.join(args.out, "latest.json.tmp"),
+                           os.path.join(args.out, "latest.json"))
+                keep = int(args.keep_snapshots)
+                if keep > 0:
+                    snap_root = os.path.join(args.out, "snapshots")
+                    olds = sorted(d for d in os.listdir(snap_root)
+                                  if d.startswith("step_")
+                                  and os.path.isdir(os.path.join(snap_root, d)))
+                    for d in olds[:-keep]:
+                        shutil.rmtree(os.path.join(snap_root, d), ignore_errors=True)
+
+            # history：追加一行（O(1)），不再全量重写
+            _th0 = time.time()
+            _tl["t_history_done"] = time.monotonic()
+            rec["profile"]["timeline"] = dict(_tl)
+            rec["profile"]["collect_timeline"] = slim.get("timeline")
+            append_record(history_path, to_jsonable(rec))
+            _history_s = time.time() - _th0
+
+            cum_decisions += int(slim.get("decisions", 0))
+            if cum_decisions >= next_eval:
+                _run_eval(cum_decisions)
+                while next_eval <= cum_decisions:
+                    next_eval += int(args.eval_every_decisions)
+            last_len = time.time() - iter_start
+            i += 1
+
+            if guard_tripped and str(args.pipeline_guard) == "abort":
+                save_checkpoint(model, os.path.join(args.out, "model.pt"),
+                                meta={**meta, "arch": arch,
+                                      "trainer_updates": int(trainer.updates)},
+                                norm_mean=norm_mean, norm_std=norm_std)
+                print("[pipeline] guard=abort：已保存权重并退出（需要人工检查）", flush=True)
+                return 4
+    finally:
+        if executor is not None:
+            executor.shutdown(wait=True)
+        if batch_server is not None:
+            batch_server.close()
+        if pool is not None:
+            pool.close()
+
+    # 收尾：导出最终模型（评测/续训都要用）
     try:
         save_checkpoint(model, os.path.join(args.out, "model.pt"),
                         meta={**meta, "arch": arch,
@@ -437,9 +581,11 @@ def main() -> int:
         print(f"[warn] final save failed: {exc!r}", flush=True)
     summary = {"iterations": i, "updates": trainer.updates,
                "elapsed_s": time.time() - t0, "config": vars(args),
-               "history": history}
-    with open(os.path.join(args.out, "summary.json"), "w", encoding="utf-8") as f:
-        json.dump(to_jsonable(summary), f, ensure_ascii=False, indent=2)
+               "history_len": len(history), "evals": evals,
+               "pipeline": {"enabled": pipeline_on,
+                            "lag_max_allowed": 1},
+               "last_records": history[-5:]}
+    write_summary(os.path.join(args.out, "summary.json"), to_jsonable(summary))
     print(f"[done] iters={i} updates={trainer.updates} "
           f"elapsed={time.time()-t0:.0f}s -> {args.out}", flush=True)
     return 0

@@ -14,7 +14,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from hsbg.az.train.runlog import read_run  # noqa: E402
 
 
 def _load(path: str, retries: int = 5):
@@ -34,7 +38,13 @@ def main() -> int:
     args = ap.parse_args()
     run = args.run
     ev = _load(os.path.join(run, "eval", "history.json")) or {"evals": []}
-    hist = _load(os.path.join(run, "history.json")) or {"history": []}
+    # 优先读 history.jsonl（新），回退旧 history.json
+    jl = os.path.join(run, "history.jsonl")
+    if os.path.isfile(jl):
+        _hdr, records = read_run(jl)
+        hist = {"history": records}
+    else:
+        hist = _load(os.path.join(run, "history.json")) or {"history": []}
 
     print(f"== {run} ==")
     print("-- 512-game C0 evals (seed_base 420000) --")
