@@ -201,6 +201,8 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
             cfg = CollectConfig(**task["cfg"])
             try:
                 server.evaluator.amp = str(cfg.leaf_amp)
+                if bool(getattr(cfg, "leaf_compile", False)):
+                    server.evaluator.enable_compile()
             except Exception:  # noqa: BLE001
                 pass
             server.reset_stats()

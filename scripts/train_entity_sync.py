@@ -86,8 +86,12 @@ def main() -> int:
                     help="梯度裁剪范数（论文 1.0）")
     ap.add_argument("--grad-accum", type=int, default=1,
                     help="梯度累积步数：有效 minibatch = minibatch * grad_accum（论文 8192）")
+    ap.add_argument("--leaf-compile", type=int, default=0,
+                    help="1=叶前向 torch.compile + TF32（实测 B=64 5.4→0.7 ms）")
     ap.add_argument("--leaf-amp", default="off", choices=["off", "bf16"],
                     help="采集/评测叶前向精度（bf16 实测 collect 约 -5%）")
+    ap.add_argument("--leaf-wait-ms", type=float, default=2.0,
+                    help="批量叶服务器聚批等待（ms）；单客户端建议 0.1")
     ap.add_argument("--rc-threads", type=int, default=8,
                     help="Rust 采集器内部引擎线程数（BatchEnv threads）")
     ap.add_argument("--rust-collector", type=int, default=0,
@@ -315,6 +319,7 @@ def main() -> int:
             sims=int(args.sims), determinizations=int(args.determinizations),
             seed=int(args.seed), threads=int(args.threads),
             batch_size=int(args.batch_size),
+            max_wait_ms=float(args.leaf_wait_ms),
             tmpdir=os.path.join(args.out, "_proc_tmp"))
         print(f"[pool] {json.dumps(pool.describe(), ensure_ascii=False)}", flush=True)
     batch_server = None
@@ -378,7 +383,9 @@ def main() -> int:
             max_steps=int(args.max_steps), fast_act=bool(int(args.fast_act)),
             lockstep=bool(int(args.lockstep)),
             rust_collector=bool(int(args.rust_collector)),
-            rc_threads=int(args.rc_threads), leaf_amp=str(args.leaf_amp))
+            rc_threads=int(args.rc_threads), leaf_amp=str(args.leaf_amp),
+            leaf_compile=bool(int(args.leaf_compile)),
+            leaf_wait_ms=float(args.leaf_wait_ms))
         t_c = time.time()
         if pool is not None:
             batch, collect_meta = pool.collect(
