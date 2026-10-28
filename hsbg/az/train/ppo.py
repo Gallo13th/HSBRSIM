@@ -263,6 +263,10 @@ class CollectConfig:
     fast_act: bool = True
     #: lock-step 批量 actor：每 worker 内 N 局同步推进（每轮一次批量前向）。
     lockstep: bool = False
+    #: Rust 全采集器（BatchEnv 驱动，引擎/观测/记录全在 Rust）。
+    rust_collector: bool = False
+    #: Rust 采集器内部引擎并行线程数（BatchEnv threads）。
+    rc_threads: int = 8
 
 
 @dataclass
@@ -1275,6 +1279,10 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
                             lam: float = 0.95, step_penalty: float = 0.0,
                             meta: Optional[Dict[str, Any]] = None) -> "PPOBatch":
     """SoA 数组 → PPOBatch（与 ``build_batch_from_records`` 等价，但零 dict）。"""
+    n0 = len(np.asarray(packed["ranks"]))
+    # 丢掉形状与样本数不匹配的字段（例如无 MCTS 时的空 target_pi）
+    packed = {k: v for k, v in packed.items()
+              if np.ndim(v) > 0 and len(np.asarray(v)) == n0}
     ranks = np.asarray(packed["ranks"])
     valid = (ranks >= 1) & (ranks <= N_RANKS)
     dropped = int((~valid).sum())
@@ -1320,8 +1328,10 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
         rewards=rewards, dones=dones, advantages=advantages, returns=returns,
         seats=seats.astype(np.int32), game_ids=game_ids.astype(np.int64),
         ranks=ranks[valid][order].astype(np.int64), turns=turns.astype(np.int32),
-        target_pi=t.get("target_pi", np.zeros((n, N_ACTIONS), dtype=np.float32)),
-        has_pi=t.get("has_pi", np.zeros(n, dtype=bool)),
+        target_pi=(lambda tp: tp if (tp is not None and np.asarray(tp).shape == (n, N_ACTIONS))
+                   else np.zeros((n, N_ACTIONS), dtype=np.float32))(t.get("target_pi")),
+        has_pi=(lambda hp: hp if (hp is not None and np.asarray(hp).shape == (n,))
+                else np.zeros(n, dtype=bool))(t.get("has_pi")),
         episode_ids=episode_ids, forced=t["forced"], meta=merged_meta)
 
 

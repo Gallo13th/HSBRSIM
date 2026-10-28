@@ -208,6 +208,18 @@ impl BatchEnv {
         self.episodes.len() * self.controlled.len()
     }
 
+    /// 每个 slot 当前所在回合（供训练记录/回合守卫使用）。
+    pub fn turns(&self) -> Vec<u32> {
+        let k = self.controlled.len();
+        let mut out = Vec::with_capacity(self.episodes.len() * k);
+        for e in &self.episodes {
+            for _ in 0..k {
+                out.push(e.game.turn);
+            }
+        }
+        out
+    }
+
     pub fn controlled(&self) -> &[PlayerId] {
         &self.controlled
     }

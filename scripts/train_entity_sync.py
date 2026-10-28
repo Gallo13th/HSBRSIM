@@ -86,6 +86,10 @@ def main() -> int:
                     help="梯度裁剪范数（论文 1.0）")
     ap.add_argument("--grad-accum", type=int, default=1,
                     help="梯度累积步数：有效 minibatch = minibatch * grad_accum（论文 8192）")
+    ap.add_argument("--rc-threads", type=int, default=8,
+                    help="Rust 采集器内部引擎线程数（BatchEnv threads）")
+    ap.add_argument("--rust-collector", type=int, default=0,
+                    help="1=Rust 全采集器（BatchEnv 驱动，记录打包在 Rust）")
     ap.add_argument("--lockstep", type=int, default=0,
                     help="1=lock-step 批量 actor（每 worker 内多局同步推进）")
     ap.add_argument("--fast-act", type=int, default=1,
@@ -370,7 +374,9 @@ def main() -> int:
             opponent=str(args.opponent), behavior=str(args.behavior),
             max_actions_per_turn=int(args.max_actions_per_turn),
             max_steps=int(args.max_steps), fast_act=bool(int(args.fast_act)),
-            lockstep=bool(int(args.lockstep)))
+            lockstep=bool(int(args.lockstep)),
+            rust_collector=bool(int(args.rust_collector)),
+            rc_threads=int(args.rc_threads))
         t_c = time.time()
         if pool is not None:
             batch, collect_meta = pool.collect(

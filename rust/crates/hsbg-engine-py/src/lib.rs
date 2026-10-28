@@ -17,6 +17,8 @@ use hsbg_engine::turn_search::{
 };
 use hsbg_engine::{Game, RulesConfig, SoloEnv};
 
+mod collector;
+
 fn parse_config(config_json: Option<&str>) -> PyResult<RulesConfig> {
     match config_json {
         None => Ok(RulesConfig::default()),
@@ -323,6 +325,11 @@ impl PyBatchEnv {
             PyBytes::new(py, &rejected),
         ))
     }
+    /// 每个 slot 的当前回合数（u32，一行一个 slot）。
+    fn turns(&self) -> Vec<u32> {
+        self.env.turns()
+    }
+
     /// Game `i` and its episode state as JSON (`load` restores it exactly).
     fn save(&self, py: Python<'_>, i: usize) -> PyResult<String> {
         py.detach(|| self.env.save(i))
@@ -734,6 +741,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyGame>()?;
     m.add_class::<PySoloEnv>()?;
     m.add_class::<PyBatchEnv>()?;
+    m.add_class::<collector::PyRustCollector>()?;
     m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add_function(wrap_pyfunction!(game_version, m)?)?;
     m.add_function(wrap_pyfunction!(server_rules_version, m)?)?;

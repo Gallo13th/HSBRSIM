@@ -72,6 +72,10 @@ class BatchEnv:
             "ready": np.frombuffer(r, dtype=np.uint8).astype(bool),
         }
 
+    def turns(self):
+        """每个 slot 当前所在回合（uint32 [n_slots]）。"""
+        return np.asarray(self._env.turns(), dtype=np.uint32)
+
     def step(self, actions):
         """Apply one action per slot. Returns (rewards float32 [n_slots], dones bool
         [n_slots], info) with `info["placement"]` (uint8, the final placement where done;

@@ -52,12 +52,26 @@ from .ppo import (CollectConfig, PPOBatch, build_batch_from_arrays,
 # ---------------------------------------------------------------------------
 # 子进程
 # ---------------------------------------------------------------------------
+def _save_built_batch(batch: Any, path: str) -> None:
+    """把已构建的 PPOBatch 写成 npz（episode_id 用全局唯一键 game_id*8+seat）。"""
+    np.savez(path, features=batch.features, cards=batch.cards, masks=batch.masks,
+             actions=batch.actions, old_logprobs=batch.old_logprobs,
+             values=batch.values, rewards=batch.rewards, dones=batch.dones,
+             advantages=batch.advantages, returns=batch.returns,
+             seats=batch.seats, game_ids=batch.game_ids, ranks=batch.ranks,
+             turns=batch.turns, forced=batch.forced, has_pi=batch.has_pi,
+             episode_ids=(batch.game_ids * 8 + batch.seats).astype(np.int64),
+             target_pi=(batch.target_pi if batch.target_pi is not None
+                        else np.zeros((len(batch.actions), 245), np.float32)))
+
+
 def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
     """常驻 worker：load checkpoint -> 循环收任务 -> 采集/热加载 -> 回传路径与统计。"""
     import torch
     from .model import load_checkpoint
     from .batch_eval import BatchLeafServer, BatchPPOEvaluator
     from .parallel_collect import collect_ppo_lockstep, collect_ppo_records_parallel
+    from .rust_collect import collect_ppo_rust
 
     # 进程内不需要 torch 的 CPU 线程池（GPU 前向 + 多线程采集已经够并行）
     torch.set_num_threads(1)
@@ -184,7 +198,13 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
         try:
             cfg = CollectConfig(**task["cfg"])
             server.reset_stats()
-            if bool(task.get("lockstep", False)) and search_fn is None:
+            if bool(task.get("rust_collector", False)) and search_fn is None:
+                arr, cmeta = collect_ppo_rust(
+                    model, cfg, eval_fn=evaluator, device=device,
+                    seed=int(task["seed"]), games=int(cfg.games),
+                    gamemode=str(cfg.opponent), threads=int(task.get("rc_threads", 1)))
+                records = []
+            elif bool(task.get("lockstep", False)) and search_fn is None:
                 # lock-step：每 worker 内 N 局同步推进，每轮一次批量前向
                 records, cmeta = collect_ppo_lockstep(
                     model, cfg, eval_fn=evaluator, device=device,
@@ -205,22 +225,21 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                 # (game_id*8+seat) 作为全局唯一键，父进程直接拼接、无需重编号
                 records_file = os.path.join(
                     task["tmpdir"], f"rec_{task_id}_w{index}.npz")
-                packed = pack_records_arrays(records)
-                try:
-                    lb = build_batch_from_arrays(packed, gamma=float(task.get("gamma", 1.0)),
-                                                 lam=float(task.get("lam", 0.95)))
-                    np.savez(records_file,
-                             features=lb.features, cards=lb.cards, masks=lb.masks,
-                             actions=lb.actions, old_logprobs=lb.old_logprobs,
-                             values=lb.values, rewards=lb.rewards, dones=lb.dones,
-                             advantages=lb.advantages, returns=lb.returns,
-                             seats=lb.seats, game_ids=lb.game_ids, ranks=lb.ranks,
-                             turns=lb.turns, forced=lb.forced, has_pi=lb.has_pi,
-                             episode_ids=(lb.game_ids * 8 + lb.seats).astype(np.int64),
-                             target_pi=(lb.target_pi if lb.target_pi is not None
-                                        else np.zeros((len(lb.actions), 245), np.float32)))
-                except BaseException:  # noqa: BLE001 - 回退到父进程构建
-                    np.savez(records_file, **packed)
+                if bool(task.get("rust_collector", False)) and search_fn is None:
+                    _save_built_batch(
+                        build_batch_from_arrays(arr, gamma=float(task.get("gamma", 1.0)),
+                                                lam=float(task.get("lam", 0.95))),
+                        records_file)
+                else:
+                    packed = pack_records_arrays(records)
+                    try:
+                        _save_built_batch(
+                            build_batch_from_arrays(
+                                packed, gamma=float(task.get("gamma", 1.0)),
+                                lam=float(task.get("lam", 0.95))),
+                            records_file)
+                    except BaseException:  # noqa: BLE001 - 回退到父进程构建
+                        np.savez(records_file, **packed)
             profile = server.profile()
             stats = server.stats
             _report({

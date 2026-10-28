@@ -60,3 +60,39 @@ def test_lockstep_collects_legal_ranked_records():
         assert np.isfinite(batch.advantages).all()
     finally:
         server.close()
+
+
+def test_rust_collector_matches_python_semantics():
+    """Rust 采集器：记录字段完整、动作合法、名次/守卫语义与 Python 路径一致。"""
+    import numpy as np
+    from hsbg.az.train.model import build_net
+    from hsbg.az.train.ppo import CollectConfig, build_batch_from_arrays
+    from hsbg.az.train.batch_eval import BatchLeafServer, BatchPPOEvaluator
+    from hsbg.az.train.rust_collect import collect_ppo_rust
+
+    model = build_net(arch="tiny")
+    model.eval()
+    server = BatchLeafServer(model, device="cpu", batch_size=64, max_wait_ms=1.0)
+    try:
+        cfg = CollectConfig(games=8, seed=13, opponent="bot", behavior="net",
+                            max_steps=5000, learner_seat=0)
+        arr, meta = collect_ppo_rust(model, cfg, eval_fn=BatchPPOEvaluator(server),
+                                     device="cpu", seed=13, games=8)
+        assert meta["mode"] == "rust_collector" and meta["decisions"] > 0
+        n = meta["decisions"]
+        for k in ("features", "cards", "masks", "actions", "old_logprobs",
+                  "values", "ranks", "seats", "game_ids", "turns", "forced"):
+            assert len(arr[k]) == n, k
+        # 动作必须合法
+        assert bool(arr["masks"][np.arange(n), arr["actions"]].all())
+        # forced 样本 logprob 必须为 0
+        if bool(arr["forced"].any()):
+            assert np.allclose(arr["old_logprobs"][arr["forced"]], 0.0)
+        # 名次要么 1..8（该局结束），要么 <=0（截断，稍后被丢弃）
+        ranks = set(int(x) for x in arr["ranks"])
+        assert all((1 <= r <= 8) or r <= 0 for r in ranks)
+        batch = build_batch_from_arrays(arr, gamma=1.0, lam=0.995)
+        batch.validate()
+        assert len(batch.actions) > 0
+    finally:
+        server.close()
