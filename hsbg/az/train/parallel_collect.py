@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -29,6 +30,7 @@ from .common import (N_ACTIONS, N_PLAYERS, load_engine, mask_from_bytes,
                      to_jsonable)
 from .ppo import (CollectConfig, PPOBatch, PPOSelfPlayPolicy, _attach_rank,
                   build_batch_from_records, _weak_bot_action)
+from .library_pool import board_signature
 
 
 def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
@@ -224,7 +226,9 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                          device: str = "cpu", seed: int = 0,
                          games: Optional[int] = None, gamemode: str = "bot",
                          engine_backend: str = "auto",
-                         norm_mean: Any = None, norm_std: Any = None
+                         norm_mean: Any = None, norm_std: Any = None,
+                         library_pool: Any = None, library_p: float = 0.0,
+                         library_rng: Any = None
                          ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """lock-step 采集：N 局同步推进，每轮把所有待决策局拼成一个 batch 前向一次。
 
@@ -254,12 +258,41 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             "rec_start": 0,
         })
     rounds = 0
+    lib_injected = 0
+    if library_pool is not None and float(library_p) > 0.0:
+        import random as _random
+        library_rng = library_rng or _random.Random(int(cfg.seed) + int(seed))
+        for st in states:
+            st["lib_turn"] = -1
     while True:
         pending = []
         for st in states:
             if st["done"]:
                 continue
             g = st["game"]
+            # 镜像库注入：每进入新回合，按概率把强牌面精确注入 bot 座位
+            if library_pool is not None and float(library_p) > 0.0:
+                if int(g.turn) != int(st.get("lib_turn", -1)):
+                    st["lib_turn"] = int(g.turn)
+                    for seat_i in range(N_PLAYERS):
+                        if int(seat_i) == seat:
+                            continue
+                        if library_rng.random() >= float(library_p):
+                            continue
+                        entry = library_pool.sample(int(g.turn), rng=library_rng)
+                        if entry is None:
+                            continue
+                        before = board_signature(json.loads(g.player_json(seat_i)))
+                        try:
+                            g.set_player_from_json(int(seat_i),
+                                                   json.dumps(entry.player), True)
+                        except BaseException:  # noqa: BLE001
+                            continue
+                        after = board_signature(json.loads(g.player_json(seat_i)))
+                        if after == board_signature(entry.player):
+                            lib_injected += 1
+                        elif before:
+                            pass   # 注入后对不上：保留引擎现状（不中断对局）
             guard = 0
             while (not g.is_over()) and (not g.needs_action(seat)) and guard < 10 ** 6:
                 q = next((p for p in range(N_PLAYERS) if g.needs_action(p)), None)
@@ -323,6 +356,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                       "rank": rank, "illegal_actions": int(st["illegal"])})
     meta = {"mode": "lockstep", "games": n, "pool_games": n,
             "rounds": int(rounds), "decisions": int(decisions_total),
+            "library_injected": int(lib_injected),
             "records": int(len(records)), "illegal_actions": int(illegal),
             "truncated_games": int(truncated),
             "games_meta": metas, "forced_end_turns": int(policy.forced_actions)}

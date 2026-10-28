@@ -96,6 +96,10 @@ def main() -> int:
                     help="Rust 采集器内部引擎线程数（BatchEnv threads）")
     ap.add_argument("--rust-collector", type=int, default=0,
                     help="1=Rust 全采集器（BatchEnv 驱动，记录打包在 Rust）")
+    ap.add_argument("--library-pool", default="",
+                    help="镜像对手库 JSONL（空=不用）；见 docs/LIBRARY_POOL_PLAN.md")
+    ap.add_argument("--library-p", type=float, default=0.0,
+                    help="每回合每个 bot 座位的注入概率（建议 0.3 起）")
     ap.add_argument("--lockstep", type=int, default=0,
                     help="1=lock-step 批量 actor（每 worker 内多局同步推进）")
     ap.add_argument("--fast-act", type=int, default=1,
@@ -384,6 +388,7 @@ def main() -> int:
             max_actions_per_turn=int(args.max_actions_per_turn),
             max_steps=int(args.max_steps), fast_act=bool(int(args.fast_act)),
             lockstep=bool(int(args.lockstep)),
+            library_pool=str(args.library_pool), library_p=float(args.library_p),
             rust_collector=bool(int(args.rust_collector)),
             rc_threads=int(args.rc_threads), leaf_amp=str(args.leaf_amp),
             leaf_compile=bool(int(args.leaf_compile)),

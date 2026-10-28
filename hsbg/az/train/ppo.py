@@ -271,6 +271,9 @@ class CollectConfig:
     leaf_amp: str = "off"
     #: 采集/评测叶前向用 torch.compile（实测 B=64 forward 5.4→0.7 ms）。
     leaf_compile: bool = False
+    #: 镜像对手库：JSONL 路径（空=不用）与每回合每 bot 座位的注入概率。
+    library_pool: str = ""
+    library_p: float = 0.0
     #: 批量叶服务器的聚批等待窗口（ms）。单客户端（lockstep/rust collector）应设很小。
     leaf_wait_ms: float = 2.0
 

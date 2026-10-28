@@ -160,6 +160,32 @@ impl PyGame {
     fn copy(&self, py: Python<'_>) -> Self {
         py.detach(|| self.clone())
     }
+    /// 用一段玩家状态 JSON（形如 `state_json()` 里 `players[seat]` 的对象）**精确**覆盖某座位。
+    ///
+    /// 与 `debug(cmd="add_minion")` 不同：这里直接反序列化整个 Player，卡牌 id/金色/关键词/
+    /// 手牌/酒馆/饰品/任务/计数器都原样恢复，不会被 `add_minion` 的 golden 归一化改写。
+    /// 用于镜像对手库：把历史高强度局面注入对手座位。
+    #[pyo3(signature = (seat, player_json, keep_seat_id=true))]
+    fn set_player_from_json(&mut self, py: Python<'_>, seat: usize, player_json: &str,
+                            keep_seat_id: bool) -> PyResult<()> {
+        check_seat(&self.g, seat)?;
+        let mut p: hsbg_engine::state::Player = py
+            .detach(|| serde_json::from_str(player_json))
+            .map_err(|e: serde_json::Error| PyValueError::new_err(e.to_string()))?;
+        if keep_seat_id {
+            p.id = self.g.players[seat].id;
+        }
+        self.g.players[seat] = p;
+        Ok(())
+    }
+
+    /// 取某座位的状态 JSON（与 `state_json()["players"][seat]` 同构），供采集/镜像库使用。
+    fn player_json(&self, py: Python<'_>, seat: usize) -> PyResult<String> {
+        check_seat(&self.g, seat)?;
+        py.detach(|| serde_json::to_string(&self.g.players[seat]))
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
     /// Human-readable JSON view of seat `p` (`hsbg_engine::debug::view`).
     fn view(&self, py: Python<'_>, p: usize) -> PyResult<String> {
         check_seat(&self.g, p)?;

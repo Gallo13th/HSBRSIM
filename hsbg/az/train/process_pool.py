@@ -52,6 +52,10 @@ from .ppo import (CollectConfig, PPOBatch, build_batch_from_arrays,
 # ---------------------------------------------------------------------------
 # 子进程
 # ---------------------------------------------------------------------------
+#: 每个 worker 进程内的镜像库缓存（按路径）
+_LIB_CACHE: Dict[str, Any] = {}
+
+
 def _save_built_batch(batch: Any, path: str) -> None:
     """把已构建的 PPOBatch 写成 npz（episode_id 用全局唯一键 game_id*8+seat）。"""
     np.savez(path, features=batch.features, cards=batch.cards, masks=batch.masks,
@@ -214,11 +218,21 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                 records = []
             elif bool(task.get("lockstep", False)) and search_fn is None:
                 # lock-step：每 worker 内 N 局同步推进，每轮一次批量前向
+                lib = None
+                if str(getattr(cfg, "library_pool", "")) and \
+                        float(getattr(cfg, "library_p", 0.0)) > 0.0:
+                    from .library_pool import LibraryPool
+                    lib = _LIB_CACHE.get(cfg.library_pool) or LibraryPool(cfg.library_pool)
+                    if not lib.entries:
+                        print(f"[warn] 镜像库为空/不存在: {cfg.library_pool}", flush=True)
+                        lib = None
+                    _LIB_CACHE[cfg.library_pool] = lib
                 records, cmeta = collect_ppo_lockstep(
                     model, cfg, eval_fn=evaluator, device=device,
                     seed=int(task["seed"]), games=int(cfg.games),
                     gamemode=str(cfg.opponent), norm_mean=norm_mean,
-                    norm_std=norm_std)
+                    norm_std=norm_std, library_pool=lib,
+                    library_p=float(getattr(cfg, "library_p", 0.0)))
             else:
                 records, cmeta = collect_ppo_records_parallel(
                     model, cfg, workers=int(task.get("threads", 4)),
