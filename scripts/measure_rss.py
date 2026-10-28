@@ -94,29 +94,41 @@ def main() -> int:
     while proc.poll() is None:
         tree = _tree(proc.pid)
         total = 0
+        n_live = 0
         for p in tree:
             v = _vm(p)
             if v is None:
                 continue
             rss, h = v
             total += rss
+            n_live += 1
             hwm[p] = max(hwm.get(p, 0), h)
         samples += 1
         if total > peak_sum_kb:
-            peak_sum_kb, peak_at, peak_procs = total, time.time() - t0, len(tree)
+            peak_sum_kb, peak_at, peak_procs = total, time.time() - t0, n_live
         time.sleep(max(0.02, args.interval))
     rc = proc.wait()
+    peak_mib = peak_sum_kb / 1024.0
     out = {
         "rc": int(rc),
         "elapsed_s": round(time.time() - t0, 1),
         "interval_s": args.interval,
         "samples": samples,
-        "simultaneous_peak_mb": round(peak_sum_kb / 1024.0, 1),
+        "unit": "MiB (KiB/1024)",
+        "simultaneous_peak_mib": round(peak_mib, 1),
+        "simultaneous_peak_gib": round(peak_mib / 1024.0, 2),
+        "simultaneous_peak_gb": round(peak_mib * 1.048576 / 1000.0, 2),
         "simultaneous_peak_at_s": round(peak_at, 1),
-        "procs_at_peak": peak_procs,
+        "procs_summed_at_peak": peak_procs,
         "n_pids_seen": len(hwm),
-        "per_pid_max_hwm_mb": sorted((round(v / 1024.0, 1) for v in hwm.values()),
-                                     reverse=True)[:20],
+        "hwm_by_pid_top20": [
+            {"pid": pid, "hwm_mib": round(kb / 1024.0, 1)}
+            for pid, kb in sorted(hwm.items(), key=lambda kv: kv[1], reverse=True)[:20]],
+        "caveats": [
+            "sampled approximation: /proc reads are not an atomic snapshot",
+            "ppid re-parenting / exited procs may be missed between samples",
+            "only covers this command's process tree within the sampling window",
+        ],
     }
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     json.dump(out, open(args.out, "w"), ensure_ascii=False, indent=2)

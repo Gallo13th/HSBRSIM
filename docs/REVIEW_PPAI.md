@@ -15,8 +15,8 @@
 | episode 计数用 unique、int64 全局 key | ✅ 已修 |
 | L4 混合回退协议（raw shard 先补齐再合并） | ✅ 已修 |
 | advantage 归一化只用 valid 子集 | ✅ 已修 |
-| worker 自愈竞态 | ✅ 已修（`_next_msg/_defer` 缓冲）+ 故障注入测试通过 |
-| RSS 峰值实测 | ✅ 17.4 GB 合计（父 3.40 + 12×~1.17），无泄漏 |
+| worker 自愈竞态 | ✅ 已修（`_take_msg(accept=task_id)` 过滤 + reload 重启重发 + acked 去重），4 个 pool 测试通过 |
+| RSS 峰值实测 | ✅ 16,820 MiB ≈ 16.43 GiB（采样窗口近似峰值，父 3.38 GiB + 12×~1.17 GiB），**不据此断言无泄漏** |
 | CUDA bf16 dtype 单测 | ✅ `test_bf16_autocast_keeps_loss_side_fp32` 通过 |
 | DDP 决策 | ✅ 用实测 C2=7.06 s / C3=6.98 s / P1=4.58 s 代入条件式 → step 不变，暂不实现 |
 | 报告口径（worker / 父进程 / 总 collect 分开） | ✅ 已改 |
@@ -97,3 +97,16 @@ EOF
 | `measure_rss.py` 误算（pgrep+cwd / VmHWM 求和 / 参数未用） | ✅ 重写：进程树采样 + 同时刻 VmRSS 之和 + 记录间隔与样本数；实测 **16.82 GB 同时峰值** |
 | 报告旧 DDP 门槛（≤2.5 s）与 §6 矛盾 | ✅ 改为条件式 `max(C2,P2) < max(C3,P1)`，并说明 0.08 s 在噪声内、进程数混杂 |
 | 中位数不可相加 / `ab_c2` 只有 10 iter | ✅ 报告已加口径与样本数说明 |
+
+
+## 8. 第三轮复审（针对 `2a9f9cf`）：不通过 → 工作树已修
+
+| 第三轮发现 | 处理 |
+|---|---|
+| reload 无过滤取消息 → 外任务消息被反复弹出（活锁） | ✅ `_take_msg(..., accept=task_id)`：不匹配的消息永不返回给本等待者；新增 `test_reload_ignores_foreign_task_messages_without_livelock`（外任务消息在场时 reload 仍在超时前完成） |
+| `pending.discard` 后无条件 `done+=1` → 重复计数 | ✅ 改为 `acked` 集合计数，重复 done 不重复计 |
+| 已 ack 的 worker 之后死亡 → 重启后加载构造期旧权重 | ✅ 记录每个 worker 的 pid，`_check_alive` 后发现 pid 变化即重新加入 pending 并重发目标权重 |
+| collect 丢弃外任务消息 | ✅ collect 也用 `accept=task_id`，外任务消息留在队列里给对应等待者 |
+| `_spawn_one` 忽略同 worker 的非 ready/fatal 消息 | ⚠️ 保留（上一轮任务已超时，属过期消息；契约写入代码注释） |
+| RSS 单位错误（MiB 标成 GB） | ✅ 输出 `_mib/_gib/_gb` 三个字段 + caveats；实测 16,820 MiB ≈ 16.43 GiB ≈ 17.6 GB |
+| 报告多处措辞冲突 | ✅ 已改：DDP 改「证据不足」、collect 口径、L4 不再列为下一步、`ab_c2`=10 iter 标注 |

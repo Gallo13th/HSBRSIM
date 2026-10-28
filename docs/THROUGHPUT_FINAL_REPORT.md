@@ -2,7 +2,7 @@
 
 > 预算：≤4 张卡，**只用空闲卡**。本轮实际使用：actor GPU **1/3/0**、learner **GPU2**
 > （GPU4–7 被邻居 `cds_ncRNA_train` 占用，util 83–90%；GPU0 仅别人 1.5 GB/0% util）。
-> 全部数据为 16–20 iteration、同 seed、pipeline+bf16 的 A/B，`lag=1`、`ratio≈1.00`。
+> 全部数据为 16–20 iteration（`ab_c2` 为 10）、同 seed、pipeline+bf16 的 A/B，`lag=1`、`ratio≈1.00`。
 
 ## 1. 成绩单（端到端）
 
@@ -37,9 +37,10 @@
   （引擎推进 + 记录打包 + 批量推理回调）搬进 Rust，即 `docs/ACTOR_RUST_OPTIONS.md` 方案 B，
   是 1–2 周量级的独立工程。
 
-**(b) DDP learner——现在上会适得其反**
-- 4 卡预算下，2 卡 learner 意味着 actor 只剩 2 卡：collect 6.0 s → **~8 s**；
-  DDP 把 PPO 4.5 → ~2.5 s，但 step = max(8, 2.5) = **8 s > 当前 6.2 s**，净亏；
+**(b) DDP learner——当前证据不足以支持投入**
+- 4 卡预算下，2 卡 learner 意味着 actor 只剩 2 卡：实测 C2=7.06 s（vs C3=6.98 s，差异 0.08 s
+  在噪声内，且 worker 数 12→8 混杂，不能称「GPU 绝非瓶颈」）；P2 为估计值 ~2.9 s；
+
 - 结论：按评审给的条件式 `max(C2,P2) < max(C3,P1)` 判断；实测 C2=7.06 s、C3=6.98 s、P1=4.58 s，
   任一非负 P2 都有 `max(C2,P2) ≥ 7.06 > 6.98 ≈ max(C3,P1)` → **当前不值得实现 DDP**。
   （0.08 s 差异在负载噪声内、且 C2 那组是 8 worker vs C3 的 12 worker，属混杂比较；
@@ -57,9 +58,9 @@
 
 | 项目 | 每 iteration | 说明 |
 |---|---:|---|
-| 父进程 read + 拼接 | ~1.0–1.6 s | 530 MB features 读取 + concat（L4 后 build 0.75 s） |
+| 父进程 read + 拼接 | ~0.9–1.6 s | 530 MB features 读取 + concat（L4 后 build ~0.56 s） |
 | worker 侧采集 | ~4.5–5.0 s | 12 worker × 16 局批量前向 + 引擎推进（每决策 ~0.22 ms） |
-| **collect 总计（实测）** | **6.0–7.0 s** | 三者之和，父进程读盘不可忽略 |
+| **collect 总计（实测）** | **6.0–7.0 s** | 计时组成（独立中位数不可相加） |
 | PPO（bf16, learner 独占） | ~4.5 s | 40k 样本 / 1024 微批 |
 | step = max(collect, PPO) + ~0.2 | ~6.0–7.2 s | 采集与 PPO 大致平衡 |
 
@@ -71,9 +72,9 @@
 1. **当前最优配置**：`--lockstep 1 --amp bf16 --pipeline 1 --processes 12 --threads 16`，
    learner 独占一张卡，actor 用其余空闲卡（每卡 4 worker）。见 `train_stage1.sh` 默认值。
 2. **下一步优先级**：
-   - ① L4 正确实现（全局 episode id）→ collect −1 s（约 −15%）；
-   - ② Rust 全采集器（方案 B）→ collect 可到 ~2 s；
-   - ③ 之后才上 DDP learner（2 卡）把 PPO 压到 ~2.5 s，最终 step ≈ 2.5–3 s（≈12–15k dec/s）。
+   - ① L4 已完成（build 1.13 → 0.56 s，端到端 +2%），不再列为下一步；
+   - ② Rust 全采集器（方案 B）→ 目标 collect ~2 s（**尚未验证**，需 1 周 spike）；
+   - ③ DDP：按条件式 `max(C2,P2) < max(C3,P1)` 重新评估；当前实测不支持投入。
 3. **不建议**：Rust actor v1（批量观测）、现在就上 DDP、继续调 processes/threads（已扫到最优）。
 
 
@@ -101,10 +102,10 @@
 
 | 指标 | 实测 |
 |---|---:|
-| 采样间隔 / 样本数 | 0.2 s / 337 |
-| **同时刻合计峰值** | **16.82 GB**（出现于 54.0 s，树内 14 个进程） |
-| 父进程 VmHWM | 3.38 GB |
-| 单 worker VmHWM | 1.16–1.19 GB × 12 |
+| 采样间隔 / 样本数 | 0.2 s / 310（修正单位后重测） |
+| **同时刻合计峰值** | **16,630 MiB ≈ 16.24 GiB ≈ 17.4 GB**（50.4 s 采样点，成功求和 14 个进程；采样近似值，非原子快照） |
+| 父进程 VmHWM | ~3.3 GiB |
+| 单 worker VmHWM | ~1.13–1.17 GiB × 12 |
 | 其它 | 仅覆盖本次配置与 6 iter 窗口，**不据此断定「无泄漏/绝无 OOM」** |
 
 ### 6.4 DDP 决策（按评审条件式，用实测替代预测）

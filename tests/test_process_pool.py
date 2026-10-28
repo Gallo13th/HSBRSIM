@@ -124,3 +124,41 @@ def test_reload_weights_survives_worker_kill(tmp_path, monkeypatch):
         assert done == 2
     finally:
         pool.close()
+
+
+def test_reload_ignores_foreign_task_messages_without_livelock(tmp_path, monkeypatch):
+    """外任务消息必须先留在缓冲、不能被本等待者反复弹出（否则活锁到超时）。"""
+    pytest.importorskip("torch")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+    from hsbg.az.train.process_pool import ProcessActorPool
+    import queue as _q
+
+    pool = ProcessActorPool.__new__(ProcessActorPool)
+    pool._result_q = _q.Queue()
+    pool._deferred = []
+    pool._task_qs = [_q.Queue(), _q.Queue()]
+    pool._info = [{"pid": 1}, {"pid": 2}]
+    pool._procs = [None, None]
+    pool._check_alive = lambda: None
+
+    # 队列里先塞一条「别的任务」的消息，再塞本任务的 done
+    pool._result_q.put({"worker": 1, "type": "collect_done", "task_id": "other"})
+    # reload 会自己发任务；worker 侧按 task 号回 done
+    import threading
+
+    def fake_workers():
+        for w, q in enumerate(pool._task_qs):
+            task = q.get(timeout=5.0)
+            pool._result_q.put({"worker": w, "type": "reload_done",
+                                "task_id": task["task_id"]})
+
+    th = threading.Thread(target=fake_workers, daemon=True)
+    th.start()
+    t0 = time.time()
+    done = pool.reload_weights("ckpt.pt", updates=1, timeout=8.0)
+    elapsed = time.time() - t0
+    assert done == 2, done
+    assert elapsed < 7.5, elapsed          # 没有活锁到超时
+    # 外任务消息仍保留，可被它的等待者取到
+    m = pool._take_msg(0.1, accept=lambda x: x.get("task_id") == "other")
+    assert m["type"] == "collect_done"

@@ -289,28 +289,30 @@ class ProcessActorPool:
         for i in range(self.processes):
             self._spawn_one(i)
 
-    def _take_msg(self, timeout: float, want_worker: Optional[int] = None
-                  ) -> Dict[str, Any]:
+    def _take_msg(self, timeout: float, want_worker: Optional[int] = None,
+                  accept: Optional[Any] = None) -> Dict[str, Any]:
         """取一条消息；不匹配 ``want_worker`` 的暂存到 ``_deferred`` 并继续等。
 
         关键：暂存的消息**不能被同一个等待者再次取出**（否则会忙等到超时）。
         先扫缓冲里是否有本等待者需要的消息，再从共享队列读。
         """
-        if self._deferred and want_worker is None:
-            return self._deferred.pop(0)
-        if want_worker is not None:
-            for idx, m in enumerate(self._deferred):
-                if m.get("worker") == want_worker:
-                    return self._deferred.pop(idx)
+        def _ok(m: Dict[str, Any]) -> bool:
+            if want_worker is not None and m.get("worker") != want_worker:
+                return False
+            return True if accept is None else bool(accept(m))
+
+        for idx, m in enumerate(self._deferred):
+            if _ok(m):
+                return self._deferred.pop(idx)
         deadline = time.time() + float(timeout)
         while True:
             remaining = deadline - time.time()
             if remaining <= 0:
                 raise queue.Empty
             msg = self._result_q.get(timeout=remaining)
-            if want_worker is None or msg.get("worker") == want_worker:
+            if _ok(msg):
                 return msg
-            self._deferred.append(msg)
+            self._deferred.append(msg)   # 匹配不上：留给对应等待者，不再被自己取出
 
     def _spawn_one(self, i: int) -> None:
         q = self.ctx.Queue()
@@ -391,48 +393,59 @@ class ProcessActorPool:
     # -- control -----------------------------------------------------------
     def reload_weights(self, checkpoint: str, *, updates: int = -1,
                        timeout: float = 300.0) -> int:
-        """把新 checkpoint 推到所有 worker（不重建进程）。返回成功数。
+        """把新 checkpoint 推到所有 worker（不重建进程）。返回成功 worker 数。
 
-        可靠性：worker 在等待期间死亡并被 `_check_alive` 重启时，**向新队列重发本任务**，
-        不会因为旧任务发给了已死进程而永远等不到该 worker 的完成消息。
+        可靠性：
+        - 只接受本任务的消息（`accept`），别的任务消息留在缓冲里给它的等待者；
+        - worker 死亡被 `_check_alive` 重启后，**重新加入 pending 并向新队列重发**，
+          避免「旧队列任务发给死进程 → 永远等不到」和「重启后仍跑构造时旧权重」；
+        - 成功数按 worker 集合计，重复 done 不重复计数。
         """
         task_id = uuid.uuid4().hex[:12]
         payload = {"kind": "reload", "task_id": task_id,
                    "checkpoint": checkpoint, "updates": int(updates)}
         pending = set(range(len(self._task_qs)))
-        done = 0
+        acked: set = set()
         errors: List[str] = []
+        pids = {i: (self._info[i] or {}).get("pid") for i in range(len(self._task_qs))}
         deadline = time.time() + float(timeout)
-        for i in sorted(pending):
-            self._task_qs[i].put(dict(payload))
+
+        def _resend() -> None:
+            for i in sorted(pending):
+                if i < len(self._task_qs):
+                    self._task_qs[i].put(dict(payload))
+
+        _resend()
         while pending:
             remaining = deadline - time.time()
             if remaining <= 0:
                 raise TimeoutError(f"reload_weights 超时: pending={sorted(pending)} "
                                    f"errors={errors}")
             try:
-                msg = self._take_msg(min(5.0, remaining))
+                msg = self._take_msg(min(5.0, remaining),
+                                     accept=lambda m: m.get("task_id") == task_id)
             except queue.Empty:
-                self._check_alive()   # 可能重启了 worker（新队列）
-                # 对仍未回报的 worker 重发（reload 幂等：worker 会重新加载并回 done）
-                for i in sorted(pending):
-                    if i < len(self._task_qs):
-                        self._task_qs[i].put(dict(payload))
-                continue
-            if msg.get("task_id") != task_id:
-                # 别的（并发）任务的消息：留给它的等待者，不能静默丢弃
-                self._deferred.append(msg)
+                self._check_alive()
+                # 被重启的 worker（pid 变化）必须重新加载目标权重
+                for i in range(len(self._task_qs)):
+                    pid = (self._info[i] or {}).get("pid")
+                    if pid is not None and pid != pids.get(i):
+                        pids[i] = pid
+                        pending.add(i)
+                _resend()
                 continue
             w = int(msg.get("worker", -1))
             if msg["type"] == "reload_done":
-                pending.discard(w)
-                done += 1
+                if w in pending:
+                    pending.discard(w)
+                    acked.add(w)
             elif msg["type"] == "reload_error":
-                pending.discard(w)
-                errors.append(f"worker{w}: {msg.get('error')}")
+                if w in pending:
+                    pending.discard(w)
+                    errors.append(f"worker{w}: {msg.get('error')}")
         if errors:
             raise RuntimeError(f"reload_weights 失败: {errors}")
-        return done
+        return len(acked)
 
     # -- collect -----------------------------------------------------------
     def collect(self, cfg: CollectConfig, games: int, *,
@@ -482,7 +495,8 @@ class ProcessActorPool:
                 missing = sorted(set(reqs) - set(results))
                 raise TimeoutError(f"collect 超时 {timeout:.0f}s，缺失 worker {missing}")
             try:
-                msg = self._take_msg(min(5.0, remaining))
+                msg = self._take_msg(min(5.0, remaining),
+                                     accept=lambda m: m.get("task_id") == task_id)
             except queue.Empty:
                 # 检查是否有人死了；死了就重启 + 重发该 shard（最多 2 次）
                 for i, p in enumerate(self._procs):
