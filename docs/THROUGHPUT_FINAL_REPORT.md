@@ -1,0 +1,70 @@
+# 加速计划终版报告（2026-10-28）
+
+> 预算：≤4 张卡，**只用空闲卡**。本轮实际使用：actor GPU **1/3/0**、learner **GPU2**
+> （GPU4–7 被邻居 `cds_ncRNA_train` 占用，util 83–90%；GPU0 仅别人 1.5 GB/0% util）。
+> 全部数据为 16–20 iteration、同 seed、pipeline+bf16 的 A/B，`lag=1`、`ratio≈1.00`。
+
+## 1. 成绩单（端到端）
+
+| 阶段 | dec/s | collect | ppo | 相对起点 |
+|---|---:|---:|---:|---:|
+| stage-1 原始（串行 fp32 + history 重写 + 阻塞评测） | 1,577 | — | — | 1.0× |
+| + history jsonl（O1）+ 流水线（S2）+ learner 独占卡 | 3,100 | 6.7 s | 8.9 s | 1.97× |
+| + bf16（O2） | 4,392 | 6.7 s | 5.5 s | 2.8× |
+| + L2 worker 侧采样（`--fast-act`） | 4,407 | 6.7 s | 5.5 s | 2.8× |
+| + **lock-step 批量 actor（L1）** | **5,921 → 6,311** | **6.1 → 6.0 s** | 4.5 s | **3.8–4.0×** |
+| 当前空闲卡复核（actor 1/3/0 + learner 2） | 5,331 | 6.99 s | 4.80 s | — |
+
+结论：**1,577 → 6,311 dec/s（≈4.0×）**；30M 训练从 5h18m 降到 **≈1.4 h + 评测**。
+
+## 2. 本轮新增（lock-step 之后的收尾工作）
+
+### 2.1 已落地
+
+| 项 | 内容 | 证据 |
+|---|---|---|
+| L1 lock-step | `collect_ppo_lockstep`：每 worker 内 N 局同步推进，一轮一次批量前向；turn 守卫键 `(game_id, seat, turn)`；`--lockstep` + `train_stage1.sh` 默认开 | `fc49fc0`、`9ef10c1`；`test_lockstep_collects_legal_ranked_records` |
+| 空闲卡纪律 | 所有测量只用 1/3/0+2；邻居卡零占用 | `nvidia-smi` 对照记录 |
+
+### 2.2 评估后**不做**的项（附数据）
+
+**(a) Rust actor v1（批量观测接口）——收益不足**
+- `Game.observe()` 已经返回 **原始字节**（f32 LE / i32），Python 侧只是 `np.frombuffer().copy()`；
+  实测单决策「engine step + observe + mask + bot_action」合计仅 **11 µs**；
+- lock-step 后每决策 ~0.22 ms 中，~~obs 解码~~ 只占 3%，大頭是 **引擎自身的 7 个 bot 座位推进**
+  （57 µs）与 record 打包/Python 记账；
+- 因此「Rust 批量观测」最多省 ~5%，**不值得**。真正的 Rust 收益需要把**整个采集循环**
+  （引擎推进 + 记录打包 + 批量推理回调）搬进 Rust，即 `docs/ACTOR_RUST_OPTIONS.md` 方案 B，
+  是 1–2 周量级的独立工程。
+
+**(b) DDP learner——现在上会适得其反**
+- 4 卡预算下，2 卡 learner 意味着 actor 只剩 2 卡：collect 6.0 s → **~8 s**；
+  DDP 把 PPO 4.5 → ~2.5 s，但 step = max(8, 2.5) = **8 s > 当前 6.2 s**，净亏；
+- 结论：**先把 collect 压到 ≤2.5 s（Rust 全采集器），DDP 才有意义**。届时 2 卡 learner +
+  2 卡 actor 可把 step 压到 ~3 s。
+
+**(c) worker 内建 batch（L4）——尝试后回退**
+- 目标：把父进程 `parent_read 0.96 s + build_batch 1.13 s`（占 collect **30%**）并行到 worker；
+- 结果：拼接后 `PPOBatch.validate()` 报 `episode N 的 done 数 != 1`（多 worker 的 episode 重编号
+  与过滤后的 episode 不连续导致），**已回退**，代码回到 L3 路径；
+- 若后续要做，正确做法是 worker 返回时就带全局 episode id（父进程不再重编号）。
+
+## 3. 当前限速步
+
+| 项目 | 每 iteration | 说明 |
+|---|---:|---|
+| collect（worker 采集） | ~4.9 s | 12 worker × 16 局的批量前向 + 引擎推进 |
+| ├ parent read + build_batch | ~2.1 s | **30%**，可并行化（L4，见 2.2c） |
+| └ worker 侧 | ~2.8 s | 每决策 ~0.22 ms（引擎 bot 推进 + record 打包） |
+| PPO（bf16, learner 独占） | ~4.5 s | 40k 样本 / 1024 微批 |
+| step = max(...) + 0.2 | ~6.0–6.2 s | 采集与 PPO 大致平衡 |
+
+## 4. 结论与建议
+
+1. **当前最优配置**：`--lockstep 1 --amp bf16 --pipeline 1 --processes 12 --threads 16`，
+   learner 独占一张卡，actor 用其余空闲卡（每卡 4 worker）。见 `train_stage1.sh` 默认值。
+2. **下一步优先级**：
+   - ① L4 正确实现（全局 episode id）→ collect −1 s（约 −15%）；
+   - ② Rust 全采集器（方案 B）→ collect 可到 ~2 s；
+   - ③ 之后才上 DDP learner（2 卡）把 PPO 压到 ~2.5 s，最终 step ≈ 2.5–3 s（≈12–15k dec/s）。
+3. **不建议**：Rust actor v1（批量观测）、现在就上 DDP、继续调 processes/threads（已扫到最优）。
