@@ -86,6 +86,8 @@ def main() -> int:
                     help="梯度裁剪范数（论文 1.0）")
     ap.add_argument("--grad-accum", type=int, default=1,
                     help="梯度累积步数：有效 minibatch = minibatch * grad_accum（论文 8192）")
+    ap.add_argument("--amp", default="off", choices=["off", "bf16"],
+                    help="PPO 前向/反向精度；bf16 实测 2.03×（loss 侧仍 fp32）")
     ap.add_argument("--pi-coef", type=float, default=0.1)
     ap.add_argument("--entropy-coef", type=float, default=0.005)
     ap.add_argument("--max-actions-per-turn", type=int, default=40)
@@ -174,7 +176,7 @@ def main() -> int:
         clip=float(args.clip), target_kl=float(args.target_kl),
         entropy_coef=float(args.entropy_coef), pi_coef=float(args.pi_coef),
         max_grad_norm=float(args.max_grad_norm),
-        grad_accum=int(args.grad_accum),
+        grad_accum=int(args.grad_accum), amp=str(args.amp),
         device=str(args.device), seed=int(args.seed),
         log_every=int(args.log_every))
     trainer: Optional[PPOTrainer] = None

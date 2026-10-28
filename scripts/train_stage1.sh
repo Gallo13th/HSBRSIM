@@ -28,6 +28,7 @@ OUT="runs/stage1"
 SMOKE="0"
 BC_SAMPLES="500000"
 PIPELINE="${PIPELINE:-1}"      # 1=double-buffer 流水线（实测 +44%）；0=串行
+AMP="${AMP:-bf16}"             # bf16=PPO 用 bf16 autocast（实测 +34%，学习等价）；off=fp32
 LEARNER_GPU="${LEARNER_GPU:-0}"
 EXTRA=()
 
@@ -118,11 +119,11 @@ PY
 fi
 
 # ---- 4) 训练 ---------------------------------------------------------------
-say "开始阶段训练：entity 14.8M / sims=0 / KL anchor / 流水线=${PIPELINE} / actor GPU=${ACTOR_GPUS} / learner GPU=${LEARNER_GPU}"
+say "开始阶段训练：entity 14.8M / sims=0 / KL anchor / 流水线=${PIPELINE} / amp=${AMP} / actor GPU=${ACTOR_GPUS} / learner GPU=${LEARNER_GPU}"
 "$PY" scripts/train_entity_sync.py \
   --checkpoint "$INIT" --arch entity --device "cuda:${LEARNER_GPU}" \
   --processes "$PROCESSES" --gpus "$ACTOR_GPUS" --threads "$THREADS" --games "$GAMES" \
-  --pipeline "$PIPELINE" \
+  --pipeline "$PIPELINE" --amp "$AMP" \
   --sims 0 --determinizations 1 --opponent bot --behavior net \
   --epochs 1 --minibatch 1024 --grad-accum 8 \
   --lr 6e-6 --lr-min-ratio 0.833 --max-updates "$ITER" \

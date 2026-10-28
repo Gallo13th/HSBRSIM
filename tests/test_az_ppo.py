@@ -561,3 +561,33 @@ def test_grad_accum_matches_effective_batch_and_processed_count():
     # 首个有效 step 的 ratio 起点=1；后续 step 会轻微偏离，取 5e-3 容差
     assert float(ep["ratio_mean"]) == pytest.approx(1.0, abs=5e-3)
     assert float(ep["clip_frac"]) == pytest.approx(0.0, abs=1e-3)
+
+
+def test_bf16_amp_matches_fp32_loss_sanity():
+    """bf16 autocast：损失有限、ratio 起点≈1、与 fp32 同一量级（需要 CUDA）。"""
+    torch = _needs_torch()
+    if not torch.cuda.is_available():
+        pytest.skip("需要 CUDA")
+    import copy
+    from hsbg.az.train.model import build_net
+
+    torch.manual_seed(0)
+    model_cpu = build_net(16)
+    batch = _batch_from_model(model_cpu, n_games=2, decisions_per_seat=2)
+
+    def run(amp: str) -> dict:
+        model = copy.deepcopy(model_cpu).cuda()
+        cfg = PPOConfig(device="cuda:0", value_loss="rank", pi_coef=0.0,
+                        minibatch=64, grad_accum=1, epochs=1, amp=amp)
+        stats = train_ppo(model, batch, cfg)
+        ep = stats["epochs"][0]
+        assert np.isfinite(ep["total"]) and np.isfinite(ep["value_loss"])
+        return ep
+
+    fp32 = run("off")
+    bf16 = run("bf16")
+    assert abs(float(fp32["ratio_mean"]) - 1.0) < 5e-3
+    assert abs(float(bf16["ratio_mean"]) - 1.0) < 5e-3
+    # 同一 batch、同起点：两种精度的 total/value_loss 应在同一量级（不要求逐位相等）
+    assert abs(float(bf16["total"]) - float(fp32["total"])) < 0.5
+    assert abs(float(bf16["value_loss"]) - float(fp32["value_loss"])) < 0.5

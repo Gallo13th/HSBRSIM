@@ -281,6 +281,9 @@ class PPOConfig:
     #: 梯度累积：minibatch 是微批大小，grad_accum 个微批 = 一个有效 minibatch。
     #: 论文有效 minibatch = 8192；显存不够时用 e.g. minibatch=2048, grad_accum=4。
     grad_accum: int = 1
+    #: 前向/反向精度：off=fp32；bf16=CUDA autocast(bfloat16)（实测 2.03×）。
+    #: 主干在 bf16 下前向，loss/KL/entropy 计算强制回到 fp32（见 ppo_losses）。
+    amp: str = "off"
     #: rank=名次 CE；mse=value MSE（critic=E[u(rank)]）
     value_loss: str = "rank"
     #: entity 有标量 value 头时的辅助 MSE 权重（tiny 无此头，忽略）
@@ -745,6 +748,11 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
 
     out = forward_model(model, x, c, m)
     logits, rank_logits, scalar_value = split_model_outputs(out)
+    # 无论是否 autocast，loss 侧一律 fp32：KL/entropy/cross_entropy 的数值稳定性依赖它
+    logits = logits.float()
+    rank_logits = rank_logits.float()
+    if scalar_value is not None:
+        scalar_value = scalar_value.float()
     logp = masked_log_softmax_torch(logits, m)
     action_logp = logp.gather(1, actions.unsqueeze(1)).squeeze(1)
     ratio = torch.exp(action_logp - old_logp)
@@ -842,6 +850,8 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     # 梯度累积：minibatch 是**微批**大小，grad_accum 个微批 = 一个有效 minibatch（论文 8192）
     accum = max(1, int(getattr(cfg, "grad_accum", 1)))
     eff = mb * accum
+    amp_mode = str(getattr(cfg, "amp", "off")).strip().lower()
+    use_amp = amp_mode in ("bf16", "bfloat16") and device.type == "cuda"
     for epoch in range(epochs):
         order = rng.permutation(n)
         acc: Dict[str, List[float]] = {}
@@ -858,7 +868,13 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
             served = 0
             for a, b in slices:
                 sel = base_idx[order[a:b]]
-                out = ppo_losses(model, batch, cfg, indices=sel, anchor_logp=anchor_logp)
+                if use_amp:
+                    with torch.autocast("cuda", dtype=torch.bfloat16):
+                        out = ppo_losses(model, batch, cfg, indices=sel,
+                                         anchor_logp=anchor_logp)
+                else:
+                    out = ppo_losses(model, batch, cfg, indices=sel,
+                                     anchor_logp=anchor_logp)
                 (out["total"] / float(len(slices))).backward()
                 served += int(sel.size)
                 for k, v in out.items():
@@ -912,6 +928,7 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         "kl_early_stop": bool(cfg.kl_early_stop),
         "value_loss_mode": cfg.value_loss,
         "pi_coef": float(cfg.pi_coef),
+        "amp": str(getattr(cfg, "amp", "off")),
         "config": to_jsonable(asdict(cfg)),
     }
 

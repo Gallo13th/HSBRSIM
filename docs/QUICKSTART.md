@@ -38,7 +38,7 @@ bash scripts/train_stage1.sh --smoke
 bash scripts/train_stage1.sh --gpus 0 --decisions 5M
 
 # (c) 完整 stage-1：4 卡、30M decisions
-#     旧串行版实测 5h18m；开流水线后实测 3,100 dec/s ≈ 2.7–3h（含评测）
+#     旧串行 fp32 实测 5h18m；流水线+bf16 实测 4,392 dec/s ≈ 2.5–2.6h（含评测）
 bash scripts/train_stage1.sh --gpus 0,5,6,7 --decisions 30M
 # 想关掉流水线：PIPELINE=0 bash scripts/train_stage1.sh ...
 ```
@@ -49,7 +49,8 @@ bash scripts/train_stage1.sh --gpus 0,5,6,7 --decisions 30M
    （`train_bc_bot.py`，50 万样本，8–15 分钟），所以**不需要我们私有的 checkpoint**；
 2. **训练**：`train_entity_sync.py`，entity 14.8M、`sims=0`（无 MCTS）、
    **double-buffer 流水线**（`PIPELINE=1`，实测 3,100 dec/s；脚本会自动把 learner 卡
-   从 actor 列表里剔除——同卡会让两者互抢、只剩 +19% 而非 +44%）、论文超参
+   从 actor 列表里剔除——同卡会让两者互抢、只剩 +19% 而非 +44%）+
+   **bf16 PPO**（`AMP=bf16`，实测 4,392 dec/s；loss/KL 仍 fp32）、论文超参
    （clip 0.2 / target KL 0.05 / λ=0.995 / entropy 0.002 / grad-clip 1.0 /
    lr 6e-6→5e-6 / 有效 minibatch 8192 梯度累积）、**KL anchor β=0.1 前 100 iter**；
 3. **监控**：每 5M decisions 自动跑 512 局 C0 评测（`eval/history.json`）；
