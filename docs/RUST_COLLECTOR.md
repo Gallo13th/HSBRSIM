@@ -160,3 +160,30 @@ worker 侧一次 `act_batch` 只送 1 个请求（K 行），服务器不会把�
 - **2 s 目标在当前「每次前向 ~5 ms 固定延迟 + 每轮 ready 行数有限」的结构下不可达**，
   除非：① 把 obs 从 3227 降维；② 减少 bot 座位（每轮引擎工作量）；③ 前向常驻 GPU 张量
   消除每次拷贝。
+
+
+## 5. 结论（spike 收尾，2026-10-28）
+
+**Rust 全采集器已实现、接入、测试通过；但 collect ≈2 s 的目标在本结构下不可达。**
+
+| 判据 | 实测 |
+|---|---|
+| 与 lock-step 对比（P=12，192 局/iter） | rust **6.07 s** vs lock-step **6.39 s**（≈持平，+5%） |
+| 单卡最佳（192 局） | 5.2–6.1k dec/s（0.16–0.19 ms/决策），collect ≈6.4–7.8 s |
+| 每轮前向固定延迟 | **≈5 ms/次**（B=1 5.09 ms、B=16 5.62、B=64 6.60；边际仅 ~0.02 ms/行） |
+| 每轮 ready 行数 | 16 行（16 局/worker）→ 44 → 88（192 局），受「同时需要决策的局数」限制 |
+| leaf bf16（`--leaf-amp bf16`） | 单进程 forward 4.20→4.06 s（略好）；pool 里有噪声、未证实收益 |
+| 引擎/records（Rust 内） | 0.06 ms/决策（pending 0.39 s + record 0.58 s / 21k 决策），不是瓶颈 |
+
+**为什么 2 s 不可达**：一趟 collect 的轮数由「每轮有多少局需要决策」决定，而每次前向有
+~5 ms 固定延迟（kernel launch + 同步 + 传输）。40k 决策 ≈ 400–900 轮 × 5–8 ms ≈ 3–7 s 的
+纯前向时间，与引擎/记录无关。要把这个压到 2 s，需要 ≥2× 减少轮数或每轮成本，而这不在
+「把 Python 搬到 Rust」的范围里：
+1. 观测降维（3227 → ~1k floats），同时减少传输与模型宽度；
+2. 减少并发 bot 座位（引擎每轮推进的工作量）；
+3. 常驻 GPU 输入缓冲 / CUDA graph，把 5 ms 固定延迟压到 ~1.5 ms（`fused_act` 是第一步，
+   需要配合持久缓冲重做，本轮尝试后因不稳定已回退）。
+
+**保留的能力**：`--rust-collector 1 --rc-threads N`（与 lock-step 等价、略快），
+`PPOEvaluator.fused_act`（备用），`--leaf-amp bf16`（备用，默认 off），
+以及 pool worker 的阶段计时（`meta.workers[].{reload_s,collect_s,save_s}`）便于后续定位。

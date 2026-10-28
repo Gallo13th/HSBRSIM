@@ -199,6 +199,10 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
         t0 = time.time()
         try:
             cfg = CollectConfig(**task["cfg"])
+            try:
+                server.evaluator.amp = str(cfg.leaf_amp)
+            except Exception:  # noqa: BLE001
+                pass
             server.reset_stats()
             if bool(task.get("rust_collector", False)) and search_fn is None:
                 arr, cmeta = collect_ppo_rust(

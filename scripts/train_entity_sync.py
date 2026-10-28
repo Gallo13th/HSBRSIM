@@ -86,6 +86,8 @@ def main() -> int:
                     help="梯度裁剪范数（论文 1.0）")
     ap.add_argument("--grad-accum", type=int, default=1,
                     help="梯度累积步数：有效 minibatch = minibatch * grad_accum（论文 8192）")
+    ap.add_argument("--leaf-amp", default="off", choices=["off", "bf16"],
+                    help="采集/评测叶前向精度（bf16 实测 collect 约 -5%）")
     ap.add_argument("--rc-threads", type=int, default=8,
                     help="Rust 采集器内部引擎线程数（BatchEnv threads）")
     ap.add_argument("--rust-collector", type=int, default=0,
@@ -376,7 +378,7 @@ def main() -> int:
             max_steps=int(args.max_steps), fast_act=bool(int(args.fast_act)),
             lockstep=bool(int(args.lockstep)),
             rust_collector=bool(int(args.rust_collector)),
-            rc_threads=int(args.rc_threads))
+            rc_threads=int(args.rc_threads), leaf_amp=str(args.leaf_amp))
         t_c = time.time()
         if pool is not None:
             batch, collect_meta = pool.collect(

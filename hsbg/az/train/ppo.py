@@ -267,6 +267,8 @@ class CollectConfig:
     rust_collector: bool = False
     #: Rust 采集器内部引擎并行线程数（BatchEnv threads）。
     rc_threads: int = 8
+    #: 采集/评测时叶前向精度：off=fp32；bf16=CUDA autocast（实测 collect 约 -5%）。
+    leaf_amp: str = "off"
 
 
 @dataclass
@@ -640,7 +642,7 @@ class PPOEvaluator:
 
     def logits(self, features: np.ndarray, cards: Any = None,
                mask: Any = None) -> Tuple[np.ndarray, np.ndarray]:
-        """批量前向 -> ``(policy_logits, rank_logits)``。"""
+        """批量前向 -> ``(policy_logits, rank_logits)``（amp=bf16 时前向走 autocast）。"""
         torch = self.torch
         x = self._normalize(np.atleast_2d(features))
         c = np.zeros((x.shape[0], OBS_CARDS), dtype=np.int64) if cards is None \
@@ -650,9 +652,14 @@ class PPOEvaluator:
         with torch.no_grad():
             xt = torch.from_numpy(np.ascontiguousarray(x)).to(self.device)
             ct = torch.from_numpy(np.ascontiguousarray(c)).to(self.device)
-            out = forward_model(self.model, xt, ct, m)
+            amp = str(getattr(self, "amp", "off")).lower() in ("bf16", "bfloat16")
+            if amp and str(self.device).startswith("cuda"):
+                with torch.autocast("cuda", dtype=torch.bfloat16):
+                    out = forward_model(self.model, xt, ct, m)
+            else:
+                out = forward_model(self.model, xt, ct, m)
             plog, rlog, _ = split_model_outputs(out)
-        return plog.detach().cpu().numpy(), rlog.detach().cpu().numpy()
+        return plog.float().detach().cpu().numpy(), rlog.float().detach().cpu().numpy()
 
     def fused_act(self, features: np.ndarray, cards: Any, mask: Any,
                   temperatures: Any = None, seed: int = 0):

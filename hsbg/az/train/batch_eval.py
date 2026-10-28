@@ -59,9 +59,11 @@ class BatchLeafServer:
                  temperature: float = 1.0,
                  norm_mean: Optional[np.ndarray] = None,
                  norm_std: Optional[np.ndarray] = None,
-                 queue_size: int = 4096) -> None:
+                 queue_size: int = 4096,
+                 amp: str = "off") -> None:
         self.evaluator = PPOEvaluator(model, device=device, temperature=temperature,
                                       norm_mean=norm_mean, norm_std=norm_std)
+        self.evaluator.amp = str(amp)
         self.batch_size = max(1, int(batch_size))
         self.max_wait_s = max(0.0, float(max_wait_ms) / 1000.0)
         self.temperature = float(temperature)

@@ -141,3 +141,10 @@
 > **口径**：表中 collect/read/build/ppo 是**各自独立的中位数**，不可严格相加；相邻 iteration
 > 的 elapsed 差也不是 `max(collect, ppo)` 的精确值（流水线重叠、快照/日志有抖动）。
 > 另外 `ab_c2`（C2=7.06 s）是 **10 iteration**，其余基准为 16–20 iteration。
+
+
+## 7. Rust 全采集器 spike（结论）
+
+实现并接入（`--rust-collector 1`），与 lock-step 持平（collect 6.07 s vs 6.39 s），
+**未达到 2 s 目标**：瓶颈是每次叶前向 ~5 ms 固定延迟 × 每轮 ready 行数有限，
+不是 Python/引擎/记录（Rust 内仅 0.06 ms/决策）。详见 `docs/RUST_COLLECTOR.md` §5。
