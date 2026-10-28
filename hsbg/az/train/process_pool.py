@@ -186,6 +186,7 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
             continue
 
         # ---- collect ----
+        _t_reload0 = time.time()
         try:
             _maybe_reload(task.get("weights_version"), task.get("weights_path"))
         except BaseException as exc:  # noqa: BLE001
@@ -193,6 +194,7 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                      "error": f"weights reload failed: {exc!r}",
                      "traceback": traceback.format_exc(), "seconds": 0.0})
             continue
+        _reload_s = time.time() - _t_reload0
         _t_start = time.monotonic()
         t0 = time.time()
         try:
@@ -218,6 +220,7 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     search_config=(_search_config(int(task["seed"])) if search_fn else None),
                     eval_fn=evaluator, device=device, seed=int(task["seed"]),
                     norm_mean=norm_mean, norm_std=norm_std, progress=False)
+            _collect_s = time.time() - t0
             records_file = None
             n_records = int(len(records))
             if bool(task.get("return_records", True)):
@@ -240,11 +243,17 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                             records_file)
                     except BaseException:  # noqa: BLE001 - 回退到父进程构建
                         np.savez(records_file, **packed)
-            profile = server.profile()
+            _save_s = time.time() - t0 - _collect_s
+            profile = dict(server.profile())
+            profile.update({"reload_s": float(_reload_s),
+                            "collect_s": float(_collect_s),
+                            "save_s": float(_save_s)})
             stats = server.stats
             _report({
                 "type": "collect_done", "task_id": task_id,
                 "seconds": time.time() - t0,
+                "reload_s": float(_reload_s), "collect_s": float(_collect_s),
+                "save_s": float(_save_s),
                 "t_start": _t_start, "t_end": time.monotonic(),
                 "records_file": records_file, "records": n_records,
                 "meta": to_jsonable(cmeta),
@@ -568,6 +577,7 @@ class ProcessActorPool:
                               "batch_max", "illegal", "truncated", "invalid",
                               "dropped", "search_calls", "search_failures",
                               "forced", "errors")}
+        agg.update({"reload_s": 0.0, "collect_s": 0.0, "save_s": 0.0})
         forward_s = batch_wait_s = 0.0
         t_read = records_bytes = 0.0
         timeline["t_read_start"] = time.monotonic()
@@ -594,6 +604,9 @@ class ProcessActorPool:
             agg["search_failures"] += int(m.get("search_failures", 0))
             agg["forced"] += int(m.get("forced_end_turns", 0))
             agg["errors"] += int(msg.get("errors", 0))
+            agg["reload_s"] += float(msg.get("reload_s", 0.0))
+            agg["collect_s"] += float(msg.get("collect_s", 0.0))
+            agg["save_s"] += float(msg.get("save_s", 0.0))
             forward_s += float(msg.get("forward_s", 0.0))
             batch_wait_s += float(msg.get("batch_wait_s", 0.0))
             f = msg.get("records_file")

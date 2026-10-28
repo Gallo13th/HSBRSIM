@@ -654,6 +654,40 @@ class PPOEvaluator:
             plog, rlog, _ = split_model_outputs(out)
         return plog.detach().cpu().numpy(), rlog.detach().cpu().numpy()
 
+    def fused_act(self, features: np.ndarray, cards: Any, mask: Any,
+                  temperatures: Any = None, seed: int = 0):
+        """一次 GPU pass：前向 + masked softmax + multinomial 采样 + value。
+
+        与 ``logits()`` + 调用方采样相比，少一次 GPU→CPU→GPU 往返与同步，
+        batch 采集（每轮 16–256 行）能省 2–3 ms/轮。
+        返回 ``(actions int64[k], logprobs f32[k], values f32[k])``。
+        """
+        torch = self.torch
+        x = self._normalize(np.atleast_2d(features))
+        c = (np.zeros((x.shape[0], OBS_CARDS), dtype=np.int64) if cards is None
+             else np.atleast_2d(np.asarray(cards, dtype=np.int64)))
+        m_np = np.atleast_2d(np.asarray(mask, dtype=bool))
+        dev = torch.device(self.device)
+        with torch.no_grad():
+            xt = torch.from_numpy(np.ascontiguousarray(x)).to(dev)
+            ct = torch.from_numpy(np.ascontiguousarray(c)).to(dev)
+            mt = torch.from_numpy(np.ascontiguousarray(m_np)).to(dev)
+            out = forward_model(self.model, xt, ct, mt)
+            plog, rlog, _ = split_model_outputs(out)
+            if temperatures is None:
+                t = float(self.temperature)
+            else:
+                t = torch.from_numpy(np.asarray(temperatures, dtype=np.float32)).to(dev)
+                t = t.unsqueeze(1)
+            probs = masked_log_softmax_torch(plog.float() / t, mt).exp()
+            vals = value_from_rank_logits_torch(rlog.float())
+            g = torch.Generator(device=dev).manual_seed(int(seed))
+            idx = torch.multinomial(probs, 1, generator=g).squeeze(1)
+            lps = probs.gather(1, idx.unsqueeze(1)).squeeze(1).clamp_min(1e-12).log()
+        return (idx.detach().cpu().numpy().astype(np.int64),
+                lps.detach().cpu().numpy().astype(np.float32),
+                vals.detach().cpu().numpy().astype(np.float32))
+
     def __call__(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
                  seat: int = 0) -> Tuple[np.ndarray, float]:
         plog, rlog = self.logits(np.asarray(features, np.float32),
