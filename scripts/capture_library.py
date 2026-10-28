@@ -45,6 +45,10 @@ def main() -> int:
                     help="被采集座位的最终名次上限")
     ap.add_argument("--min-learner-placement", type=int, default=0,
                     help="要求 learner 的最终名次 >= 该值（例如 5 = 只收「赢了我们」的对局）")
+    ap.add_argument("--created-iter", type=int, default=0,
+                    help="这批采集对应的训练 iteration（用于世代衰减；0=未知）")
+    ap.add_argument("--fresh", type=int, default=0,
+                    help="1=覆盖旧库，0=载入已有库后追加（滚动更新，默认）")
     ap.add_argument("--min-turn", type=int, default=8)
     ap.add_argument("--min-board", type=int, default=4)
     ap.add_argument("--temperature", type=float, default=1.0)
@@ -62,9 +66,15 @@ def main() -> int:
     evaluator = PPOEvaluator(model, device=args.device,
                              norm_mean=meta.get("norm_mean"), norm_std=meta.get("norm_std"))
     rng = np.random.default_rng(int(args.seed))
-    pool = LibraryPool(path=None, min_turn=args.min_turn,
-                       max_placement=args.max_placement, min_board=args.min_board)
-    pool.path = args.out
+    if int(args.fresh):
+        pool = LibraryPool(path=None, min_turn=args.min_turn,
+                           max_placement=args.max_placement, min_board=args.min_board)
+        pool.path = args.out
+    else:
+        # 滚动更新：先载入旧库，再追加（M5），去重由 LibraryPool 负责
+        pool = LibraryPool(args.out, min_turn=args.min_turn,
+                           max_placement=args.max_placement, min_board=args.min_board)
+        pool.path = args.out
     n_games = 0
     n_captured = 0
     t0 = time.time()
@@ -115,7 +125,8 @@ def main() -> int:
                                  placement=int(placements[seat]),
                                  strength=board_strength(player),
                                  checkpoint=str(args.checkpoint), source="capture",
-                                 created_iter=gi, game_seed=int(args.seed) + gi, seat=int(seat))
+                                 created_iter=int(args.created_iter),
+                                 game_seed=int(args.seed) + gi, seat=int(seat))
             if pool.add(entry):
                 n_captured += 1
     if n_captured:

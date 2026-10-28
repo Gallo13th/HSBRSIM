@@ -70,12 +70,15 @@ class LibraryPool:
     """按 turn 分桶的对手牌面池；支持去重、质量门、世代衰减与滚动追加。"""
 
     def __init__(self, path: Optional[str] = None, *, bucket: int = 1,
-                 min_turn: int = 8, max_placement: int = 2, min_board: int = 4):
+                 min_turn: int = 8, max_placement: int = 2, min_board: int = 4,
+                 generation_decay: float = 0.01):
         self.path = path
         self.bucket = max(1, int(bucket))
         self.min_turn = int(min_turn)
         self.max_placement = int(max_placement)
         self.min_board = int(min_board)
+        #: 每「一代」（created_iter 差 1）强度折减的比例；0=不衰减
+        self.generation_decay = float(generation_decay)
         self.entries: List[LibraryEntry] = []
         self._seen: set = set()
         if path and os.path.isfile(path):
@@ -126,7 +129,14 @@ class LibraryPool:
         if target_strength is not None:
             cands.sort(key=lambda e: abs(e.strength - int(target_strength)))
             return cands[0]
-        cands.sort(key=lambda e: e.strength, reverse=True)
+        # 世代衰减：越旧的对局等效强度越低（缺省 1%/代），避免旧强样本永久霸榜
+        newest = max(int(e.created_iter) for e in cands)
+        d = self.generation_decay
+
+        def _score(e: LibraryEntry) -> float:
+            return float(e.strength) * (1.0 - d) ** max(0, newest - int(e.created_iter))
+
+        cands.sort(key=_score, reverse=True)
         return cands[0]
 
     # ---- 持久化 ----

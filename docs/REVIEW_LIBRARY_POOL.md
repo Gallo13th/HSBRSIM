@@ -22,6 +22,38 @@
 
 > 「不允许正式训练；最多隔离 CPU / A-B 前置修复。」
 
+## 2b. 措辞校正（评审第二轮）
+
+- 「pool 不重算」是**代码确定事实**（守恒关系无人维护），但**负计数/崩溃未被运行证实**；
+  `next_eid`/eid 冲突同属风险，需 CPU 验证，不写成「必然」。
+- 采集来源：当前 checkpoint **只驱动 learner**，7 个对手仍是引擎 bot ⇒ 采到的是「当前 learner
+  对局里打败它的 bot 牌面」（条件选择偏差），不是 learner 策略，也不是历史 policy。
+- 单测现状：`tests/test_library_pool.py` 只有 4 个 **Python 假 player** 用例（质量门/去重/
+  ±1 桶/JSONL），**缺**真实 Rust 注入、不变量、跨 turn、死亡座位、故障回退、热更新集成用例。
+- 体积：完整 Player JSON（含 shop/hand/quests/effects/scouted）单条 p50/p95 需实测；按
+  14,336 条（512 局×4 turn×7 席）、5–20 KB/条估算约 **72–286 MB**，且每个 worker 各持一份
+  → 建议 zstd 分片 + 按 turn/世代分片，避免单 JSONL 全量入内存。
+
+## 2c. M5（滚动更新）已补
+
+- `capture_library.py` 默认**载入已有库再追加**（`--fresh 1` 才覆盖），`--created-iter` 用训练
+  iteration 而非游戏序号；
+- `LibraryPool.sample` 实现**世代衰减**（`generation_decay` 默认 1%/代，越旧等效强度越低）。
+
+## 2d. 混入判据（评审给定，写入协议）
+
+- 固定同一 commit/checkpoint/card db/seed/游戏数/worker，`--lockstep 1`；
+- **p=0 基线 vs p=0.1/0.3/0.5**，各 ≥3 seeds、≥1k 局或足够 CI；先短跑 10–20 iter 再长跑；
+- 记录：mean rank/top4/placement 分布、learner win、对手伤害、回合长度、legal/illegal、
+  truncated/forced、library attempt/success/fail/mismatch、吞吐、approx_kl/clipfrac/entropy/
+  value loss/adv std/return、各 turn 的库覆盖与强度 p50/p90；
+- **允许条件**：注入成功率≈attempt 且失败 <1e-3、0 异常/非法/复活/跨卡表、legal 不劣于基线
+  （CI）、truncated/forced 不升、吞吐影响 <5%、KL/entropy/adv 方差无持续恶化、held-out 固定
+  评测 top4/mean rank 显著或不劣；
+- **回退条件**：引擎 panic/不变量破坏/illegal 显著/性能 >5%/KL 或 entropy 越界/收益不显著 → p=0；
+- **p 建议从 0.1 起**；不要按 7 席独立 p=0.3（至少一次注入概率 ≈0.92，扰动过强），
+  建议 game-level 或每 turn 固定注入数。
+
 ## 3. 本轮已修（提交见 git log）
 
 | 评审项 | 修复 |
@@ -51,3 +83,12 @@
 镜像库实现完成度：**M1–M4 代码就绪、测试通过，但按终审不能混入正式训练**。
 下一步（按优先级）：① 引擎 `recount_pool` + 不变量测试 → ② 自对弈采集（模型驱动 7 席） →
 ③ 隔离 A/B → ④ 再送终审；全部通过后才打开 `--library-p`。
+
+
+## 6. 「越来越强」目前不成立（评审结论）
+
+- top-2 是**幸存者选择**（selection bias），且当前局 bot 不是 checkpoint 策略；
+- 强度 Σ(atk+hp) 未按 turn/英雄/种族/血量校准；
+- 已补的世代衰减/追加只是必要条件，**不构成「库会变强」的证明**；
+- 要真正建立「越来越强」：固定旧代保留 + 按世代/时间衰减 + 采集**历史 checkpoint 混合**（避免自举）
+  + held-out 上做 Elo/胜率评估。
