@@ -130,6 +130,8 @@ def main() -> int:
                     help="KL anchor 系数 β（论文 Table 7 = 0.1；0=关闭）")
     ap.add_argument("--anchor-iterations", type=int, default=100,
                     help="β 生效的前 N 个 iteration（论文 300 个中的前 100）")
+    ap.add_argument("--anchor-beta-tail", type=float, default=0.0,
+                    help="前 N 个 iteration 之后保留的 anchor β（stage-3 建议 0.02；0=旧行为）")
     ap.add_argument("--eval-every-decisions", type=int, default=0,
                     help="每累计 N decisions 做一次 C0 评测（0=关闭）")
     ap.add_argument("--eval-games", type=int, default=512)
@@ -490,8 +492,9 @@ def main() -> int:
                     print(f"[pipeline] ratio guard tripped: pre_ratio_mean={pre_ratio:.3f} "
                           f"(lag={lag}); guard={args.pipeline_guard}", flush=True)
 
-            trainer.config.anchor_coef = (float(args.anchor_beta)
-                                          if i < int(args.anchor_iterations) else 0.0)
+            trainer.config.anchor_coef = (
+                float(args.anchor_beta) if i < int(args.anchor_iterations)
+                else float(args.anchor_beta_tail))
             _t_ppo = time.time()
             _tl["t_ppo_start"] = time.monotonic()
             stats = trainer.update(batch)
