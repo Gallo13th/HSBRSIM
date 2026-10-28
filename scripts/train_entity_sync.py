@@ -98,6 +98,8 @@ def main() -> int:
                     help="1=Rust 全采集器（BatchEnv 驱动，记录打包在 Rust）")
     ap.add_argument("--library-pool", default="",
                     help="镜像对手库 JSONL（空=不用）；见 docs/LIBRARY_POOL_PLAN.md")
+    ap.add_argument("--frozen-seats", type=int, default=0,
+                    help="由冻结对手驱动的 bot 座位数（1–2 性价比最高；7=全部，慢 ~25x）")
     ap.add_argument("--frozen-opponent", default="",
                     help="冻结对手模型 checkpoint（空=引擎 bot）；bot 座位由它驱动（分裂模型/自对弈）")
     ap.add_argument("--trajectory-pool", default="",
@@ -401,6 +403,7 @@ def main() -> int:
             library_pool=str(args.library_pool), library_p=float(args.library_p),
             trajectory_pool=str(args.trajectory_pool), trajectory_p=float(args.trajectory_p),
             frozen_opponent=str(args.frozen_opponent),
+            frozen_seats=int(args.frozen_seats),
             rust_collector=bool(int(args.rust_collector)),
             rc_threads=int(args.rc_threads), leaf_amp=str(args.leaf_amp),
             leaf_compile=bool(int(args.leaf_compile)),

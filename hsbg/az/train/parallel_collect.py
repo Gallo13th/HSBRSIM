@@ -292,6 +292,10 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             st["steps"] = 0
             st["rng"] = np.random.default_rng(int(seed) + st["gi"] + 7919)
             lib_traj_used += 1
+    n_frozen = max(0, min(7, int(getattr(cfg, "frozen_seats", 0))))
+    frozen_set = tuple(range(1, 1 + n_frozen)) if opponent_policy is not None else ()
+    for st in states:
+        st["frozen_set"] = frozen_set
     library_p = max(0.0, min(1.0, float(library_p)))
     if library_pool is not None and library_p > 0.0:
         raise RuntimeError(
@@ -361,7 +365,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                     st["traj_fallback"] = st.get("traj_fallback", 0) + 1
                 if replayed:
                     pass
-                elif opponent_policy is not None:
+                elif opponent_policy is not None and int(q) in st.get("frozen_set", ()):
                     # 冻结对手模型：由它替这个座位决策（分裂模型/自对弈）
                     try:
                         dec = opponent_policy.decide(g, int(q))
@@ -443,6 +447,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             "trajectory_replay_illegal": int(sum(st.get("traj_illegal", 0) for st in states)),
             "trajectory_fallback": int(sum(st.get("traj_fallback", 0) for st in states)),
             "frozen_opponent": bool(opponent_policy is not None),
+            "frozen_seats": int(len(frozen_set)),
             "records": int(len(records)), "illegal_actions": int(illegal),
             "truncated_games": int(truncated),
             "games_meta": metas, "forced_end_turns": int(policy.forced_actions)}
