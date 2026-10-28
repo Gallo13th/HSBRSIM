@@ -45,7 +45,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from .common import to_jsonable
-from .ppo import CollectConfig, PPOBatch, build_batch_from_records
+from .ppo import (CollectConfig, PPOBatch, build_batch_from_arrays,
+                  build_batch_from_records, pack_records_arrays)
 
 
 # ---------------------------------------------------------------------------
@@ -192,10 +193,10 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
             records_file = None
             n_records = int(len(records))
             if bool(task.get("return_records", True)):
+                # L3：SoA 打包成 npz（父进程不用再逐 dict 解析）
                 records_file = os.path.join(
-                    task["tmpdir"], f"rec_{task_id}_w{index}.pkl")
-                with open(records_file, "wb") as f:
-                    pickle.dump(records, f, protocol=pickle.HIGHEST_PROTOCOL)
+                    task["tmpdir"], f"rec_{task_id}_w{index}.npz")
+                np.savez(records_file, **pack_records_arrays(records))
             profile = server.profile()
             stats = server.stats
             _report({
@@ -454,6 +455,7 @@ class ProcessActorPool:
         timeline["t_dispatch_done"] = time.monotonic()
         wall = time.time() - t_start
         records: List[Dict[str, Any]] = []
+        packed_all: List[Dict[str, np.ndarray]] = []
         metas: List[Dict[str, Any]] = []
         profiles: List[Dict[str, Any]] = []
         agg = {k: 0 for k in ("decisions", "records", "leafs", "batches",
@@ -491,8 +493,12 @@ class ProcessActorPool:
             f = msg.get("records_file")
             if f:
                 t_r0 = time.time()
-                with open(f, "rb") as fh:
-                    records.extend(pickle.load(fh))
+                if f.endswith(".npz"):
+                    with np.load(f) as z:
+                        packed_all.append({k: z[k] for k in z.files})
+                else:
+                    with open(f, "rb") as fh:
+                        records.extend(pickle.load(fh))
                 t_read += time.time() - t_r0
                 try:
                     records_bytes += os.path.getsize(f)
@@ -544,15 +550,22 @@ class ProcessActorPool:
             "worker_meta": to_jsonable(metas),
             "elapsed_s": wall,
         }
-        if not records:
+        if not records and not packed_all:
             # 采集侧没有有效记录（全部截断/非法），保持与单进程一致的报错语义
             raise RuntimeError(
                 f"process pool 无有效轨迹（truncated={agg['truncated']}, "
                 f"invalid={agg['invalid']}, decisions={agg['decisions']}）")
         timeline["t_read_done"] = time.monotonic()
         t_b0 = time.time()
-        batch = build_batch_from_records(records, gamma=float(gamma),
-                                         lam=float(lam), meta=meta)
+        if packed_all:
+            # L3：数组直拼（每个 worker 的 episode 互不相交，拼完统一排序/GAE）
+            merged = {k: np.concatenate([p[k] for p in packed_all if k in p], axis=0)
+                      for k in packed_all[0]}
+            batch = build_batch_from_arrays(merged, gamma=float(gamma),
+                                            lam=float(lam), meta=meta)
+        else:
+            batch = build_batch_from_records(records, gamma=float(gamma),
+                                             lam=float(lam), meta=meta)
         build_batch_s = time.time() - t_b0
         meta["parent_read_s"] = float(t_read)
         meta["records_bytes"] = int(records_bytes)

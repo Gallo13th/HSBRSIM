@@ -1174,6 +1174,100 @@ def _weak_bot_action(game: Any, seat: int, rng: np.random.Generator) -> int:
     return int(legal[int(rng.integers(0, legal.size))])
 
 
+def pack_records_arrays(records: Sequence[Dict[str, Any]]) -> Dict[str, np.ndarray]:
+    """records(list[dict]) → SoA 数组（L3：一次性 stack，供 npz 传输）。"""
+    n = len(records)
+    f0 = records[0]["features"]
+    has_pi = any(r.get("target_pi") is not None for r in records)
+    out = {
+        "features": np.empty((n, f0.size), dtype=np.float32),
+        "cards": np.empty((n, np.asarray(records[0]["cards"]).size), dtype=np.int16),
+        "masks": np.empty((n, np.asarray(records[0]["mask"]).size), dtype=bool),
+        "actions": np.empty(n, dtype=np.int64),
+        "old_logprobs": np.empty(n, dtype=np.float32),
+        "values": np.empty(n, dtype=np.float32),
+        "ranks": np.empty(n, dtype=np.int64),
+        "seats": np.empty(n, dtype=np.int32),
+        "game_ids": np.empty(n, dtype=np.int64),
+        "turns": np.empty(n, dtype=np.int32),
+        "forced": np.empty(n, dtype=bool),
+        "has_pi": np.zeros(n, dtype=bool),
+    }
+    if has_pi:
+        out["target_pi"] = np.zeros((n, np.asarray(records[0]["mask"]).size), dtype=np.float32)
+    for i, r in enumerate(records):
+        out["features"][i] = r["features"]
+        out["cards"][i] = np.asarray(r["cards"], dtype=np.int16)
+        out["masks"][i] = np.asarray(r["mask"], dtype=bool)
+        out["actions"][i] = int(r["action"])
+        out["old_logprobs"][i] = float(r["old_logprob"])
+        out["values"][i] = float(r["value"])
+        out["ranks"][i] = int(r.get("rank", -1))
+        out["seats"][i] = int(r["seat"])
+        out["game_ids"][i] = int(r["game_id"])
+        out["turns"][i] = int(r.get("turn", -1))
+        out["forced"][i] = bool(r.get("forced", False))
+        pi = r.get("target_pi")
+        if pi is not None and has_pi:
+            out["has_pi"][i] = True
+            out["target_pi"][i] = pi
+    return out
+
+
+def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0,
+                            lam: float = 0.95, step_penalty: float = 0.0,
+                            meta: Optional[Dict[str, Any]] = None) -> "PPOBatch":
+    """SoA 数组 → PPOBatch（与 ``build_batch_from_records`` 等价，但零 dict）。"""
+    ranks = np.asarray(packed["ranks"])
+    valid = ranks > 0
+    dropped = int((~valid).sum())
+    if not bool(valid.all()):
+        packed = {k: v[valid] for k, v in packed.items()}
+    game_ids = np.asarray(packed["game_ids"])
+    seats = np.asarray(packed["seats"])
+    turns = np.asarray(packed["turns"])
+    # 与 ``_group_order`` 完全一致：按 (game_id, seat) **稳定**排序，局内保持原时序
+    key = game_ids.astype(np.int64) * np.int64(256) + seats.astype(np.int64)
+    order = np.argsort(key, kind="stable")
+    t = {k: v[order] for k, v in packed.items()}
+    n = int(order.size)
+    if n == 0:
+        raise ValueError("build_batch_from_arrays: 没有有效样本")
+    game_ids, seats, turns = t["game_ids"], t["seats"], t["turns"]
+    values = t["values"]
+
+    rewards = np.full(n, -float(step_penalty), dtype=np.float32)
+    dones = np.zeros(n, dtype=np.float32)
+    episode_ids = np.zeros(n, dtype=np.int32)
+    key_change = np.empty(n, dtype=bool)
+    key_change[0] = True
+    key_change[1:] = (game_ids[1:] != game_ids[:-1]) | (seats[1:] != seats[:-1])
+    ep_index = np.cumsum(key_change) - 1
+    episode_ids[:] = ep_index
+    ep = int(ep_index[-1] + 1)
+    last_of_ep = np.empty(n, dtype=bool)
+    last_of_ep[:-1] = key_change[1:]
+    last_of_ep[-1] = True
+    util = utility_from_rank(ranks[valid][order])
+    rewards[last_of_ep] = np.asarray(util, dtype=np.float32)[last_of_ep] - float(step_penalty)
+    dones[last_of_ep] = 1.0
+
+    advantages, returns = compute_gae(rewards, values, dones, gamma=gamma, lam=lam)
+    merged_meta: Dict[str, Any] = dict(meta or {})
+    merged_meta.update({"gamma": float(gamma), "lam": float(lam),
+                        "step_penalty": float(step_penalty),
+                        "dropped_unknown_rank": dropped, "episodes": int(ep)})
+    return PPOBatch(
+        features=t["features"], cards=t["cards"], masks=t["masks"],
+        actions=t["actions"], old_logprobs=t["old_logprobs"], values=values,
+        rewards=rewards, dones=dones, advantages=advantages, returns=returns,
+        seats=seats.astype(np.int32), game_ids=game_ids.astype(np.int64),
+        ranks=ranks[valid][order].astype(np.int64), turns=turns.astype(np.int32),
+        target_pi=t.get("target_pi", np.zeros((n, N_ACTIONS), dtype=np.float32)),
+        has_pi=t.get("has_pi", np.zeros(n, dtype=bool)),
+        episode_ids=episode_ids, forced=t["forced"], meta=merged_meta)
+
+
 def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                       search_fn: Optional[Callable[..., Any]] = None,
                       search_config: Any = None,
