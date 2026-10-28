@@ -230,6 +230,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                          library_pool: Any = None, library_p: float = 0.0,
                          library_rng: Any = None,
                          trajectory_pool: Any = None, trajectory_p: float = 0.0,
+                         opponent_policy: Any = None,
                          ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """lock-step 采集：N 局同步推进，每轮把所有待决策局拼成一个 batch 前向一次。
 
@@ -360,6 +361,17 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                     st["traj_fallback"] = st.get("traj_fallback", 0) + 1
                 if replayed:
                     pass
+                elif opponent_policy is not None:
+                    # 冻结对手模型：由它替这个座位决策（分裂模型/自对弈）
+                    try:
+                        dec = opponent_policy.decide(g, int(q))
+                        game_action = int(dec.action)
+                        mq = mask_from_bytes(g.legal_mask(int(q)))
+                        if not (0 <= game_action < N_ACTIONS and bool(mq[game_action])):
+                            game_action = int(np.flatnonzero(mq)[0]) if mq.any() else 0
+                        g.step(int(q), game_action)
+                    except BaseException:  # noqa: BLE001 - 失败退回 bot，保证对局继续
+                        g.bot_play(int(q))
                 elif str(gamemode) == "weak":
                     g.step(int(q), _weak_bot_action(g, int(q), st["rng"]))
                 else:
@@ -430,6 +442,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             "trajectory_replayed": int(sum(st.get("traj_replayed", 0) for st in states)),
             "trajectory_replay_illegal": int(sum(st.get("traj_illegal", 0) for st in states)),
             "trajectory_fallback": int(sum(st.get("traj_fallback", 0) for st in states)),
+            "frozen_opponent": bool(opponent_policy is not None),
             "records": int(len(records)), "illegal_actions": int(illegal),
             "truncated_games": int(truncated),
             "games_meta": metas, "forced_end_turns": int(policy.forced_actions)}

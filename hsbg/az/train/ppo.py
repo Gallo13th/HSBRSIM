@@ -277,6 +277,8 @@ class CollectConfig:
     #: 对手场面轨迹镜像库（目录）；trajectory_p=每局被轨迹替换的概率
     trajectory_pool: str = ""
     trajectory_p: float = 0.0
+    #: 冻结对手模型（分裂模型/自对弈的对手）：空=引擎 bot；给 checkpoint 则 bot 座位由它驱动
+    frozen_opponent: str = ""
     #: 批量叶服务器的聚批等待窗口（ms）。单客户端（lockstep/rust collector）应设很小。
     leaf_wait_ms: float = 2.0
 

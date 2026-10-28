@@ -45,7 +45,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from .common import to_jsonable
-from .ppo import (CollectConfig, PPOBatch, build_batch_from_arrays,
+from .ppo import (CollectConfig, PPOBatch, PPOSelfPlayPolicy, build_batch_from_arrays,
                   build_batch_from_records, pack_records_arrays)
 
 
@@ -55,6 +55,7 @@ from .ppo import (CollectConfig, PPOBatch, build_batch_from_arrays,
 #: 每个 worker 进程内的镜像库缓存（按路径）
 _LIB_CACHE: Dict[str, Any] = {}
 _TRAJ_CACHE: Dict[str, Any] = {}
+_OPP_CACHE: Dict[Any, Any] = {}
 
 
 def _save_built_batch(batch: Any, path: str) -> None:
@@ -260,6 +261,23 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                         tpool = cached[1]
                     if tpool is not None and not tpool.items:
                         tpool = None
+                opp_pol = None
+                fck = str(getattr(cfg, "frozen_opponent", "") or "")
+                if fck:
+                    key = (fck, os.path.getmtime(fck) if os.path.isfile(fck) else 0.0)
+                    cached_pol = _OPP_CACHE.get(key)
+                    if cached_pol is None:
+                        from .model import load_checkpoint as _load_ckpt
+                        om, ometa = _load_ckpt(fck, device=device)
+                        opp_pol = PPOSelfPlayPolicy(
+                            om, device=device, config=cfg, search_fn=None,
+                            search_config=None, eval_fn=evaluator,
+                            engine_backend="auto", seed=int(task["seed"]) + 31,
+                            norm_mean=ometa.get("norm_mean"),
+                            norm_std=ometa.get("norm_std"), move_model=False)
+                        _OPP_CACHE[key] = opp_pol
+                    else:
+                        opp_pol = cached_pol
                 records, cmeta = collect_ppo_lockstep(
                     model, cfg, eval_fn=evaluator, device=device,
                     seed=int(task["seed"]), games=int(cfg.games),
@@ -267,7 +285,8 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     norm_std=norm_std, library_pool=lib,
                     library_p=float(getattr(cfg, "library_p", 0.0)),
                     trajectory_pool=tpool,
-                    trajectory_p=float(getattr(cfg, "trajectory_p", 0.0)))
+                    trajectory_p=float(getattr(cfg, "trajectory_p", 0.0)),
+                    opponent_policy=opp_pol)
             else:
                 if str(getattr(cfg, "library_pool", "")) and \
                         float(getattr(cfg, "library_p", 0.0)) > 0.0:
