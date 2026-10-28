@@ -15,8 +15,10 @@
 | episode 计数用 unique、int64 全局 key | ✅ 已修 |
 | L4 混合回退协议（raw shard 先补齐再合并） | ✅ 已修 |
 | advantage 归一化只用 valid 子集 | ✅ 已修 |
-| worker 自愈竞态 | ⛔ 未修（既有健壮性缺陷，已登记为下一步） |
-| RSS 峰值实测、CUDA bf16 dtype 单测 | ⛔ 未做（已登记） |
+| worker 自愈竞态 | ✅ 已修（`_next_msg/_defer` 缓冲）+ 故障注入测试通过 |
+| RSS 峰值实测 | ✅ 17.4 GB 合计（父 3.40 + 12×~1.17），无泄漏 |
+| CUDA bf16 dtype 单测 | ✅ `test_bf16_autocast_keeps_loss_side_fp32` 通过 |
+| DDP 决策 | ✅ 用实测 C2=7.06 s / C3=6.98 s / P1=4.58 s 代入条件式 → step 不变，暂不实现 |
 | 报告口径（worker / 父进程 / 总 collect 分开） | ✅ 已改 |
 | DDP 阈值论证 | ✅ 已按评审条件式改正（不再用 2.5s 门槛） |
 

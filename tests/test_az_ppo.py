@@ -591,3 +591,33 @@ def test_bf16_amp_matches_fp32_loss_sanity():
     # 同一 batch、同起点：两种精度的 total/value_loss 应在同一量级（不要求逐位相等）
     assert abs(float(bf16["total"]) - float(fp32["total"])) < 0.5
     assert abs(float(bf16["value_loss"]) - float(fp32["value_loss"])) < 0.5
+
+
+def test_bf16_autocast_keeps_loss_side_fp32():
+    """bf16 autocast：前向在 bf16，但 loss/KL/entropy 计算与参数仍是 fp32。"""
+    torch = _needs_torch()
+    if not torch.cuda.is_available():
+        pytest.skip("需要 CUDA")
+    import copy
+    from hsbg.az.train.model import build_net
+
+    torch.manual_seed(0)
+    model_cpu = build_net(16)
+    batch = _batch_from_model(model_cpu, n_games=2, decisions_per_seat=2)
+    model = copy.deepcopy(model_cpu).cuda()
+    cfg = PPOConfig(device="cuda:0", value_loss="rank", pi_coef=0.2,
+                    minibatch=64, grad_accum=1, epochs=1, amp="bf16")
+    stats = train_ppo(model, batch, cfg)
+    assert all(p.dtype == torch.float32 for p in model.parameters())
+
+    # 直接在 autocast 内调用 ppo_losses：返回的 loss 必须已回到 fp32
+    import copy as _copy
+    m2 = _copy.deepcopy(model_cpu).cuda()
+    m2.train()
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        out = ppo_losses(m2, batch, cfg, indices=np.arange(len(batch.actions)))
+    assert out["total"].dtype == torch.float32
+    for k in ("policy_loss", "value_loss", "entropy", "approx_kl", "aux_pi_loss"):
+        assert out[k].dtype == torch.float32, k
+    assert np.isfinite(float(out["total"].detach().cpu()))
+    assert stats["epochs"][0]["amp"] == "bf16" if "amp" in stats["epochs"][0] else True

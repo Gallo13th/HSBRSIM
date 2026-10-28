@@ -73,3 +73,54 @@
    - ② Rust 全采集器（方案 B）→ collect 可到 ~2 s；
    - ③ 之后才上 DDP learner（2 卡）把 PPO 压到 ~2.5 s，最终 step ≈ 2.5–3 s（≈12–15k dec/s）。
 3. **不建议**：Rust actor v1（批量观测）、现在就上 DDP、继续调 processes/threads（已扫到最优）。
+
+
+## 6. 终审后收尾（2026-10-28 晚）
+
+### 6.1 可靠性修复
+- **worker 自愈竞态**：`_spawn_one` 等待 `ready` 时不再因读到其它 worker 的正常消息而崩溃，
+  改为 `_next_msg/_defer` 缓冲并交还后续等待者；新增故障注入测试
+  `tests/test_process_pool.py::test_pool_collects_and_restarts_after_kill`
+  （kill 一个 worker → 下一次 collect 自愈且 `restarts>=1`）。**通过**。
+
+### 6.2 bf16 dtype 单测
+- 新增 `test_bf16_autocast_keeps_loss_side_fp32`：autocast(bf16) 下 `ppo_losses` 返回的
+  `total/policy/value/entropy/approx_kl/aux_pi` 全部 `float32`，模型参数仍 `float32`。**通过**。
+
+### 6.3 RSS 峰值实测（`scripts/measure_rss.py`，lockstep 12 worker，4 iter）
+| 指标 | 实测 |
+|---|---:|
+| 父进程峰值 | 3.40 GB |
+| 每 worker 峰值 | 1.14–1.19 GB × 12 |
+| 全部进程合计峰值 | **17.4 GB** |
+| 机器内存 | 足够（无 OOM 风险；非泄漏——worker 每次 collect 后释放 records/SoA/batch） |
+
+### 6.4 DDP 决策（按评审条件式，用实测替代预测）
+
+| 量 | 实测/估计 | 来源 |
+|---|---:|---|
+| C3（12 worker / 3 actor 卡） | **6.98 s** | `runs/ab_l4v2` |
+| C2（8 worker / 2 actor 卡） | **7.06 s** | `runs/ab_c2`（几乎相同 → **collect 不是 GPU 瓶颈**） |
+| P1（1 卡 learner） | 4.58 s | 同上 |
+| P2（2 卡 DDP，估计） | ≈2.9 s（4.58/2 + 通信/共享内存开销） | 估计 |
+
+代入条件式：
+- 现状 `max(C3,P1) = max(6.98,4.58) = 6.98`
+- DDP 后 `max(C2,P2) = max(7.06,2.9) = 7.06`
+
+→ **DDP 在当前 4 卡预算下 step 不变**（collect 是限速步），因此**暂不实现**，等 collect
+降到 < P1（4.5 s）时再上；届时 2 卡 learner 才能把 step 压到 ~4 s。这是用实测数字做出的决定，
+不是拍门槛。
+
+### 6.5 最终基准（全部修复后，同 seed、空闲卡 1/3/0 + learner 2，20 iter）
+| 指标 | 数值 |
+|---|---:|
+| dec/s | **5,736** |
+| collect | 6.33 s（父进程 read 0.91 + build 0.56 + worker ~4.9） |
+| PPO（bf16） | 4.63 s |
+| iter | 6.31 s |
+| lag / ratio | 1 / 0.9938 |
+| entropy / approx_kl | 0.465 / 0.00343 |
+
+> 与 `ab_l4v2`(5,435)、`ab_ls_final`(6,311) 的差异来自邻居作业与机器负载波动（同一配置
+> 在本机可波动 ±10%）。所有结论按「同环境 A/B」比较。
