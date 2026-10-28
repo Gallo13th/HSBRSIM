@@ -54,6 +54,7 @@ from .ppo import (CollectConfig, PPOBatch, build_batch_from_arrays,
 # ---------------------------------------------------------------------------
 #: 每个 worker 进程内的镜像库缓存（按路径）
 _LIB_CACHE: Dict[str, Any] = {}
+_TRAJ_CACHE: Dict[str, Any] = {}
 
 
 def _save_built_batch(batch: Any, path: str) -> None:
@@ -238,12 +239,30 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                         float(getattr(cfg, "library_p", 0.0)) > 0.0:
                     print("[warn] library_pool 已设置但库为空/路径无效：本次将退回纯 bot 对手",
                           flush=True)
+                tpool = None
+                if str(getattr(cfg, "trajectory_pool", "")) and \
+                        float(getattr(cfg, "trajectory_p", 0.0)) > 0.0:
+                    from .trajectory_pool import TrajectoryPool
+                    tdir = str(cfg.trajectory_pool)
+                    tkey = os.path.getmtime(tdir) if os.path.isdir(tdir) else 0.0
+                    cached = _TRAJ_CACHE.get(tdir)
+                    if cached is None or cached[0] != tkey:
+                        tpool = TrajectoryPool(tdir) if tkey else None
+                        _TRAJ_CACHE[tdir] = (tkey, tpool)
+                        if tpool is None or not tpool.items:
+                            print(f"[warn] 轨迹库为空/不存在: {tdir}", flush=True)
+                    else:
+                        tpool = cached[1]
+                    if tpool is not None and not tpool.items:
+                        tpool = None
                 records, cmeta = collect_ppo_lockstep(
                     model, cfg, eval_fn=evaluator, device=device,
                     seed=int(task["seed"]), games=int(cfg.games),
                     gamemode=str(cfg.opponent), norm_mean=norm_mean,
                     norm_std=norm_std, library_pool=lib,
-                    library_p=float(getattr(cfg, "library_p", 0.0)))
+                    library_p=float(getattr(cfg, "library_p", 0.0)),
+                    trajectory_pool=tpool,
+                    trajectory_p=float(getattr(cfg, "trajectory_p", 0.0)))
             else:
                 if str(getattr(cfg, "library_pool", "")) and \
                         float(getattr(cfg, "library_p", 0.0)) > 0.0:
