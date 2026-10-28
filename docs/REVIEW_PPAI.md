@@ -123,5 +123,11 @@ EOF
 | `_spawn_one` 非 ready 消息「已修 vs 保留」自相矛盾 | ✅ 明确为：**过期消息忽略属已记录契约**（上一任务已超时），不算缺陷 |
 | THROUGHPUT 116 行「collect 不是 GPU 瓶颈」措辞 | ✅ 改为「未观察到让卡收益（证据不足）」 |
 
+### 9.1 第四轮追加反例（ack 后死亡、无 Empty 分支）
+评审用 AST 纯内存复现了「worker0 ack 后死亡、worker1 done 持续到达 → 永不走 Empty 分支 → 不被发现」
+（针对 `0beabb9`）。`5597cf8` 已改为**每收到一条消息就 `_resync()`**；并新增回归
+`test_reload_detects_worker_death_after_ack`（模拟 pid 变化：worker0 首次 ack 后"死亡"，
+断言其被重新入 pending、收到第二次任务、最终 `done==2` 且在超时前返回）。**通过**。
+
 > 第四轮评审结论原文：「有条件通过（核心阻断已消除）……加速计划可收尾：是，
 > 条件是修正 REVIEW RSS/措辞并把 pytest.raises 改精确断言」。以上条件已全部满足。

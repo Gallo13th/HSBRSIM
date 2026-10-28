@@ -163,3 +163,51 @@ def test_reload_ignores_foreign_task_messages_without_livelock(tmp_path, monkeyp
     # 外任务消息仍保留，可被它的等待者取到
     m = pool._take_msg(0.1, accept=lambda x: x.get("task_id") == "other")
     assert m["type"] == "collect_done"
+
+
+def test_reload_detects_worker_death_after_ack(tmp_path, monkeypatch):
+    """ack 后立刻死亡（无 queue.Empty 分支）：必须在收到后续消息时 resync 并重发。"""
+    pytest.importorskip("torch")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+    import queue as _q
+    import threading
+
+    from hsbg.az.train.process_pool import ProcessActorPool
+
+    pool = ProcessActorPool.__new__(ProcessActorPool)
+    pool._result_q = _q.Queue()
+    pool._deferred = []
+    pool._task_qs = [_q.Queue(), _q.Queue()]
+    pool._info = [{"pid": 100}, {"pid": 200}]
+    pool._procs = [None, None]
+
+    state = {"w0_acks": 0}
+
+    def fake_check_alive():
+        # 模拟：worker0 在 ack 之后死亡并被重启（pid 变化）
+        if state["w0_acks"] >= 1 and pool._info[0]["pid"] == 100:
+            pool._info[0]["pid"] = 999
+        return []
+
+    pool._check_alive = fake_check_alive
+
+    def worker(w, q):
+        while True:
+            task = q.get(timeout=5.0)
+            if w == 0:
+                state["w0_acks"] += 1
+            pool._result_q.put({"worker": w, "type": "reload_done",
+                                "task_id": task["task_id"]})
+            if w == 1 and state["w0_acks"] >= 2:
+                return
+
+    ths = [threading.Thread(target=worker, args=(w, q), daemon=True)
+           for w, q in enumerate(pool._task_qs)]
+    [t.start() for t in ths]
+    t0 = time.time()
+    done = pool.reload_weights("ckpt.pt", updates=1, timeout=10.0)
+    elapsed = time.time() - t0
+    # worker0 收到两次任务（首次 ack 后死亡 → 重发 → 再 ack），最终成功数为 2
+    assert state["w0_acks"] >= 2, state
+    assert done == 2, done
+    assert elapsed < 9.5, elapsed
