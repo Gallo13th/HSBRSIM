@@ -37,15 +37,19 @@ bash scripts/train_stage1.sh --smoke
 # (b) 小预算：单卡 5M decisions（约 1 小时）
 bash scripts/train_stage1.sh --gpus 0 --decisions 5M
 
-# (c) 完整 stage-1：4 卡、30M decisions（实测 5h18m；见 §3）
+# (c) 完整 stage-1：4 卡、30M decisions
+#     旧串行版实测 5h18m；开流水线后实测 3,100 dec/s ≈ 2.7–3h（含评测）
 bash scripts/train_stage1.sh --gpus 0,5,6,7 --decisions 30M
+# 想关掉流水线：PIPELINE=0 bash scripts/train_stage1.sh ...
 ```
 
 脚本的默认行为：
 
 1. **起点**：若存在 `runs/az_entity_1m_s0/model.pt` 就用它；否则先跑 **BC 冷启动**
    （`train_bc_bot.py`，50 万样本，8–15 分钟），所以**不需要我们私有的 checkpoint**；
-2. **训练**：`train_entity_sync.py`，entity 14.8M、`sims=0`（无 MCTS）、论文超参
+2. **训练**：`train_entity_sync.py`，entity 14.8M、`sims=0`（无 MCTS）、
+   **double-buffer 流水线**（`PIPELINE=1`，实测 3,100 dec/s；脚本会自动把 learner 卡
+   从 actor 列表里剔除——同卡会让两者互抢、只剩 +19% 而非 +44%）、论文超参
    （clip 0.2 / target KL 0.05 / λ=0.995 / entropy 0.002 / grad-clip 1.0 /
    lr 6e-6→5e-6 / 有效 minibatch 8192 梯度累积）、**KL anchor β=0.1 前 100 iter**；
 3. **监控**：每 5M decisions 自动跑 512 局 C0 评测（`eval/history.json`）；
@@ -61,6 +65,7 @@ stage-1（30.08M decisions，4 卡，5h18m）在 512 局 C0 上的曲线：
 | decisions | mean rank | top4 | 说明 |
 |---:|---:|---:|---|
 | 0（起点） | 4.70 | 44.9% | 1M sims=0 基线 |
+| 1.1M（流水线复核） | 3.40 | 71.9% | 同 seed 串行 3.47，配对 CI 覆盖 0 |
 | 10.01M | 4.40 | 52.7% | 首次统计显著（配对 CI 不含 0） |
 | 15.02M | 4.18 | 59.4% | |
 | 25.02M | 4.08 | 60.2% | |
