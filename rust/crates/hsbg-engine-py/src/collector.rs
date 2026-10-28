@@ -50,6 +50,9 @@ pub struct PyRustCollector {
     // 本轮待决策槽位
     pending_slots: Vec<usize>,
     pending_turns: Vec<u32>,
+    pending_masks: Vec<u8>,
+    pending_feats: Vec<f32>,
+    pending_cards: Vec<i32>,
     rounds: u64,
     illegal: u64,
 }
@@ -109,7 +112,9 @@ impl PyRustCollector {
         let cfg: RulesConfig = parse_config(config_json)?;
         let env = BatchEnv::new(n_games, seed, cfg, vec![seat], threads)
             .map_err(pyo3::exceptions::PyValueError::new_err)?;
-        let cap = n_games * (max_steps.min(4096).max(64));
+        // 预分配按「每局 ~160 决策」估；不足时 grow()，避免一开始就 memset 几个 GB
+        let _ = max_steps;
+        let cap = n_games * 192;
         Ok(PyRustCollector {
             env, n_slots: n_games, seat, limit, cap, cnt: 0,
             feats: vec![0.0; cap * OBS_FLOATS],
@@ -130,6 +135,9 @@ impl PyRustCollector {
             placements: vec![0; n_games],
             pending_slots: Vec::new(),
             pending_turns: Vec::new(),
+            pending_masks: Vec::new(),
+            pending_feats: Vec::new(),
+            pending_cards: Vec::new(),
             rounds: 0,
             illegal: 0,
         })
@@ -170,6 +178,9 @@ impl PyRustCollector {
             to[j] = turns[slot];
             so[j] = slot as i64;
         }
+        self.pending_masks = mo.clone();
+        self.pending_feats = fo.clone();
+        self.pending_cards = co.clone();
         Ok((f32_bytes(py, &fo), i32_bytes(py, &co), PyBytes::new(py, &mo),
             PyBytes::new(py, &u32_bytes(&to)), PyBytes::new(py, &i64_bytes(&so))))
     }
@@ -186,14 +197,12 @@ impl PyRustCollector {
                 "expect {k} rows: actions {}B, logprobs {}B, values {}B",
                 actions.len(), logprobs.len(), values.len())));
         }
-        let (mut f, mut c) = (vec![0f32; self.n_slots * OBS_FLOATS],
-                              vec![0i32; self.n_slots * OBS_CARDS]);
-        let (mut m, mut r) = (vec![0u8; self.n_slots * N_ACTIONS], vec![0u8; self.n_slots]);
-        self.env.observe(&mut f, &mut c, &mut m, &mut r)
-            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
         let mut step_actions = vec![0i64; self.n_slots];
         let slots = std::mem::take(&mut self.pending_slots);
         let turns = std::mem::take(&mut self.pending_turns);
+        let masks = std::mem::take(&mut self.pending_masks);
+        let feats = std::mem::take(&mut self.pending_feats);
+        let cards = std::mem::take(&mut self.pending_cards);
         for (j, &slot) in slots.iter().enumerate() {
             let a = i64::from_le_bytes(actions[j * 8..(j + 1) * 8].try_into().unwrap());
             let logp = f32::from_le_bytes(logprobs[j * 4..(j + 1) * 4].try_into().unwrap());
@@ -208,25 +217,26 @@ impl PyRustCollector {
             let mut logprob = logp;
             let mut forced = false;
             if limit > 0 && *n_turn > limit {
-                let base = slot * N_ACTIONS;
-                if m[base] != 0 {
+                let base = j * N_ACTIONS;
+                if masks[base] != 0 {
                     forced = true;
                     action = 0;
                     logprob = 0.0;
                 }
             }
+            let row = j * N_ACTIONS;
             let legal = action >= 0 && (action as usize) < N_ACTIONS
-                && m[slot * N_ACTIONS + action as usize] != 0;
+                && masks[row + action as usize] != 0;
             if !legal {
                 self.illegal += 1;
-                action = (0..N_ACTIONS).find(|&a| m[slot * N_ACTIONS + a] != 0)
+                action = (0..N_ACTIONS).find(|&a| masks[row + a] != 0)
                     .map(|a| a as i64).unwrap_or(0);
                 logprob = 0.0;
             }
             step_actions[slot] = action;
-            self.push_row(slot, turn, &f[slot * OBS_FLOATS..(slot + 1) * OBS_FLOATS],
-                          &c[slot * OBS_CARDS..(slot + 1) * OBS_CARDS],
-                          &m[slot * N_ACTIONS..(slot + 1) * N_ACTIONS],
+            self.push_row(slot, turn, &feats[j * OBS_FLOATS..(j + 1) * OBS_FLOATS],
+                          &cards[j * OBS_CARDS..(j + 1) * OBS_CARDS],
+                          &masks[row..row + N_ACTIONS],
                           action, logprob, val, forced);
         }
         let mut out = vec![hsbg_engine::batch::SlotResult::default(); self.n_slots];

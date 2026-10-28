@@ -67,6 +67,19 @@ leaf forward 微基准（entity，cuda:1，`BatchLeafServer.logits`）：
   因此下一轮必须做**共享推理服务 + 去掉重复 observe**（`record_actions` 复用 `pending()` 的
   mask/turn，避免第二次全量观测），而不是继续调 worker 数。
 
+## 4b. 第二轮实测（cap 修复 + 多 shard）
+
+- 预分配从 `n_games × 4096` 降到 `n_games × 192`（原来 96 局要 memset 3.4 GB）；
+- 新增 `collect_ppo_rust_multi`（单进程多 shard 共享一次前向），实测单卡 192 局：
+  single 3,109 dec/s、multi 4×48 3,277、8×24 3,197、12×16 3,175 → **多 shard 无显著收益**；
+- 单进程 64 局（=P=3 的每 worker 负载）直接测：5.0–6.0 s / 13.5k 决策（2,255–2,691 dec/s），
+  其中 forward 2.6–2.9 s（约 50%）；但在 **pool 里同样的负载要 10–13 s**（collect 13.08 s @P=3、
+  8.57 s @P=6、7.19 s @P=12）——说明 pool 路径还有 **~2× 的额外开销**（尚未定位，
+  候选：pipeline 下与 PPO 抢 CPU、每轮 `np.savez`/父进程读盘、或 3 个 CUDA context 的调度）。
+- 结论：**目标 2 s 未达成**；当前 Rust 采集器最好成绩 = 与 lock-step 持平（6.35 s）。
+  下一步优先级：① 定位 pool 路径的 2× 差距（用 `--pipeline 0` 且单 worker 复现对比）；
+  ② 共享 per-GPU 推理服务（把 44 行/次提升到 128–256 行/次）。
+
 ## 5. 复现命令
 
 ```bash
