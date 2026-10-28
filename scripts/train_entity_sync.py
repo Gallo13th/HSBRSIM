@@ -315,6 +315,7 @@ def main() -> int:
             max_actions_per_turn=int(args.max_actions_per_turn),
             max_steps=int(args.max_steps))
         iter_start = time.time()
+        _tl = {"t_iter_start": time.monotonic()}
         if pool is not None:
             # 同步模式：先把最新权重推到每个 actor 进程（不重建进程）
             _t0 = time.time()
@@ -322,11 +323,13 @@ def main() -> int:
                             norm_mean=norm_mean, norm_std=norm_std)
             pool.reload_weights(pool_ckpt, updates=int(trainer.updates))
             _reload_s = time.time() - _t0
+            _tl["t_reload_done"] = time.monotonic()
             _t1 = time.time()
             batch, collect_meta = pool.collect(
                 c_cfg, int(args.games), return_records=True, progress=True,
                 seed=int(c_cfg.seed), gamma=1.0, lam=float(args.lam))
             _collect_s = time.time() - _t1
+            _tl["t_collect_done"] = time.monotonic()
         elif args.workers > 1:
             batch, collect_meta = collect_ppo_batch_parallel(
                 model, c_cfg, workers=int(args.workers),
@@ -348,8 +351,10 @@ def main() -> int:
         trainer.config.anchor_coef = (float(args.anchor_beta)
                                       if i < int(args.anchor_iterations) else 0.0)
         _t_ppo = time.time()
+        _tl["t_ppo_start"] = time.monotonic()
         stats = trainer.update(batch)
         _ppo_s = time.time() - _t_ppo
+        _tl["t_ppo_done"] = time.monotonic()
         rec = {"iter": i, "collect": collect_meta, "ppo": stats,
                "profile": {"reload_s": round(_reload_s, 3),
                            "collect_s": round(_collect_s, 3),
@@ -405,6 +410,9 @@ def main() -> int:
             json.dump({"args": vars(args), "history": history,
                        "elapsed_s": time.time() - t0}, f, ensure_ascii=False, indent=2)
         _history_s = time.time() - _th0
+        _tl["t_history_done"] = time.monotonic()
+        rec["profile"]["timeline"] = {k: v for k, v in _tl.items()}
+        rec["profile"]["collect_timeline"] = collect_meta.get("timeline")
         # 累计 decisions + 周期评测（512 局 C0，暂停采集）
         cum_decisions += int(collect_meta.get("decisions", 0))
         if cum_decisions >= next_eval:

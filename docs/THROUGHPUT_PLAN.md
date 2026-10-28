@@ -92,6 +92,11 @@ PPO 侧实测（micro-batch 1024，entity 14.8M，GPU0 独占）：
   Python」变成「每 batch 一次」，目标 GPU util 从 32% → 60–80%；
 - 验收：sims=0 采集瞬时 ≥ 12,000 dec/s；sims=4 ≥ 1,200 dec/s。
 
+> 单 iteration 的时间轴（谁在等谁、限速步、并行方案）单独写在
+> [`docs/THROUGHPUT_TIMELINE.md`](THROUGHPUT_TIMELINE.md)，含实测 Gantt 图与流水线契约。
+> 下面的 O1–O5 是**串行排程**下的优化；若再叠上 double-buffer 流水线，上限可从
+> ≈7.2 s/iter 降到 ≈4.6 s/iter（≈6,700 dec/s）。
+
 ## 4. 预期收益
 
 | 阶段 | 方案 | s/iter | 端到端 dec/s | 30M 用时 |

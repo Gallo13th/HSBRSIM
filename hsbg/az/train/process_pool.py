@@ -145,6 +145,7 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
             continue
 
         # ---- collect ----
+        _t_start = time.monotonic()
         t0 = time.time()
         try:
             cfg = CollectConfig(**task["cfg"])
@@ -167,6 +168,7 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
             _report({
                 "type": "collect_done", "task_id": task_id,
                 "seconds": time.time() - t0,
+                "t_start": _t_start, "t_end": time.monotonic(),
                 "records_file": records_file, "records": n_records,
                 "meta": to_jsonable(cmeta),
                 "profile": to_jsonable(profile),
@@ -367,6 +369,8 @@ class ProcessActorPool:
             reqs[i] = payload
             self._task_qs[i].put(payload)
 
+        timeline: Dict[str, Any] = {"t_issue": {i: time.monotonic() for i in reqs},
+                                    "t_dispatch_done": None}
         results: Dict[int, Dict[str, Any]] = {}
         attempts: Dict[int, int] = {i: 0 for i in reqs}
         deadline = time.time() + float(timeout)
@@ -404,12 +408,14 @@ class ProcessActorPool:
                 raise RuntimeError(
                     f"worker{i} 采集失败: {msg.get('error')}\n{msg.get('traceback', '')}")
             if msg["type"] == "collect_done":
+                timeline.setdefault("t_recv", {})[i] = time.monotonic()
                 results[i] = msg
                 if progress:
                     print(f"[pool] worker{i} gpu{msg.get('gpu')} "
                           f"decisions={msg.get('meta', {}).get('decisions')} "
                           f"{msg.get('seconds', 0):.1f}s", flush=True)
 
+        timeline["t_dispatch_done"] = time.monotonic()
         wall = time.time() - t_start
         records: List[Dict[str, Any]] = []
         metas: List[Dict[str, Any]] = []
@@ -420,6 +426,7 @@ class ProcessActorPool:
                               "forced", "errors")}
         forward_s = batch_wait_s = 0.0
         t_read = records_bytes = 0.0
+        timeline["t_read_start"] = time.monotonic()
         for i in sorted(results):
             msg = results[i]
             m = dict(msg.get("meta") or {})
@@ -505,6 +512,7 @@ class ProcessActorPool:
             raise RuntimeError(
                 f"process pool 无有效轨迹（truncated={agg['truncated']}, "
                 f"invalid={agg['invalid']}, decisions={agg['decisions']}）")
+        timeline["t_read_done"] = time.monotonic()
         t_b0 = time.time()
         batch = build_batch_from_records(records, gamma=float(gamma),
                                          lam=float(lam), meta=meta)
@@ -512,6 +520,8 @@ class ProcessActorPool:
         meta["parent_read_s"] = float(t_read)
         meta["records_bytes"] = int(records_bytes)
         meta["build_batch_s"] = float(build_batch_s)
+        timeline["t_build_done"] = time.monotonic()
+        meta["timeline"] = timeline
         batch.meta.update({"collect_seconds": wall,
                            "collect": {k: v for k, v in meta.items()
                                        if k != "worker_meta"}})
