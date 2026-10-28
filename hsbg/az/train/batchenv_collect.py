@@ -114,6 +114,7 @@ def collect_ppo_batchenv(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                 illegal += 1
                 legal = np.flatnonzero(mask)
                 a = int(legal[0]) if legal.size else 0
+                lp, forced = 0.0, True   # 兜底不是策略采样：只参与 value
             if forced:
                 a, lp = 0, 0.0
             step_actions[slot] = a

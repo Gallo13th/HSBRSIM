@@ -200,6 +200,10 @@ impl PyRustCollector {
                 "expect {k} rows: actions {}B, logprobs {}B, values {}B",
                 actions.len(), logprobs.len(), values.len())));
         }
+        if self.pending_slots.is_empty() {
+            return Ok((f32_bytes(py, &Vec::<f32>::new()), PyBytes::new(py, &[]),
+                       PyBytes::new(py, &[]), PyBytes::new(py, &[])));
+        }
         let mut step_actions = vec![0i64; self.n_slots];
         let slots = std::mem::take(&mut self.pending_slots);
         let turns = std::mem::take(&mut self.pending_turns);
@@ -235,6 +239,7 @@ impl PyRustCollector {
                 action = (0..N_ACTIONS).find(|&a| masks[row + a] != 0)
                     .map(|a| a as i64).unwrap_or(0);
                 logprob = 0.0;
+                forced = true;   // 兜底动作不是策略采样：只参与 value，避免伪造 on-policy ratio
             }
             step_actions[slot] = action;
             self.steps[slot] += 1;

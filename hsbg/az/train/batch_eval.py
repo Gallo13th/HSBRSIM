@@ -284,7 +284,8 @@ class BatchLeafServer:
                 fwd = time.monotonic() - t0
                 off = 0
                 batched = [r for r in batch if r.batch_mode]
-                if batched:
+                mixed = batched and len(batched) != len(batch)
+                if batched and not mixed:
                     acts_all, lps_all, vals_all = self._act_batched(plog, m, rlog, batched)
                 else:
                     acts_all = lps_all = vals_all = None
