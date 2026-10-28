@@ -251,10 +251,14 @@ impl PyRustCollector {
             if dones[slot] != 0 && !self.finished[slot] {
                 self.finished[slot] = true;
                 self.placements[slot] = places[slot] as i64;
+                // 记录是按轮交错写入的，first..last 区间里混着其他局的记录：
+                // 只给本局（gids == slot）的行回填名次，避免污染其他局甚至未结束的局
                 let (a, b) = (self.first[slot], self.last[slot]);
                 if a >= 0 && b >= a {
                     for i in a as usize..=b as usize {
-                        self.ranks[i] = places[slot] as i64;
+                        if self.gids[i] == slot as i64 {
+                            self.ranks[i] = places[slot] as i64;
+                        }
                     }
                 }
             }

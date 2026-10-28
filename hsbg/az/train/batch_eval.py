@@ -102,7 +102,7 @@ class BatchLeafServer:
     def submit(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
                timeout: float = 0.5, copy: bool = False, *,
                want_action: bool = False, temperature: float = 1.0,
-               seed: Optional[int] = None) -> LeafRequest:
+               seed: Optional[int] = None, batch_mode: bool = False) -> LeafRequest:
         with self._state_lock:
             if self._state != "open":
                 raise RuntimeError(f"BatchLeafServer is {self._state}")
@@ -119,6 +119,7 @@ class BatchLeafServer:
             req.want_action = bool(want_action)
             req.temperature = float(temperature)
             req.seed = seed
+            req.batch_mode = bool(batch_mode)
             req.submit_t = time.monotonic()
             try:
                 self._q.put(req, timeout=float(timeout))
@@ -170,8 +171,7 @@ class BatchLeafServer:
         """
         req = self.submit(np.atleast_2d(features), np.atleast_2d(cards),
                           np.atleast_2d(mask), want_action=True,
-                          temperature=temperature, seed=seed)
-        req.batch_mode = True
+                          temperature=temperature, seed=seed, batch_mode=True)
         if not req.event.wait(timeout=timeout):
             raise TimeoutError("batch leaf timeout")
         if req.error is not None:
@@ -211,6 +211,8 @@ class BatchLeafServer:
         with torch.no_grad():
             vals = value_from_rank_logits_torch(
                 torch.from_numpy(np.asarray(rlog, dtype=np.float32)).to(dev))
+        # 整批一个 Generator：seed 取第一个请求的（同一次运行请求顺序固定 → 可复现）；
+        # 其余请求的 seed 只影响各自的 action，不影响采样分布
         seed = int(reqs[0].seed) if reqs[0].seed is not None else 0
         g = torch.Generator(device=dev).manual_seed(seed)
         idx = torch.multinomial(probs, 1, generator=g).squeeze(1)

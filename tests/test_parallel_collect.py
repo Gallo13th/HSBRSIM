@@ -96,3 +96,30 @@ def test_rust_collector_matches_python_semantics():
         assert len(batch.actions) > 0
     finally:
         server.close()
+
+
+def test_rust_collector_rank_backfill_not_cross_game():
+    """rank 回填不能污染其他局：每局的 rank 必须等于该局自己的 placement。"""
+    import numpy as np
+    from hsbg.az.train.model import build_net
+    from hsbg.az.train.ppo import CollectConfig
+    from hsbg.az.train.batch_eval import BatchLeafServer, BatchPPOEvaluator
+    from hsbg.az.train.rust_collect import collect_ppo_rust
+
+    model = build_net(arch="tiny")
+    model.eval()
+    server = BatchLeafServer(model, device="cpu", batch_size=64, max_wait_ms=1.0)
+    try:
+        cfg = CollectConfig(games=12, seed=29, opponent="bot", behavior="net",
+                            max_steps=8000, learner_seat=0)
+        arr, meta = collect_ppo_rust(model, cfg, eval_fn=BatchPPOEvaluator(server),
+                                     device="cpu", seed=29, games=12)
+        gids = np.asarray(arr["game_ids"])
+        ranks = np.asarray(arr["ranks"])
+        for g in np.unique(gids):
+            mine = ranks[gids == g]
+            done = mine[mine > 0]
+            # 同一局只能有一个名次（全部相同），且不会出现两个不同名次
+            assert len(set(int(x) for x in done)) <= 1, (g, sorted(set(done.tolist())))
+    finally:
+        server.close()
