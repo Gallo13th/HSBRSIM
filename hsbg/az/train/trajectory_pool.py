@@ -81,6 +81,7 @@ class TrajectoryPool:
     def sample(self, rng: Optional[random.Random] = None,
                entry_turn: Optional[int] = None, tolerance: int = 2
                ) -> Optional[Trajectory]:
+        """按 (帧数 + 入口回合) 选强轨迹，并对旧文件施加世代衰减。"""
         if not self.items:
             return None
         rng = rng or random.Random(0)
@@ -89,9 +90,22 @@ class TrajectoryPool:
             cands = [t for t in self.items if abs(t.entry_turn - int(entry_turn)) <= tolerance]
             if not cands:
                 cands = self.items
-        cands = sorted(cands, key=lambda t: t.strength(), reverse=True)
+        newest = max(self._mtime(t) for t in cands) or 1.0
+
+        def _score(t: Trajectory) -> float:
+            age = max(0.0, (newest - self._mtime(t)) / 86400.0)   # 天
+            return t.strength() * (1.0 - self.generation_decay) ** age
+
+        cands = sorted(cands, key=_score, reverse=True)
         top = cands[:max(1, min(len(cands), 16))]
         return rng.choice(top)
+
+    @staticmethod
+    def _mtime(t: "Trajectory") -> float:
+        try:
+            return os.path.getmtime(t.path) if t.path else 0.0
+        except OSError:
+            return 0.0
 
     def stats(self) -> Dict[str, Any]:
         if not self.items:

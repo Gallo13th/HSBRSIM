@@ -244,10 +244,15 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                         float(getattr(cfg, "trajectory_p", 0.0)) > 0.0:
                     from .trajectory_pool import TrajectoryPool
                     tdir = str(cfg.trajectory_pool)
-                    tkey = os.path.getmtime(tdir) if os.path.isdir(tdir) else 0.0
+                    if os.path.isdir(tdir):
+                        files = [os.path.join(tdir, f) for f in os.listdir(tdir) if f.endswith(".json.gz")]
+                        tkey = (len(files),
+                                max((os.path.getmtime(f) for f in files), default=0.0))
+                    else:
+                        tkey = None
                     cached = _TRAJ_CACHE.get(tdir)
                     if cached is None or cached[0] != tkey:
-                        tpool = TrajectoryPool(tdir) if tkey else None
+                        tpool = TrajectoryPool(tdir) if tkey is not None else None
                         _TRAJ_CACHE[tdir] = (tkey, tpool)
                         if tpool is None or not tpool.items:
                             print(f"[warn] 轨迹库为空/不存在: {tdir}", flush=True)

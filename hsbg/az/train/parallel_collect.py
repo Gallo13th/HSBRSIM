@@ -268,15 +268,23 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         for st in states:
             if trng.random() >= trajectory_p:
                 continue
-            traj = trajectory_pool.sample(trng)
-            if traj is None:
+            new_game = None
+            traj = None
+            for _try in range(4):                  # 重采样：恢复点必须让 learner 活着
+                cand = trajectory_pool.sample(trng)
+                if cand is None:
+                    break
+                try:
+                    g2 = E.Game.from_json(cand.frames[0]["state"])
+                except BaseException:  # noqa: BLE001
+                    continue
+                if int(list(g2.placements())[seat]) != 0:
+                    st["traj_skipped"] = st.get("traj_skipped", 0) + 1
+                    continue
+                traj, new_game = cand, g2
+                break
+            if traj is None or new_game is None:
                 continue
-            try:
-                new_game = E.Game.from_json(traj.frames[0]["state"])
-            except BaseException:  # noqa: BLE001
-                continue
-            if int(list(new_game.placements())[seat]) != 0:
-                continue          # 恢复点里学习座位已淘汰：换局
             st["game"] = new_game
             st["traj"] = ReplayScript(traj, learner_seat=seat)
             st["traj_turn"] = int(traj.frames[0]["turn"])
@@ -285,6 +293,9 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             lib_traj_used += 1
     library_p = max(0.0, min(1.0, float(library_p)))
     if library_pool is not None and library_p > 0.0:
+        raise RuntimeError(
+            "v1 单座位镜像注入未通过终审，禁止在训练中使用；请改用 "
+            "--trajectory-pool/--trajectory-p（整局状态轨迹库）")
         import random as _random
         library_rng = library_rng or _random.Random(int(cfg.seed) + int(seed))
         for st in states:
@@ -337,10 +348,16 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                 if st.get("traj") is not None and int(q) != seat:
                     a_rec = st["traj"].next_action(int(q), int(g.turn))
                     if a_rec is not None:
+                        st["traj_attempt"] = st.get("traj_attempt", 0) + 1
                         mq = mask_from_bytes(g.legal_mask(int(q)))
                         if 0 <= a_rec < N_ACTIONS and bool(mq[a_rec]):
                             g.step(int(q), int(a_rec))
                             replayed = True
+                            st["traj_replayed"] = st.get("traj_replayed", 0) + 1
+                        else:
+                            st["traj_illegal"] = st.get("traj_illegal", 0) + 1
+                if not replayed and st.get("traj") is not None and int(q) != seat:
+                    st["traj_fallback"] = st.get("traj_fallback", 0) + 1
                 if replayed:
                     pass
                 elif str(gamemode) == "weak":
@@ -408,6 +425,11 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             "library_p": float(library_p),
             "trajectory_p": float(trajectory_p),
             "trajectory_games": int(lib_traj_used),
+            "trajectory_skipped": int(sum(st.get("traj_skipped", 0) for st in states)),
+            "trajectory_replay_attempt": int(sum(st.get("traj_attempt", 0) for st in states)),
+            "trajectory_replayed": int(sum(st.get("traj_replayed", 0) for st in states)),
+            "trajectory_replay_illegal": int(sum(st.get("traj_illegal", 0) for st in states)),
+            "trajectory_fallback": int(sum(st.get("traj_fallback", 0) for st in states)),
             "records": int(len(records)), "illegal_actions": int(illegal),
             "truncated_games": int(truncated),
             "games_meta": metas, "forced_end_turns": int(policy.forced_actions)}

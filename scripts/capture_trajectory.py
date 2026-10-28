@@ -47,7 +47,8 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=810000)
     ap.add_argument("--temperature", type=float, default=0.7)
     ap.add_argument("--from-turn", type=int, default=6, help="从第几回合开始记录状态帧")
-    ap.add_argument("--every", type=int, default=2, help="每隔几回合记一帧")
+    ap.add_argument("--min-frames", type=int, default=2,
+                    help="至少多少帧才保留这条轨迹")
     ap.add_argument("--max-steps", type=int, default=20000)
     ap.add_argument("--max-actions-per-turn", type=int, default=40,
                     help="单座位单回合决策上限，超限强制 EndTurn（与训练一致，防 Play/Cancel 循环）")
@@ -69,9 +70,10 @@ def main() -> int:
     for gi in range(int(args.games)):
         game = E.Game(seed=int(args.seed) + gi)
         frames, pending_actions = [], []
-        last_turn = int(game.turn)
-        steps = 0
+        cur_turn = int(game.turn)
+        cur_state = game.state_json()          # 本回合「开始时刻」的状态
         turn_counts = {}
+        steps = 0
         while not game.is_over() and steps < int(args.max_steps):
             acted = False
             for p in range(8):
@@ -92,30 +94,29 @@ def main() -> int:
                 turn_counts[key] = turn_counts.get(key, 0) + 1
                 limit = int(args.max_actions_per_turn)
                 if limit > 0 and turn_counts[key] > limit and bool(mask[0]):
-                    a = 0          # 与训练一致的回合守卫：强制 EndTurn
+                    a = 0
                 game.step(int(p), int(a))
                 pending_actions.append([int(p), int(a)])
                 steps += 1
                 if game.is_over():
                     break
-            now = int(game.turn)
-            if now != last_turn:
-                if last_turn >= int(args.from_turn) and \
-                        (last_turn - int(args.from_turn)) % max(1, int(args.every)) == 0:
-                    frames.append({"turn": last_turn, "state": game.state_json(),
+                now = int(game.turn)
+                if now != cur_turn:
+                    # 本回合结束：状态 = 本回合开始时刻，动作 = 本回合动作（严格配对）
+                    frames.append({"turn": cur_turn, "state": cur_state,
                                    "actions": list(pending_actions)})
-                pending_actions = []
-                last_turn = now
+                    cur_turn, cur_state, pending_actions = now, game.state_json(), []
             if not acted:
                 break
-        if int(last_turn) >= int(args.from_turn) and pending_actions:
-            frames.append({"turn": last_turn, "state": game.state_json(),
+        if pending_actions:
+            frames.append({"turn": cur_turn, "state": cur_state,
                            "actions": list(pending_actions)})
+        frames = [fr for fr in frames if int(fr["turn"]) >= int(args.from_turn)]
         over = bool(game.is_over())
-        if len(frames) < 2:
+        if len(frames) < int(args.min_frames):
             if os.environ.get("CAPTURE_DEBUG"):
-                print(f"[dbg] seed={args.seed+gi} over={over} turns={last_turn} "
-                      f"steps={steps} frames={len(frames)}", flush=True)
+                print(f"[dbg] seed={args.seed+gi} over={over} steps={steps} "
+                      f"frames={len(frames)}", flush=True)
             continue
         rec = {"seed": int(args.seed) + gi, "learner_seat": 0,
                "placements": list(game.placements()), "frames": frames,

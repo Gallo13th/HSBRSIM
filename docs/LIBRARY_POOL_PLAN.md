@@ -93,7 +93,8 @@ Rust `PyGame` 新增两个方法：
 
 ## B. 回放（训练侧）
 
-- `--trajectory-pool <dir> --trajectory-p p`：每局以概率 p 被替换成某条轨迹的**第 1 帧**恢复；
+- `--trajectory-pool <dir> --trajectory-p p`：每局以概率 p 被替换成某条轨迹的**第 1 帧**恢复
+  （与 v1 互斥：v1 已禁用）；
 - 之后每个 bot 座位优先**回放该回合记录的动作**（`ReplayScript`，按 `(seat, turn)` 顺序取）；
   动作非法/缺记录 → 该座位交回 `bot_play`（bot 接管）；
 - 学习座位（seat 0）照常用当前策略决策；若恢复点里 seat 0 已淘汰则换一条轨迹；
@@ -110,8 +111,10 @@ Rust `PyGame` 新增两个方法：
 
 ## D. 与 v1（单座位 Player 移植）的关系
 
-- v1 保留为**离线工具**（`library_pool.py` + `capture_library.py`），但**不进入训练**：
-  Astra 终审指出其 pool/eid/生命周期不变量未维护；
+- v1（单座位注入）**已在代码层禁用**：`collect_ppo_lockstep` 一旦发现
+  `library_pool + library_p>0` 直接 `RuntimeError`；`train_entity_sync` 在
+  `--library-p>0` 时直接退出（返回 2）。`library_pool.py` / `capture_library.py`
+  仅作为离线分析工具保留。Astra 终审指出其 pool/eid/生命周期不变量未维护；
 - v2（本方案）走整局恢复，避开这些问题；仍需 Astra 终审确认：
   恢复点的「历史强对手」是否会让 learner 面对不可学习分布、以及 `placements` 语义（从中局开始的
   名次是真实重放名次）。

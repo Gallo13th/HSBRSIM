@@ -153,6 +153,10 @@ def main() -> int:
     ap.add_argument("--out", default="runs/az_entity_sync")
     args = ap.parse_args()
     args.out = os.path.abspath(args.out)
+    if float(args.library_p) > 0.0:
+        print("[error] --library-p（v1 单座位注入）未通过终审，已禁用；"
+              "请用 --trajectory-pool/--trajectory-p", file=sys.stderr)
+        return 2
 
     if not engine_available():
         print("[error] hsbg_engine 不可用", file=sys.stderr)
