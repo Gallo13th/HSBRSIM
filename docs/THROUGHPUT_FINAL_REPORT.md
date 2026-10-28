@@ -55,11 +55,14 @@
 
 | 项目 | 每 iteration | 说明 |
 |---|---:|---|
-| collect（worker 采集） | ~4.9 s | 12 worker × 16 局的批量前向 + 引擎推进 |
-| ├ parent read + build_batch | ~2.1 s | **30%**，可并行化（L4，见 2.2c） |
-| └ worker 侧 | ~2.8 s | 每决策 ~0.22 ms（引擎 bot 推进 + record 打包） |
+| 父进程 read + 拼接 | ~1.0–1.6 s | 530 MB features 读取 + concat（L4 后 build 0.75 s） |
+| worker 侧采集 | ~4.5–5.0 s | 12 worker × 16 局批量前向 + 引擎推进（每决策 ~0.22 ms） |
+| **collect 总计（实测）** | **6.0–7.0 s** | 三者之和，父进程读盘不可忽略 |
 | PPO（bf16, learner 独占） | ~4.5 s | 40k 样本 / 1024 微批 |
-| step = max(...) + 0.2 | ~6.0–6.2 s | 采集与 PPO 大致平衡 |
+| step = max(collect, PPO) + ~0.2 | ~6.0–7.2 s | 采集与 PPO 大致平衡 |
+
+> 口径说明（PPAI 终审 §5 指出原表把 4.9 与 6.0 混用）：worker 侧、父进程 read/build、
+> **总 collect** 必须分开列，`max()` 只能对总 collect 与 PPO 取。
 
 ## 4. 结论与建议
 

@@ -749,8 +749,12 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         np.ascontiguousarray(batch.forced[idx].astype(bool))).to(dev)
     valid = (~forced).to(torch.float32)
     if config.normalize_advantage:
-        std = adv.std(unbiased=False)
-        adv = (adv - adv.mean()) / std.clamp_min(1e-8)
+        # 只在 valid（非 forced）子集上估均值/方差：forced 是环境确定性守卫，
+        # 不应影响策略侧 advant 的尺度（否则会间接改变 policy 梯度）
+        n_valid = valid.sum().clamp_min(1.0)
+        vmean = (adv * valid).sum() / n_valid
+        vvar = (((adv - vmean) ** 2) * valid).sum() / n_valid
+        adv = (adv - vmean) / vvar.sqrt().clamp_min(1e-8)
 
     out = forward_model(model, x, c, m)
     logits, rank_logits, scalar_value = split_model_outputs(out)
@@ -778,9 +782,10 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         value_loss = value_loss + float(config.value_head_coef) * F.mse_loss(
             scalar_value, returns_t)
 
-    if bool((has_pi & (valid > 0)).any()) and float(config.pi_coef) > 0.0:
+    aux_mask = has_pi & (valid > 0)   # forced 样本不参与 aux policy（与主 policy loss 一致）
+    if bool(aux_mask.any()) and float(config.pi_coef) > 0.0:
         aux_all = -(target_pi * safe_logp).sum(dim=-1)
-        aux_pi_loss = aux_all[has_pi].mean()
+        aux_pi_loss = aux_all[aux_mask].mean()
     else:
         aux_pi_loss = torch.zeros((), device=dev)
 
@@ -1254,7 +1259,7 @@ def pack_records_arrays(records: Sequence[Dict[str, Any]]) -> Dict[str, np.ndarr
         out["turns"][i] = int(r.get("turn", -1))
         out["forced"][i] = bool(r.get("forced", False))
         pi = r.get("target_pi")
-        if pi is not None and has_pi:
+        if pi is not None and has_pi and not out["forced"][i]:
             out["has_pi"][i] = True
             out["target_pi"][i] = pi
     return out
@@ -1265,7 +1270,7 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
                             meta: Optional[Dict[str, Any]] = None) -> "PPOBatch":
     """SoA 数组 → PPOBatch（与 ``build_batch_from_records`` 等价，但零 dict）。"""
     ranks = np.asarray(packed["ranks"])
-    valid = ranks > 0
+    valid = (ranks >= 1) & (ranks <= N_RANKS)
     dropped = int((~valid).sum())
     if not bool(valid.all()):
         packed = {k: v[valid] for k, v in packed.items()}

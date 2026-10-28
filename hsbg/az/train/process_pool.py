@@ -216,7 +216,7 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                              advantages=lb.advantages, returns=lb.returns,
                              seats=lb.seats, game_ids=lb.game_ids, ranks=lb.ranks,
                              turns=lb.turns, forced=lb.forced, has_pi=lb.has_pi,
-                             episode_ids=(lb.game_ids * 8 + lb.seats).astype(np.int32),
+                             episode_ids=(lb.game_ids * 8 + lb.seats).astype(np.int64),
                              target_pi=(lb.target_pi if lb.target_pi is not None
                                         else np.zeros((len(lb.actions), 245), np.float32)))
                 except BaseException:  # noqa: BLE001 - 回退到父进程构建
@@ -582,13 +582,28 @@ class ProcessActorPool:
                 f"invalid={agg['invalid']}, decisions={agg['decisions']}）")
         timeline["t_read_done"] = time.monotonic()
         t_b0 = time.time()
+        # 统一协议：任何 shard 回退成 raw SoA 时，父进程先把它补齐成 batch 再合并
+        for i, p in enumerate(packed_all):
+            if "advantages" not in p:
+                lb = build_batch_from_arrays(p, gamma=float(gamma), lam=float(lam))
+                packed_all[i] = {
+                    "features": lb.features, "cards": lb.cards, "masks": lb.masks,
+                    "actions": lb.actions, "old_logprobs": lb.old_logprobs,
+                    "values": lb.values, "rewards": lb.rewards, "dones": lb.dones,
+                    "advantages": lb.advantages, "returns": lb.returns,
+                    "seats": lb.seats, "game_ids": lb.game_ids, "ranks": lb.ranks,
+                    "turns": lb.turns, "forced": lb.forced, "has_pi": lb.has_pi,
+                    "episode_ids": (lb.game_ids * 8 + lb.seats).astype(np.int64),
+                    "target_pi": (lb.target_pi if lb.target_pi is not None
+                                  else np.zeros((len(lb.actions), 245), np.float32)),
+                }
         if packed_all and all("advantages" in p for p in packed_all):
             # L4：worker 已构建好 batch（episode_id 全局唯一）→ 父进程只拼接
             keys = ["features", "cards", "masks", "actions", "old_logprobs", "values",
                     "rewards", "dones", "advantages", "returns", "seats", "game_ids",
                     "ranks", "turns", "forced", "has_pi", "episode_ids", "target_pi"]
             merged = {k: np.concatenate([p[k] for p in packed_all], axis=0) for k in keys}
-            meta["episodes"] = int(merged["episode_ids"].max()) + 1 if len(merged["episode_ids"]) else 0
+            meta["episodes"] = int(len(np.unique(merged["episode_ids"])))
             meta["built_in"] = "worker"
             batch = PPOBatch(**merged, meta=meta)
         elif packed_all:
