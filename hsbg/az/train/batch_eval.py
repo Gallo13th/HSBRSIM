@@ -39,6 +39,11 @@ class LeafRequest:
     error: Optional[BaseException] = None
     #: True = 直接在 worker 里按 temperature 采样动作（不回传 245 维 prior）
     want_action: bool = False
+    #: True = 该请求携带 2D 批（features[k,3227] ...），结果写入 actions/logprobs/values
+    batch_mode: bool = False
+    actions: Optional[np.ndarray] = None
+    logprobs: Optional[np.ndarray] = None
+    values: Optional[np.ndarray] = None
     temperature: float = 1.0
     seed: Optional[int] = None
     action: Optional[int] = None
@@ -153,6 +158,23 @@ class BatchLeafServer:
         assert req.action is not None
         return int(req.action), float(req.logprob or 0.0), float(req.value or 0.0)
 
+    def act_batch(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
+                  temperature: float = 1.0, seed: Optional[int] = None,
+                  timeout: float = 60.0):
+        """一次请求携带 2D 批：返回 (actions, logprobs, values)，批内每行独立 seed=seed+j。
+
+        lock-step actor 的底层原语：N 局拼一个批、一次前向、一次 GIL 往返。
+        """
+        req = self.submit(np.atleast_2d(features), np.atleast_2d(cards),
+                          np.atleast_2d(mask), want_action=True,
+                          temperature=temperature, seed=seed)
+        req.batch_mode = True
+        if not req.event.wait(timeout=timeout):
+            raise TimeoutError("batch leaf timeout")
+        if req.error is not None:
+            raise req.error
+        return req.actions, req.logprobs, req.values
+
     def call_many(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
                   timeout: float = 60.0) -> List[Tuple[np.ndarray, float]]:
         """先全部 submit 再等待；这样单线程也能让 worker 聚批。"""
@@ -209,14 +231,37 @@ class BatchLeafServer:
                     break
                 batch.append(nxt)
             try:
-                f = np.stack([r.features.reshape(-1) for r in batch], axis=0)
-                c = np.stack([r.cards.reshape(-1) for r in batch], axis=0)
-                m = np.stack([r.mask.reshape(-1) for r in batch], axis=0)
+                f = np.concatenate([np.atleast_2d(r.features) for r in batch], axis=0)
+                c = np.concatenate([np.atleast_2d(r.cards) for r in batch], axis=0)
+                m = np.concatenate([np.atleast_2d(r.mask) for r in batch], axis=0)
+                owner = []
+                for ri, r in enumerate(batch):
+                    k = int(np.atleast_2d(r.features).shape[0])
+                    owner.extend([ri] * k)
                 t0 = time.monotonic()
                 plog, rlog = self.evaluator.logits(f, c, m)
                 fwd = time.monotonic() - t0
+                off = 0
                 for i, r in enumerate(batch):
                     temp = float(r.temperature) if r.temperature else self.temperature
+                    if r.batch_mode:
+                        k = int(np.atleast_2d(r.features).shape[0])
+                        acts = np.empty(k, dtype=np.int64)
+                        lps = np.empty(k, dtype=np.float32)
+                        vals = np.empty(k, dtype=np.float32)
+                        for j in range(k):
+                            p = masked_probs_np(plog[off + j], m[off + j], temp)
+                            p = p / max(float(p.sum()), 1e-12)
+                            seed = None if r.seed is None else int(r.seed) + j
+                            rng = np.random.default_rng(seed if seed is not None else 0)
+                            a = int(rng.choice(p.size, p=p))
+                            acts[j] = a
+                            lps[j] = float(np.log(max(float(p[a]), 1e-12)))
+                            vals[j] = float(value_from_rank_logits_np(rlog[off + j])[0])
+                        r.actions, r.logprobs, r.values = acts, lps, vals
+                        off += k
+                        r.event.set()
+                        continue
                     if r.want_action:
                         # GPU/worker 侧采样：不回传 245 维 prior，直接用请求 seed 采样
                         p = masked_probs_np(plog[i], m[i], temp)
@@ -317,6 +362,10 @@ class BatchPPOEvaluator:
             temperature: float = 1.0, seed: Optional[int] = None
             ) -> Tuple[int, float, float]:
         return self.server.act(features, cards, mask, temperature, seed)
+
+    def act_batch(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
+                  temperature: float = 1.0, seed: Optional[int] = None):
+        return self.server.act_batch(features, cards, mask, temperature, seed)
 
 
 __all__ = ["LeafRequest", "BatchLeafServer", "BatchPPOEvaluator"]
