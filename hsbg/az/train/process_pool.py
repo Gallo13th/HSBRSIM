@@ -391,29 +391,45 @@ class ProcessActorPool:
     # -- control -----------------------------------------------------------
     def reload_weights(self, checkpoint: str, *, updates: int = -1,
                        timeout: float = 300.0) -> int:
-        """把新 checkpoint 推到所有 worker（不重建进程）。返回成功数。"""
+        """把新 checkpoint 推到所有 worker（不重建进程）。返回成功数。
+
+        可靠性：worker 在等待期间死亡并被 `_check_alive` 重启时，**向新队列重发本任务**，
+        不会因为旧任务发给了已死进程而永远等不到该 worker 的完成消息。
+        """
         task_id = uuid.uuid4().hex[:12]
-        for q in self._task_qs:
-            q.put({"kind": "reload", "task_id": task_id,
-                   "checkpoint": checkpoint, "updates": int(updates)})
+        payload = {"kind": "reload", "task_id": task_id,
+                   "checkpoint": checkpoint, "updates": int(updates)}
+        pending = set(range(len(self._task_qs)))
         done = 0
         errors: List[str] = []
         deadline = time.time() + float(timeout)
-        while done + len(errors) < len(self._task_qs):
+        for i in sorted(pending):
+            self._task_qs[i].put(dict(payload))
+        while pending:
             remaining = deadline - time.time()
             if remaining <= 0:
-                raise TimeoutError(f"reload_weights 超时: done={done} errors={errors}")
+                raise TimeoutError(f"reload_weights 超时: pending={sorted(pending)} "
+                                   f"errors={errors}")
             try:
                 msg = self._take_msg(min(5.0, remaining))
             except queue.Empty:
-                self._check_alive()
+                self._check_alive()   # 可能重启了 worker（新队列）
+                # 对仍未回报的 worker 重发（reload 幂等：worker 会重新加载并回 done）
+                for i in sorted(pending):
+                    if i < len(self._task_qs):
+                        self._task_qs[i].put(dict(payload))
                 continue
             if msg.get("task_id") != task_id:
+                # 别的（并发）任务的消息：留给它的等待者，不能静默丢弃
+                self._deferred.append(msg)
                 continue
+            w = int(msg.get("worker", -1))
             if msg["type"] == "reload_done":
+                pending.discard(w)
                 done += 1
             elif msg["type"] == "reload_error":
-                errors.append(f"worker{msg.get('worker')}: {msg.get('error')}")
+                pending.discard(w)
+                errors.append(f"worker{w}: {msg.get('error')}")
         if errors:
             raise RuntimeError(f"reload_weights 失败: {errors}")
         return done

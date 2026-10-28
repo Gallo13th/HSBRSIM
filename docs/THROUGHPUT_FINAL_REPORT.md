@@ -40,8 +40,10 @@
 **(b) DDP learner——现在上会适得其反**
 - 4 卡预算下，2 卡 learner 意味着 actor 只剩 2 卡：collect 6.0 s → **~8 s**；
   DDP 把 PPO 4.5 → ~2.5 s，但 step = max(8, 2.5) = **8 s > 当前 6.2 s**，净亏；
-- 结论：**先把 collect 压到 ≤2.5 s（Rust 全采集器），DDP 才有意义**。届时 2 卡 learner +
-  2 卡 actor 可把 step 压到 ~3 s。
+- 结论：按评审给的条件式 `max(C2,P2) < max(C3,P1)` 判断；实测 C2=7.06 s、C3=6.98 s、P1=4.58 s，
+  任一非负 P2 都有 `max(C2,P2) ≥ 7.06 > 6.98 ≈ max(C3,P1)` → **当前不值得实现 DDP**。
+  （0.08 s 差异在负载噪声内、且 C2 那组是 8 worker vs C3 的 12 worker，属混杂比较；
+  因此结论是「统计上无收益」，不是「GPU 绝非瓶颈」。）
 
 **(c) worker 内建 batch（L4）——已修复并落地（收益有限）**
 - 目标：把父进程 `parent_read 0.96 s + build_batch 1.13 s`（占 collect **30%**）并行到 worker；
@@ -83,17 +85,27 @@
   `tests/test_process_pool.py::test_pool_collects_and_restarts_after_kill`
   （kill 一个 worker → 下一次 collect 自愈且 `restarts>=1`）。**通过**。
 
+### 6.1b reload 自愈
+- `reload_weights` 发现 worker 死亡并重启后，**向新队列重发本任务**（幂等），不再等到超时；
+  新增 `test_reload_weights_survives_worker_kill`（kill 一个 worker → reload 仍返回 done=2）。
+- 非本任务的消息改为缓冲给对应等待者，不再静默丢弃。
+
 ### 6.2 bf16 dtype 单测
 - 新增 `test_bf16_autocast_keeps_loss_side_fp32`：autocast(bf16) 下 `ppo_losses` 返回的
   `total/policy/value/entropy/approx_kl/aux_pi` 全部 `float32`，模型参数仍 `float32`。**通过**。
 
-### 6.3 RSS 峰值实测（`scripts/measure_rss.py`，lockstep 12 worker，4 iter）
+### 6.3 RSS 峰值实测（`scripts/measure_rss.py` 修正版，lockstep 12 worker，6 iter）
+
+口径：按**启动命令的进程树**（ppid 关系）采样，统计**同一时刻**树内所有进程 `VmRSS` 之和的峰值；
+另列每 pid 的 `VmHWM`（历史峰值，**不可与同时峰值相加**）。
+
 | 指标 | 实测 |
 |---|---:|
-| 父进程峰值 | 3.40 GB |
-| 每 worker 峰值 | 1.14–1.19 GB × 12 |
-| 全部进程合计峰值 | **17.4 GB** |
-| 机器内存 | 足够（无 OOM 风险；非泄漏——worker 每次 collect 后释放 records/SoA/batch） |
+| 采样间隔 / 样本数 | 0.2 s / 337 |
+| **同时刻合计峰值** | **16.82 GB**（出现于 54.0 s，树内 14 个进程） |
+| 父进程 VmHWM | 3.38 GB |
+| 单 worker VmHWM | 1.16–1.19 GB × 12 |
+| 其它 | 仅覆盖本次配置与 6 iter 窗口，**不据此断定「无泄漏/绝无 OOM」** |
 
 ### 6.4 DDP 决策（按评审条件式，用实测替代预测）
 
@@ -124,3 +136,7 @@
 
 > 与 `ab_l4v2`(5,435)、`ab_ls_final`(6,311) 的差异来自邻居作业与机器负载波动（同一配置
 > 在本机可波动 ±10%）。所有结论按「同环境 A/B」比较。
+>
+> **口径**：表中 collect/read/build/ppo 是**各自独立的中位数**，不可严格相加；相邻 iteration
+> 的 elapsed 差也不是 `max(collect, ppo)` 的精确值（流水线重叠、快照/日志有抖动）。
+> 另外 `ab_c2`（C2=7.06 s）是 **10 iteration**，其余基准为 16–20 iteration。

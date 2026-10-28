@@ -97,3 +97,30 @@ def test_take_msg_defers_stray_messages_without_starvation(tmp_path, monkeypatch
     assert pool._deferred == []
     with pytest.raises(Exception):
         pool._take_msg(0.05, want_worker=0)  # 没有消息 → 超时而不是死等
+
+
+def test_reload_weights_survives_worker_kill(tmp_path, monkeypatch):
+    """reload 期间 worker 死亡：重启后必须向新队列重发任务，不能等到超时。"""
+    pytest.importorskip("torch")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+
+    from hsbg.az.train.common import engine_available
+    if not engine_available():
+        pytest.skip("hsbg_engine 不可用")
+    from hsbg.az.train.process_pool import ProcessActorPool
+
+    ckpt = _tiny_ckpt(tmp_path)
+    pool = ProcessActorPool(2, [0, 1], ckpt, arch="tiny", sims=0, determinizations=1,
+                            seed=5, threads=1, batch_size=8, tmpdir=str(tmp_path / "p2"))
+    try:
+        victim = pool._procs[0]
+        os.kill(victim.pid, signal.SIGKILL)
+        for _ in range(100):
+            if not victim.is_alive():
+                break
+            time.sleep(0.05)
+        # 旧队列上的 reload 永远等不到 → 必须靠重启重发才能成功返回
+        done = pool.reload_weights(ckpt, updates=1, timeout=120.0)
+        assert done == 2
+    finally:
+        pool.close()

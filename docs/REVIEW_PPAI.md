@@ -84,3 +84,16 @@ EOF
 2. 实测 2 卡 actor / 2 卡 learner 的组合，用真实 `C2/P2` 决定 DDP；
 3. L4 已完成；Rust 全采集器（方案 B）作为独立立项，先做 1 周 spike 验证「collect ≤2 s」假设；
 4. 补 RSS 峰值与 bf16 dtype 单测。
+
+
+## 7. 第二轮复审（PPAI gpt-6-astra，针对 `ea8f62d`）：不通过 → 已按条修复
+
+| 评审项 | 状态（修复位置） |
+|---|---|
+| `_deferred` 活锁（同一等待者反复取回同一条消息） | ✅ 已修：`_take_msg(timeout, want_worker)` 按 worker 匹配；新增 `test_take_msg_defers_stray_messages_without_starvation`（`111428a`） |
+| reload 重启后不重发任务 → 确定性超时 | ✅ 已修：重启后向新队列重发（幂等）；新增 `test_reload_weights_survives_worker_kill` |
+| 非本任务消息被静默丢弃 | ✅ 改为缓冲给对应等待者 |
+| 故障测试未覆盖「重启期间其他 worker 消息先到」 | ✅ 新增确定性消息顺序单测（不依赖时序运气） |
+| `measure_rss.py` 误算（pgrep+cwd / VmHWM 求和 / 参数未用） | ✅ 重写：进程树采样 + 同时刻 VmRSS 之和 + 记录间隔与样本数；实测 **16.82 GB 同时峰值** |
+| 报告旧 DDP 门槛（≤2.5 s）与 §6 矛盾 | ✅ 改为条件式 `max(C2,P2) < max(C3,P1)`，并说明 0.08 s 在噪声内、进程数混杂 |
+| 中位数不可相加 / `ab_c2` 只有 10 iter | ✅ 报告已加口径与样本数说明 |
