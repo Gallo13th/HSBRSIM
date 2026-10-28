@@ -289,14 +289,28 @@ class ProcessActorPool:
         for i in range(self.processes):
             self._spawn_one(i)
 
-    def _next_msg(self, timeout: float) -> Dict[str, Any]:
-        """统一取消息：先取缓冲（可能是别的等待者遗留的），再阻塞读共享队列。"""
-        if self._deferred:
-            return self._deferred.pop(0)
-        return self._result_q.get(timeout=timeout)
+    def _take_msg(self, timeout: float, want_worker: Optional[int] = None
+                  ) -> Dict[str, Any]:
+        """取一条消息；不匹配 ``want_worker`` 的暂存到 ``_deferred`` 并继续等。
 
-    def _defer(self, msg: Dict[str, Any]) -> None:
-        self._deferred.append(msg)
+        关键：暂存的消息**不能被同一个等待者再次取出**（否则会忙等到超时）。
+        先扫缓冲里是否有本等待者需要的消息，再从共享队列读。
+        """
+        if self._deferred and want_worker is None:
+            return self._deferred.pop(0)
+        if want_worker is not None:
+            for idx, m in enumerate(self._deferred):
+                if m.get("worker") == want_worker:
+                    return self._deferred.pop(idx)
+        deadline = time.time() + float(timeout)
+        while True:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                raise queue.Empty
+            msg = self._result_q.get(timeout=remaining)
+            if want_worker is None or msg.get("worker") == want_worker:
+                return msg
+            self._deferred.append(msg)
 
     def _spawn_one(self, i: int) -> None:
         q = self.ctx.Queue()
@@ -321,14 +335,10 @@ class ProcessActorPool:
         deadline = time.time() + 180.0
         while time.time() < deadline:
             try:
-                msg = self._next_msg(timeout=5.0)
+                msg = self._take_msg(5.0, want_worker=i)
             except queue.Empty:
                 if not p.is_alive():
                     raise RuntimeError(f"actor-{i} 启动即退出（exit={p.exitcode}）")
-                continue
-            if msg.get("worker") != i:
-                # 其它 worker 的正常消息（collect_done/weights_loaded）：缓冲给后续等待者
-                self._defer(msg)
                 continue
             if msg["type"] == "ready":
                 info = {"index": i, "gpu": msg["gpu"], "pid": msg["pid"],
@@ -394,7 +404,7 @@ class ProcessActorPool:
             if remaining <= 0:
                 raise TimeoutError(f"reload_weights 超时: done={done} errors={errors}")
             try:
-                msg = self._next_msg(timeout=min(5.0, remaining))
+                msg = self._take_msg(min(5.0, remaining))
             except queue.Empty:
                 self._check_alive()
                 continue
@@ -456,7 +466,7 @@ class ProcessActorPool:
                 missing = sorted(set(reqs) - set(results))
                 raise TimeoutError(f"collect 超时 {timeout:.0f}s，缺失 worker {missing}")
             try:
-                msg = self._next_msg(timeout=min(5.0, remaining))
+                msg = self._take_msg(min(5.0, remaining))
             except queue.Empty:
                 # 检查是否有人死了；死了就重启 + 重发该 shard（最多 2 次）
                 for i, p in enumerate(self._procs):

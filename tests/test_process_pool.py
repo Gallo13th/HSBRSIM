@@ -63,3 +63,37 @@ def test_pool_collects_and_restarts_after_kill(tmp_path, monkeypatch):
         assert np.isfinite(np.asarray(batch2.advantages, dtype=np.float64)).all()
     finally:
         pool.close()
+
+
+def test_take_msg_defers_stray_messages_without_starvation(tmp_path, monkeypatch):
+    """竞态回归：别的 worker 的消息被暂存后，等待者不能把它取回来忙等。
+
+    构造两个 worker 的消息交错：等待 worker0 时先读到 worker1 的两条消息，
+    必须仍能在超时前拿到 worker0 的 ready，且 worker1 的消息保留在缓冲里、
+    之后能被 want_worker=1 的等待者取到（不丢、不饿死）。
+    """
+    pytest.importorskip("torch")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+
+    from hsbg.az.train.process_pool import ProcessActorPool
+
+    pool = ProcessActorPool.__new__(ProcessActorPool)   # 不启动进程，只测消息分发
+    import queue as _q
+    pool.ctx = None
+    pool._result_q = _q.Queue()
+    pool._deferred = []
+
+    pool._result_q.put({"worker": 1, "type": "collect_done", "task_id": "a"})
+    pool._result_q.put({"worker": 1, "type": "weights_loaded"})
+    pool._result_q.put({"worker": 0, "type": "ready", "gpu": 0, "pid": 1})
+
+    m0 = pool._take_msg(2.0, want_worker=0)
+    assert m0["type"] == "ready" and m0["worker"] == 0
+    assert len(pool._deferred) == 2          # worker1 的两条被暂存
+    m1 = pool._take_msg(0.1, want_worker=1)  # 从缓冲里按 worker 取
+    assert m1["type"] == "collect_done"
+    m2 = pool._take_msg(0.1)                 # 不限 worker：取剩余
+    assert m2["type"] == "weights_loaded"
+    assert pool._deferred == []
+    with pytest.raises(Exception):
+        pool._take_msg(0.05, want_worker=0)  # 没有消息 → 超时而不是死等
