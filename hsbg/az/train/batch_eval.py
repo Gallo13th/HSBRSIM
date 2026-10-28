@@ -204,8 +204,14 @@ class BatchLeafServer:
             k = int(np.atleast_2d(r.features).shape[0])
             temps[off:off + k] = float(r.temperature) if r.temperature else self.temperature
             off += k
+        if not np.all(np.isfinite(temps)) or float(np.min(temps)) <= 0.0:
+            raise ValueError(f"温度非法（必须 >0 且有限）：{temps[:8]}")
         logits = torch.from_numpy(np.asarray(plog, dtype=np.float32)).to(dev)
-        mask_t = torch.from_numpy(np.asarray(m, dtype=bool)).to(dev)
+        mask_np = np.asarray(m, dtype=bool)
+        if not bool(mask_np.any(axis=1).all()):
+            bad = np.flatnonzero(~mask_np.any(axis=1))[:8].tolist()
+            raise ValueError(f"存在无合法动作的行（mask 全 False）：rows={bad}")
+        mask_t = torch.from_numpy(mask_np).to(dev)
         t = torch.from_numpy(temps).to(dev).unsqueeze(1)
         probs = masked_log_softmax_torch(logits / t, mask_t).exp()
         with torch.no_grad():

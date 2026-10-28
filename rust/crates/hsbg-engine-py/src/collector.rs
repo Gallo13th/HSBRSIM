@@ -55,6 +55,8 @@ pub struct PyRustCollector {
     pending_cards: Vec<i32>,
     rounds: u64,
     illegal: u64,
+    max_steps: usize,
+    steps: Vec<usize>,
 }
 
 impl PyRustCollector {
@@ -113,7 +115,6 @@ impl PyRustCollector {
         let env = BatchEnv::new(n_games, seed, cfg, vec![seat], threads)
             .map_err(pyo3::exceptions::PyValueError::new_err)?;
         // 预分配按「每局 ~160 决策」估；不足时 grow()，避免一开始就 memset 几个 GB
-        let _ = max_steps;
         let cap = n_games * 192;
         Ok(PyRustCollector {
             env, n_slots: n_games, seat, limit, cap, cnt: 0,
@@ -140,6 +141,8 @@ impl PyRustCollector {
             pending_cards: Vec::new(),
             rounds: 0,
             illegal: 0,
+            max_steps,
+            steps: vec![0; n_games],
         })
     }
 
@@ -234,6 +237,7 @@ impl PyRustCollector {
                 logprob = 0.0;
             }
             step_actions[slot] = action;
+            self.steps[slot] += 1;
             self.push_row(slot, turn, &feats[j * OBS_FLOATS..(j + 1) * OBS_FLOATS],
                           &cards[j * OBS_CARDS..(j + 1) * OBS_CARDS],
                           &masks[row..row + N_ACTIONS],
@@ -248,6 +252,11 @@ impl PyRustCollector {
         let places: Vec<u8> = out.iter().map(|x| x.placement).collect();
         let rejected: Vec<u8> = out.iter().map(|x| x.rejected as u8).collect();
         for slot in 0..self.n_slots {
+            // max_steps 截断：与 Python 路径一致，超限的局不再继续（rank 保持 -1 → 下游丢弃）
+            if !self.finished[slot] && self.max_steps > 0 && self.steps[slot] >= self.max_steps {
+                self.finished[slot] = true;
+                continue;
+            }
             if dones[slot] != 0 && !self.finished[slot] {
                 self.finished[slot] = true;
                 self.placements[slot] = places[slot] as i64;

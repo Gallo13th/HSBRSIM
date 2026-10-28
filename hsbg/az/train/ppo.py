@@ -684,8 +684,12 @@ class PPOEvaluator:
             if temperatures is None:
                 t = float(self.temperature)
             else:
-                t = torch.from_numpy(np.asarray(temperatures, dtype=np.float32)).to(dev)
-                t = t.unsqueeze(1)
+                tv = np.asarray(temperatures, dtype=np.float32)
+                if not np.all(np.isfinite(tv)) or float(np.min(tv)) <= 0.0:
+                    raise ValueError("温度非法（必须 >0 且有限）")
+                t = torch.from_numpy(tv).to(dev).unsqueeze(1)
+            if not bool(m_np.any(axis=1).all()):
+                raise ValueError("存在无合法动作的行（mask 全 False）")
             probs = masked_log_softmax_torch(plog.float() / t, mt).exp()
             vals = value_from_rank_logits_torch(rlog.float())
             g = torch.Generator(device=dev).manual_seed(int(seed))

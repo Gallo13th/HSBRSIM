@@ -159,7 +159,11 @@ def collect_ppo_batchenv(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         a = per_slot_first[slot]
         b = per_slot_last[slot] + 1
         if ranks[slot] > 0:
-            buf["ranks"][a:b] = ranks[slot]
+            # 记录按轮交错，区间里混着别的局：只填本局（game_ids == slot+g0）的行
+            gid = int(cfg.game_id_offset) + slot
+            seg = buf["game_ids"][a:b]
+            mask = seg == gid
+            buf["ranks"][a:b][mask] = ranks[slot]
     out = {k: v[:cnt] for k, v in buf.items()}
     meta = {
         "mode": "rust_batchenv",
