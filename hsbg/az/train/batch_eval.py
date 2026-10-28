@@ -37,6 +37,12 @@ class LeafRequest:
     prior: Optional[np.ndarray] = None
     value: Optional[float] = None
     error: Optional[BaseException] = None
+    #: True = 直接在 worker 里按 temperature 采样动作（不回传 245 维 prior）
+    want_action: bool = False
+    temperature: float = 1.0
+    seed: Optional[int] = None
+    action: Optional[int] = None
+    logprob: Optional[float] = None
 
 
 class BatchLeafServer:
@@ -86,7 +92,9 @@ class BatchLeafServer:
         return a if a.flags.c_contiguous else np.ascontiguousarray(a)
 
     def submit(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
-               timeout: float = 0.5, copy: bool = False) -> LeafRequest:
+               timeout: float = 0.5, copy: bool = False, *,
+               want_action: bool = False, temperature: float = 1.0,
+               seed: Optional[int] = None) -> LeafRequest:
         with self._state_lock:
             if self._state != "open":
                 raise RuntimeError(f"BatchLeafServer is {self._state}")
@@ -100,6 +108,9 @@ class BatchLeafServer:
                                   self._pack(features, np.float32),
                                   self._pack(cards, np.int64),
                                   self._pack(mask, bool))
+            req.want_action = bool(want_action)
+            req.temperature = float(temperature)
+            req.seed = seed
             req.submit_t = time.monotonic()
             try:
                 self._q.put(req, timeout=float(timeout))
@@ -128,6 +139,19 @@ class BatchLeafServer:
             raise req.error
         assert req.prior is not None
         return req.prior, float(req.value)  # type: ignore[arg-type]
+
+    def act(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
+            temperature: float = 1.0, seed: Optional[int] = None,
+            timeout: float = 30.0) -> Tuple[int, float, float]:
+        """worker 侧采样：返回 ``(action, logprob, value)``，不构造 245 维 prior。"""
+        req = self.submit(features, cards, mask, want_action=True,
+                          temperature=temperature, seed=seed)
+        if not req.event.wait(timeout=timeout):
+            raise TimeoutError("batch leaf timeout")
+        if req.error is not None:
+            raise req.error
+        assert req.action is not None
+        return int(req.action), float(req.logprob or 0.0), float(req.value or 0.0)
 
     def call_many(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
                   timeout: float = 60.0) -> List[Tuple[np.ndarray, float]]:
@@ -192,9 +216,19 @@ class BatchLeafServer:
                 plog, rlog = self.evaluator.logits(f, c, m)
                 fwd = time.monotonic() - t0
                 for i, r in enumerate(batch):
-                    p = masked_probs_np(plog[i], m[i], self.temperature)
-                    p = p / max(float(p.sum()), 1e-12)
-                    r.prior = p.astype(np.float32)
+                    temp = float(r.temperature) if r.temperature else self.temperature
+                    if r.want_action:
+                        # GPU/worker 侧采样：不回传 245 维 prior，直接用请求 seed 采样
+                        p = masked_probs_np(plog[i], m[i], temp)
+                        p = p / max(float(p.sum()), 1e-12)
+                        rng = np.random.default_rng(int(r.seed) if r.seed is not None else 0)
+                        a = int(rng.choice(p.size, p=p))
+                        r.action = a
+                        r.logprob = float(np.log(max(float(p[a]), 1e-12)))
+                    else:
+                        p = masked_probs_np(plog[i], m[i], temp)
+                        p = p / max(float(p.sum()), 1e-12)
+                        r.prior = p.astype(np.float32)
                     r.value = float(value_from_rank_logits_np(rlog[i])[0])
                     r.event.set()
                 with self._stats_lock:
@@ -278,6 +312,11 @@ class BatchPPOEvaluator:
     def __call__(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
                  seat: int = 0) -> Tuple[np.ndarray, float]:
         return self.server.call(features, cards, mask, seat)
+
+    def act(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
+            temperature: float = 1.0, seed: Optional[int] = None
+            ) -> Tuple[int, float, float]:
+        return self.server.act(features, cards, mask, temperature, seed)
 
 
 __all__ = ["LeafRequest", "BatchLeafServer", "BatchPPOEvaluator"]

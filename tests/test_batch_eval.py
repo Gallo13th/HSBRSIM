@@ -94,3 +94,30 @@ def test_batch_server_close_rejects_and_fails_pending():
     with pytest.raises(RuntimeError):
         server.call(f[0], c[0], m[0])
     server.close()  # idempotent
+
+
+def test_act_is_deterministic_and_legal(_tiny_model_factory=None):
+    """worker 侧采样：同 seed → 同动作；动作合法；logprob 与 prior 一致。"""
+    import numpy as np
+    from hsbg.az.train.batch_eval import BatchLeafServer
+    from hsbg.az.train.model import build_net
+
+    model = build_net(arch="tiny")
+    server = BatchLeafServer(model, device="cpu", batch_size=8, max_wait_ms=1.0)
+    try:
+        rng = np.random.default_rng(0)
+        f = rng.normal(size=(3227,)).astype(np.float32)
+        c = np.zeros(124, dtype=np.int64)
+        m = np.zeros(245, dtype=bool)
+        m[rng.integers(0, 245, 8)] = True
+        m[0] = True
+        a1, lp1, v1 = server.act(f, c, m, 1.0, seed=123)
+        a2, lp2, v2 = server.act(f, c, m, 1.0, seed=123)
+        a3, _, _ = server.act(f, c, m, 1.0, seed=124)
+        assert a1 == a2 and abs(lp1 - lp2) < 1e-9 and abs(v1 - v2) < 1e-9
+        assert bool(m[a1]) and bool(m[a3])
+        prior, value = server.call(f, c, m)
+        assert abs(float(np.log(max(prior[a1], 1e-12))) - lp1) < 1e-5
+        assert abs(float(value) - float(v1)) < 1e-5
+    finally:
+        server.close()

@@ -259,6 +259,8 @@ class CollectConfig:
     #: 单座位单回合决策数上限（超过且 EndTurn 合法则强制结束回合；0=关闭）。
     #: 未训练网络容易陷入 Play/Cancel 循环，默认 40 保证采集/评测能走到终局。
     max_actions_per_turn: int = 40
+    #: worker 侧采样（L2）：sims=0 + behavior=net 时跳过 245 维 prior 回传。
+    fast_act: bool = True
 
 
 @dataclass
@@ -281,6 +283,8 @@ class PPOConfig:
     #: 梯度累积：minibatch 是微批大小，grad_accum 个微批 = 一个有效 minibatch。
     #: 论文有效 minibatch = 8192；显存不够时用 e.g. minibatch=2048, grad_accum=4。
     grad_accum: int = 1
+    #: worker 侧采样：sims=0 + behavior=net 时跳过 245 维 prior 回传（L2）。
+    fast_act: bool = True
     #: 前向/反向精度：off=fp32；bf16=CUDA autocast(bfloat16)（实测 2.03×）。
     #: 主干在 bf16 下前向，loss/KL/entropy 计算强制回到 fp32（见 ppo_losses）。
     amp: str = "off"
@@ -1058,13 +1062,31 @@ class PPOSelfPlayPolicy(Policy):
         finally:
             self._n += 1
 
+    def _can_fast_act(self) -> bool:
+        """sims=0 + behavior=net + evaluator 支持 worker 侧采样 → 可跳过 245 维 prior。"""
+        return (bool(getattr(self.config, "fast_act", True))
+                and self.search_fn is None
+                and str(self.config.behavior).strip().lower() == "net"
+                and hasattr(self.eval_fn, "act")
+                and float(self.config.temperature) > 0.0)
+
     def decide(self, game: Any, seat: int) -> Decision:
         seat = int(seat)
         f, c = obs_arrays(game.observe(seat))
         mask = mask_from_bytes(game.legal_mask(seat))
-        logits, value = self._net_predict(f, c, mask, seat)
-        p_net = masked_probs_np(logits, mask, float(self.config.temperature))
-        target_pi = self._run_search(game, seat, mask)
+        fast = self._can_fast_act()
+        preset = None
+        if fast:
+            # worker 侧采样：省掉 prior 回传 + 调用方 numpy softmax/采样
+            seed = int(self._rng.integers(0, 2 ** 63 - 1))
+            a, lp, value = self.eval_fn.act(f, c, mask,
+                                            float(self.config.temperature), seed)
+            preset = (int(a), float(lp))
+            p_net = target_pi = None
+        else:
+            logits, value = self._net_predict(f, c, mask, seat)
+            p_net = masked_probs_np(logits, mask, float(self.config.temperature))
+            target_pi = self._run_search(game, seat, mask)
 
         behavior = str(self.config.behavior).strip().lower()
         if behavior == "net" or target_pi is None:
@@ -1094,6 +1116,8 @@ class PPOSelfPlayPolicy(Policy):
             action = 0
             logprob = 0.0
             self.forced_actions += 1
+        elif preset is not None:
+            action, logprob = preset
         else:
             mu64 = np.maximum(np.asarray(mu, dtype=np.float64), 0.0)
             s = float(mu64.sum())
@@ -1120,7 +1144,8 @@ class PPOSelfPlayPolicy(Policy):
             "game_id": int(self.game_id),
             "forced": bool(forced),
         })
-        out_pi = target_pi if target_pi is not None else mu
+        out_pi = target_pi if target_pi is not None else (
+            mu if preset is None else mask.astype(np.float32) / max(float(mask.sum()), 1.0))
         return Decision(int(action), np.asarray(out_pi, dtype=np.float32),
                         {"search": target_pi is not None, "policy": self.name,
                          "logprob": float(logprob), "value": float(value),
