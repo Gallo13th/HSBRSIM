@@ -165,15 +165,30 @@ impl PyGame {
     /// 与 `debug(cmd="add_minion")` 不同：这里直接反序列化整个 Player，卡牌 id/金色/关键词/
     /// 手牌/酒馆/饰品/任务/计数器都原样恢复，不会被 `add_minion` 的 golden 归一化改写。
     /// 用于镜像对手库：把历史高强度局面注入对手座位。
-    #[pyo3(signature = (seat, player_json, keep_seat_id=true))]
+    #[pyo3(signature = (seat, player_json, keep_seat_id=true, preserve_lobby=true))]
     fn set_player_from_json(&mut self, py: Python<'_>, seat: usize, player_json: &str,
-                            keep_seat_id: bool) -> PyResult<()> {
+                            keep_seat_id: bool, preserve_lobby: bool) -> PyResult<()> {
         check_seat(&self.g, seat)?;
         let mut p: hsbg_engine::state::Player = py
             .detach(|| serde_json::from_str(player_json))
             .map_err(|e: serde_json::Error| PyValueError::new_err(e.to_string()))?;
         if keep_seat_id {
             p.id = self.g.players[seat].id;
+        }
+        if preserve_lobby {
+            // 大厅簿记必须用**当前局**的，否则会复活已淘汰座位 / 让配对与侦察状态错乱
+            let live = &self.g.players[seat];
+            p.alive = live.alive;
+            p.placement = live.placement;
+            p.next_opponent = live.next_opponent;
+            p.last_opponent = live.last_opponent;
+            p.recent_opponents = live.recent_opponents.clone();
+            p.next_is_ghost = live.next_is_ghost;
+            p.sees_all_boards = live.sees_all_boards;
+            p.scouted = live.scouted.clone();
+            p.ended_turn = live.ended_turn;
+            p.actions_this_turn = live.actions_this_turn;
+            p.skipping = live.skipping;
         }
         self.g.players[seat] = p;
         Ok(())

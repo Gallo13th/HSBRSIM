@@ -258,46 +258,56 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             "rec_start": 0,
         })
     rounds = 0
-    lib_injected = 0
-    if library_pool is not None and float(library_p) > 0.0:
+    library_p = max(0.0, min(1.0, float(library_p)))
+    if library_pool is not None and library_p > 0.0:
         import random as _random
         library_rng = library_rng or _random.Random(int(cfg.seed) + int(seed))
         for st in states:
-            st["lib_turn"] = -1
+            st["lib_done"] = set()
+            st["lib_attempt"] = 0
+            st["lib_injected"] = 0
+            st["lib_mismatch"] = 0
+            st["lib_error"] = 0
     while True:
         pending = []
         for st in states:
             if st["done"]:
                 continue
             g = st["game"]
-            # 镜像库注入：每进入新回合，按概率把强牌面精确注入 bot 座位
-            if library_pool is not None and float(library_p) > 0.0:
-                if int(g.turn) != int(st.get("lib_turn", -1)):
-                    st["lib_turn"] = int(g.turn)
-                    for seat_i in range(N_PLAYERS):
-                        if int(seat_i) == seat:
-                            continue
-                        if library_rng.random() >= float(library_p):
-                            continue
-                        entry = library_pool.sample(int(g.turn), rng=library_rng)
-                        if entry is None:
-                            continue
-                        before = board_signature(json.loads(g.player_json(seat_i)))
-                        try:
-                            g.set_player_from_json(int(seat_i),
-                                                   json.dumps(entry.player), True)
-                        except BaseException:  # noqa: BLE001
-                            continue
-                        after = board_signature(json.loads(g.player_json(seat_i)))
-                        if after == board_signature(entry.player):
-                            lib_injected += 1
-                        elif before:
-                            pass   # 注入后对不上：保留引擎现状（不中断对局）
             guard = 0
             while (not g.is_over()) and (not g.needs_action(seat)) and guard < 10 ** 6:
                 q = next((p for p in range(N_PLAYERS) if g.needs_action(p)), None)
                 if q is None:
                     break
+                # 镜像库注入：在该 bot 座位**本回合第一次行动之前**注入（严格 turn 起点）
+                if library_pool is not None and float(library_p) > 0.0 and int(q) != seat:
+                    key = (int(q), int(g.turn))
+                    if key not in st["lib_done"]:
+                        st["lib_done"].add(key)
+                        st["lib_attempt"] += 1
+                        try:
+                            placements = list(g.placements())
+                            alive_q = int(placements[int(q)]) == 0
+                            if alive_q and library_rng.random() < float(library_p):
+                                entry = library_pool.sample(int(g.turn), rng=library_rng)
+                                if entry is not None:
+                                    before = g.player_json(int(q))
+                                    g.set_player_from_json(int(q), json.dumps(entry.player),
+                                                           True, True)
+                                    after = json.loads(g.player_json(int(q)))
+                                    want = dict(entry.player)
+                                    # 只校验「我们想替换的内容」，大厅簿记字段按当前局保留
+                                    ok = all(after.get(k) == want.get(k) for k in
+                                             ("board", "hand", "tier", "health", "gold",
+                                              "trinkets", "quests", "hero"))
+                                    if ok:
+                                        st["lib_injected"] += 1
+                                    else:
+                                        st["lib_mismatch"] += 1
+                                        g.set_player_from_json(int(q), before, True, True)
+                        except BaseException as exc:  # noqa: BLE001
+                            st["lib_error"] += 1
+                            st.setdefault("lib_error_last", repr(exc))
                 if str(gamemode) == "weak":
                     g.step(int(q), _weak_bot_action(g, int(q), st["rng"]))
                 else:
@@ -356,7 +366,11 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                       "rank": rank, "illegal_actions": int(st["illegal"])})
     meta = {"mode": "lockstep", "games": n, "pool_games": n,
             "rounds": int(rounds), "decisions": int(decisions_total),
-            "library_injected": int(lib_injected),
+            "library_attempt": int(sum(st.get("lib_attempt", 0) for st in states)),
+            "library_injected": int(sum(st.get("lib_injected", 0) for st in states)),
+            "library_mismatch": int(sum(st.get("lib_mismatch", 0) for st in states)),
+            "library_error": int(sum(st.get("lib_error", 0) for st in states)),
+            "library_p": float(library_p),
             "records": int(len(records)), "illegal_actions": int(illegal),
             "truncated_games": int(truncated),
             "games_meta": metas, "forced_end_turns": int(policy.forced_actions)}

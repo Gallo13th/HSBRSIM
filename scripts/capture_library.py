@@ -41,7 +41,10 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=710000)
     ap.add_argument("--learner-seat", type=int, default=0)
     ap.add_argument("--turns", default="8,10,12,15,18")
-    ap.add_argument("--max-placement", type=int, default=2)
+    ap.add_argument("--max-placement", type=int, default=2,
+                    help="被采集座位的最终名次上限")
+    ap.add_argument("--min-learner-placement", type=int, default=0,
+                    help="要求 learner 的最终名次 >= 该值（例如 5 = 只收「赢了我们」的对局）")
     ap.add_argument("--min-turn", type=int, default=8)
     ap.add_argument("--min-board", type=int, default=4)
     ap.add_argument("--temperature", type=float, default=1.0)
@@ -101,6 +104,9 @@ def main() -> int:
         if not game.is_over():
             continue
         placements = list(game.placements())
+        if int(args.min_learner_placement) > 0 and \
+                int(placements[int(args.learner_seat)]) < int(args.min_learner_placement):
+            continue
         for (seat, turn), pj in captured.items():
             if int(placements[seat]) > int(args.max_placement):
                 continue

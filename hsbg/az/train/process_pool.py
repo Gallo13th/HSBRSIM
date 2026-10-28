@@ -222,11 +222,22 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                 if str(getattr(cfg, "library_pool", "")) and \
                         float(getattr(cfg, "library_p", 0.0)) > 0.0:
                     from .library_pool import LibraryPool
-                    lib = _LIB_CACHE.get(cfg.library_pool) or LibraryPool(cfg.library_pool)
-                    if not lib.entries:
-                        print(f"[warn] 镜像库为空/不存在: {cfg.library_pool}", flush=True)
+                    path = str(cfg.library_pool)
+                    mtime = os.path.getmtime(path) if os.path.isfile(path) else 0.0
+                    cached = _LIB_CACHE.get(path)
+                    if cached is None or cached[0] != mtime:   # 热加载：文件更新即重读
+                        lib = LibraryPool(path) if mtime else None
+                        _LIB_CACHE[path] = (mtime, lib)
+                        if lib is None or not lib.entries:
+                            print(f"[warn] 镜像库为空/不存在: {path}", flush=True)
+                    else:
+                        lib = cached[1]
+                    if lib is not None and not lib.entries:
                         lib = None
-                    _LIB_CACHE[cfg.library_pool] = lib
+                if lib is None and str(getattr(cfg, "library_pool", "")) and \
+                        float(getattr(cfg, "library_p", 0.0)) > 0.0:
+                    print("[warn] library_pool 已设置但库为空/路径无效：本次将退回纯 bot 对手",
+                          flush=True)
                 records, cmeta = collect_ppo_lockstep(
                     model, cfg, eval_fn=evaluator, device=device,
                     seed=int(task["seed"]), games=int(cfg.games),
@@ -234,6 +245,10 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     norm_std=norm_std, library_pool=lib,
                     library_p=float(getattr(cfg, "library_p", 0.0)))
             else:
+                if str(getattr(cfg, "library_pool", "")) and \
+                        float(getattr(cfg, "library_p", 0.0)) > 0.0:
+                    print("[warn] 镜像库目前只在 --lockstep 1 路径生效，本次请求被忽略",
+                          flush=True)
                 records, cmeta = collect_ppo_records_parallel(
                     model, cfg, workers=int(task.get("threads", 4)),
                     search_fn=search_fn,

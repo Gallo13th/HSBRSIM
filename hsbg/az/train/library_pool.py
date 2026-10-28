@@ -127,8 +127,7 @@ class LibraryPool:
             cands.sort(key=lambda e: abs(e.strength - int(target_strength)))
             return cands[0]
         cands.sort(key=lambda e: e.strength, reverse=True)
-        top = cands[:max(1, min(len(cands), 8))]
-        return rng.choice(top)
+        return cands[0]
 
     # ---- 持久化 ----
     def load(self, path: str) -> int:
