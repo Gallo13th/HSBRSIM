@@ -43,11 +43,13 @@
 - 结论：**先把 collect 压到 ≤2.5 s（Rust 全采集器），DDP 才有意义**。届时 2 卡 learner +
   2 卡 actor 可把 step 压到 ~3 s。
 
-**(c) worker 内建 batch（L4）——尝试后回退**
+**(c) worker 内建 batch（L4）——已修复并落地（收益有限）**
 - 目标：把父进程 `parent_read 0.96 s + build_batch 1.13 s`（占 collect **30%**）并行到 worker；
-- 结果：拼接后 `PPOBatch.validate()` 报 `episode N 的 done 数 != 1`（多 worker 的 episode 重编号
-  与过滤后的 episode 不连续导致），**已回退**，代码回到 L3 路径；
-- 若后续要做，正确做法是 worker 返回时就带全局 episode id（父进程不再重编号）。
+- 第一版失败（`episode N 的 done 数 != 1`），原因是父进程对过滤后的局部 episode 重编号；
+- 修复：worker 直接把 `episode_ids` 写成 **全局唯一键 `game_id*8 + seat`**，父进程只拼接不再重编号；
+- 实测（16 iter，同卡同 seed）：`build_batch 1.13 → 0.75 s`，dec/s 5,331 → **5,435**，
+  collect 6.99 → 6.98 s（几乎不变）——**瓶颈已变成 530 MB features 的磁盘读取与内存拼接**，
+  不是排序/GAE。结论：L4 保留（正确、低风险、略快），但**别再指望它提速**。
 
 ## 3. 当前限速步
 

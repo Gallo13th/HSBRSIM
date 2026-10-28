@@ -201,10 +201,26 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
             records_file = None
             n_records = int(len(records))
             if bool(task.get("return_records", True)):
-                # L3：SoA 打包成 npz（父进程不用再逐 dict 解析）
+                # L4：worker 内构建 batch（排序/过滤/GAE 并行化）；episode_id 用
+                # (game_id*8+seat) 作为全局唯一键，父进程直接拼接、无需重编号
                 records_file = os.path.join(
                     task["tmpdir"], f"rec_{task_id}_w{index}.npz")
-                np.savez(records_file, **pack_records_arrays(records))
+                packed = pack_records_arrays(records)
+                try:
+                    lb = build_batch_from_arrays(packed, gamma=float(task.get("gamma", 1.0)),
+                                                 lam=float(task.get("lam", 0.95)))
+                    np.savez(records_file,
+                             features=lb.features, cards=lb.cards, masks=lb.masks,
+                             actions=lb.actions, old_logprobs=lb.old_logprobs,
+                             values=lb.values, rewards=lb.rewards, dones=lb.dones,
+                             advantages=lb.advantages, returns=lb.returns,
+                             seats=lb.seats, game_ids=lb.game_ids, ranks=lb.ranks,
+                             turns=lb.turns, forced=lb.forced, has_pi=lb.has_pi,
+                             episode_ids=(lb.game_ids * 8 + lb.seats).astype(np.int32),
+                             target_pi=(lb.target_pi if lb.target_pi is not None
+                                        else np.zeros((len(lb.actions), 245), np.float32)))
+                except BaseException:  # noqa: BLE001 - 回退到父进程构建
+                    np.savez(records_file, **packed)
             profile = server.profile()
             stats = server.stats
             _report({
@@ -566,8 +582,16 @@ class ProcessActorPool:
                 f"invalid={agg['invalid']}, decisions={agg['decisions']}）")
         timeline["t_read_done"] = time.monotonic()
         t_b0 = time.time()
-        if packed_all:
-            # L3：数组直拼（每个 worker 的 episode 互不相交，拼完统一排序/GAE）
+        if packed_all and all("advantages" in p for p in packed_all):
+            # L4：worker 已构建好 batch（episode_id 全局唯一）→ 父进程只拼接
+            keys = ["features", "cards", "masks", "actions", "old_logprobs", "values",
+                    "rewards", "dones", "advantages", "returns", "seats", "game_ids",
+                    "ranks", "turns", "forced", "has_pi", "episode_ids", "target_pi"]
+            merged = {k: np.concatenate([p[k] for p in packed_all], axis=0) for k in keys}
+            meta["episodes"] = int(merged["episode_ids"].max()) + 1 if len(merged["episode_ids"]) else 0
+            meta["built_in"] = "worker"
+            batch = PPOBatch(**merged, meta=meta)
+        elif packed_all:
             merged = {k: np.concatenate([p[k] for p in packed_all if k in p], axis=0)
                       for k in packed_all[0]}
             batch = build_batch_from_arrays(merged, gamma=float(gamma),
