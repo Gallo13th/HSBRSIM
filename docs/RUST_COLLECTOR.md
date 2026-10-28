@@ -175,14 +175,35 @@ worker 侧一次 `act_batch` 只送 1 个请求（K 行），服务器不会把�
 | leaf bf16（`--leaf-amp bf16`） | 单进程 forward 4.20→4.06 s（略好）；pool 里有噪声、未证实收益 |
 | 引擎/records（Rust 内） | 0.06 ms/决策（pending 0.39 s + record 0.58 s / 21k 决策），不是瓶颈 |
 
-**为什么 2 s 不可达**：一趟 collect 的轮数由「每轮有多少局需要决策」决定，而每次前向有
-~5 ms 固定延迟（kernel launch + 同步 + 传输）。40k 决策 ≈ 400–900 轮 × 5–8 ms ≈ 3–7 s 的
-纯前向时间，与引擎/记录无关。要把这个压到 2 s，需要 ≥2× 减少轮数或每轮成本，而这不在
-「把 Python 搬到 Rust」的范围里：
+**为什么这一版没到 2 s**（口径按 PPAI 终审修正）：一趟 collect 的轮数由「每轮有多少局需要决策」
+决定，而每次前向有 ~5 ms 固定延迟（kernel launch + 同步 + 传输）。40k 决策 ≈ 400–900 轮 ×
+5–8 ms ≈ **2–7.2 s** 的纯前向时间（区间而不是点估计），与引擎/记录无关；多卡时还要按
+「串行轮数 / 每轮延迟 / GPU 分摊 / 额外开销」分开看，不能把多卡总服务时间当关键路径。
+因此这只是**本实现**未达标，不是「2 s 被证明不可达」——本轮 §4 曾预测共享推理可到 1.5–2 s，
+那个预测**没有兑现**，原因正是上面这条「每轮 ready 行数受限 + 固定延迟摊不薄」。
+要真正逼近 2 s，需要：
 1. 观测降维（3227 → ~1k floats），同时减少传输与模型宽度；
 2. 减少并发 bot 座位（引擎每轮推进的工作量）；
-3. 常驻 GPU 输入缓冲 / CUDA graph，把 5 ms 固定延迟压到 ~1.5 ms（`fused_act` 是第一步，
-   需要配合持久缓冲重做，本轮尝试后因不稳定已回退）。
+3. 常驻 GPU 输入缓冲 / 融合采样 / CUDA graph，把 5 ms 固定延迟压到 ~1.5 ms（`fused_act` 是
+   第一步，本轮尝试后因不稳定已回退）。注意：减少 bot 席位会改变任务，不算等价优化。
+
+**计量口径提醒**：`batch_eval` 的 `batch_sizes` 记的是**请求数**而非行数，`batch_p50` 不能直接
+当「每轮 ready 行数」用；`docs` 里凡引用它都已按请求数解读。
+
+## 5b. 终审后修复（HEAD 1983404，全部有测试/实测）
+
+| PPAI 终审项 | 修复与证据 |
+|---|---|
+| P0 rank 回填串局 | Rust 与 `batchenv_collect` 都只回填 `game_ids == slot` 的行；实测 96 局 **零串局**，batch 校验 96 episodes |
+| P1 single 路径缺 `game_id_offset` | 已加；实测 `game_ids ∈ [100,195]`（offset=100） |
+| P1 `max_steps` 未生效 | Rust 侧按 slot 计步，超限 finish（rank 保持 -1） |
+| P1 非法兜底进 policy loss | 兜底动作标 `forced=true`；实测 `forced=76` 且 logprob 全为 0 |
+| P1 `batch_mode` 入队竞态 | 改为 `submit(batch_mode=...)`，入队前完成 |
+| P1 混合单/批请求行错位 | 混合时回退逐行路径 |
+| P1 空 mask / 非法温度 | 显式 `ValueError`，与 `masked_log_softmax_np` 一致 |
+| P2 `k=0` 仍 step | `pending` 为空时直接返回、不推进 |
+
+单卡 96 局的端到端复核：**19,126 决策 / 4.57 s = 4,187 dec/s**，batch 校验通过。
 
 **保留的能力**：`--rust-collector 1 --rc-threads N`（与 lock-step 等价、略快），
 `PPOEvaluator.fused_act`（备用），`--leaf-amp bf16`（备用，默认 off），
