@@ -30,6 +30,8 @@ import numpy as np
 from .ppo import (PPOConfig, PPOBatch, _torch, build_train_forward,
                   compile_train_mode, forward_model, masked_log_softmax_torch,
                   split_model_outputs, train_ppo)
+from .bc_aux import (DEFAULT_BC_SAMPLES_PATH, bc_pool_summary, load_bc_samples,
+                     parse_bc_coef_ramp)
 
 #: anchor 参考前向的分块大小（= 编译图的固定 batch；尾块走 eager）。
 ANCHOR_CHUNK = 4096
@@ -40,7 +42,8 @@ class PPOTrainer:
 
     def __init__(self, model: Any, config: Optional[PPOConfig] = None, *,
                  lr_min_ratio: float = 0.1, max_updates: int = 100000,
-                 state: Optional[Dict[str, Any]] = None):
+                 state: Optional[Dict[str, Any]] = None,
+                 bc_pool: Optional[Any] = None):
         torch = _torch()
         self.model = model
         self.config = config or PPOConfig()
@@ -60,6 +63,9 @@ class PPOTrainer:
         self.rng = np.random.default_rng(int(self.config.seed))
         self.updates = 0
         self.extra: Dict[str, Any] = {}
+        #: 真实人类 BC 样本池（``bc_coef=0`` 时 None；加载失败自动关闭）
+        self.bc_pool: Any = bc_pool
+        self._bc_warned = False
         #: KL anchor（stage 起点策略的冻结副本）；由 ``set_anchor()`` 建立
         self.anchor_model: Optional[Any] = None
         #: 训练侧编译包装（compile_train=0 时 None）；失败自动回退 eager
@@ -68,6 +74,8 @@ class PPOTrainer:
         self.anchor_forward: Optional[Any] = None
         if state is not None:
             self.load_state_dict(state)
+        # BC 池：bc_coef=0（默认）时完全不加载；失败只 warn 一次并自动关闭
+        self._ensure_bc_pool()
         # 编译放在最后：权重/优化器状态就绪后再固定形状 warmup（计时之外）
         if compile_train_mode(getattr(self.config, "compile_train", 0)) > 0:
             self.train_forward = build_train_forward(self.model, self.config)
@@ -125,6 +133,48 @@ class PPOTrainer:
                 outs.append(masked_log_softmax_torch(logits, m))
         return torch.cat(outs, dim=0) if len(outs) > 1 else outs[0]
 
+    # -- BC auxiliary ------------------------------------------------------
+    def bc_enabled(self) -> bool:
+        """配置是否要求 BC（常数系数 >0，或 ramp 中存在正系数）。"""
+        if float(getattr(self.config, "bc_coef", 0.0) or 0.0) > 0.0:
+            return True
+        try:
+            points = parse_bc_coef_ramp(
+                str(getattr(self.config, "bc_coef_ramp", "") or ""))
+        except ValueError:
+            return False
+        return any(float(c) > 0.0 for _f, c in points)
+
+    def set_bc_pool(self, pool: Any) -> None:
+        """外部（如 CLI）预加载好 BC 池后注入，避免重复读 12 MB JSONL。"""
+        self.bc_pool = pool
+
+    def _ensure_bc_pool(self) -> Any:
+        if self.bc_pool is not None or not self.bc_enabled():
+            return self.bc_pool
+        path = str(getattr(self.config, "bc_samples_path", "")
+                   or DEFAULT_BC_SAMPLES_PATH)
+        try:
+            pool = load_bc_samples(
+                path, mmr_min=int(getattr(self.config, "bc_mmr_min", 6000)),
+                mmr_boost=float(getattr(self.config, "bc_mmr_boost", 1.0)))
+            if len(pool) == 0:
+                raise ValueError("BC 样本池为空（白名单/MMR 过滤后 0 条）")
+            self.bc_pool = pool
+        except Exception as exc:  # noqa: BLE001 - BC 可选，失败不中断训练
+            if not self._bc_warned:
+                print(f"[ppo][warn] BC 辅助正则加载失败，自动关闭 bc_coef=0："
+                      f"{type(exc).__name__}: {exc}", flush=True)
+                self._bc_warned = True
+            self.config.bc_coef = 0.0
+            self.config.bc_coef_ramp = ""
+            self.bc_pool = None
+        return self.bc_pool
+
+    def bc_summary(self) -> Optional[Dict[str, Any]]:
+        """BC 池摘要（启动打印/summary 用；未启用返回 None）。"""
+        return bc_pool_summary(self.bc_pool) if self.bc_pool is not None else None
+
     # -- update ------------------------------------------------------------
     def update(self, batch: PPOBatch) -> Dict[str, Any]:
         anchor_logp = None
@@ -133,7 +183,8 @@ class PPOTrainer:
         stats = train_ppo(self.model, batch, self.config,
                           optimizer=self.optimizer, rng=self.rng,
                           anchor_logp=anchor_logp,
-                          train_forward=self.train_forward)
+                          train_forward=self.train_forward,
+                          bc_pool=self.bc_pool)
         self.scheduler.step()
         self.updates += 1
         stats["trainer_updates"] = int(self.updates)
@@ -188,7 +239,7 @@ class PPOTrainer:
 
     @classmethod
     def load(cls, model: Any, path: str, config: Optional[PPOConfig] = None, *,
-             device: str = "cpu") -> "PPOTrainer":
+             device: str = "cpu", bc_pool: Optional[Any] = None) -> "PPOTrainer":
         torch = _torch()
         try:
             state = torch.load(path, map_location=device, weights_only=False)
@@ -197,7 +248,8 @@ class PPOTrainer:
         cfg = config or PPOConfig(**state.get("config", {}))
         cfg.device = str(device)
         return cls(model, cfg, lr_min_ratio=float(state.get("lr_min_ratio", 0.1)),
-                   max_updates=int(state.get("max_updates", 100000)), state=state)
+                   max_updates=int(state.get("max_updates", 100000)), state=state,
+                   bc_pool=bc_pool)
 
 
 __all__ = ["PPOTrainer", "ANCHOR_CHUNK"]

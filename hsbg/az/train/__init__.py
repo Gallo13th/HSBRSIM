@@ -11,6 +11,7 @@
 - ``ppo``        MCTS 引导的 PPO（masked、clip、GAE、KL 早停）与自对弈采集；
 - ``seq_aux``    动作序列辅助任务：turn 内动作 multi-hot 标签、权重 ramp、BCE 损失
                  （默认关闭，见 docs/ACTION_SEQUENCE_AUX.md）；
+- ``bc_aux``     真实人类对局 BC 辅助正则（小权重辅助 CE，默认关闭，见 docs/BC_AUX.md）；
 - ``evaluate``   固定 seed 策略评测（rank/top4/win/legal/truncated/耗时）；
 - ``report``     JSON 报告 schema（``hsbg.az.eval/v1`` / ``hsbg.az.train_smoke/v1``）。
 

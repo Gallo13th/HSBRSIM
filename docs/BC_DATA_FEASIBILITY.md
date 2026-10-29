@@ -15,6 +15,7 @@
 | `data/firestone_bc/SCHEMA.md` | 样本字段与语义说明 |
 | `scripts/firestone_bc_parse.py` | 解析器（Python 标准库，12 进程约 4 分钟/1000 局） |
 | `docs/BC_DATA_FEASIBILITY.md` | 本文 |
+| `docs/BC_AUX.md` | BC 辅助正则（形态 A）的 PPO 接入、单测、冒烟与失败判据 |
 
 ---
 

@@ -60,6 +60,10 @@ from hsbg.az.train.process_pool import ProcessActorPool  # noqa: E402
 from hsbg.az.train.runlog import (append_record, read_run, slim_collect,  # noqa: E402
                                   write_header, write_summary)
 from hsbg.az.train.seq_aux import SeqCoefSchedule  # noqa: E402
+from hsbg.az.train.bc_aux import (  # noqa: E402
+    bc_pool_summary,
+    load_bc_samples,
+)
 from scripts.async_eval import (AsyncEvalRunner, parse_c0_result,  # noqa: E402
                                 write_json_atomic)
 
@@ -179,6 +183,21 @@ def main() -> int:
     ap.add_argument("--seq-ramp-total-decisions", type=float, default=0.0,
                     help="ramp 的 100%% 进度对应的累计 decisions（0=用 --stop-at-decisions，"
                          "再缺省 30M）")
+    # ---- 真实人类 BC 辅助正则（默认关闭，见 docs/BC_AUX.md）----
+    ap.add_argument("--bc-coef", type=float, default=0.0,
+                    help="真实人类对局（Firestone）BC 辅助 CE 权重（形态 A）；"
+                         "0=关闭（默认，不加载 BC、不采样、loss 与旧路径逐位等价）")
+    ap.add_argument("--bc-coef-ramp", default="",
+                    help='BC 系数 ramp（与 --seq-coef-ramp 同语法），如 "0.005@0,0.02@0.3"；'
+                         "按累计 decisions 求值后写回 bc_coef")
+    ap.add_argument("--bc-mmr-min", type=int, default=6000,
+                    help="BC 样本 MMR 下限（低于该值丢弃；默认 6000）")
+    ap.add_argument("--bc-mmr-boost", type=float, default=1.0,
+                    help="MMR 线性增强：1=不加权（默认）；1.5=在 6000..8000 上从 1.0 线性升到 1.5")
+    ap.add_argument("--bc-samples", default="data/firestone_bc/bc_samples.jsonl.gz",
+                    help="BC 样本 JSONL(.gz) 路径（默认仓库 data/firestone_bc/bc_samples.jsonl.gz）")
+    ap.add_argument("--bc-batch", type=int, default=256,
+                    help="每个 PPO minibatch 抽取/编码的 BC 样本数（默认 256）")
     ap.add_argument("--entropy-coef", type=float, default=0.005)
     ap.add_argument("--max-actions-per-turn", type=int, default=40)
     ap.add_argument("--max-steps", type=int, default=20000)
@@ -275,6 +294,48 @@ def main() -> int:
         print("[error] --seq-coef 必须 >= 0", file=sys.stderr)
         return 2
 
+    # ---- 真实人类 BC 辅助正则：系数 ramp + 预加载池（默认关闭 = 零影响）----
+    if float(args.bc_coef) < 0.0:
+        print("[error] --bc-coef 必须 >= 0", file=sys.stderr)
+        return 2
+    try:
+        bc_schedule = SeqCoefSchedule.from_spec(
+            base_coef=float(args.bc_coef), spec=str(args.bc_coef_ramp),
+            total_decisions=(float(args.stop_at_decisions) if
+                             float(args.stop_at_decisions) > 0 else 3.0e7))
+    except ValueError as exc:
+        print(f"[error] --bc-coef-ramp 非法: {exc}", file=sys.stderr)
+        return 2
+    bc_enabled = bool(bc_schedule.enabled)
+    bc_pool = None
+    if bc_enabled:
+        try:
+            _t_bc = time.time()
+            bc_pool = load_bc_samples(
+                str(args.bc_samples), mmr_min=int(args.bc_mmr_min),
+                mmr_boost=float(args.bc_mmr_boost))
+            if len(bc_pool) == 0:
+                raise ValueError("过滤后样本数为 0（动作白名单/MMR 下限）")
+            _sum = bc_pool_summary(bc_pool)
+            print(f"[bc] 真实人类 BC 池: samples={len(bc_pool)} "
+                  f"mmr>={int(args.bc_mmr_min)} load={time.time() - _t_bc:.1f}s "
+                  f"path={bc_pool.path}", flush=True)
+            print(f"[bc] class_counts={json.dumps(_sum['class_counts'], ensure_ascii=False)}",
+                  flush=True)
+            print(f"[bc] class_fractions="
+                  f"{json.dumps({k: round(v, 4) for k, v in _sum['class_fractions'].items()}, ensure_ascii=False)}",
+                  flush=True)
+            print(f"[bc] coef(dec=0)={bc_schedule.coef(0):.4g} "
+                  f"ramp={json.dumps(bc_schedule.describe(), ensure_ascii=False)}",
+                  flush=True)
+        except Exception as exc:  # noqa: BLE001 - BC 可选，失败自动关闭
+            print(f"[warn] BC 数据加载失败，自动关闭 bc_coef=0（不中断训练）："
+                  f"{type(exc).__name__}: {exc}", flush=True)
+            bc_enabled = False
+            args.bc_coef = 0.0
+            args.bc_coef_ramp = ""
+            bc_pool = None
+
     if not engine_available():
         print("[error] hsbg_engine 不可用", file=sys.stderr)
         return 2
@@ -332,16 +393,35 @@ def main() -> int:
         anchor_amp=bool(int(args.anchor_amp)),
         # 动作序列辅助任务：初始系数由 ramp 在 dec=0 处给出（无 ramp 时=--seq-coef）
         seq_coef=(seq_schedule.coef(0) if seq_enabled else 0.0),
-        seq_coef_ramp=(str(args.seq_coef_ramp) if seq_enabled else ""))
+        seq_coef_ramp=(str(args.seq_coef_ramp) if seq_enabled else ""),
+        # 真实人类 BC 辅助正则：初始系数由 ramp 在 dec=0 处给出；池在下方注入 trainer
+        bc_coef=(bc_schedule.coef(0) if bc_enabled else 0.0),
+        bc_coef_ramp=(str(args.bc_coef_ramp) if bc_enabled else ""),
+        bc_mmr_min=int(args.bc_mmr_min),
+        bc_mmr_boost=float(args.bc_mmr_boost),
+        bc_samples_path=str(args.bc_samples),
+        bc_batch=int(args.bc_batch))
     trainer: Optional[PPOTrainer] = None
     if args.trainer_state and os.path.isfile(args.trainer_state):
         trainer = PPOTrainer.load(model, args.trainer_state, config=p_cfg,
-                                  device=args.device)
+                                  device=args.device, bc_pool=bc_pool)
         print(f"[trainer] loaded updates={trainer.updates} "
               f"lr={trainer.optimizer.param_groups[0]['lr']:.3g}", flush=True)
     else:
         trainer = PPOTrainer(model, p_cfg, lr_min_ratio=float(args.lr_min_ratio),
-                             max_updates=int(args.max_updates))
+                             max_updates=int(args.max_updates), bc_pool=bc_pool)
+
+    # BC 池注入（CLI 已预加载/打印；trainer 若自己加载过则复用）
+    if bc_enabled:
+        if bc_pool is not None:
+            trainer.set_bc_pool(bc_pool)
+        elif getattr(trainer, "bc_pool", None) is not None:
+            bc_pool = trainer.bc_pool
+        if getattr(trainer, "bc_pool", None) is None:
+            print("[warn] BC 池不可用，自动关闭 bc_coef=0", flush=True)
+            bc_enabled = False
+            trainer.config.bc_coef = 0.0
+            trainer.config.bc_coef_ramp = ""
 
     # ---- 日志：history.jsonl 追加（兼容旧 history.json）----
     history: List[Dict[str, Any]] = []
@@ -759,6 +839,9 @@ def main() -> int:
                     print("[warn] seq 辅助任务已开启但批次没有 seq_target"
                           "（--rust-collector 路径暂不产出标签）-> 本批次 seq_loss=0",
                           flush=True)
+            if bc_enabled:
+                # BC 系数 ramp：与 seq 同一进度口径（累计 decisions）
+                trainer.config.bc_coef = float(bc_schedule.coef(cum_decisions))
             _t_ppo = time.time()
             _tl["t_ppo_start"] = time.monotonic()
             stats = trainer.update(batch)
@@ -790,7 +873,11 @@ def main() -> int:
                   f"lr={stats['lr']:.3g} total={stats['epochs'][-1]['total']:.4f}"
                   + (f" lag={lag} ratio={pre_ratio:.3f}" if pipeline_on else "")
                   + (f" seq={stats.get('seq_loss', 0.0):.4f}"
-                     f" seq_coef={stats.get('seq_coef', 0.0):.4g}" if seq_enabled else ""),
+                     f" seq_coef={stats.get('seq_coef', 0.0):.4g}" if seq_enabled else "")
+                  + (f" bc={stats.get('bc_loss', 0.0):.4f}"
+                     f" bc_coef={stats.get('bc_coef', 0.0):.4g}"
+                     f" bc_samples={stats.get('bc_samples', 0.0):.0f}"
+                     if bc_enabled else ""),
                   flush=True)
 
             # 版本化快照：trainer 为权威，model 为导出；manifest 最后原子发布
@@ -897,6 +984,13 @@ def main() -> int:
         summary["seq"] = {**seq_schedule.describe(),
                           "coef_final": float(seq_schedule.coef(cum_decisions)),
                           "cum_decisions": int(cum_decisions)}
+    if bc_enabled:
+        summary["bc"] = {
+            **bc_schedule.describe(),
+            "coef_final": float(bc_schedule.coef(cum_decisions)),
+            "cum_decisions": int(cum_decisions),
+            "pool": (bc_pool_summary(bc_pool) if bc_pool is not None else None),
+        }
     write_summary(os.path.join(args.out, "summary.json"), to_jsonable(summary))
     print(f"[done] iters={i} updates={trainer.updates} "
           f"elapsed={time.time()-t0:.0f}s -> {args.out}", flush=True)

@@ -60,6 +60,16 @@ from .common import (
     utility_from_rank,
 )
 from .policies import Decision, Policy
+from .bc_aux import (
+    DEFAULT_BC_SAMPLES_PATH,
+    BC_OBS_LAYOUT,
+    BCObsBatch,
+    bc_ce_loss,
+    bc_obs_batch,
+    bc_pool_summary,
+    load_bc_samples,
+    parse_bc_coef_ramp,
+)
 from .seq_aux import (
     SEQ_TARGET_KEY,
     parse_coef_ramp,
@@ -347,6 +357,24 @@ class PPOConfig:
     #: 权重 ramp 规格（``"0.02@0,0.05@0.5"``，按 decisions 进度线性插值）；由训练循环
     #: 每个 iteration 用它算出实际的 ``seq_coef`` 后写回本字段。空 = 用常数 ``seq_coef``。
     seq_coef_ramp: str = ""
+    #: 真实人类对局（Firestone 回放）BC 辅助正则（形态 A：小权重辅助 CE）。
+    #: **0 = 关闭（默认）**：不加载 BC 池、不编码、不采样、不算 loss，stats 里不出现
+    #: ``bc_*`` 字段（与旧版本等价）。>0 时每个 minibatch 额外抽 ``bc_batch`` 条，
+    #: 与 PPO 同一次 backward 相加：``total = ppo + seq + bc_coef * bc_ce``。
+    bc_coef: float = 0.0
+    #: BC 系数 ramp（与 ``seq_coef_ramp`` 同语法，直接复用 ``parse_coef_ramp``）；
+    #: 由训练入口按累计 decisions 求值后写回 ``bc_coef``。空 = 用常数 ``bc_coef``。
+    bc_coef_ramp: str = ""
+    #: BC 样本 MMR 下限（低于该值直接丢弃）；默认 6000（人类中位约 6280）。
+    bc_mmr_min: int = 6000
+    #: MMR 线性增强（可选）：1.0=所有 mmr>=bc_mmr_min 权重相同；>1 时在
+    #: [bc_mmr_min, 8000] 上从 1.0 线性升到该值（6000–8000 线性增强）。
+    bc_mmr_boost: float = 1.0
+    #: BC 样本 JSONL(.gz) 路径；空 = 用仓库默认
+    #: ``data/firestone_bc/bc_samples.jsonl.gz``。
+    bc_samples_path: str = ""
+    #: 每个 PPO minibatch 抽取并编码的 BC 样本数。
+    bc_batch: int = 256
     #: KL anchor 到 stage 起点的系数 β（论文 Table 7：0.1，前 100 个 iteration 后放开）。
     #: >0 时必须由 trainer 提供 anchor 分布（见 PPOTrainer.set_anchor）。
     anchor_coef: float = 0.0
@@ -394,6 +422,18 @@ class PPOConfig:
             parse_coef_ramp(self.seq_coef_ramp)
         if float(self.seq_coef) < 0.0:
             raise ValueError(f"seq_coef 必须 >= 0，得到 {self.seq_coef!r}")
+        # BC 辅助正则（默认关闭）：同样在构造期校验 ramp/系数
+        if str(self.bc_coef_ramp or "").strip():
+            parse_bc_coef_ramp(self.bc_coef_ramp)
+        if float(self.bc_coef) < 0.0:
+            raise ValueError(f"bc_coef 必须 >= 0，得到 {self.bc_coef!r}")
+        if int(self.bc_batch) <= 0:
+            raise ValueError(f"bc_batch 必须 > 0，得到 {self.bc_batch!r}")
+        if int(self.bc_mmr_min) < 0:
+            raise ValueError(f"bc_mmr_min 必须 >= 0，得到 {self.bc_mmr_min!r}")
+        if float(self.bc_mmr_boost) < 1.0:
+            raise ValueError(
+                f"bc_mmr_boost 必须 >= 1，得到 {self.bc_mmr_boost!r}")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1181,7 +1221,8 @@ def build_train_forward(model: Any, config: Any = None, *,
 def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
                indices: Optional[np.ndarray] = None,
                anchor_logp: Any = None,
-               train_forward: Optional[TrainForward] = None) -> Dict[str, Any]:
+               train_forward: Optional[TrainForward] = None,
+               bc_batch: Optional[BCObsBatch] = None) -> Dict[str, Any]:
     """计算一个 minibatch 的 PPO 损失（返回 torch 张量字典）。
 
     - policy: ``-min(r*A, clip(r,1±ε)*A).mean()``；
@@ -1297,6 +1338,34 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
              - float(config.entropy_coef) * entropy)
     if seq_loss is not None:
         total = total + seq_coef * seq_loss
+    # ── 真实人类 BC 辅助正则（形态 A；默认 bc_coef=0 时整段不执行）──────────
+    # 每个 PPO minibatch 用同一个 model、同一张图做一次额外 forward，CE 直接加进 total，
+    # 因此与 PPO/seq 共享同一次 backward（不单独 step）。loss 只对 BC 样本平均，
+    # 再按类别频率倒数 + MMR 权重加权。
+    bc_coef = float(getattr(config, "bc_coef", 0.0) or 0.0)
+    bc_loss = None
+    bc_n = 0
+    if bc_coef > 0.0 and bc_batch is not None and len(bc_batch) > 0:
+        bc_n = int(len(bc_batch))
+        bx = torch.from_numpy(np.ascontiguousarray(
+            bc_batch.features.astype(np.float32))).to(dev)
+        bc_cards = torch.from_numpy(np.ascontiguousarray(
+            bc_batch.cards.astype(np.int64))).to(dev)
+        bc_m = torch.from_numpy(np.ascontiguousarray(
+            bc_batch.action_mask.astype(bool))).to(dev)
+        bc_a = torch.from_numpy(np.ascontiguousarray(
+            bc_batch.action_index.astype(np.int64))).to(dev)
+        bc_w = torch.from_numpy(np.ascontiguousarray(
+            bc_batch.weights.astype(np.float32))).to(dev)
+        bc_cls = torch.from_numpy(np.ascontiguousarray(
+            bc_batch.class_ids.astype(np.int64))).to(dev)
+        bc_out = forward_model(model, bx, bc_cards, bc_m)
+        bc_logits, _bc_rank, _bc_scalar = split_model_outputs(bc_out)
+        bc_logits = bc_logits.float().masked_fill(~bc_m, float(MASKED_LOGIT))
+        bc_loss = bc_ce_loss(
+            bc_logits, bc_a, weights=bc_w, mask=None, class_ids=bc_cls,
+            class_counts=bc_batch.class_counts)
+        total = total + bc_coef * bc_loss
     anchor_kl = torch.zeros((), device=dev)
     beta = float(config.anchor_coef)
     if beta > 0.0 and anchor_logp is not None:
@@ -1325,6 +1394,11 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     # 默认关闭时不出现该键（保持 stats/日志与旧版本逐字节一致）
     if seq_loss is not None:
         result["seq_loss"] = seq_loss
+    # BC 辅助正则：只有 bc_coef>0 才出现；bc_coef=0 时 stats 结构与旧版一致
+    if bc_loss is not None:
+        result["bc_loss"] = bc_loss.detach()
+        result["bc_coef"] = torch.as_tensor(bc_coef, device=dev)
+        result["bc_samples"] = torch.as_tensor(float(bc_n), device=dev)
     return result
 
 
@@ -1332,7 +1406,8 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
               *, on_step: Optional[Callable[[Dict[str, Any]], None]] = None,
               optimizer: Any = None, rng: Optional[np.random.Generator] = None,
               anchor_logp: Any = None,
-              train_forward: Optional[TrainForward] = None) -> Dict[str, Any]:
+              train_forward: Optional[TrainForward] = None,
+              bc_pool: Any = None) -> Dict[str, Any]:
     """执行 PPO 更新（minibatch × epochs，clip、entropy、KL 早停）。
 
     ``train_forward``：复用外部构建的 ``TrainForward``（``PPOTrainer`` 在启动时构建并
@@ -1353,6 +1428,34 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     n = int(base_idx.size)
     if n == 0:
         raise ValueError("PPO 训练样本为空")
+    # ── BC 池（默认关闭）：优先用外部预加载的池；否则按配置惰性加载一次 ──
+    bc_points = parse_bc_coef_ramp(str(getattr(cfg, "bc_coef_ramp", "") or ""))
+    bc_wanted = (float(getattr(cfg, "bc_coef", 0.0) or 0.0) > 0.0
+                 or bool(bc_points))
+    if bc_wanted and bc_pool is None:
+        path = str(getattr(cfg, "bc_samples_path", "") or DEFAULT_BC_SAMPLES_PATH)
+        try:
+            pool = load_bc_samples(
+                path, mmr_min=int(getattr(cfg, "bc_mmr_min", 6000)),
+                mmr_boost=float(getattr(cfg, "bc_mmr_boost", 1.0)))
+            if len(pool) == 0:
+                raise ValueError("BC 样本池为空（白名单/MMR 过滤后 0 条）")
+            bc_pool = pool
+        except Exception as exc:  # noqa: BLE001 - BC 是可选正则，失败不能中断训练
+            print(f"[ppo][warn] BC 辅助正则加载失败，自动关闭 bc_coef=0："
+                  f"{type(exc).__name__}: {exc}", flush=True)
+            cfg.bc_coef = 0.0
+            cfg.bc_coef_ramp = ""
+            bc_pool = None
+            bc_wanted = False
+    if bc_wanted and bc_pool is not None and len(bc_pool) == 0:
+        print("[ppo][warn] BC 样本池为空，自动关闭 bc_coef=0", flush=True)
+        cfg.bc_coef = 0.0
+        cfg.bc_coef_ramp = ""
+        bc_pool = None
+        bc_wanted = False
+    bc_active = bool(bc_wanted and float(getattr(cfg, "bc_coef", 0.0) or 0.0) > 0.0
+                     and bc_pool is not None and len(bc_pool) > 0)
     device = torch.device(cfg.device)
     model.to(device)
     # 保持 eval（关闭 dropout）：old_logprob 是采集时 eval 前向算出的，若 PPO 前向
@@ -1397,15 +1500,23 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
             served = 0
             for a, b in slices:
                 sel = base_idx[order[a:b]]
+                bc_batch = None
+                if bc_active:
+                    k = min(int(cfg.bc_batch), len(bc_pool))
+                    bc_sel = rng.choice(len(bc_pool), size=k, replace=False)
+                    bc_batch = bc_obs_batch(bc_pool, BC_OBS_LAYOUT,
+                                            indices=bc_sel)
                 if use_amp:
                     with torch.autocast("cuda", dtype=torch.bfloat16):
                         out = ppo_losses(model, batch, cfg, indices=sel,
                                          anchor_logp=anchor_logp,
-                                         train_forward=train_forward)
+                                         train_forward=train_forward,
+                                         bc_batch=bc_batch)
                 else:
                     out = ppo_losses(model, batch, cfg, indices=sel,
                                      anchor_logp=anchor_logp,
-                                     train_forward=train_forward)
+                                     train_forward=train_forward,
+                                     bc_batch=bc_batch)
                 (out["total"] / float(len(slices))).backward()
                 served += int(sel.size)
                 for k, v in out.items():
@@ -1417,10 +1528,13 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
             if on_step is not None:
                 on_step({"step": updates, "epoch": epoch + 1, **step_metrics})
             if int(cfg.log_every) > 0 and updates % int(cfg.log_every) == 0:
+                bc_note = (f" bc={step_metrics['bc_loss']:.4f}"
+                           f" bc_coef={step_metrics['bc_coef']:.4g}"
+                           if "bc_loss" in step_metrics else "")
                 print(f"[ppo] step {updates} total={step_metrics['total']:.4f} "
                       f"policy={step_metrics['policy_loss']:.4f} "
                       f"value={step_metrics['value_loss']:.4f} "
-                      f"kl={step_metrics['approx_kl']:.5f}", flush=True)
+                      f"kl={step_metrics['approx_kl']:.5f}{bc_note}", flush=True)
             # 标准 PPO：逐有效 minibatch 监控近似 KL；超阈的这一步不执行更新
             if cfg.kl_early_stop and float(cfg.target_kl) > 0.0 and \
                     step_metrics["approx_kl"] > 1.5 * float(cfg.target_kl):
@@ -1436,12 +1550,15 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         rec["elapsed_s"] = time.time() - t0
         rec["kl_early_stopped"] = bool(epoch_stopped)
         logs.append(rec)
-        # seq=... 只在启用动作序列辅助任务时出现（默认关闭 -> 日志行与旧版逐字节一致）
+        # seq=... / bc=... 只在启用对应辅助任务时出现（默认关闭 -> 日志行与旧版逐字节一致）
         seq_note = f" seq={rec['seq_loss']:.4f}" if "seq_loss" in rec else ""
+        bc_note = (f" bc={rec['bc_loss']:.4f} bc_coef={rec['bc_coef']:.4g}"
+                   f" bc_samples={rec['bc_samples']:.0f}"
+                   if "bc_loss" in rec else "")
         print(f"[ppo] epoch {epoch + 1}/{epochs} total={rec['total']:.4f} "
               f"(policy={rec['policy_loss']:.4f} value={rec['value_loss']:.4f} "
               f"aux_pi={rec['aux_pi_loss']:.4f} ent={rec['entropy']:.4f} "
-              f"kl={rec['approx_kl']:.5f} clip={rec['clip_frac']:.3f}){seq_note}",
+              f"kl={rec['approx_kl']:.5f} clip={rec['clip_frac']:.3f}){seq_note}{bc_note}",
               flush=True)
         if epoch_stopped:
             print(f"[ppo] KL 早停：minibatch approx_kl 超过 "
@@ -1485,6 +1602,23 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         if isinstance(cfg_echo, dict):
             cfg_echo.pop("seq_coef", None)
             cfg_echo.pop("seq_coef_ramp", None)
+    # BC 辅助正则：只有真的算出 bc_loss 才写 stats；bc_coef=0（默认）时连 config
+    # 回显里的 bc_* 键也去掉，保证与未接 BC 的旧版本结构一致。
+    bc_on = any("bc_loss" in r for r in logs)
+    if bc_on:
+        stats["bc_loss"] = float(np.mean([r.get("bc_loss", 0.0) for r in logs]))
+        stats["bc_coef"] = float(getattr(cfg, "bc_coef", 0.0) or 0.0)
+        stats["bc_samples"] = float(np.mean(
+            [r.get("bc_samples", 0.0) for r in logs]))
+        stats["bc_pool_samples"] = int(len(bc_pool)) if bc_pool is not None else 0
+        if bc_pool is not None:
+            stats["bc_pool"] = bc_pool_summary(bc_pool)
+    else:
+        cfg_echo = stats.get("config")
+        if isinstance(cfg_echo, dict):
+            for key in ("bc_coef", "bc_coef_ramp", "bc_mmr_min", "bc_mmr_boost",
+                        "bc_samples_path", "bc_batch"):
+                cfg_echo.pop(key, None)
     return stats
 
 
