@@ -1,0 +1,26 @@
+{
+  "created_on": "2026-10-28",
+  "excluded": [
+    "names and BattleTags",
+    "ranks/ratings and match outcomes",
+    "exact timestamps and source replay/review IDs",
+    "signed download URLs/tokens",
+    "raw replay XML",
+    "source-to-pseudonym mapping",
+    "curve rows with fewer than 5 samples"
+  ],
+  "included": {
+    "final_boards": 538,
+    "matches": 544,
+    "observation_files": 376,
+    "opponent_library_games": {
+      "calibration": 7,
+      "evaluation": 9,
+      "train": 41
+    },
+    "strength_curve_rows": 385
+  },
+  "method": "fresh random per-game pseudonyms preserving split buckets; mapping not retained",
+  "pseudonymized_ids": 544,
+  "runtime_note": "Included library retains original target_contract source_hash c807e9aa1a6746ee; current workspace source_hash fb141b2e432064e2. Loader correctly rejects cross-contract use."
+}\n

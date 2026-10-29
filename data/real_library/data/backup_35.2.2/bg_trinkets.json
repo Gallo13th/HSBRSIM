@@ -1,0 +1,2789 @@
+[
+  {
+    "id": "BG30_MagicItem_301",
+    "dbf_id": 111388,
+    "name": "Eternal Portrait",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_303",
+    "dbf_id": 111403,
+    "name": "Automaton Portrait",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_310",
+    "dbf_id": 112102,
+    "name": "Rivendare Portrait",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_402",
+    "dbf_id": 111476,
+    "name": "Conductor Portrait",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_403",
+    "dbf_id": 111488,
+    "name": "Ironforge Anvil",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_406",
+    "dbf_id": 111502,
+    "name": "Butcher's Sickle",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_407",
+    "dbf_id": 111505,
+    "name": "Ship in a Bottle",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_410",
+    "dbf_id": 111512,
+    "name": "Quilligraphy Set",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "avenge": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_410t2",
+    "dbf_id": 115253,
+    "name": "Quilligraphy Set",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44,
+    "avenge": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_411",
+    "dbf_id": 111514,
+    "name": "Hoggy Bank",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_414",
+    "dbf_id": 111533,
+    "name": "Kodo Leather Pouch",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_414t",
+    "dbf_id": 115221,
+    "name": "Kodo Leather Pouch",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_416",
+    "dbf_id": 111556,
+    "name": "Token of the Old Gods",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "spellcraft_id": 112813,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_418",
+    "dbf_id": 111607,
+    "name": "Bronzebeard Portrait",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_419",
+    "dbf_id": 111608,
+    "name": "Exquisite Dishware",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_420",
+    "dbf_id": 111609,
+    "name": "Book of Medivh",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_420t",
+    "dbf_id": 115230,
+    "name": "Book of Medivh",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_422",
+    "dbf_id": 111664,
+    "name": "Lorewalker Scroll",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_422t",
+    "dbf_id": 117416,
+    "name": "Lorewalker Scroll",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_423",
+    "dbf_id": 111999,
+    "name": "Innkeeper's Stein",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_425",
+    "dbf_id": 112001,
+    "name": "Azeroth Model Globe",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_426",
+    "dbf_id": 112002,
+    "name": "Colorful Compass",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_426t",
+    "dbf_id": 115250,
+    "name": "Colorful Compass",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_427",
+    "dbf_id": 112073,
+    "name": "Tiger Carving",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_427t",
+    "dbf_id": 115231,
+    "name": "Tiger Carving",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_429",
+    "dbf_id": 112078,
+    "name": "Demonblood Gourd",
+    "card_set": 1453,
+    "card_type": 44,
+    "spellcraft_id": 112401
+  },
+  {
+    "id": "BG30_MagicItem_430",
+    "dbf_id": 112079,
+    "name": "Rockin' Music Box",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_431",
+    "dbf_id": 112400,
+    "name": "Azerite Portrait",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_432",
+    "dbf_id": 112402,
+    "name": "Belcher Portrait",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_432t",
+    "dbf_id": 115240,
+    "name": "Belcher Portrait",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_433",
+    "dbf_id": 112083,
+    "name": "Alliance Keychain",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_433t",
+    "dbf_id": 115248,
+    "name": "Alliance Keychain",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_434",
+    "dbf_id": 112855,
+    "name": "Replica Cathedral",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_435",
+    "dbf_id": 112082,
+    "name": "Goldenizer Supply",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_437",
+    "dbf_id": 112080,
+    "name": "Staff of the Scourge",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "avenge": 1
+  },
+  {
+    "id": "BG30_MagicItem_438t",
+    "dbf_id": 113302,
+    "name": "Mug of the Sire",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_439",
+    "dbf_id": 112990,
+    "name": "Designer Eyepatch",
+    "cost": 7,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_440",
+    "dbf_id": 113095,
+    "name": "Boom Controller",
+    "cost": 7,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_441",
+    "dbf_id": 113099,
+    "name": "Tinyfin Onesie",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_442",
+    "dbf_id": 113096,
+    "name": "Blood Golem Sticker",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_540",
+    "dbf_id": 112381,
+    "name": "Slamma Sticker",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_541",
+    "dbf_id": 112382,
+    "name": "Nether Pendant",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_542",
+    "dbf_id": 112383,
+    "name": "Emerald Dreamcatcher",
+    "cost": 7,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_543",
+    "dbf_id": 112385,
+    "name": "Devourer Sticker",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_544",
+    "dbf_id": 112392,
+    "name": "Nomi Sticker",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_544t",
+    "dbf_id": 115235,
+    "name": "Nomi Sticker",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_545",
+    "dbf_id": 112397,
+    "name": "Fridge Magnet",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "avenge": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_546",
+    "dbf_id": 112398,
+    "name": "Jar o' Gems",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_547",
+    "dbf_id": 112399,
+    "name": "Comfy Coffin",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_547t",
+    "dbf_id": 115226,
+    "name": "Comfy Coffin",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_548",
+    "dbf_id": 112464,
+    "name": "Glowscale Portrait",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_555",
+    "dbf_id": 117905,
+    "name": "Surprise Portrait",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_700",
+    "dbf_id": 117794,
+    "name": "Deathly Phylactery",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_701",
+    "dbf_id": 117795,
+    "name": "The Eye of Sargeras",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_702",
+    "dbf_id": 117796,
+    "name": "Primalfin Portrait",
+    "cost": 8,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_703",
+    "dbf_id": 117801,
+    "name": "Mystery Cube",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_705",
+    "dbf_id": 117854,
+    "name": "Bartend-o-Tron's Oilcan",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_706",
+    "dbf_id": 117857,
+    "name": "Reflective Pendant",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_707",
+    "dbf_id": 117860,
+    "name": "Tickatus Sticker",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_709",
+    "dbf_id": 117894,
+    "name": "Electromagnetic Device",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_709t",
+    "dbf_id": 121689,
+    "name": "Electromagnetic Device",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_710",
+    "dbf_id": 117896,
+    "name": "Fungalmancer Sticker",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_711",
+    "dbf_id": 117897,
+    "name": "Marine Signet",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_713",
+    "dbf_id": 117906,
+    "name": "Bleeding Heart",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_714",
+    "dbf_id": 117944,
+    "name": "Precious Pearl",
+    "card_set": 1453,
+    "card_type": 44,
+    "spellcraft_id": 117945
+  },
+  {
+    "id": "BG30_MagicItem_777",
+    "dbf_id": 117895,
+    "name": "Goose Portrait",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_803",
+    "dbf_id": 110956,
+    "name": "Kaboom Bot Portrait",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_804",
+    "dbf_id": 110957,
+    "name": "Ancient Wishbone",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_821",
+    "dbf_id": 110966,
+    "name": "Fish Portrait",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_821t2",
+    "dbf_id": 111046,
+    "name": "Fishy Sticker",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_822",
+    "dbf_id": 114208,
+    "name": "Twin Sky Lanterns",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_822t2",
+    "dbf_id": 115247,
+    "name": "Twin Sky Lanterns",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_825",
+    "dbf_id": 111255,
+    "name": "Smuggler Portrait",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_828",
+    "dbf_id": 114212,
+    "name": "Shaker Portrait",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_841",
+    "dbf_id": 111092,
+    "name": "Glowing Gauntlet",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_843t",
+    "dbf_id": 115251,
+    "name": "Horde Keychain",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_847",
+    "dbf_id": 111448,
+    "name": "Goblin Wallet",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_864",
+    "dbf_id": 110972,
+    "name": "Gilnean Thorned Rose",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "avenge": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_868",
+    "dbf_id": 110975,
+    "name": "Rewinder Portrait",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_869",
+    "dbf_id": 111404,
+    "name": "Felblood Portrait",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_876",
+    "dbf_id": 111207,
+    "name": "Manipulator Portrait",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_879",
+    "dbf_id": 111384,
+    "name": "Dalaran Cheese Wheel",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_879t",
+    "dbf_id": 115236,
+    "name": "Dalaran Cheese Wheel",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_880",
+    "dbf_id": 111211,
+    "name": "Feral Talisman",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_880t",
+    "dbf_id": 111250,
+    "name": "Feral Talisman",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_886",
+    "dbf_id": 110967,
+    "name": "Reinforced Shield",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_888",
+    "dbf_id": 112895,
+    "name": "Souvenir Stand",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_891",
+    "dbf_id": 112991,
+    "name": "Trip Vouchers",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_900",
+    "dbf_id": 110985,
+    "name": "Dragonwing Glider",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_900t",
+    "dbf_id": 115223,
+    "name": "Dragonwing Glider",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_902",
+    "dbf_id": 111401,
+    "name": "Holy Mallet",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_910",
+    "dbf_id": 111529,
+    "name": "Mechagon Adapter",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_914",
+    "dbf_id": 110991,
+    "name": "Nerglish Phrasebook",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_914t",
+    "dbf_id": 115237,
+    "name": "Nerglish Phrasebook",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_916",
+    "dbf_id": 111253,
+    "name": "Essence of Dreams",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_917",
+    "dbf_id": 111557,
+    "name": "Rusty Trident",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_918",
+    "dbf_id": 117798,
+    "name": "Promo Portrait",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_919",
+    "dbf_id": 117797,
+    "name": "Nazjatar Postcard",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_920",
+    "dbf_id": 111400,
+    "name": "Spitescale Sushi Roll",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_921",
+    "dbf_id": 117799,
+    "name": "Flagbearer Portrait",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_923",
+    "dbf_id": 111406,
+    "name": "Elementium Chest",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_924",
+    "dbf_id": 110993,
+    "name": "Booty Bay Brew",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_924t",
+    "dbf_id": 115245,
+    "name": "Booty Bay Brew",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_925",
+    "dbf_id": 115464,
+    "name": "Ceremonial Sword",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_930",
+    "dbf_id": 117800,
+    "name": "Burgling Claw",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_931",
+    "dbf_id": 111408,
+    "name": "Lucky Tabby",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_942",
+    "dbf_id": 117855,
+    "name": "Mecha-Jaraxxus Sticker",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_943",
+    "dbf_id": 117856,
+    "name": "Surveyor Portrait",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_944",
+    "dbf_id": 117858,
+    "name": "Redeemer Portrait",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_951",
+    "dbf_id": 111499,
+    "name": "Lava Lamp",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_952",
+    "dbf_id": 111500,
+    "name": "Jarred Frostling",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_962",
+    "dbf_id": 111417,
+    "name": "Training Certificate",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_970",
+    "dbf_id": 111920,
+    "name": "Valorous Medallion",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_970t",
+    "dbf_id": 115219,
+    "name": "Valorous Medallion",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_971",
+    "dbf_id": 111921,
+    "name": "Enforcer Portrait",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_972",
+    "dbf_id": 111922,
+    "name": "Karazhan Chess Set",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_978",
+    "dbf_id": 111976,
+    "name": "Blingtron's Sunglasses",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_979",
+    "dbf_id": 111977,
+    "name": "Primordial Terrarium",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_981",
+    "dbf_id": 112850,
+    "name": "The Eye of Dalaran",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_982",
+    "dbf_id": 112004,
+    "name": "Shaman Prayer Beads",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_984",
+    "dbf_id": 112005,
+    "name": "Charging Staff",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_984t",
+    "dbf_id": 115258,
+    "name": "Charging Staff",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_986",
+    "dbf_id": 112009,
+    "name": "Peacebloom Candle",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_987",
+    "dbf_id": 112011,
+    "name": "Balladist Portrait",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_988",
+    "dbf_id": 112013,
+    "name": "Great Boar Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_988t",
+    "dbf_id": 115225,
+    "name": "Great Boar Sticker",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_989",
+    "dbf_id": 112014,
+    "name": "Artisanal Urn",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_989t",
+    "dbf_id": 117157,
+    "name": "Artisanal Urn",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_991",
+    "dbf_id": 112054,
+    "name": "Felbat Portrait",
+    "cost": 8,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_992",
+    "dbf_id": 112055,
+    "name": "Darnassus Pie",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_992t",
+    "dbf_id": 115218,
+    "name": "Darnassus Pie",
+    "cost": 8,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG30_MagicItem_993",
+    "dbf_id": 113103,
+    "name": "Pagle's Fishing Rod",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_994",
+    "dbf_id": 113104,
+    "name": "Yogg-Tastic Pastry",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_995",
+    "dbf_id": 112411,
+    "name": "Bronze Timepiece",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_996",
+    "dbf_id": 112988,
+    "name": "Bob's Tip Jar",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_998",
+    "dbf_id": 113101,
+    "name": "Bob-blehead",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_MagicItem_999",
+    "dbf_id": 113102,
+    "name": "Fancy Spellbook",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG30_Trinket_1st",
+    "dbf_id": 116510,
+    "name": "Lesser Trinket",
+    "card_set": 1453,
+    "card_type": 44,
+    "tech_level": 4
+  },
+  {
+    "id": "BG30_Trinket_2nd",
+    "dbf_id": 116614,
+    "name": "Greater Trinket",
+    "card_set": 1453,
+    "card_type": 44,
+    "tech_level": 6
+  },
+  {
+    "id": "BG31_MagicItem_903",
+    "dbf_id": 120155,
+    "name": "Wisdomball Supply",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_111",
+    "dbf_id": 121690,
+    "name": "Toxic Stinger",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_170",
+    "dbf_id": 120864,
+    "name": "Spell-powered Wrench",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_171",
+    "dbf_id": 120865,
+    "name": "Divine Signet",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_172",
+    "dbf_id": 120866,
+    "name": "Boom's Monster Portrait",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_179",
+    "dbf_id": 121156,
+    "name": "Drakkari Portrait",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_200",
+    "dbf_id": 120932,
+    "name": "All-Purpose Kibble",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_204",
+    "dbf_id": 121507,
+    "name": "Kel'Thuzad Portrait",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_205",
+    "dbf_id": 121558,
+    "name": "Maw Caster Portrait",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_230",
+    "dbf_id": 120937,
+    "name": "Extravagant Scale",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_231",
+    "dbf_id": 120938,
+    "name": "Gilded Anchor",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_231t",
+    "dbf_id": 121035,
+    "name": "Gilded Anchor",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_232",
+    "dbf_id": 120939,
+    "name": "Shark Cannon",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_270",
+    "dbf_id": 121039,
+    "name": "Wicked Tome",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "avenge": 1
+  },
+  {
+    "id": "BG32_MagicItem_270t",
+    "dbf_id": 121041,
+    "name": "Wicked Tome",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "avenge": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_271",
+    "dbf_id": 121120,
+    "name": "Ornate Clock",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_274",
+    "dbf_id": 121044,
+    "name": "Bristlebach Portrait",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_276",
+    "dbf_id": 121121,
+    "name": "Enigmatic Headstone",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_278",
+    "dbf_id": 121125,
+    "name": "Reusable Batteries",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_279",
+    "dbf_id": 121126,
+    "name": "Tough Tusk Sticker",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_280",
+    "dbf_id": 121127,
+    "name": "Eclectic Shrine",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_281",
+    "dbf_id": 121128,
+    "name": "Wizard's Pipe",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_282",
+    "dbf_id": 121129,
+    "name": "Turbocharged Drill",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_283",
+    "dbf_id": 121130,
+    "name": "Czarina Portrait",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_284",
+    "dbf_id": 121132,
+    "name": "Aggem Sticker",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_286",
+    "dbf_id": 121134,
+    "name": "Lavish Cape",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_300",
+    "dbf_id": 120827,
+    "name": "Putricide Sticker",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_301",
+    "dbf_id": 120942,
+    "name": "Bassgill Portrait",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_304",
+    "dbf_id": 111420,
+    "name": "Horn of Summoning",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_306",
+    "dbf_id": 120926,
+    "name": "Herald Sticker",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_350",
+    "dbf_id": 111387,
+    "name": "Splinter of Aurum",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_360",
+    "dbf_id": 120137,
+    "name": "Baleful Incense",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_361",
+    "dbf_id": 111399,
+    "name": "Portable Factory",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_361t",
+    "dbf_id": 120925,
+    "name": "Portable Factory",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_362",
+    "dbf_id": 121498,
+    "name": "Innkeeper's Hearth",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_362t",
+    "dbf_id": 121684,
+    "name": "Innkeeper's Hearth",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_363",
+    "dbf_id": 120870,
+    "name": "Faerie Dragon Scale",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_364",
+    "dbf_id": 120875,
+    "name": "Poet Portrait",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_365",
+    "dbf_id": 120967,
+    "name": "Valdrakken Wind Chimes",
+    "cost": 7,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_366",
+    "dbf_id": 120928,
+    "name": "Guiding Candle",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_367",
+    "dbf_id": 120873,
+    "name": "Ghastly Sticker",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_400",
+    "dbf_id": 111427,
+    "name": "Shrine of Evolution",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_415",
+    "dbf_id": 120874,
+    "name": "Battle Horn",
+    "card_set": 1453,
+    "card_type": 44,
+    "avenge": 1
+  },
+  {
+    "id": "BG32_MagicItem_416",
+    "dbf_id": 121037,
+    "name": "War Drum",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_417",
+    "dbf_id": 121061,
+    "name": "Tarecgosa Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_419",
+    "dbf_id": 121040,
+    "name": "Yu'lon Sticker",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_428",
+    "dbf_id": 112075,
+    "name": "Worn Treasure Map",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_700",
+    "dbf_id": 120863,
+    "name": "Marvelous Mushroom",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_801",
+    "dbf_id": 120138,
+    "name": "Heart of the Forest",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_801t",
+    "dbf_id": 120160,
+    "name": "Heart of the Forest",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_802",
+    "dbf_id": 120140,
+    "name": "Fountain Pen",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_802t",
+    "dbf_id": 120161,
+    "name": "Fountain Pen",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_803",
+    "dbf_id": 120152,
+    "name": "Macaw Portrait",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_804",
+    "dbf_id": 120151,
+    "name": "Selfless Portrait",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_806",
+    "dbf_id": 120799,
+    "name": "Battlecruiser Portrait",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_807",
+    "dbf_id": 120145,
+    "name": "Curator Sticker",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_808",
+    "dbf_id": 120146,
+    "name": "Bloodbound Earrings",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_808t",
+    "dbf_id": 121038,
+    "name": "Bloodbound Earrings",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_809",
+    "dbf_id": 120147,
+    "name": "Gem Donation",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_817",
+    "dbf_id": 120154,
+    "name": "Rendle Sticker",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_820",
+    "dbf_id": 120696,
+    "name": "Impulsive Portrait",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_821",
+    "dbf_id": 120698,
+    "name": "Pilgrimp Sticker",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_822",
+    "dbf_id": 121033,
+    "name": "Bazaar Sticker",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_823",
+    "dbf_id": 121034,
+    "name": "Wax Imprinter",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_824",
+    "dbf_id": 121059,
+    "name": "Implicator Portrait",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_830",
+    "dbf_id": 121062,
+    "name": "Felemental Portrait",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_831",
+    "dbf_id": 120800,
+    "name": "Sellemental Portrait",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_832",
+    "dbf_id": 120801,
+    "name": "Windfall Portrait",
+    "cost": 8,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_832t",
+    "dbf_id": 120927,
+    "name": "Windfall Portrait",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_844",
+    "dbf_id": 111109,
+    "name": "Sacrificial Altar",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_858",
+    "dbf_id": 120139,
+    "name": "Explorer's Binoculars",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_860",
+    "dbf_id": 120760,
+    "name": "Beetle Band",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "avenge": 1
+  },
+  {
+    "id": "BG32_MagicItem_860t",
+    "dbf_id": 121182,
+    "name": "Beetle Band",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "avenge": 1
+  },
+  {
+    "id": "BG32_MagicItem_862",
+    "dbf_id": 120930,
+    "name": "Unholy Sanctum",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_862t",
+    "dbf_id": 120936,
+    "name": "Unholy Sanctum",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_864",
+    "dbf_id": 121500,
+    "name": "Bird Feeder",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "avenge": 1
+  },
+  {
+    "id": "BG32_MagicItem_864t",
+    "dbf_id": 121501,
+    "name": "Bird Feeder",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "avenge": 1
+  },
+  {
+    "id": "BG32_MagicItem_887",
+    "dbf_id": 111252,
+    "name": "Shadowy Elixir",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_888",
+    "dbf_id": 120705,
+    "name": "Recycling Sticker",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_890",
+    "dbf_id": 121115,
+    "name": "Cliffdiver Sticker",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_891",
+    "dbf_id": 121137,
+    "name": "Finley's Helmet",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_892",
+    "dbf_id": 121138,
+    "name": "Vibrant Bubble",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "spellcraft_id": 121139
+  },
+  {
+    "id": "BG32_MagicItem_893",
+    "dbf_id": 121140,
+    "name": "Bluegill Flippers",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_894",
+    "dbf_id": 121141,
+    "name": "Blessing Portrait",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_901",
+    "dbf_id": 120159,
+    "name": "Gold-plated Compass",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_902",
+    "dbf_id": 121068,
+    "name": "Statue of Hir'eek",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_904",
+    "dbf_id": 120156,
+    "name": "Hogwash Basin",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_906",
+    "dbf_id": 120157,
+    "name": "Artanis Sticker",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_907",
+    "dbf_id": 121113,
+    "name": "S'Thara Sticker",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_920",
+    "dbf_id": 120606,
+    "name": "Thaumaturgist Portrait",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_922",
+    "dbf_id": 120619,
+    "name": "Charming Panpipes",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_925",
+    "dbf_id": 121109,
+    "name": "Hackerfin Portrait",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_926",
+    "dbf_id": 121111,
+    "name": "Morgl Portrait",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_930",
+    "dbf_id": 120610,
+    "name": "Archaic Scroll",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_931",
+    "dbf_id": 120617,
+    "name": "Azsharan Statuette",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_932",
+    "dbf_id": 120611,
+    "name": "Vash'jir Anemone",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_933",
+    "dbf_id": 120613,
+    "name": "Weary Portrait",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_934",
+    "dbf_id": 120618,
+    "name": "Dazzling Dagger",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_935",
+    "dbf_id": 120616,
+    "name": "Lubber Sticker",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_944",
+    "dbf_id": 121499,
+    "name": "Empowerment Portrait",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_950",
+    "dbf_id": 120804,
+    "name": "Gritty Portrait",
+    "cost": 8,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_951",
+    "dbf_id": 120809,
+    "name": "Gold Pendant",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_953",
+    "dbf_id": 120867,
+    "name": "Goldgrubber Portrait",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_954",
+    "dbf_id": 120868,
+    "name": "Auric Offering",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_957",
+    "dbf_id": 121036,
+    "name": "Grifter Portrait",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG32_MagicItem_960",
+    "dbf_id": 120924,
+    "name": "Crocheted Sungill",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG32_MagicItem_998",
+    "dbf_id": 121114,
+    "name": "Behemoth Portrait",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_150",
+    "dbf_id": 131276,
+    "name": "Cursed Crystal",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_151",
+    "dbf_id": 131278,
+    "name": "Defiler Portrait",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_151t",
+    "dbf_id": 131277,
+    "name": "Defiler Portrait",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_152",
+    "dbf_id": 131280,
+    "name": "Demonic Tapestry",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_154",
+    "dbf_id": 131282,
+    "name": "Ur'zul Sticker",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_155",
+    "dbf_id": 131283,
+    "name": "Felburned Ledger",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_156",
+    "dbf_id": 131284,
+    "name": "Flaming Portrait",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_300",
+    "dbf_id": 130875,
+    "name": "Copper Coil",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_300t",
+    "dbf_id": 130878,
+    "name": "Copper Coil",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_301",
+    "dbf_id": 130879,
+    "name": "Scraper Sticker",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_302",
+    "dbf_id": 130880,
+    "name": "Stormcoil Sticker",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_303",
+    "dbf_id": 130881,
+    "name": "Skipper Portrait",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_305",
+    "dbf_id": 131137,
+    "name": "Conch Portrait",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_306",
+    "dbf_id": 131135,
+    "name": "Jailer Sticker",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "spellcraft_id": 131136,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_309",
+    "dbf_id": 131296,
+    "name": "Errgl Sticker",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_310",
+    "dbf_id": 131252,
+    "name": "Radio Star Portrait",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_430",
+    "dbf_id": 130900,
+    "name": "Scrapsmith Portrait",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_431t",
+    "dbf_id": 130902,
+    "name": "Thornspike Pauldron",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_432",
+    "dbf_id": 130906,
+    "name": "Blood Amulet",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_434",
+    "dbf_id": 130904,
+    "name": "Jewelry Box",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_700",
+    "dbf_id": 130895,
+    "name": "Wildfeather Duster",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_701",
+    "dbf_id": 130896,
+    "name": "Fang Anklet",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_702",
+    "dbf_id": 130897,
+    "name": "Stegodon Portrait",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_710",
+    "dbf_id": 130892,
+    "name": "Miniature Ship",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_711",
+    "dbf_id": 130893,
+    "name": "Protective Ring",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_712",
+    "dbf_id": 130891,
+    "name": "Privateer Portrait",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_713",
+    "dbf_id": 130894,
+    "name": "Trusty Crowbar",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_714",
+    "dbf_id": 131001,
+    "name": "Powder Keg",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_733",
+    "dbf_id": 131133,
+    "name": "Jailer Sticker",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "spellcraft_id": 131134,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_741",
+    "dbf_id": 131139,
+    "name": "Beatboxer Portrait",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_742",
+    "dbf_id": 131140,
+    "name": "Accord-o-Tron Portrait",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_743",
+    "dbf_id": 131141,
+    "name": "Electrode Attractor",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_750",
+    "dbf_id": 131303,
+    "name": "Magicfin Sticker",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_752",
+    "dbf_id": 131305,
+    "name": "Young Murk-Eye Sticker",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_753",
+    "dbf_id": 131306,
+    "name": "Murky Sticker",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_754",
+    "dbf_id": 131307,
+    "name": "Dramaloc Sticker",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_801",
+    "dbf_id": 130028,
+    "name": "Sous Chef Sticker",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_812",
+    "dbf_id": 130830,
+    "name": "Corrupted Tome",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_815",
+    "dbf_id": 130833,
+    "name": "Magician's Top Hat",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_816",
+    "dbf_id": 130834,
+    "name": "Orb of the Unknown",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_817",
+    "dbf_id": 130835,
+    "name": "Lens Case",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_820",
+    "dbf_id": 130838,
+    "name": "Safety Patch",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_821",
+    "dbf_id": 130839,
+    "name": "Kaleidoscope",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_821t",
+    "dbf_id": 131309,
+    "name": "Kaleidoscope",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_840",
+    "dbf_id": 130886,
+    "name": "Chromatic Tear",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_840t",
+    "dbf_id": 130977,
+    "name": "Chromatic Tear",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_842",
+    "dbf_id": 130887,
+    "name": "Egg of the Endtimes Portrait",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_848t",
+    "dbf_id": 130978,
+    "name": "Egg of the Endtimes Portrait",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_849",
+    "dbf_id": 130999,
+    "name": "Cloud Serpent Horn",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "avenge": 1,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_850",
+    "dbf_id": 130888,
+    "name": "Pocket Cyclone",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_850t",
+    "dbf_id": 131329,
+    "name": "Pocket Cyclone",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_851",
+    "dbf_id": 130889,
+    "name": "Water Wheel",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_852",
+    "dbf_id": 130976,
+    "name": "Lightning in a Bottle",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BG35_MagicItem_861",
+    "dbf_id": 130873,
+    "name": "Baller Portrait",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_862",
+    "dbf_id": 130874,
+    "name": "Upstart Embers",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_863",
+    "dbf_id": 131000,
+    "name": "Avalanche Sticker",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_870",
+    "dbf_id": 130876,
+    "name": "Leapfrogger Portrait",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_871",
+    "dbf_id": 130877,
+    "name": "Mama Bear Sticker",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_872",
+    "dbf_id": 130908,
+    "name": "Ophidian Staff",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "spellcraft_id": 130909,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_890",
+    "dbf_id": 130890,
+    "name": "Sunken Anchor",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_920",
+    "dbf_id": 130898,
+    "name": "Bubble Crown",
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_921",
+    "dbf_id": 130980,
+    "name": "Cowrie Necklace",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_922",
+    "dbf_id": 130899,
+    "name": "Tide Raiser Portrait",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_923",
+    "dbf_id": 130865,
+    "name": "Bewitched Ribbon",
+    "cost": 6,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_924",
+    "dbf_id": 130907,
+    "name": "Groundbreaker Portrait",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_925",
+    "dbf_id": 130981,
+    "name": "Coral Spear",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_930",
+    "dbf_id": 131002,
+    "name": "Warband Whistle",
+    "cost": 2,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_931",
+    "dbf_id": 131003,
+    "name": "Transcribing Typewriter",
+    "cost": 1,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BG35_MagicItem_931t",
+    "dbf_id": 131325,
+    "name": "Transcribing Typewriter",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BGDUO_MagicItem_001",
+    "dbf_id": 117932,
+    "name": "Common Thread",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BGDUO_MagicItem_002",
+    "dbf_id": 117933,
+    "name": "Cho'gall Sticker",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BGDUO_MagicItem_003",
+    "dbf_id": 117934,
+    "name": "Summoning Sphere",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BGDUO_MagicItem_004",
+    "dbf_id": 117935,
+    "name": "Charm of Generosity",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BGDUO_MagicItem_005",
+    "dbf_id": 117936,
+    "name": "Bottle Sticker",
+    "cost": 4,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BGDUO_MagicItem_006",
+    "dbf_id": 117937,
+    "name": "Magic Road Sign",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BGDUO_MagicItem_007",
+    "dbf_id": 117938,
+    "name": "Orc-estra Portrait",
+    "cost": 5,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BGDUO_MagicItem_008",
+    "dbf_id": 117939,
+    "name": "Moveout Box",
+    "cost": 10,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BGDUO_MagicItem_009",
+    "dbf_id": 117940,
+    "name": "Investment Contract",
+    "card_set": 1453,
+    "card_type": 44
+  },
+  {
+    "id": "BGDUO_MagicItem_010",
+    "dbf_id": 117941,
+    "name": "Empowered Mirror",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  },
+  {
+    "id": "BGDUO_MagicItem_010t",
+    "dbf_id": 117942,
+    "name": "Empowered Mirror",
+    "cost": 3,
+    "card_set": 1453,
+    "card_type": 44,
+    "trinket": true
+  }
+]

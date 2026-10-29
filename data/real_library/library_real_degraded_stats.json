@@ -1,0 +1,276 @@
+{
+  "generated_at": "2026-10-29T08:55:22+0800",
+  "elapsed_sec": 9.784,
+  "source": {
+    "tag": "real_10k",
+    "obs_dir": "data/real_library/obs/observations",
+    "pattern": "*.jsonl",
+    "files": 376,
+    "files_read": 376,
+    "lines": 13120,
+    "bytes": 649731024
+  },
+  "config": {
+    "quality_gate": "relaxed",
+    "allow_unready": true,
+    "max_board": 7,
+    "min_board": 0,
+    "dedup": true,
+    "limit": 0,
+    "source_tag": "real_10k"
+  },
+  "rows": {
+    "total": 13120,
+    "parsed": 13120,
+    "kept": 4284,
+    "dropped": 8836
+  },
+  "drop_reasons": {
+    "duplicate": 8616,
+    "incomplete_stats": 162,
+    "board_too_large": 58
+  },
+  "gate_failures": {
+    "hidden_counters_incomplete": 13120,
+    "library_ready_false": 13120
+  },
+  "structural_failures": {
+    "incomplete_stats": 166,
+    "board_too_large": 58
+  },
+  "mapping": {
+    "card_table": "rust/crates/hsbg-engine/data/cards.json",
+    "card_count": 3983,
+    "client_version": "37.0.0.255790",
+    "minions_seen": 67386,
+    "board_minions_mapped": 67220,
+    "unmapped_minion_occurrences": 0,
+    "rows_with_unmapped_minion": 0,
+    "mapping_failure_rate": 0.0,
+    "unmapped_unique_card_ids": [],
+    "hero_direct": 7490,
+    "hero_via_skin_base": 5484,
+    "hero_unmapped": 146,
+    "hero_none": 0,
+    "known_hand_cards": 19424,
+    "known_hand_unmapped": 0,
+    "incomplete_stats_occurrences": 166
+  },
+  "turns": {
+    "1": 68,
+    "2": 132,
+    "3": 298,
+    "4": 374,
+    "5": 386,
+    "6": 399,
+    "7": 403,
+    "8": 403,
+    "9": 416,
+    "10": 414,
+    "11": 368,
+    "12": 273,
+    "13": 192,
+    "14": 97,
+    "15": 42,
+    "16": 16,
+    "17": 3
+  },
+  "turns_input": {
+    "1": 894,
+    "2": 1062,
+    "3": 984,
+    "4": 1108,
+    "5": 1108,
+    "6": 1110,
+    "7": 1104,
+    "8": 1098,
+    "9": 1092,
+    "10": 1038,
+    "11": 928,
+    "12": 690,
+    "13": 478,
+    "14": 252,
+    "15": 126,
+    "16": 42,
+    "17": 6
+  },
+  "strength": {
+    "n": 4284,
+    "p50": 196.0,
+    "p90": 6330.5,
+    "p99": 57622.89,
+    "mean": 3441.345,
+    "min": 0,
+    "max": 370510
+  },
+  "per_turn_strength": {
+    "1": {
+      "n": 68,
+      "p50": 6.0,
+      "p90": 10.0,
+      "min": 0,
+      "max": 14
+    },
+    "2": {
+      "n": 132,
+      "p50": 8.5,
+      "p90": 15.9,
+      "min": 0,
+      "max": 25
+    },
+    "3": {
+      "n": 298,
+      "p50": 17.5,
+      "p90": 28.0,
+      "min": 0,
+      "max": 42
+    },
+    "4": {
+      "n": 374,
+      "p50": 26.0,
+      "p90": 45.7,
+      "min": 3,
+      "max": 70
+    },
+    "5": {
+      "n": 386,
+      "p50": 48.0,
+      "p90": 73.0,
+      "min": 9,
+      "max": 144
+    },
+    "6": {
+      "n": 399,
+      "p50": 79.0,
+      "p90": 126.2,
+      "min": 4,
+      "max": 347
+    },
+    "7": {
+      "n": 403,
+      "p50": 129.0,
+      "p90": 237.6,
+      "min": 22,
+      "max": 705
+    },
+    "8": {
+      "n": 403,
+      "p50": 261.0,
+      "p90": 502.8,
+      "min": 4,
+      "max": 1306
+    },
+    "9": {
+      "n": 416,
+      "p50": 547.5,
+      "p90": 1355.0,
+      "min": 37,
+      "max": 2938
+    },
+    "10": {
+      "n": 414,
+      "p50": 1144.0,
+      "p90": 3028.8,
+      "min": 99,
+      "max": 31822
+    },
+    "11": {
+      "n": 368,
+      "p50": 2435.0,
+      "p90": 8900.9,
+      "min": 0,
+      "max": 29648
+    },
+    "12": {
+      "n": 273,
+      "p50": 4858.0,
+      "p90": 18508.4,
+      "min": 85,
+      "max": 98122
+    },
+    "13": {
+      "n": 192,
+      "p50": 10158.0,
+      "p90": 32021.3,
+      "min": 237,
+      "max": 281845
+    },
+    "14": {
+      "n": 97,
+      "p50": 23243.0,
+      "p90": 74670.2,
+      "min": 377,
+      "max": 249407
+    },
+    "15": {
+      "n": 42,
+      "p50": 29729.0,
+      "p90": 95825.3,
+      "min": 85,
+      "max": 370510
+    },
+    "16": {
+      "n": 16,
+      "p50": 28644.5,
+      "p90": 163764.0,
+      "min": 4673,
+      "max": 192010
+    },
+    "17": {
+      "n": 3,
+      "p50": 22403.0,
+      "p90": 22603.0,
+      "min": 10487,
+      "max": 22653
+    }
+  },
+  "board_sizes": {
+    "0": 4,
+    "1": 203,
+    "2": 238,
+    "3": 322,
+    "4": 251,
+    "5": 289,
+    "6": 527,
+    "7": 2450
+  },
+  "board_sizes_input": {
+    "0": 226,
+    "1": 1838,
+    "2": 686,
+    "3": 934,
+    "4": 750,
+    "5": 784,
+    "6": 1422,
+    "7": 6422,
+    "12": 6,
+    "13": 6,
+    "14": 26,
+    "20": 8,
+    "21": 6,
+    "28": 6
+  },
+  "stages": {
+    "first_attack_after_start_effects": 8622,
+    "recruitment_end_at_phase_switch": 4498
+  },
+  "splits": {
+    "train": 9346,
+    "evaluation": 2108,
+    "calibration": 1666
+  },
+  "perspectives": {
+    "self": 8808,
+    "observed_opponent": 4312
+  },
+  "builds": {
+    "250339": 4744,
+    "251952": 1246,
+    "253216": 3212,
+    "254477": 3918
+  },
+  "quality_flags": {
+    "incomplete_minion_state": 162,
+    "invalid_board_positions": 58
+  }
+}

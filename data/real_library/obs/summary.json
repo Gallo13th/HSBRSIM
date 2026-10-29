@@ -1,0 +1,62 @@
+{
+  "builds": {
+    "223542": 1,
+    "226021": 1,
+    "229984": 31,
+    "231191": 15,
+    "231720": 39,
+    "233275": 3,
+    "235290": 11,
+    "236529": 5,
+    "238003": 2,
+    "238087": 5,
+    "239550": 22,
+    "240397": 33,
+    "241958": 10,
+    "243002": 43,
+    "244584": 46,
+    "245258": 11,
+    "246003": 7,
+    "248348": 71,
+    "250339": 67,
+    "251952": 18,
+    "253216": 46,
+    "254477": 57
+  },
+  "downloaded_replays": 188,
+  "excluded_snapshots": 110,
+  "failed_replays": 356,
+  "final_board_decode_errors": 0,
+  "final_boards": 538,
+  "library_ready": false,
+  "limitations": [
+    "mixed builds and modes must be separated",
+    "observed opponents have incomplete hidden state",
+    "first-attack snapshots already include combat-start effects",
+    "calibration not yet fitted"
+  ],
+  "matches": 544,
+  "modes": {
+    "battlegrounds": 446,
+    "battlegrounds-duo": 93,
+    "battlegrounds-friendly": 5
+  },
+  "parsed_replays": 188,
+  "parser_version": "firestone-visible-v3",
+  "privacy_note": "Pseudonymized, not guaranteed anonymous. Original replays and source linkage IDs are excluded.",
+  "quality_flags": {
+    "incomplete_minion_state": 81,
+    "invalid_board_positions": 29
+  },
+  "reference_curve_rows": 574,
+  "snapshot_counts": {
+    "observed_opponent:first_attack_after_start_effects": 2156,
+    "self:first_attack_after_start_effects": 2155,
+    "self:recruitment_end_at_phase_switch": 2249
+  },
+  "splits": {
+    "calibration": 77,
+    "evaluation": 85,
+    "train": 382
+  }
+}

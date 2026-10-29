@@ -144,3 +144,189 @@ Astra 要求的「同一中局入口状态，bot 继续 vs 回放记录动作」
 **下一步建议**：放弃轨迹回放路线（Astra 本就不批准混入），改为用户设想的后期方案——
 **冻结对手模型（分裂模型/self-play）**：bot 座位直接由某个 checkpoint 采样动作，
 这是唯一有明确「更强对手」机制的做法；代价是每个 bot 决策多一次前向（可用同一批量叶服务摊薄）。
+
+
+## §H 真实 10k+ MMR 战团库导入
+
+> 实现：`scripts/import_real_library.py`；测试：`tests/test_import_real_library.py`。
+> 结论先说：**这批观测的 `library_ready` / `hidden_counters_complete` 全为 false，严格质量门保留 0 条。**
+> 诊断模式（`--allow-unready`）可导出 4,284 条牌面记录，但**不是**可用镜像对手库，不得混入训练。
+
+### H.1 数据来源与规模
+
+| 项 | 值 |
+|---|---|
+| 观测目录 | `data/real_library/obs/observations/` |
+| 文件数 | **376** 个 `<game_hash>.jsonl`（`observations_10k_57games.zip` 共 383 个条目 = 376 jsonl + 7 个辅助文件） |
+| 行数 | **13,120** 行（每行一条快照） |
+| 体积 | **619.6 MB** |
+| 解析器 | `firestone-visible-v3`（Firestone 可见信息重建） |
+| 上游汇总 | 188 局解析成功 / 356 局失败；544 场对局；模式 446 battlegrounds + 93 duo + 5 friendly |
+| 观测内 build | 仅 4 个：250339 / 251952 / 253216 / 254477（`summary.json` 的 22 个 build 是更早批次汇总） |
+| 阶段 | `first_attack_after_start_effects` 8,622；`recruitment_end_at_phase_switch` 4,498 |
+| 视角 | `self` 8,808；`observed_opponent` 4,312 |
+| split | train 9,346 / evaluation 2,108 / calibration 1,666 |
+
+zip 内另有 7 个辅助文件（未解压进 `obs/`）：`summary.json`、`README.md`、`matches.jsonl`、
+`human-opponent-library.json`、`strength_reference_curves.json`、`final_boards.jsonl`、
+`redaction_manifest.json`。其中两个对判断很关键：
+
+- `matches.jsonl`（544 场）：每局 lobby 元数据 `bgsAvailableTribes` / `bgsBannedTribes` /
+  `bgsTrinkets` / `bgsAnomalies` / `gameMode` / `buildNumber` / `playerCardId`。它能部分重建
+  「这一局有哪些种族/饰品」，但**没有逐 turn 的池计数**（已买走/已刷新掉的随从），也没有动作；
+- `human-opponent-library.json`：`personal-human-strength-proxy-v1`，对 57 局只按 turn 记录
+  `attack/health/minions` **总量**，自述 `not complete human opponent states`，只校准攻防总量。
+  它是评测用的强度代理，不是可注入的牌面/状态。
+
+**重要**：上游 `summary.json` 自己就写着 `"library_ready": false`，并列明限制
+`observed opponents have incomplete hidden state`、`first-attack snapshots already include
+combat-start effects`、`mixed builds and modes must be separated`。也就是说，这不是「质量门误杀」，
+而是数据源在采集阶段就未达到 ready。payload 里**没有 MMR 字段**，「10k+ MMR」只是上游来源描述，
+无法在库内按 MMR 分层。
+
+### H.2 字段与清洗
+
+每行实测字段：`game_id`、`turn`（1–17）、`combat_index`、`controller`、`perspective`、
+`stage`、`split`、`board[]`、`enchantments[]`、`known_hand[]`、`unknown_hand_count`、
+`heroes[]`、`build_number`、`parser_version`、`quality_flags[]`、`hidden_counters_complete`、
+`library_ready`、`turn_source`。
+
+- `board[]` 元素：`card_id`（字符串，如 `BG31_803`）、`attack`、`health`、`damage`、
+  `entity_id`、`position`、`tags{}`；
+- 输出只保留牌面四元组 `{card:int, atk:int, hp:int, position:int}`；
+- `strength = Σ(attack + health)`（按需求，直接用当前 `health`，不再减 `damage`）；
+- 空牌面（226 行）不丢弃（强度 0；按 turn 去重后仅 4 条），`board > 7` 视为解析损坏（BG 牌面上限 7 张）；
+- `attack`/`health` 为 `null` 的 166 处 / 162 行（`quality_flags: incomplete_minion_state`）丢弃；
+- 58 行 `board > 7`（`quality_flags: invalid_board_positions`）丢弃。
+
+### H.3 质量门（默认 strict，符合需求）
+
+```python
+keep  = (row["library_ready"] is True) and (row["hidden_counters_complete"] is True)
+```
+
+字段缺失分别记 `missing_library_ready` / `missing_hidden_counters_complete`；
+显式 false 记 `library_ready_false` / `hidden_counters_incomplete`。
+全量实测：
+
+| 门 | 行数 |
+|---|---:|
+| `library_ready == true` | **0 / 13,120** |
+| `hidden_counters_complete == true` | **0 / 13,120** |
+| 严格门保留 | **0** |
+
+因此 `data/real_library/library_real.jsonl` 按设计为 **0 行**；拒绝伪造 ready 标志。
+为了仍有可分析的产物，脚本提供显式开关 `--allow-unready`：只跳过这两个质量标志，
+结构校验（卡映射 / 数值完整性 / 牌面上限）仍然 fail-closed，输出标记
+`quality:"degraded"` 与 `degraded_reasons`。
+
+### H.4 卡表映射
+
+- 卡表：`rust/crates/hsbg-engine/data/cards.json`，`cards` 为数组，共 **3,983** 张；
+- **整数索引 = 数组下标**，与 Rust `cards.rs` 的 `CardId(i as u16)` 完全一致；脚本只读，不修改卡表；
+- 随从：13,120 行共 67,386 张随从，成功映射 **67,220**，**0 张卡 id 映射失败**
+  （映射失败率 **0.0000%**）；差额 166 是 `attack/health` 缺失而非卡表问题；
+- 英雄：先直接命中，再去掉 `_SKIN_<后缀>` 归一（如 `BG23_HERO_305_SKIN_A -> BG23_HERO_305`）。
+  13,120 行中 direct 7,490 + skin_base 5,484 = **12,974 可映射（98.89%）**，
+  剩余 **146（1.11%）** 无基础英雄条目，输出 `hero:null` 并保留 `hero_card_id`；
+- `known_hand`：19,424 张，全部可映射（0 失败）。
+
+### H.5 去重与统计结果
+
+去重键：`(turn, sorted((card, atk, hp)))`；同键保留文件序第一条。输出按
+`(turn, strength, signature)` 排序，同 turn 连续（按 turn 分桶）。
+
+**严格门（默认）**
+
+| 指标 | 值 |
+|---|---|
+| 输入 / 保留 | 13,120 / **0** |
+| 丢弃 | `library_ready_false` 13,120 |
+| turn / 强度 | 无 |
+| 卡映射失败 | 0 / 67,386 |
+
+**诊断模式（`--allow-unready`，不可训练）**
+
+| 指标 | 值 |
+|---|---|
+| 输入 / 保留 / 丢弃 | 13,120 / **4,284** / 8,836 |
+| 丢弃原因 | `duplicate` 8,616；`incomplete_stats` 162；`board_too_large` 58 |
+| 强度 p50 / p90 / p99 | **196 / 6,330.5 / 57,622.9** |
+| 强度 min / mean / max | 0 / 3,441.3 / 370,510 |
+| 牌面张数分布 | 0:4, 1:203, 2:238, 3:322, 4:251, 5:289, 6:527, 7:2,450 |
+
+turn 分布与分 turn 强度：
+
+| turn | n | p50 | p90 |
+|---:|---:|---:|---:|
+| 1 | 68 | 6.0 | 10.0 |
+| 2 | 132 | 8.5 | 15.9 |
+| 3 | 298 | 17.5 | 28.0 |
+| 4 | 374 | 26.0 | 45.7 |
+| 5 | 386 | 48.0 | 73.0 |
+| 6 | 399 | 79.0 | 126.2 |
+| 7 | 403 | 129.0 | 237.6 |
+| 8 | 403 | 261.0 | 502.8 |
+| 9 | 416 | 547.5 | 1,355.0 |
+| 10 | 414 | 1,144.0 | 3,028.8 |
+| 11 | 368 | 2,435.0 | 8,900.9 |
+| 12 | 273 | 4,858.0 | 18,508.4 |
+| 13 | 192 | 10,158.0 | 32,021.3 |
+| 14 | 97 | 23,243.0 | 74,670.2 |
+| 15 | 42 | 29,729.0 | 95,825.3 |
+| 16 | 16 | 28,644.5 | 163,764.0 |
+| 17 | 3 | 22,403.0 | 22,603.0 |
+
+去重率 65.7%（8,616/13,120）主要是同一牌面在 `recruitment_end` 与下一次
+`first_attack` 两个阶段重复出现，以及不同对局在低 turn 的同签名牌面。p90 以上被少量
+异常缩放随从拉高（如单张 12 万攻/防，`quality_flags` 为空但数值明显是解析重复计数），
+所以**不能用均值/最大值代表人类强度**；分 turn p50 曲线更可信。
+
+产物：
+
+```text
+data/real_library/library_real.jsonl              # strict，0 行（按质量门）
+data/real_library/library_real_stats.json         # strict 统计
+data/real_library/library_real_degraded.jsonl     # 诊断，4,284 行，quality=degraded
+data/real_library/library_real_degraded_stats.json# 诊断统计
+```
+
+复现：
+
+```bash
+PYTHONPATH=rust/python:. python scripts/import_real_library.py --stats \
+    --stats-json data/real_library/library_real_stats.json
+PYTHONPATH=rust/python:. python scripts/import_real_library.py --allow-unready \
+    --out data/real_library/library_real_degraded.jsonl \
+    --stats-json data/real_library/library_real_degraded_stats.json --stats
+PYTHONPATH=rust/python:. python -m pytest tests/test_import_real_library.py -q
+```
+
+### H.6 局限与「能否直接当镜像对手」判断
+
+**不能直接当镜像对手。** 具体缺口：
+
+1. **没有 pool 差量**：观测只有某一座位当前牌面，没有逐 turn 的酒馆池/已被买走或刷新掉的
+   随从计数。`matches.jsonl` 虽有 lobby 的可用/禁用种族与饰品，可部分重建种族构成，但无法恢复
+   池消耗；注入引擎后引擎自己从满池开始，后续买牌、刷新、三连概率全部失真；
+2. **没有逐决策轨迹**：没有 action、目标选择、商店刷新、金币/等级/饰品/任务/法术：
+   只能恢复「某一刻的牌面」，不能恢复「对手怎么打」。轨迹回放方案（§B–§F）需要的是
+   `Game.state_json()` + 动作序列，这份数据两者都没有；
+3. **隐藏计数不完整**：`hidden_counters_complete=false` 全量成立；`enchantments` 是可见信息重建，
+   亡语/复仇/回合计数等隐藏状态缺失，直接注入会改变机制结算；
+4. **阶段语义混杂**：`first_attack_after_start_effects` 已包含战斗开始效果，和
+   `recruitment_end_at_phase_switch` 不是同一时点；两者混在一个 turn 桶里会重复计强度；
+5. **构建/模式混杂**：仅 4 个 build，但含 duo/friendly 模式；跨版本卡 id 语义变化未对齐；
+6. **数值噪声**：162 行（166 处）数值缺失、58 行牌面超 7、异常缩放导致 max 37 万；没有 MMR 字段可过滤；
+7. **没有后续动作**：即便只做「牌面注入 + bot 接管」，也仍受第 1 条 pool 不一致影响。
+
+**可以怎么用（仅离线）**：
+
+- 作为真实人类强度的**分 turn 参考分布**（p50 曲线）校准 `capture_library.py` 的强度档与
+  `target_strength` 采样，不进入引擎；
+- 作为回归/合理性检查：bot 自对弈在 turn 8/10/12 的强度分位数是否落在人类区间；
+- 作为「异常值检测」语料：识别解析器的重复计数/牌面越界问题。
+
+**要变成可用镜像对手，至少还需要**：同一时点的完整 `player_json`（含英雄/手牌/酒馆/饰品/
+任务/隐藏计数）+ lobby races/pool 状态 + 逐决策动作（或可回放的 `state_json` 轨迹）。
+这等价于 §B 的整局轨迹采集，而不是本目录的「可见牌面快照」。

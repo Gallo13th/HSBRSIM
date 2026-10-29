@@ -1,0 +1,296 @@
+{
+  "new_matches": {
+    "BG30_MagicItem_406": [
+      "SoTRepeatGetScript",
+      "Butcher's Sickle",
+      "SoT repeat get"
+    ],
+    "BG30_MagicItem_414": [
+      "OnBuyBuffTwoRandomScript",
+      "Kodo Leather Pouch",
+      "on buy: buff 2 random"
+    ],
+    "BG30_MagicItem_414t": [
+      "OnBuyBuffTwoRandomScript",
+      "Kodo Leather Pouch",
+      "on buy: buff 2 random"
+    ],
+    "BG30_MagicItem_420": [
+      "SoTDiscoverTavernSpellScript",
+      "Book of Medivh",
+      "SoT discover tavern spell"
+    ],
+    "BG30_MagicItem_420t": [
+      "SoTDiscoverTavernSpellScript",
+      "Book of Medivh",
+      "SoT discover tavern spell"
+    ],
+    "BG30_MagicItem_426": [
+      "SoTRepeatGetScript",
+      "Colorful Compass",
+      "SoT repeat get"
+    ],
+    "BG30_MagicItem_426t": [
+      "SoTRepeatGetScript",
+      "Colorful Compass",
+      "SoT repeat get"
+    ],
+    "BG30_MagicItem_430": [
+      "SoTGetRandomBattlecryScript",
+      "Rockin' Music Box",
+      "SoT get random BC minion"
+    ],
+    "BG30_MagicItem_441": [
+      "SoCLeftmostGainsHighestHealthScript",
+      "Tinyfin Onesie",
+      "SoC leftmost gains highest health stats"
+    ],
+    "BG30_MagicItem_541": [
+      "TavernBuffAuraScript",
+      "Nether Pendant",
+      "tavern buff aura"
+    ],
+    "BG30_MagicItem_543": [
+      "SoTRepeatGetScript",
+      "Devourer Sticker",
+      "SoT repeat get"
+    ],
+    "BG30_MagicItem_703": [
+      "SoTGenericScript",
+      "Mystery Cube",
+      "SoT generic"
+    ],
+    "BG30_MagicItem_705": [
+      "SoTGenericScript",
+      "Bartend-o-Tron's Oilcan",
+      "SoT generic"
+    ],
+    "BG30_MagicItem_841": [
+      "TavernBuffAuraScript",
+      "Glowing Gauntlet",
+      "tavern buff aura"
+    ],
+    "BG30_MagicItem_879": [
+      "TavernBuffAuraScript",
+      "Dalaran Cheese Wheel",
+      "tavern buff aura"
+    ],
+    "BG30_MagicItem_879t": [
+      "TavernBuffAuraScript",
+      "Dalaran Cheese Wheel",
+      "tavern buff aura"
+    ],
+    "BG30_MagicItem_900": [
+      "OnPlayBuffTribeScript",
+      "Dragonwing Glider",
+      "on play buff tribe"
+    ],
+    "BG30_MagicItem_900t": [
+      "OnPlayBuffTribeScript",
+      "Dragonwing Glider",
+      "on play buff tribe"
+    ],
+    "BG30_MagicItem_902": [
+      "SoCGiveLeftRightMostKeywordScript",
+      "Holy Mallet",
+      "SoC L/R DS"
+    ],
+    "BG30_MagicItem_916": [
+      "SoTRepeatGetScript",
+      "Essence of Dreams",
+      "SoT repeat get"
+    ],
+    "BG30_MagicItem_924": [
+      "OnSpendGoldBuffScript",
+      "Booty Bay Brew",
+      "on spend gold buff"
+    ],
+    "BG30_MagicItem_924t": [
+      "OnSpendGoldBuffScript",
+      "Booty Bay Brew",
+      "on spend gold buff"
+    ],
+    "BG30_MagicItem_930": [
+      "SoTRepeatGetScript",
+      "Burgling Claw",
+      "SoT repeat get"
+    ],
+    "BG30_MagicItem_942": [
+      "SoTRepeatGetScript",
+      "Mecha-Jaraxxus Sticker",
+      "SoT repeat get"
+    ],
+    "BG30_MagicItem_962": [
+      "SoCDoubleLowestStatsScript",
+      "Training Certificate",
+      "SoC double lowest atk minions"
+    ],
+    "BG30_MagicItem_987": [
+      "SoTRepeatGetScript",
+      "Balladist Portrait",
+      "SoT repeat get"
+    ],
+    "BG30_MagicItem_992": [
+      "TavernBuffAuraScript",
+      "Darnassus Pie",
+      "tavern buff aura"
+    ],
+    "BG30_MagicItem_992t": [
+      "TavernBuffAuraScript",
+      "Darnassus Pie",
+      "tavern buff aura"
+    ],
+    "BG30_MagicItem_993": [
+      "SoTRepeatGetScript",
+      "Pagle's Fishing Rod",
+      "SoT repeat get"
+    ],
+    "BG30_MagicItem_994": [
+      "SoTGenericScript",
+      "Yogg-Tastic Pastry",
+      "SoT generic"
+    ],
+    "BG31_MagicItem_903": [
+      "SoTRepeatGetScript",
+      "Wisdomball Supply",
+      "SoT repeat get"
+    ],
+    "BG32_MagicItem_111": [
+      "EoTBuffRandomMurlocScript",
+      "Toxic Stinger",
+      "EoT buff random Murloc"
+    ],
+    "BG32_MagicItem_286": [
+      "SoTCastSpellScript",
+      "Lavish Cape",
+      "SoT cast spell"
+    ],
+    "BG32_MagicItem_350": [
+      "GetRandomMinionsTierScript",
+      "Splinter of Aurum",
+      "get random minions of tier"
+    ],
+    "BG32_MagicItem_361": [
+      "SoTDiscoverMinionScript",
+      "Portable Factory",
+      "SoT discover minion"
+    ],
+    "BG32_MagicItem_361t": [
+      "SoTDiscoverMinionScript",
+      "Portable Factory",
+      "SoT discover minion"
+    ],
+    "BG32_MagicItem_365": [
+      "SoCDoubleScript",
+      "Valdrakken Wind Chimes",
+      "SoC double"
+    ],
+    "BG32_MagicItem_700": [
+      "SoTGenericScript",
+      "Marvelous Mushroom",
+      "SoT generic"
+    ],
+    "BG32_MagicItem_831": [
+      "SoTRepeatGetScript",
+      "Sellemental Portrait",
+      "SoT repeat get"
+    ],
+    "BG32_MagicItem_832": [
+      "EoTGetWindfallScript",
+      "Windfall Portrait",
+      "EoT get Windfall"
+    ],
+    "BG32_MagicItem_832t": [
+      "EoTGetWindfallScript",
+      "Windfall Portrait",
+      "EoT get Windfall"
+    ],
+    "BG32_MagicItem_858": [
+      "GetRandomMinionsTierScript",
+      "Explorer's Binoculars",
+      "get random minions of tier"
+    ],
+    "BG32_MagicItem_931": [
+      "SoTRepeatGetScript",
+      "Azsharan Statuette",
+      "SoT repeat get"
+    ],
+    "BG32_MagicItem_950": [
+      "SoTRepeatGetScript",
+      "Gritty Portrait",
+      "SoT repeat get"
+    ],
+    "BG32_MagicItem_951": [
+      "SoTGenericScript",
+      "Gold Pendant",
+      "SoT generic"
+    ],
+    "BG35_MagicItem_301": [
+      "SoTGetRandomMagneticScript",
+      "Scraper Sticker",
+      "SoT get magnetic"
+    ],
+    "BG35_MagicItem_309": [
+      "SoTRepeatGetScript",
+      "Errgl Sticker",
+      "SoT repeat get"
+    ],
+    "BG35_MagicItem_434": [
+      "SoTRepeatGetScript",
+      "Jewelry Box",
+      "SoT repeat get"
+    ],
+    "BG35_MagicItem_712": [
+      "SoTRepeatGetScript",
+      "Privateer Portrait",
+      "SoT repeat get"
+    ],
+    "BG35_MagicItem_752": [
+      "EoTTriggerBattlecriesScript",
+      "Young Murk-Eye Sticker",
+      "EoT trigger BC"
+    ],
+    "BG35_MagicItem_753": [
+      "EoTBuffLeftmostScript",
+      "Murky Sticker",
+      "EoT buff leftmost"
+    ],
+    "BG35_MagicItem_850": [
+      "SoTCastSpellScript",
+      "Pocket Cyclone",
+      "SoT cast spell"
+    ],
+    "BG35_MagicItem_850t": [
+      "SoTCastSpellScript",
+      "Pocket Cyclone",
+      "SoT cast spell"
+    ],
+    "BG35_MagicItem_890": [
+      "SoTRepeatGetScript",
+      "Sunken Anchor",
+      "SoT repeat get"
+    ]
+  },
+  "templates_needed": [
+    "EoTBuffLeftmostScript",
+    "EoTBuffRandomMurlocScript",
+    "EoTGetWindfallScript",
+    "EoTTriggerBattlecriesScript",
+    "GetRandomMinionsTierScript",
+    "OnBuyBuffTwoRandomScript",
+    "OnPlayBuffTribeScript",
+    "OnSpendGoldBuffScript",
+    "SoCDoubleLowestStatsScript",
+    "SoCDoubleScript",
+    "SoCGiveLeftRightMostKeywordScript",
+    "SoCLeftmostGainsHighestHealthScript",
+    "SoTCastSpellScript",
+    "SoTDiscoverMinionScript",
+    "SoTDiscoverTavernSpellScript",
+    "SoTGenericScript",
+    "SoTGetRandomBattlecryScript",
+    "SoTGetRandomMagneticScript",
+    "SoTRepeatGetScript",
+    "TavernBuffAuraScript"
+  ]
+}

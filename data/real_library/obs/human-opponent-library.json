@@ -1,0 +1,4200 @@
+{
+  "cross_build_statistics_only": true,
+  "excluded": {
+    "other_build": 125,
+    "quality": 22
+  },
+  "kind": "personal-human-strength-proxy-v1",
+  "limitations": [
+    "personal strength proxy, not complete human opponent states",
+    "current-rule scripted cards, keywords, hands and counters are retained",
+    "only attack and health totals are calibrated; minion-count mismatch is audited",
+    "missing turns use same-split same-turn survivors, then nearest earlier observations; never future turns",
+    "no claims of matching human combat win rates or top-player distributions"
+  ],
+  "minimum_source_games": 3,
+  "schema_version": 1,
+  "source_build": 254477,
+  "source_fingerprint": "b65fc4b5e3311214057dbcf407a5744508f0adb714a41be2e0a1266580404ff8",
+  "source_mode": "battlegrounds",
+  "source_stage": "recruitment_end_at_phase_switch",
+  "target_contract": {
+    "game_version": "36.6.3.253932",
+    "source_hash": "c807e9aa1a6746ee"
+  },
+  "trajectories": {
+    "calibration": [
+      {
+        "game_id": "3014be9522fd1c960fc624a4fad2193f",
+        "points": [
+          {
+            "attack": 1,
+            "health": 4,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 4,
+            "health": 9,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 5,
+            "health": 9,
+            "minions": 2,
+            "turn": 4
+          },
+          {
+            "attack": 19,
+            "health": 25,
+            "minions": 4,
+            "turn": 5
+          },
+          {
+            "attack": 38,
+            "health": 42,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 83,
+            "health": 87,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 142,
+            "health": 152,
+            "minions": 6,
+            "turn": 8
+          },
+          {
+            "attack": 583,
+            "health": 558,
+            "minions": 6,
+            "turn": 9
+          },
+          {
+            "attack": 918,
+            "health": 857,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 1569,
+            "health": 1436,
+            "minions": 6,
+            "turn": 11
+          },
+          {
+            "attack": 1764,
+            "health": 1657,
+            "minions": 7,
+            "turn": 12
+          }
+        ]
+      },
+      {
+        "game_id": "fe6eb380f7479e1419636c99ed02e07d",
+        "points": [
+          {
+            "attack": 1,
+            "health": 1,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 1,
+            "health": 1,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 4,
+            "health": 8,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 10,
+            "health": 14,
+            "minions": 5,
+            "turn": 4
+          },
+          {
+            "attack": 11,
+            "health": 18,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 17,
+            "health": 25,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 15,
+            "health": 23,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 15,
+            "health": 23,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 203,
+            "health": 172,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 208,
+            "health": 200,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 271,
+            "health": 245,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      },
+      {
+        "game_id": "0f4f558279aa63ddb5268122022b9403",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 1,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 6,
+            "health": 7,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 4,
+            "health": 4,
+            "minions": 2,
+            "turn": 4
+          },
+          {
+            "attack": 16,
+            "health": 11,
+            "minions": 4,
+            "turn": 5
+          },
+          {
+            "attack": 38,
+            "health": 33,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 91,
+            "health": 77,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 121,
+            "health": 108,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 200,
+            "health": 195,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 339,
+            "health": 364,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 403,
+            "health": 429,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 804,
+            "health": 694,
+            "minions": 7,
+            "turn": 12
+          }
+        ]
+      },
+      {
+        "game_id": "b5a251d4f65f243927d639e592661dea",
+        "points": [
+          {
+            "attack": 1,
+            "health": 1,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 1,
+            "health": 1,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 5,
+            "health": 3,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 29,
+            "health": 22,
+            "minions": 5,
+            "turn": 4
+          },
+          {
+            "attack": 50,
+            "health": 33,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 59,
+            "health": 39,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 93,
+            "health": 71,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 116,
+            "health": 81,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 208,
+            "health": 102,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 2094,
+            "health": 1288,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 4317,
+            "health": 2976,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 7144,
+            "health": 5320,
+            "minions": 7,
+            "turn": 13
+          },
+          {
+            "attack": 12569,
+            "health": 10277,
+            "minions": 7,
+            "turn": 14
+          }
+        ]
+      },
+      {
+        "game_id": "d5f5fb568a6fc9d8a12a5b4c8f4bfa99",
+        "points": [
+          {
+            "attack": 1,
+            "health": 4,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 1,
+            "health": 4,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 10,
+            "health": 14,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 29,
+            "health": 22,
+            "minions": 5,
+            "turn": 4
+          },
+          {
+            "attack": 45,
+            "health": 31,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 103,
+            "health": 72,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 132,
+            "health": 91,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 111,
+            "health": 65,
+            "minions": 6,
+            "turn": 8
+          },
+          {
+            "attack": 211,
+            "health": 142,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 288,
+            "health": 159,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 599,
+            "health": 287,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 4278,
+            "health": 2129,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 8206,
+            "health": 4232,
+            "minions": 7,
+            "turn": 13
+          }
+        ]
+      },
+      {
+        "game_id": "a0b71c43f418146be0f421eb20170acb",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 4,
+            "health": 4,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 6,
+            "health": 8,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 18,
+            "health": 17,
+            "minions": 5,
+            "turn": 4
+          },
+          {
+            "attack": 26,
+            "health": 27,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 36,
+            "health": 35,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 50,
+            "health": 51,
+            "minions": 6,
+            "turn": 7
+          },
+          {
+            "attack": 46,
+            "health": 50,
+            "minions": 4,
+            "turn": 8
+          },
+          {
+            "attack": 456,
+            "health": 444,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 1559,
+            "health": 1509,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 2993,
+            "health": 2919,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 4683,
+            "health": 4585,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 11153,
+            "health": 10977,
+            "minions": 7,
+            "turn": 13
+          }
+        ]
+      },
+      {
+        "game_id": "0696e7f698d819837e6cf1616dc5fafa",
+        "points": [
+          {
+            "attack": 14,
+            "health": 11,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 21,
+            "health": 17,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 47,
+            "health": 54,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 119,
+            "health": 146,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 152,
+            "health": 183,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 163,
+            "health": 220,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 242,
+            "health": 396,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 1144,
+            "health": 1135,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      }
+    ],
+    "evaluation": [
+      {
+        "game_id": "e85396c63d2140795c55e5066cc06772",
+        "points": [
+          {
+            "attack": 2,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 2,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 9,
+            "health": 10,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 12,
+            "health": 14,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 27,
+            "health": 24,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 35,
+            "health": 33,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 70,
+            "health": 81,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 196,
+            "health": 210,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 290,
+            "health": 310,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 1206,
+            "health": 1384,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 1729,
+            "health": 2060,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      },
+      {
+        "game_id": "320c7d3b808bb75b3aa274119988db95",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 4,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 5,
+            "health": 7,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 14,
+            "health": 16,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 21,
+            "health": 21,
+            "minions": 7,
+            "turn": 5
+          },
+          {
+            "attack": 41,
+            "health": 44,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 66,
+            "health": 65,
+            "minions": 6,
+            "turn": 7
+          },
+          {
+            "attack": 187,
+            "health": 203,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 223,
+            "health": 256,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 586,
+            "health": 572,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 896,
+            "health": 995,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      },
+      {
+        "game_id": "887552697810ecefcffcb49517cce4c6",
+        "points": [
+          {
+            "attack": 2,
+            "health": 1,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 2,
+            "health": 1,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 8,
+            "health": 12,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 19,
+            "health": 26,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 26,
+            "health": 31,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 32,
+            "health": 37,
+            "minions": 5,
+            "turn": 6
+          },
+          {
+            "attack": 47,
+            "health": 50,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 114,
+            "health": 115,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 296,
+            "health": 283,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 858,
+            "health": 810,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 1914,
+            "health": 1978,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 3960,
+            "health": 3995,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 7645,
+            "health": 7564,
+            "minions": 7,
+            "turn": 13
+          },
+          {
+            "attack": 12137,
+            "health": 11902,
+            "minions": 7,
+            "turn": 14
+          }
+        ]
+      },
+      {
+        "game_id": "1d6ec1a71dc5a2d22ee55efef449284f",
+        "points": [
+          {
+            "attack": 2,
+            "health": 6,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 8,
+            "health": 10,
+            "minions": 3,
+            "turn": 2
+          },
+          {
+            "attack": 16,
+            "health": 17,
+            "minions": 4,
+            "turn": 3
+          },
+          {
+            "attack": 18,
+            "health": 17,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 33,
+            "health": 31,
+            "minions": 7,
+            "turn": 5
+          },
+          {
+            "attack": 35,
+            "health": 31,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 59,
+            "health": 53,
+            "minions": 6,
+            "turn": 7
+          },
+          {
+            "attack": 67,
+            "health": 79,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 285,
+            "health": 169,
+            "minions": 7,
+            "turn": 9
+          }
+        ]
+      },
+      {
+        "game_id": "546403b6b33f103d70bf97c0f92750c9",
+        "points": [
+          {
+            "attack": 3,
+            "health": 2,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 5,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 13,
+            "health": 9,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 23,
+            "health": 17,
+            "minions": 2,
+            "turn": 4
+          },
+          {
+            "attack": 38,
+            "health": 27,
+            "minions": 4,
+            "turn": 5
+          },
+          {
+            "attack": 55,
+            "health": 44,
+            "minions": 4,
+            "turn": 6
+          },
+          {
+            "attack": 57,
+            "health": 43,
+            "minions": 3,
+            "turn": 7
+          },
+          {
+            "attack": 102,
+            "health": 97,
+            "minions": 6,
+            "turn": 8
+          },
+          {
+            "attack": 162,
+            "health": 163,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 1000,
+            "health": 1208,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 2137,
+            "health": 2685,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 6755,
+            "health": 8999,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 21669,
+            "health": 29854,
+            "minions": 7,
+            "turn": 13
+          },
+          {
+            "attack": 44742,
+            "health": 62350,
+            "minions": 7,
+            "turn": 14
+          }
+        ]
+      },
+      {
+        "game_id": "5af8d62285c34e997b5769c84a8741b8",
+        "points": [
+          {
+            "attack": 3,
+            "health": 2,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 5,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 11,
+            "health": 9,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 22,
+            "health": 16,
+            "minions": 3,
+            "turn": 4
+          },
+          {
+            "attack": 33,
+            "health": 21,
+            "minions": 3,
+            "turn": 5
+          },
+          {
+            "attack": 87,
+            "health": 73,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 118,
+            "health": 108,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 140,
+            "health": 136,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 250,
+            "health": 262,
+            "minions": 6,
+            "turn": 9
+          },
+          {
+            "attack": 410,
+            "health": 442,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 718,
+            "health": 771,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 2117,
+            "health": 2159,
+            "minions": 7,
+            "turn": 12
+          }
+        ]
+      },
+      {
+        "game_id": "cbbd10f5bdc7386b623da6d8945a67d8",
+        "points": [
+          {
+            "attack": 2,
+            "health": 1,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 2,
+            "health": 1,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 2,
+            "health": 1,
+            "minions": 1,
+            "turn": 3
+          },
+          {
+            "attack": 11,
+            "health": 13,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 17,
+            "health": 24,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 42,
+            "health": 47,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 53,
+            "health": 70,
+            "minions": 6,
+            "turn": 7
+          },
+          {
+            "attack": 116,
+            "health": 131,
+            "minions": 6,
+            "turn": 8
+          },
+          {
+            "attack": 206,
+            "health": 240,
+            "minions": 6,
+            "turn": 9
+          },
+          {
+            "attack": 369,
+            "health": 516,
+            "minions": 6,
+            "turn": 10
+          },
+          {
+            "attack": 384,
+            "health": 654,
+            "minions": 6,
+            "turn": 11
+          }
+        ]
+      },
+      {
+        "game_id": "6c326a851cf20f3c5580bd3991e38e83",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 1,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 19,
+            "health": 14,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 25,
+            "health": 18,
+            "minions": 3,
+            "turn": 4
+          },
+          {
+            "attack": 29,
+            "health": 25,
+            "minions": 4,
+            "turn": 5
+          },
+          {
+            "attack": 39,
+            "health": 35,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 72,
+            "health": 81,
+            "minions": 6,
+            "turn": 7
+          },
+          {
+            "attack": 135,
+            "health": 149,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 402,
+            "health": 443,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 745,
+            "health": 766,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 1485,
+            "health": 1492,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 4234,
+            "health": 4072,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 8912,
+            "health": 7547,
+            "minions": 6,
+            "turn": 13
+          }
+        ]
+      },
+      {
+        "game_id": "e91388a8c76b1bcb8402515129d75787",
+        "points": [
+          {
+            "attack": 56,
+            "health": 42,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 113,
+            "health": 84,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 272,
+            "health": 147,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 775,
+            "health": 519,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 1371,
+            "health": 1242,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 2730,
+            "health": 3034,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      }
+    ],
+    "train": [
+      {
+        "game_id": "b79ef569998c8a3d3daf68e524db959d",
+        "points": [
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 9,
+            "health": 9,
+            "minions": 2,
+            "turn": 2
+          },
+          {
+            "attack": 15,
+            "health": 15,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 15,
+            "health": 15,
+            "minions": 2,
+            "turn": 4
+          },
+          {
+            "attack": 20,
+            "health": 18,
+            "minions": 2,
+            "turn": 5
+          },
+          {
+            "attack": 33,
+            "health": 32,
+            "minions": 3,
+            "turn": 6
+          },
+          {
+            "attack": 78,
+            "health": 78,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 137,
+            "health": 139,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 393,
+            "health": 393,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 834,
+            "health": 838,
+            "minions": 7,
+            "turn": 10
+          }
+        ]
+      },
+      {
+        "game_id": "931764a836a720a098352762a471f284",
+        "points": [
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 12,
+            "health": 13,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 14,
+            "health": 12,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 29,
+            "health": 22,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 49,
+            "health": 46,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 70,
+            "health": 67,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 138,
+            "health": 134,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 244,
+            "health": 232,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 339,
+            "health": 320,
+            "minions": 7,
+            "turn": 10
+          }
+        ]
+      },
+      {
+        "game_id": "6a68537889f340b86513d5847bcae3fa",
+        "points": [
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 3
+          },
+          {
+            "attack": 8,
+            "health": 11,
+            "minions": 3,
+            "turn": 4
+          },
+          {
+            "attack": 27,
+            "health": 27,
+            "minions": 4,
+            "turn": 5
+          },
+          {
+            "attack": 27,
+            "health": 27,
+            "minions": 4,
+            "turn": 6
+          },
+          {
+            "attack": 114,
+            "health": 107,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 205,
+            "health": 207,
+            "minions": 7,
+            "turn": 8
+          }
+        ]
+      },
+      {
+        "game_id": "35d02e91ff319f5ff930be83e1875510",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 7,
+            "health": 18,
+            "minions": 3,
+            "turn": 2
+          },
+          {
+            "attack": 10,
+            "health": 24,
+            "minions": 4,
+            "turn": 3
+          },
+          {
+            "attack": 10,
+            "health": 24,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 17,
+            "health": 35,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 20,
+            "health": 38,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 71,
+            "health": 82,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 85,
+            "health": 87,
+            "minions": 6,
+            "turn": 8
+          },
+          {
+            "attack": 104,
+            "health": 143,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 178,
+            "health": 266,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 697,
+            "health": 930,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      },
+      {
+        "game_id": "68acf6d13991e186665459deb3cc6f24",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 5,
+            "health": 7,
+            "minions": 2,
+            "turn": 2
+          },
+          {
+            "attack": 10,
+            "health": 12,
+            "minions": 4,
+            "turn": 3
+          },
+          {
+            "attack": 8,
+            "health": 10,
+            "minions": 3,
+            "turn": 4
+          },
+          {
+            "attack": 21,
+            "health": 40,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 20,
+            "health": 30,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 30,
+            "health": 46,
+            "minions": 6,
+            "turn": 7
+          },
+          {
+            "attack": 71,
+            "health": 125,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 696,
+            "health": 477,
+            "minions": 6,
+            "turn": 9
+          },
+          {
+            "attack": 604,
+            "health": 752,
+            "minions": 6,
+            "turn": 10
+          },
+          {
+            "attack": 916,
+            "health": 1119,
+            "minions": 6,
+            "turn": 11
+          },
+          {
+            "attack": 1822,
+            "health": 2109,
+            "minions": 7,
+            "turn": 12
+          }
+        ]
+      },
+      {
+        "game_id": "04ed4558919267e0cbb22d35d2ce0560",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 1,
+            "health": 1,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 10,
+            "health": 12,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 13,
+            "health": 18,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 22,
+            "health": 23,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 24,
+            "health": 28,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 20,
+            "health": 22,
+            "minions": 5,
+            "turn": 7
+          },
+          {
+            "attack": 42,
+            "health": 51,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 163,
+            "health": 120,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 205,
+            "health": 167,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 3756,
+            "health": 1954,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 12188,
+            "health": 6186,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 21600,
+            "health": 10895,
+            "minions": 7,
+            "turn": 13
+          },
+          {
+            "attack": 41057,
+            "health": 20613,
+            "minions": 7,
+            "turn": 14
+          },
+          {
+            "attack": 106650,
+            "health": 53419,
+            "minions": 7,
+            "turn": 15
+          }
+        ]
+      },
+      {
+        "game_id": "97c657dc0903bb85e9443ee5b07a3ef2",
+        "points": [
+          {
+            "attack": 3,
+            "health": 2,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 2,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 25,
+            "health": 29,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 34,
+            "health": 38,
+            "minions": 5,
+            "turn": 6
+          },
+          {
+            "attack": 52,
+            "health": 59,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 135,
+            "health": 210,
+            "minions": 5,
+            "turn": 8
+          },
+          {
+            "attack": 231,
+            "health": 364,
+            "minions": 6,
+            "turn": 9
+          },
+          {
+            "attack": 908,
+            "health": 1557,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 1284,
+            "health": 2133,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 1624,
+            "health": 2723,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 2502,
+            "health": 4316,
+            "minions": 7,
+            "turn": 13
+          }
+        ]
+      },
+      {
+        "game_id": "b99b056a42638698c9cbc07ce7544c06",
+        "points": [
+          {
+            "attack": 1,
+            "health": 1,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 1,
+            "health": 1,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 8,
+            "health": 7,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 15,
+            "health": 12,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 25,
+            "health": 20,
+            "minions": 7,
+            "turn": 5
+          },
+          {
+            "attack": 66,
+            "health": 24,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 72,
+            "health": 31,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 155,
+            "health": 48,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 225,
+            "health": 67,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 558,
+            "health": 169,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 895,
+            "health": 299,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 3541,
+            "health": 2432,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 4026,
+            "health": 2809,
+            "minions": 7,
+            "turn": 13
+          },
+          {
+            "attack": 6076,
+            "health": 4502,
+            "minions": 7,
+            "turn": 14
+          },
+          {
+            "attack": 8293,
+            "health": 6078,
+            "minions": 7,
+            "turn": 15
+          },
+          {
+            "attack": 12924,
+            "health": 10339,
+            "minions": 7,
+            "turn": 16
+          }
+        ]
+      },
+      {
+        "game_id": "7f69afdc5331981092fb57484c570313",
+        "points": [
+          {
+            "attack": 3,
+            "health": 1,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 8,
+            "health": 5,
+            "minions": 3,
+            "turn": 2
+          },
+          {
+            "attack": 10,
+            "health": 8,
+            "minions": 4,
+            "turn": 3
+          },
+          {
+            "attack": 16,
+            "health": 15,
+            "minions": 6,
+            "turn": 4
+          },
+          {
+            "attack": 35,
+            "health": 27,
+            "minions": 7,
+            "turn": 5
+          },
+          {
+            "attack": 84,
+            "health": 51,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 101,
+            "health": 55,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 120,
+            "health": 60,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 129,
+            "health": 68,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 80,
+            "health": 90,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 130,
+            "health": 284,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      },
+      {
+        "game_id": "c55050e3564731c6e896ccfa113a4f5e",
+        "points": [
+          {
+            "attack": 3,
+            "health": 4,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 4,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 9,
+            "health": 9,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 15,
+            "health": 16,
+            "minions": 5,
+            "turn": 4
+          },
+          {
+            "attack": 17,
+            "health": 17,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 46,
+            "health": 58,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 72,
+            "health": 92,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 192,
+            "health": 214,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 237,
+            "health": 262,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 295,
+            "health": 305,
+            "minions": 7,
+            "turn": 10
+          }
+        ]
+      },
+      {
+        "game_id": "57fe0d98b92b0066b9187e68457bc9ed",
+        "points": [
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 8,
+            "health": 8,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 10,
+            "health": 10,
+            "minions": 3,
+            "turn": 4
+          },
+          {
+            "attack": 21,
+            "health": 22,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 30,
+            "health": 31,
+            "minions": 5,
+            "turn": 6
+          },
+          {
+            "attack": 107,
+            "health": 111,
+            "minions": 6,
+            "turn": 7
+          },
+          {
+            "attack": 126,
+            "health": 149,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 233,
+            "health": 362,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 376,
+            "health": 512,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 407,
+            "health": 658,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 484,
+            "health": 714,
+            "minions": 6,
+            "turn": 12
+          },
+          {
+            "attack": 1349,
+            "health": 688,
+            "minions": 7,
+            "turn": 13
+          }
+        ]
+      },
+      {
+        "game_id": "65a80be80e9ba4fc3d420680ebcdf65c",
+        "points": [
+          {
+            "attack": 3,
+            "health": 2,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 2,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 3
+          },
+          {
+            "attack": 28,
+            "health": 25,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 37,
+            "health": 37,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 88,
+            "health": 93,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 189,
+            "health": 197,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 459,
+            "health": 475,
+            "minions": 7,
+            "turn": 9
+          }
+        ]
+      },
+      {
+        "game_id": "8c108b0fd9cb0bed3e8c673e4b01a2d5",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 2
+          },
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 3
+          },
+          {
+            "attack": 11,
+            "health": 13,
+            "minions": 3,
+            "turn": 4
+          },
+          {
+            "attack": 37,
+            "health": 30,
+            "minions": 7,
+            "turn": 5
+          },
+          {
+            "attack": 28,
+            "health": 27,
+            "minions": 5,
+            "turn": 6
+          },
+          {
+            "attack": 43,
+            "health": 43,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 157,
+            "health": 163,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 341,
+            "health": 347,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 270,
+            "health": 275,
+            "minions": 7,
+            "turn": 10
+          }
+        ]
+      },
+      {
+        "game_id": "56a474fde143ce9451c386c3feb43c0a",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 1,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 12,
+            "health": 10,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 23,
+            "health": 22,
+            "minions": 5,
+            "turn": 4
+          },
+          {
+            "attack": 34,
+            "health": 28,
+            "minions": 7,
+            "turn": 5
+          },
+          {
+            "attack": 37,
+            "health": 35,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 55,
+            "health": 68,
+            "minions": 6,
+            "turn": 7
+          },
+          {
+            "attack": 126,
+            "health": 122,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 576,
+            "health": 562,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 888,
+            "health": 874,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 1400,
+            "health": 1400,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      },
+      {
+        "game_id": "b3386f334c2c0fb9686e4bb71fe94e76",
+        "points": [
+          {
+            "attack": 4,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 4,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 6,
+            "health": 9,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 30,
+            "health": 24,
+            "minions": 5,
+            "turn": 4
+          },
+          {
+            "attack": 48,
+            "health": 30,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 63,
+            "health": 42,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 113,
+            "health": 66,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 132,
+            "health": 75,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 439,
+            "health": 437,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 541,
+            "health": 699,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 1024,
+            "health": 1211,
+            "minions": 6,
+            "turn": 11
+          },
+          {
+            "attack": 1801,
+            "health": 2013,
+            "minions": 7,
+            "turn": 12
+          }
+        ]
+      },
+      {
+        "game_id": "b995df158b943113d2c49c920d22451a",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 2,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 7,
+            "health": 9,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 10,
+            "health": 11,
+            "minions": 5,
+            "turn": 4
+          },
+          {
+            "attack": 12,
+            "health": 12,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 33,
+            "health": 33,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 44,
+            "health": 53,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 27,
+            "health": 45,
+            "minions": 6,
+            "turn": 8
+          },
+          {
+            "attack": 88,
+            "health": 79,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 158,
+            "health": 87,
+            "minions": 6,
+            "turn": 10
+          },
+          {
+            "attack": 230,
+            "health": 118,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      },
+      {
+        "game_id": "b1068fafcbc6b0fb3b0a1cedc4d18cd3",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 2,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 3
+          },
+          {
+            "attack": 22,
+            "health": 24,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 47,
+            "health": 54,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 51,
+            "health": 62,
+            "minions": 6,
+            "turn": 7
+          },
+          {
+            "attack": 114,
+            "health": 137,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 346,
+            "health": 270,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 558,
+            "health": 431,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 630,
+            "health": 488,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 600,
+            "health": 494,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 634,
+            "health": 530,
+            "minions": 7,
+            "turn": 13
+          },
+          {
+            "attack": 664,
+            "health": 552,
+            "minions": 7,
+            "turn": 14
+          },
+          {
+            "attack": 2577,
+            "health": 2316,
+            "minions": 7,
+            "turn": 15
+          },
+          {
+            "attack": 2448,
+            "health": 2225,
+            "minions": 7,
+            "turn": 16
+          }
+        ]
+      },
+      {
+        "game_id": "b973f00fb53e65cfdde85c91000a1b46",
+        "points": [
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 8,
+            "health": 8,
+            "minions": 2,
+            "turn": 2
+          },
+          {
+            "attack": 13,
+            "health": 13,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 22,
+            "health": 19,
+            "minions": 3,
+            "turn": 4
+          },
+          {
+            "attack": 37,
+            "health": 32,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 48,
+            "health": 42,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 69,
+            "health": 76,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 141,
+            "health": 160,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 217,
+            "health": 243,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 400,
+            "health": 418,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 996,
+            "health": 1014,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 1418,
+            "health": 1434,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 2101,
+            "health": 2120,
+            "minions": 7,
+            "turn": 13
+          }
+        ]
+      },
+      {
+        "game_id": "abc8ddbed7858e372e012ea1b68355b7",
+        "points": [
+          {
+            "attack": 3,
+            "health": 2,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 2,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 3
+          },
+          {
+            "attack": 24,
+            "health": 24,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 36,
+            "health": 34,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 33,
+            "health": 31,
+            "minions": 6,
+            "turn": 7
+          },
+          {
+            "attack": 85,
+            "health": 79,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 274,
+            "health": 183,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 1132,
+            "health": 697,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 2698,
+            "health": 1632,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 4597,
+            "health": 2845,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 7280,
+            "health": 4625,
+            "minions": 7,
+            "turn": 13
+          },
+          {
+            "attack": 11407,
+            "health": 7355,
+            "minions": 7,
+            "turn": 14
+          },
+          {
+            "attack": 16264,
+            "health": 10574,
+            "minions": 7,
+            "turn": 15
+          },
+          {
+            "attack": 22978,
+            "health": 15752,
+            "minions": 7,
+            "turn": 16
+          }
+        ]
+      },
+      {
+        "game_id": "775cd08f2d08fe22aa36a32730853eb6",
+        "points": [
+          {
+            "attack": 4,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 4,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 3
+          },
+          {
+            "attack": 7,
+            "health": 5,
+            "minions": 3,
+            "turn": 4
+          },
+          {
+            "attack": 18,
+            "health": 23,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 22,
+            "health": 27,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 60,
+            "health": 65,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 152,
+            "health": 157,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 286,
+            "health": 252,
+            "minions": 6,
+            "turn": 9
+          },
+          {
+            "attack": 1145,
+            "health": 878,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 3229,
+            "health": 2375,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      },
+      {
+        "game_id": "5479bcbb2056dd7755d26a2aed57e06d",
+        "points": [
+          {
+            "attack": 3,
+            "health": 2,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 26,
+            "health": 29,
+            "minions": 7,
+            "turn": 5
+          },
+          {
+            "attack": 30,
+            "health": 34,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 105,
+            "health": 119,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 140,
+            "health": 157,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 321,
+            "health": 341,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 306,
+            "health": 322,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 256,
+            "health": 370,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      },
+      {
+        "game_id": "bb81025bdf9d63d4ac41be48e9683258",
+        "points": [
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 8,
+            "health": 8,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 19,
+            "health": 17,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 25,
+            "health": 22,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 34,
+            "health": 29,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 34,
+            "health": 48,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 112,
+            "health": 129,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 243,
+            "health": 253,
+            "minions": 6,
+            "turn": 9
+          },
+          {
+            "attack": 358,
+            "health": 385,
+            "minions": 7,
+            "turn": 10
+          }
+        ]
+      },
+      {
+        "game_id": "bef615b6c1e36da341030881568cac63",
+        "points": [
+          {
+            "attack": 2149,
+            "health": 1785,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 2092,
+            "health": 1749,
+            "minions": 7,
+            "turn": 12
+          }
+        ]
+      },
+      {
+        "game_id": "8b95cbcb044e048931816ed169642c7b",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 2,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 8,
+            "health": 10,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 10,
+            "health": 12,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 24,
+            "health": 24,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 38,
+            "health": 38,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 80,
+            "health": 82,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 189,
+            "health": 186,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 359,
+            "health": 345,
+            "minions": 7,
+            "turn": 9
+          }
+        ]
+      },
+      {
+        "game_id": "06cf07477990fcc7c0f83efa1cd2e7f7",
+        "points": [
+          {
+            "attack": 1,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 6,
+            "minions": 2,
+            "turn": 2
+          },
+          {
+            "attack": 5,
+            "health": 10,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 15,
+            "health": 20,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 55,
+            "health": 62,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 88,
+            "health": 95,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 127,
+            "health": 133,
+            "minions": 5,
+            "turn": 7
+          },
+          {
+            "attack": 245,
+            "health": 253,
+            "minions": 5,
+            "turn": 8
+          },
+          {
+            "attack": 329,
+            "health": 355,
+            "minions": 5,
+            "turn": 9
+          },
+          {
+            "attack": 578,
+            "health": 666,
+            "minions": 6,
+            "turn": 10
+          },
+          {
+            "attack": 1741,
+            "health": 924,
+            "minions": 6,
+            "turn": 11
+          },
+          {
+            "attack": 2343,
+            "health": 1838,
+            "minions": 6,
+            "turn": 12
+          }
+        ]
+      },
+      {
+        "game_id": "f9900874faa60d0286b44d739cef0d05",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 1,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 12,
+            "health": 12,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 23,
+            "health": 35,
+            "minions": 5,
+            "turn": 4
+          },
+          {
+            "attack": 31,
+            "health": 55,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 33,
+            "health": 62,
+            "minions": 5,
+            "turn": 6
+          },
+          {
+            "attack": 116,
+            "health": 199,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 428,
+            "health": 512,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 917,
+            "health": 1064,
+            "minions": 6,
+            "turn": 9
+          },
+          {
+            "attack": 1602,
+            "health": 1658,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 1641,
+            "health": 1707,
+            "minions": 6,
+            "turn": 11
+          },
+          {
+            "attack": 2331,
+            "health": 2413,
+            "minions": 6,
+            "turn": 12
+          },
+          {
+            "attack": 3863,
+            "health": 3989,
+            "minions": 5,
+            "turn": 13
+          }
+        ]
+      },
+      {
+        "game_id": "80d086659c0af90dda5c76fe3dbceec5",
+        "points": [
+          {
+            "attack": 5,
+            "health": 5,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 5,
+            "health": 5,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 10,
+            "health": 10,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 13,
+            "health": 16,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 27,
+            "health": 38,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 42,
+            "health": 94,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 39,
+            "health": 96,
+            "minions": 6,
+            "turn": 7
+          },
+          {
+            "attack": 141,
+            "health": 151,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 152,
+            "health": 144,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 1654,
+            "health": 1294,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 2920,
+            "health": 2333,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      },
+      {
+        "game_id": "5b15e69e32df6b3ee0d82815b41331f0",
+        "points": [
+          {
+            "attack": 2,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 2,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 4,
+            "health": 6,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 10,
+            "health": 12,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 17,
+            "health": 23,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 29,
+            "health": 44,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 41,
+            "health": 63,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 89,
+            "health": 137,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 355,
+            "health": 480,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 1015,
+            "health": 1177,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 2010,
+            "health": 2076,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 3846,
+            "health": 3769,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 4535,
+            "health": 4484,
+            "minions": 7,
+            "turn": 13
+          },
+          {
+            "attack": 6892,
+            "health": 6819,
+            "minions": 7,
+            "turn": 14
+          }
+        ]
+      },
+      {
+        "game_id": "946c0dee96a634af97125574ec4ae530",
+        "points": [
+          {
+            "attack": 2,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 2,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 6,
+            "health": 12,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 9,
+            "health": 13,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 16,
+            "health": 21,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 30,
+            "health": 34,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 39,
+            "health": 44,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 185,
+            "health": 209,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 594,
+            "health": 772,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 1045,
+            "health": 1442,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 3750,
+            "health": 5063,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 5422,
+            "health": 7264,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 6565,
+            "health": 8716,
+            "minions": 7,
+            "turn": 13
+          },
+          {
+            "attack": 9015,
+            "health": 11874,
+            "minions": 7,
+            "turn": 14
+          },
+          {
+            "attack": 9412,
+            "health": 12392,
+            "minions": 7,
+            "turn": 15
+          }
+        ]
+      },
+      {
+        "game_id": "bc87a6efe4afcd350442ad2694aac4cf",
+        "points": [
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 9,
+            "health": 8,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 29,
+            "health": 21,
+            "minions": 5,
+            "turn": 4
+          },
+          {
+            "attack": 35,
+            "health": 25,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 51,
+            "health": 31,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 108,
+            "health": 87,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 113,
+            "health": 164,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 171,
+            "health": 232,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 392,
+            "health": 488,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 1136,
+            "health": 1287,
+            "minions": 6,
+            "turn": 11
+          },
+          {
+            "attack": 2806,
+            "health": 3924,
+            "minions": 6,
+            "turn": 12
+          }
+        ]
+      },
+      {
+        "game_id": "949100a6ae1597efc73c67242225b60d",
+        "points": [
+          {
+            "attack": 1,
+            "health": 4,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 1,
+            "health": 4,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 3,
+            "health": 5,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 10,
+            "health": 14,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 21,
+            "health": 27,
+            "minions": 7,
+            "turn": 5
+          },
+          {
+            "attack": 29,
+            "health": 28,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 40,
+            "health": 30,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 64,
+            "health": 51,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 316,
+            "health": 300,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 554,
+            "health": 563,
+            "minions": 7,
+            "turn": 10
+          }
+        ]
+      },
+      {
+        "game_id": "87900554cbf0cdaf0e9701f33b27147a",
+        "points": [
+          {
+            "attack": 1,
+            "health": 4,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 1,
+            "health": 4,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 5,
+            "health": 12,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 32,
+            "health": 45,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 211,
+            "health": 171,
+            "minions": 6,
+            "turn": 8
+          },
+          {
+            "attack": 233,
+            "health": 189,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 646,
+            "health": 497,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 948,
+            "health": 714,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 1138,
+            "health": 910,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 823,
+            "health": 631,
+            "minions": 7,
+            "turn": 13
+          }
+        ]
+      },
+      {
+        "game_id": "0454dcda9a566c8304e4169351e1e25a",
+        "points": [
+          {
+            "attack": 3,
+            "health": 2,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 5,
+            "health": 6,
+            "minions": 2,
+            "turn": 2
+          },
+          {
+            "attack": 11,
+            "health": 11,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 26,
+            "health": 23,
+            "minions": 6,
+            "turn": 4
+          },
+          {
+            "attack": 32,
+            "health": 25,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 54,
+            "health": 43,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 89,
+            "health": 72,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 101,
+            "health": 75,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 198,
+            "health": 293,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 16250,
+            "health": 16422,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 54252,
+            "health": 54426,
+            "minions": 7,
+            "turn": 14
+          }
+        ]
+      },
+      {
+        "game_id": "71dc5eabc6c1692719bb371243162bc6",
+        "points": [
+          {
+            "attack": 2,
+            "health": 5,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 6,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 13,
+            "health": 17,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 23,
+            "health": 35,
+            "minions": 5,
+            "turn": 4
+          },
+          {
+            "attack": 40,
+            "health": 56,
+            "minions": 7,
+            "turn": 5
+          },
+          {
+            "attack": 67,
+            "health": 65,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 92,
+            "health": 99,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 162,
+            "health": 162,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 250,
+            "health": 236,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 839,
+            "health": 935,
+            "minions": 7,
+            "turn": 10
+          }
+        ]
+      },
+      {
+        "game_id": "978b11b91bc043c4c14ea70f540ceda2",
+        "points": [
+          {
+            "attack": 3,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 6,
+            "health": 6,
+            "minions": 2,
+            "turn": 2
+          },
+          {
+            "attack": 15,
+            "health": 13,
+            "minions": 4,
+            "turn": 3
+          },
+          {
+            "attack": 24,
+            "health": 19,
+            "minions": 5,
+            "turn": 4
+          },
+          {
+            "attack": 31,
+            "health": 24,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 68,
+            "health": 40,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 94,
+            "health": 49,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 162,
+            "health": 85,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 243,
+            "health": 150,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 538,
+            "health": 316,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 914,
+            "health": 480,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      },
+      {
+        "game_id": "c0e7aafb405a65a286b643eae92b2233",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 1,
+            "health": 4,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 3,
+            "health": 10,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 12,
+            "health": 20,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 18,
+            "health": 26,
+            "minions": 5,
+            "turn": 5
+          },
+          {
+            "attack": 35,
+            "health": 45,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 62,
+            "health": 72,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 45,
+            "health": 53,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 56,
+            "health": 66,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 318,
+            "health": 234,
+            "minions": 7,
+            "turn": 10
+          }
+        ]
+      },
+      {
+        "game_id": "010382a0072a2af71857f9b603f2ad7e",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 3,
+            "health": 1,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 8,
+            "health": 5,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 13,
+            "health": 12,
+            "minions": 4,
+            "turn": 4
+          },
+          {
+            "attack": 17,
+            "health": 18,
+            "minions": 4,
+            "turn": 5
+          },
+          {
+            "attack": 21,
+            "health": 32,
+            "minions": 5,
+            "turn": 6
+          },
+          {
+            "attack": 36,
+            "health": 50,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 38,
+            "health": 53,
+            "minions": 6,
+            "turn": 8
+          },
+          {
+            "attack": 254,
+            "health": 218,
+            "minions": 6,
+            "turn": 9
+          },
+          {
+            "attack": 542,
+            "health": 395,
+            "minions": 6,
+            "turn": 10
+          },
+          {
+            "attack": 1158,
+            "health": 864,
+            "minions": 6,
+            "turn": 11
+          },
+          {
+            "attack": 1491,
+            "health": 1126,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 1819,
+            "health": 1371,
+            "minions": 7,
+            "turn": 14
+          }
+        ]
+      },
+      {
+        "game_id": "9f8bd39acef4028363f6aa12cbcb0afe",
+        "points": [
+          {
+            "attack": 2,
+            "health": 1,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 2,
+            "health": 1,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 4,
+            "health": 10,
+            "minions": 2,
+            "turn": 3
+          },
+          {
+            "attack": 9,
+            "health": 12,
+            "minions": 3,
+            "turn": 4
+          },
+          {
+            "attack": 9,
+            "health": 12,
+            "minions": 3,
+            "turn": 5
+          },
+          {
+            "attack": 11,
+            "health": 15,
+            "minions": 4,
+            "turn": 6
+          },
+          {
+            "attack": 34,
+            "health": 41,
+            "minions": 6,
+            "turn": 7
+          },
+          {
+            "attack": 88,
+            "health": 104,
+            "minions": 6,
+            "turn": 8
+          },
+          {
+            "attack": 237,
+            "health": 267,
+            "minions": 6,
+            "turn": 9
+          },
+          {
+            "attack": 370,
+            "health": 412,
+            "minions": 6,
+            "turn": 10
+          },
+          {
+            "attack": 380,
+            "health": 422,
+            "minions": 6,
+            "turn": 11
+          },
+          {
+            "attack": 430,
+            "health": 444,
+            "minions": 6,
+            "turn": 12
+          },
+          {
+            "attack": 115,
+            "health": 122,
+            "minions": 7,
+            "turn": 13
+          }
+        ]
+      },
+      {
+        "game_id": "e29dba3392015b98b2db4affb83b79d7",
+        "points": [
+          {
+            "attack": 2,
+            "health": 3,
+            "minions": 1,
+            "turn": 1
+          },
+          {
+            "attack": 2,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 10,
+            "health": 13,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 20,
+            "health": 26,
+            "minions": 5,
+            "turn": 4
+          },
+          {
+            "attack": 28,
+            "health": 38,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 41,
+            "health": 46,
+            "minions": 6,
+            "turn": 6
+          },
+          {
+            "attack": 61,
+            "health": 66,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 77,
+            "health": 84,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 110,
+            "health": 130,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 126,
+            "health": 150,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 141,
+            "health": 177,
+            "minions": 7,
+            "turn": 11
+          }
+        ]
+      },
+      {
+        "game_id": "3917a32b5407fb04476cb71c8867d556",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 6,
+            "health": 6,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 6,
+            "health": 6,
+            "minions": 1,
+            "turn": 3
+          },
+          {
+            "attack": 15,
+            "health": 17,
+            "minions": 3,
+            "turn": 4
+          },
+          {
+            "attack": 39,
+            "health": 63,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 26,
+            "health": 42,
+            "minions": 2,
+            "turn": 6
+          },
+          {
+            "attack": 74,
+            "health": 109,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 310,
+            "health": 458,
+            "minions": 7,
+            "turn": 8
+          },
+          {
+            "attack": 861,
+            "health": 1136,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 1377,
+            "health": 1661,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 2445,
+            "health": 2490,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 5664,
+            "health": 5252,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 9709,
+            "health": 9283,
+            "minions": 7,
+            "turn": 13
+          }
+        ]
+      },
+      {
+        "game_id": "8eb88819152ead23627d4bdc2dd17253",
+        "points": [
+          {
+            "attack": 0,
+            "health": 0,
+            "minions": 0,
+            "turn": 1
+          },
+          {
+            "attack": 4,
+            "health": 3,
+            "minions": 1,
+            "turn": 2
+          },
+          {
+            "attack": 9,
+            "health": 11,
+            "minions": 3,
+            "turn": 3
+          },
+          {
+            "attack": 19,
+            "health": 23,
+            "minions": 6,
+            "turn": 4
+          },
+          {
+            "attack": 22,
+            "health": 30,
+            "minions": 6,
+            "turn": 5
+          },
+          {
+            "attack": 29,
+            "health": 38,
+            "minions": 7,
+            "turn": 6
+          },
+          {
+            "attack": 61,
+            "health": 78,
+            "minions": 7,
+            "turn": 7
+          },
+          {
+            "attack": 171,
+            "health": 184,
+            "minions": 6,
+            "turn": 8
+          },
+          {
+            "attack": 391,
+            "health": 405,
+            "minions": 7,
+            "turn": 9
+          },
+          {
+            "attack": 658,
+            "health": 681,
+            "minions": 7,
+            "turn": 10
+          },
+          {
+            "attack": 3025,
+            "health": 3015,
+            "minions": 7,
+            "turn": 11
+          },
+          {
+            "attack": 3607,
+            "health": 3572,
+            "minions": 7,
+            "turn": 12
+          },
+          {
+            "attack": 4548,
+            "health": 4380,
+            "minions": 7,
+            "turn": 13
+          },
+          {
+            "attack": 7618,
+            "health": 7092,
+            "minions": 6,
+            "turn": 14
+          }
+        ]
+      }
+    ]
+  }
+}

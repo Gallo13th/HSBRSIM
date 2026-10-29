@@ -1,0 +1,127 @@
+{
+  "generated_at": "2026-10-29T08:55:09+0800",
+  "elapsed_sec": 8.649,
+  "source": {
+    "tag": "real_10k",
+    "obs_dir": "data/real_library/obs/observations",
+    "pattern": "*.jsonl",
+    "files": 376,
+    "files_read": 376,
+    "lines": 13120,
+    "bytes": 649731024
+  },
+  "config": {
+    "quality_gate": "strict",
+    "allow_unready": false,
+    "max_board": 7,
+    "min_board": 0,
+    "dedup": true,
+    "limit": 0,
+    "source_tag": "real_10k"
+  },
+  "rows": {
+    "total": 13120,
+    "parsed": 13120,
+    "kept": 0,
+    "dropped": 13120
+  },
+  "drop_reasons": {
+    "library_ready_false": 13120
+  },
+  "gate_failures": {
+    "hidden_counters_incomplete": 13120,
+    "library_ready_false": 13120
+  },
+  "structural_failures": {
+    "incomplete_stats": 166,
+    "board_too_large": 58
+  },
+  "mapping": {
+    "card_table": "rust/crates/hsbg-engine/data/cards.json",
+    "card_count": 3983,
+    "client_version": "37.0.0.255790",
+    "minions_seen": 67386,
+    "board_minions_mapped": 67220,
+    "unmapped_minion_occurrences": 0,
+    "rows_with_unmapped_minion": 0,
+    "mapping_failure_rate": 0.0,
+    "unmapped_unique_card_ids": [],
+    "hero_direct": 7490,
+    "hero_via_skin_base": 5484,
+    "hero_unmapped": 146,
+    "hero_none": 0,
+    "known_hand_cards": 19424,
+    "known_hand_unmapped": 0,
+    "incomplete_stats_occurrences": 166
+  },
+  "turns": {},
+  "turns_input": {
+    "1": 894,
+    "2": 1062,
+    "3": 984,
+    "4": 1108,
+    "5": 1108,
+    "6": 1110,
+    "7": 1104,
+    "8": 1098,
+    "9": 1092,
+    "10": 1038,
+    "11": 928,
+    "12": 690,
+    "13": 478,
+    "14": 252,
+    "15": 126,
+    "16": 42,
+    "17": 6
+  },
+  "strength": {
+    "n": 0,
+    "p50": null,
+    "p90": null,
+    "p99": null,
+    "mean": null,
+    "min": null,
+    "max": null
+  },
+  "per_turn_strength": {},
+  "board_sizes": {},
+  "board_sizes_input": {
+    "0": 226,
+    "1": 1838,
+    "2": 686,
+    "3": 934,
+    "4": 750,
+    "5": 784,
+    "6": 1422,
+    "7": 6422,
+    "12": 6,
+    "13": 6,
+    "14": 26,
+    "20": 8,
+    "21": 6,
+    "28": 6
+  },
+  "stages": {
+    "first_attack_after_start_effects": 8622,
+    "recruitment_end_at_phase_switch": 4498
+  },
+  "splits": {
+    "train": 9346,
+    "evaluation": 2108,
+    "calibration": 1666
+  },
+  "perspectives": {
+    "self": 8808,
+    "observed_opponent": 4312
+  },
+  "builds": {
+    "250339": 4744,
+    "251952": 1246,
+    "253216": 3212,
+    "254477": 3918
+  },
+  "quality_flags": {
+    "incomplete_minion_state": 162,
+    "invalid_board_positions": 58
+  }
+}
