@@ -35,6 +35,7 @@ MCTS visit ``π``。按 ``(game_id, seat)`` 分组计算 GAE(λ) 与 reward-to-g
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -308,6 +309,23 @@ class CollectConfig:
     seq_aux: bool = False
 
 
+#: ``compile_train`` 取值 -> ``torch.compile`` 模式（0=关闭，不在表内）。
+_COMPILE_TRAIN_MODES = {1: "default", 2: "max-autotune"}
+
+
+def compile_train_mode(value: Any) -> int:
+    """规范化 ``PPOConfig.compile_train``：``True→1``、``False→0``，只接受 0|1|2。"""
+    if isinstance(value, bool):
+        return 1 if value else 0
+    try:
+        mode = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"compile_train 只能是 0|1|2，得到 {value!r}") from exc
+    if mode != 0 and mode not in _COMPILE_TRAIN_MODES:
+        raise ValueError(f"compile_train 只能是 0|1|2，得到 {value!r}")
+    return mode
+
+
 @dataclass
 class PPOConfig:
     """PPO 优化配置（固定 245 动作、masked softmax）。"""
@@ -340,6 +358,17 @@ class PPOConfig:
     #: 前向/反向精度：off=fp32；bf16=CUDA autocast(bfloat16)（实测 2.03×）。
     #: 主干在 bf16 下前向，loss/KL/entropy 计算强制回到 fp32（见 ppo_losses）。
     amp: str = "off"
+    #: 训练侧 ``torch.compile``（**只** learner 的 forward+backward）：
+    #: 0=关闭（默认）、1=``mode="default"``、2=``mode="max-autotune"``。
+    #: ``dynamic=False``（特征/动作/minibatch 形状固定）；同时编译 anchor 参考前向并
+    #: 打开 TF32（与 ``--leaf-compile`` 同一做法）。编译/运行失败自动回退 eager 并打印
+    #: 一次 warn，不会中断训练。叶前向（PPOEvaluator / BatchLeafServer / 自对弈）
+    #: 与评测路径完全不经过本开关，见 ``docs/TRAINING_COMPILE.md``。
+    compile_train: int = 0
+    #: anchor 参考前向（``PPOTrainer._anchor_logp``）的精度：False=fp32（旧行为）；
+    #: True=与 ``amp`` 相同的 autocast 精度（bf16 时实测约 1.8×）。只影响 KL 正则项
+    #: 的参考分布，不影响策略/价值主干前向。
+    anchor_amp: bool = False
     #: rank=名次 CE；mse=value MSE（critic=E[u(rank)]）
     value_loss: str = "rank"
     #: entity 有标量 value 头时的辅助 MSE 权重（tiny 无此头，忽略）
@@ -358,6 +387,8 @@ class PPOConfig:
         if mode not in ("rank", "mse"):
             raise ValueError(f"value_loss 只能是 rank|mse，得到 {self.value_loss!r}")
         self.value_loss = mode
+        self.compile_train = compile_train_mode(self.compile_train)
+        self.anchor_amp = bool(self.anchor_amp)
         # 早失败：ramp 规格写错时不要等到训练循环里才炸
         if str(self.seq_coef_ramp or "").strip():
             parse_coef_ramp(self.seq_coef_ramp)
@@ -922,11 +953,235 @@ class PPOGreedyPolicy(Policy):
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# 5b. 训练侧编译（torch.compile 只包 learner 的 forward/backward）
+# ══════════════════════════════════════════════════════════════════════════
+class TrainForward:
+    """learner 侧训练前向的 ``torch.compile`` 包装（失败自动回退 eager）。
+
+    **只**包装 ``model.forward`` / ``model.forward_aux``：``torch.compile`` 走
+    AOTAutograd，一次把 **forward + backward** 都编成静态图（梯度仍写回原
+    ``model.parameters().grad``）。本类不替换 model 对象，因此 optimizer /
+    state_dict / checkpoint / EMA 全部不受影响；叶前向（``PPOEvaluator``、
+    BatchLeafServer、自对弈）用的是别的对象，**完全不会**经过这里。
+
+    关键约束（与历史 leaf 侧 compile 失败的差异，见 docs/TRAINING_COMPILE.md）：
+
+    - ``dynamic=False``：feature ``[B, 3227]``、cards ``[B, 124]``、mask ``[B, 245]``
+      与 minibatch ``B`` 都是固定形状 → 只生成一张静态图；leaf 侧当年是动态 batch
+      + 每步不同 B，才炸成 51 张 CUDA graph；
+    - 只有 ``B == minibatch`` 走编译图，尾批（``B < minibatch``）走 eager，避免
+      每个 iteration 的尾批形状触发重编译；
+    - ``torch.compile`` 抛错 / warmup 抛错 / 运行期抛错 → 打印一次 warn、永久回退
+      eager（训练继续，不崩）；
+    - warmup 用固定形状的零张量跑一次 forward+backward（梯度随后清零），把编译
+      开销挪到训练开始前（计时之外），首个 iteration 不会突然慢几十秒。
+
+    用法::
+
+        tf = build_train_forward(model, cfg)      # cfg.compile_train>0 时非 None
+        loss = ppo_losses(..., train_forward=tf)
+    """
+
+    def __init__(self, model: Any, mode: int = 1, *, minibatch: int = 0,
+                 device: str = "cpu", use_amp: bool = False) -> None:
+        torch = _torch()
+        self.torch = torch
+        self.model = model
+        self.mode = compile_train_mode(mode)
+        self.minibatch = int(minibatch or 0)
+        self.device = torch.device(device)
+        self.use_amp = bool(use_amp) and self.device.type == "cuda"
+        # 缓存「是否吃 mask」：compile 之后 OptimizedModule.forward 的签名是 (*args,
+        # **kwargs)，不能再靠 inspect 判断，必须用编译前的原模型签名。
+        self.accepts_mask = _accepts_mask(model)
+        self.accepts_mask_aux = _accepts_mask_aux(model)
+        self.has_aux = getattr(model, "forward_aux", None) is not None
+        self._main_fn: Any = None
+        self._aux_fn: Any = None
+        self.main_compiled = False
+        self.aux_compiled = False
+        self.warnings: List[str] = []
+        self.eager_calls = 0
+        self.compiled_calls = 0
+        self.warmup_seconds = 0.0
+
+    # ── eager 原路径（与 forward_model / forward_model_aux 逐位一致）────────
+    def _raw_main(self, x: Any, c: Any, m: Any):
+        if self.accepts_mask:
+            return self.model(x, c, m)
+        return self.model(x, c)
+
+    def _raw_aux(self, x: Any, c: Any, m: Any):
+        fn = getattr(self.model, "forward_aux", None)
+        if fn is None:  # 无 seq 头：等价于 forward_model_aux 的回退分支
+            logits, rank_logits, scalar = split_model_outputs(self._raw_main(x, c, m))
+            return logits, rank_logits, scalar, None
+        if self.accepts_mask_aux:
+            return fn(x, c, m)
+        return fn(x, c)
+
+    # ── 编译 / warmup ─────────────────────────────────────────────────────
+    def _warn(self, kind: str, exc: BaseException) -> None:
+        msg = (f"torch.compile 训练前向（{kind}）不可用，自动回退 eager："
+               f"{type(exc).__name__}: {exc}")
+        if msg not in self.warnings:
+            self.warnings.append(msg)
+            print(f"[ppo][warn] {msg}", flush=True)
+
+    def _zero_grads(self) -> None:
+        for p in self.model.parameters():
+            if p.grad is not None:
+                p.grad = None
+
+    def _warm_one(self, kind: str, x: Any, c: Any, m: Any,
+                  backward: bool = True) -> bool:
+        torch = self.torch
+        fn_raw = self._raw_main if kind == "main" else self._raw_aux
+        try:
+            mode = _COMPILE_TRAIN_MODES[self.mode]
+            fn = torch.compile(fn_raw, mode=mode, dynamic=False, fullgraph=False)
+            amp_ctx = (torch.autocast("cuda", dtype=torch.bfloat16)
+                       if self.use_amp else contextlib.nullcontext())
+            with amp_ctx:
+                out = fn(x, c, m)
+            tensors = [t for t in out if torch.is_tensor(t)]
+            if not tensors:
+                raise RuntimeError("训练前向没有返回任何张量")
+            if backward:
+                # 有 backward 才会触发 AOTAutograd 编译反向图
+                loss = sum(t.float().sum() for t in tensors)
+                loss.backward()
+        except Exception as exc:  # noqa: BLE001 - 编译/运行失败一律回退 eager
+            self._warn(kind, exc)
+            self._zero_grads()
+            return False
+        self._zero_grads()
+        if kind == "main":
+            self._main_fn, self.main_compiled = fn, True
+        else:
+            self._aux_fn, self.aux_compiled = fn, True
+        return True
+
+    def warmup(self, *, need_aux: bool = False, batch_size: Optional[int] = None,
+               backward: bool = True, verbose: bool = True) -> "TrainForward":
+        """固定形状 warmup（forward+backward 各一次）：把编译开销挪到训练计时之外。"""
+        torch = self.torch
+        t0 = time.time()
+        # torch.compile 与训练同口径：保持 eval（dropout 关闭）与固定 batch 形状
+        self.model.eval()
+        if self.device.type == "cuda":
+            # 与 leaf_compile 一致：fp32 matmul 走 TF32（锚点参考前向明显受益；
+            # amp=bf16 时训练主干本来就是 bf16，不受影响）
+            torch.set_float32_matmul_precision("high")
+        mb = max(1, int(batch_size or self.minibatch or 1))
+        d = self.device
+        warm = (torch.zeros((mb, OBS_FLOATS), dtype=torch.float32, device=d),
+                torch.zeros((mb, OBS_CARDS), dtype=torch.long, device=d),
+                torch.ones((mb, N_ACTIONS), dtype=torch.bool, device=d))
+        self._warm_one("main", *warm, backward=backward)
+        if need_aux:
+            if self.has_aux:
+                self._warm_one("aux", *warm, backward=backward)
+            else:
+                self._warn("aux", RuntimeError("模型没有 forward_aux，seq 路径保持 eager"))
+        self.warmup_seconds = time.time() - t0
+        if verbose:
+            print(f"[ppo] train compile mode={self.mode} "
+                  f"main={'on' if self.main_compiled else 'eager'} "
+                  f"aux={'on' if self.aux_compiled else ('eager' if need_aux else 'off')} "
+                  f"warmup={self.warmup_seconds:.1f}s"
+                  + (f" warnings={len(self.warnings)}" if self.warnings else ""),
+                  flush=True)
+        return self
+
+    # ── 训练调用入口 ───────────────────────────────────────────────────────
+    @property
+    def active(self) -> bool:
+        return bool(self.main_compiled or self.aux_compiled)
+
+    def _size_ok(self, n: int) -> bool:
+        return self.minibatch <= 0 or int(n) == self.minibatch
+
+    def _call(self, kind: str, x: Any, c: Any, m: Any):
+        compiled = self.main_compiled if kind == "main" else self.aux_compiled
+        if compiled and self._size_ok(int(x.shape[0])):
+            fn = self._main_fn if kind == "main" else self._aux_fn
+            try:
+                self.compiled_calls += 1
+                return fn(x, c, m)
+            except Exception as exc:  # noqa: BLE001 - 运行期失败同样回退 eager
+                self._warn(kind, exc)
+                if kind == "main":
+                    self.main_compiled, self._main_fn = False, None
+                else:
+                    self.aux_compiled, self._aux_fn = False, None
+        self.eager_calls += 1
+        return self._raw_main(x, c, m) if kind == "main" else self._raw_aux(x, c, m)
+
+    def main(self, x: Any, c: Any, m: Any):
+        """训练主前向 ``(logits, rank_logits[, value])``。"""
+        return self._call("main", x, c, m)
+
+    def aux(self, x: Any, c: Any, m: Any):
+        """训练辅前向 ``(logits, rank_logits, value|None, seq_logits|None)``。"""
+        return self._call("aux", x, c, m)
+
+    def describe(self) -> Dict[str, Any]:
+        """进 stats 的诊断信息（可 JSON 序列化）。"""
+        return {
+            "mode": int(self.mode),
+            "active": bool(self.active),
+            "main_compiled": bool(self.main_compiled),
+            "aux_compiled": bool(self.aux_compiled),
+            "warmup_s": round(float(self.warmup_seconds), 3),
+            "compiled_calls": int(self.compiled_calls),
+            "eager_calls": int(self.eager_calls),
+            "warnings": list(self.warnings),
+        }
+
+
+def build_train_forward(model: Any, config: Any = None, *,
+                        minibatch: Optional[int] = None,
+                        warmup: bool = True, need_aux: Optional[bool] = None,
+                        use_amp: Optional[bool] = None,
+                        warmup_backward: bool = True,
+                        verbose: bool = True) -> Optional[TrainForward]:
+    """按 ``PPOConfig.compile_train`` 构建训练侧编译包装；0=返回 ``None``（纯 eager）。
+
+    ``need_aux`` 默认由 ``seq_coef>0`` 或 ``seq_coef_ramp`` 非空推断（seq 辅助任务路径
+    走 ``forward_aux``，需要单独编译）。``minibatch``/``use_amp`` 可覆盖配置（anchor 参考
+    前向用固定 chunk + 自己的精度口径）；``warmup_backward=False`` 用于 no_grad 的
+    anchor 参考前向（只编 forward 图）。
+    """
+    cfg = config if config is not None else PPOConfig()
+    mode = compile_train_mode(getattr(cfg, "compile_train", 0))
+    if mode <= 0:
+        return None
+    if need_aux is None:
+        need_aux = (float(getattr(cfg, "seq_coef", 0.0) or 0.0) > 0.0
+                    or bool(str(getattr(cfg, "seq_coef_ramp", "") or "").strip()))
+    if use_amp is None:
+        amp = str(getattr(cfg, "amp", "off")).strip().lower()
+        use_amp = amp in ("bf16", "bfloat16")
+    tf = TrainForward(
+        model, mode=mode,
+        minibatch=(int(minibatch) if minibatch is not None
+                   else int(getattr(cfg, "minibatch", 0) or 0)),
+        device=str(getattr(cfg, "device", "cpu")),
+        use_amp=bool(use_amp))
+    if warmup:
+        tf.warmup(need_aux=bool(need_aux), backward=bool(warmup_backward),
+                  verbose=verbose)
+    return tf
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # 6. PPO loss / 训练
 # ══════════════════════════════════════════════════════════════════════════
 def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
                indices: Optional[np.ndarray] = None,
-               anchor_logp: Any = None) -> Dict[str, Any]:
+               anchor_logp: Any = None,
+               train_forward: Optional[TrainForward] = None) -> Dict[str, Any]:
     """计算一个 minibatch 的 PPO 损失（返回 torch 张量字典）。
 
     - policy: ``-min(r*A, clip(r,1±ε)*A).mean()``；
@@ -937,7 +1192,9 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     - entropy: masked 策略熵（鼓励探索）；
     - anchor: ``anchor_coef * KL(π_θ ‖ π_anchor)``（``anchor_logp`` 为 stage 起点在整批
       样本上的 masked log-prob，形状 ``[len(batch), 245]``）；
-    - 非法动作：logits 在 loss 内重新 masked，概率严格 0（``illegal_prob_max`` 可验证）。
+    - 非法动作：logits 在 loss 内重新 masked，概率严格 0（``illegal_prob_max`` 可验证）；
+    - ``train_forward``：``TrainForward``（``compile_train>0`` 时传入）；前向走编译图，
+      否则与旧版本一致走 ``forward_model`` / ``forward_model_aux``。
     """
     torch = _torch()
     F = torch.nn.functional
@@ -978,10 +1235,16 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     seq_coef = float(getattr(config, "seq_coef", 0.0) or 0.0)
     seq_logits = None
     if seq_coef > 0.0:
-        _l, _r, _s, seq_logits = forward_model_aux(model, x, c, m)
+        if train_forward is not None:
+            _l, _r, _s, seq_logits = train_forward.aux(x, c, m)
+        else:
+            _l, _r, _s, seq_logits = forward_model_aux(model, x, c, m)
         logits, rank_logits, scalar_value = _l, _r, _s
     else:
-        out = forward_model(model, x, c, m)
+        if train_forward is not None:
+            out = train_forward.main(x, c, m)
+        else:
+            out = forward_model(model, x, c, m)
         logits, rank_logits, scalar_value = split_model_outputs(out)
     # 无论是否 autocast，loss 侧一律 fp32：KL/entropy/cross_entropy 的数值稳定性依赖它
     logits = logits.float()
@@ -1068,8 +1331,13 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
 def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
               *, on_step: Optional[Callable[[Dict[str, Any]], None]] = None,
               optimizer: Any = None, rng: Optional[np.random.Generator] = None,
-              anchor_logp: Any = None) -> Dict[str, Any]:
+              anchor_logp: Any = None,
+              train_forward: Optional[TrainForward] = None) -> Dict[str, Any]:
     """执行 PPO 更新（minibatch × epochs，clip、entropy、KL 早停）。
+
+    ``train_forward``：复用外部构建的 ``TrainForward``（``PPOTrainer`` 在启动时构建并
+    warmup，避免把编译开销算进第一个 iteration）；为 ``None`` 且
+    ``config.compile_train>0`` 时在此处构建 + warmup。
 
     返回可 JSON 序列化的统计字典。
     """
@@ -1090,6 +1358,10 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     # 保持 eval（关闭 dropout）：old_logprob 是采集时 eval 前向算出的，若 PPO 前向
     # 打开 dropout 会让 ratio 起点偏离 1、approx_kl 虚高（entity 默认 dropout=0.1）。
     model.eval()
+    # 训练侧编译：默认在第一个 minibatch 前构建 + 固定形状 warmup（编译开销不在
+    # minibatch 循环里）；PPOTrainer 会传入启动时已 warmup 的同一个对象。
+    if train_forward is None and compile_train_mode(getattr(cfg, "compile_train", 0)) > 0:
+        train_forward = build_train_forward(model, cfg)
     if optimizer is not None:
         model_ids = {id(p) for p in model.parameters()}
         opt_ids = {id(p) for group in optimizer.param_groups for p in group["params"]}
@@ -1128,10 +1400,12 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                 if use_amp:
                     with torch.autocast("cuda", dtype=torch.bfloat16):
                         out = ppo_losses(model, batch, cfg, indices=sel,
-                                         anchor_logp=anchor_logp)
+                                         anchor_logp=anchor_logp,
+                                         train_forward=train_forward)
                 else:
                     out = ppo_losses(model, batch, cfg, indices=sel,
-                                     anchor_logp=anchor_logp)
+                                     anchor_logp=anchor_logp,
+                                     train_forward=train_forward)
                 (out["total"] / float(len(slices))).backward()
                 served += int(sel.size)
                 for k, v in out.items():
@@ -1189,8 +1463,15 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         "value_loss_mode": cfg.value_loss,
         "pi_coef": float(cfg.pi_coef),
         "amp": str(getattr(cfg, "amp", "off")),
+        "compile_train": int(getattr(cfg, "compile_train", 0) or 0),
+        "compile_active": bool(train_forward is not None and train_forward.active),
+        "cuda_peak_mb": (round(torch.cuda.max_memory_allocated(device) / 2 ** 20, 1)
+                         if device.type == "cuda" else None),
         "config": to_jsonable(asdict(cfg)),
     }
+    if train_forward is not None:
+        # 编译诊断：是否真的走上编译图 / warmup 耗时 / 回退原因（无编译时不出该键）
+        stats["compile"] = train_forward.describe()
     # 动作序列辅助任务：只有「当前系数>0 或配置了 ramp」才出现，
     # 且关闭（默认）时连 config 回显里的两个 seq 键也去掉 -> stats 与旧版逐字节一致。
     seq_points = parse_coef_ramp(str(getattr(cfg, "seq_coef_ramp", "") or ""))
@@ -1796,6 +2077,9 @@ __all__ = [
     "forward_model",
     "forward_model_aux",
     "split_model_outputs",
+    "TrainForward",
+    "build_train_forward",
+    "compile_train_mode",
     "PPOEvaluator",
     "PPOGreedyPolicy",
     "ppo_losses",

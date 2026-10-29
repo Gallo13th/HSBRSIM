@@ -11,6 +11,9 @@
   在损失里加 ``β·KL(π_θ ‖ π_anchor)``（AutoTavern 论文 Table 7：β=0.1，前 100 个
   iteration）。anchor 分布对整个 batch 只算一次（no_grad），再按 minibatch 切片，
   因此额外开销 ≈ 每 iteration 一次前向，而不是每个 minibatch 一次；
+- **训练侧编译**（``config.compile_train>0``）：启动时用 ``build_train_forward`` 编译
+  learner 的训练 fwd+bwd 与 anchor 参考前向并 warmup；失败自动回退 eager。两条路径
+  都只在 **learner** 进程，与叶前向/自对弈/评测无关（docs/TRAINING_COMPILE.md）。
 - 不建议跨进程“伪续训”：每个进程必须 load 完整 trainer state。
 
 注意：短实验可接受每轮重置 Adam；P0 baseline 用本类。
@@ -18,13 +21,18 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 from typing import Any, Dict, Optional
 
 import numpy as np
 
-from .ppo import (PPOConfig, PPOBatch, _torch, forward_model,
-                  masked_log_softmax_torch, split_model_outputs, train_ppo)
+from .ppo import (PPOConfig, PPOBatch, _torch, build_train_forward,
+                  compile_train_mode, forward_model, masked_log_softmax_torch,
+                  split_model_outputs, train_ppo)
+
+#: anchor 参考前向的分块大小（= 编译图的固定 batch；尾块走 eager）。
+ANCHOR_CHUNK = 4096
 
 
 class PPOTrainer:
@@ -54,8 +62,15 @@ class PPOTrainer:
         self.extra: Dict[str, Any] = {}
         #: KL anchor（stage 起点策略的冻结副本）；由 ``set_anchor()`` 建立
         self.anchor_model: Optional[Any] = None
+        #: 训练侧编译包装（compile_train=0 时 None）；失败自动回退 eager
+        self.train_forward: Optional[Any] = None
+        #: anchor 参考前向的编译包装（同样受 compile_train 控制）
+        self.anchor_forward: Optional[Any] = None
         if state is not None:
             self.load_state_dict(state)
+        # 编译放在最后：权重/优化器状态就绪后再固定形状 warmup（计时之外）
+        if compile_train_mode(getattr(self.config, "compile_train", 0)) > 0:
+            self.train_forward = build_train_forward(self.model, self.config)
 
     # -- KL anchor ---------------------------------------------------------
     def set_anchor(self) -> None:
@@ -66,19 +81,35 @@ class PPOTrainer:
         for p in self.anchor_model.parameters():
             p.requires_grad_(False)
         self.extra["anchor_set"] = True
+        self.anchor_forward = None
+        if compile_train_mode(getattr(self.config, "compile_train", 0)) > 0:
+            self.anchor_forward = build_train_forward(
+                self.anchor_model, self.config, minibatch=ANCHOR_CHUNK,
+                need_aux=False, use_amp=self._anchor_use_amp(),
+                warmup_backward=False, verbose=False)
 
     def clear_anchor(self) -> None:
         self.anchor_model = None
+        self.anchor_forward = None
         self.extra["anchor_set"] = False
 
-    def _anchor_logp(self, batch: PPOBatch, chunk: int = 4096) -> Any:
+    def _anchor_use_amp(self) -> bool:
+        """anchor 参考前向是否走 autocast：需要 anchor_amp + amp=bf16 + CUDA。"""
+        amp = str(getattr(self.config, "amp", "off")).strip().lower()
+        return (bool(getattr(self.config, "anchor_amp", False))
+                and amp in ("bf16", "bfloat16")
+                and self.device.type == "cuda")
+
+    def _anchor_logp(self, batch: PPOBatch, chunk: int = ANCHOR_CHUNK) -> Any:
         """整个 batch 上的 anchor masked log-prob，形状 ``[n, 245]``（no_grad）。"""
         torch = _torch()
         if self.anchor_model is None:
             raise RuntimeError("anchor_coef>0 但未 set_anchor()")
         outs = []
         device = self.device
-        with torch.no_grad():
+        amp_ctx = (torch.autocast("cuda", dtype=torch.bfloat16)
+                   if self._anchor_use_amp() else contextlib.nullcontext())
+        with torch.no_grad(), amp_ctx:
             for start in range(0, len(batch), int(chunk)):
                 sl = slice(start, start + int(chunk))
                 x = torch.from_numpy(
@@ -87,7 +118,9 @@ class PPOTrainer:
                     np.ascontiguousarray(batch.cards[sl].astype(np.int64))).to(device)
                 m = torch.from_numpy(
                     np.ascontiguousarray(batch.masks[sl].astype(bool))).to(device)
-                out = forward_model(self.anchor_model, x, c, m)
+                out = (self.anchor_forward.main(x, c, m)
+                       if self.anchor_forward is not None
+                       else forward_model(self.anchor_model, x, c, m))
                 logits, _rank_logits, _scalar = split_model_outputs(out)
                 outs.append(masked_log_softmax_torch(logits, m))
         return torch.cat(outs, dim=0) if len(outs) > 1 else outs[0]
@@ -99,12 +132,15 @@ class PPOTrainer:
             anchor_logp = self._anchor_logp(batch)
         stats = train_ppo(self.model, batch, self.config,
                           optimizer=self.optimizer, rng=self.rng,
-                          anchor_logp=anchor_logp)
+                          anchor_logp=anchor_logp,
+                          train_forward=self.train_forward)
         self.scheduler.step()
         self.updates += 1
         stats["trainer_updates"] = int(self.updates)
         stats["lr"] = float(self.optimizer.param_groups[0]["lr"])
         stats["anchor_coef"] = float(self.config.anchor_coef)
+        if self.anchor_forward is not None:
+            stats["anchor_compile"] = self.anchor_forward.describe()
         return stats
 
     def state_dict(self) -> Dict[str, Any]:
@@ -164,4 +200,4 @@ class PPOTrainer:
                    max_updates=int(state.get("max_updates", 100000)), state=state)
 
 
-__all__ = ["PPOTrainer"]
+__all__ = ["PPOTrainer", "ANCHOR_CHUNK"]

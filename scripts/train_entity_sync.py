@@ -9,6 +9,10 @@
    始终由同一个版本采集 → 滞后恒为 1，可断言；
 3. 多线程采集（`--workers > 1 --processes 1`）：老路径，保留兼容。
 
+评测：`--eval-every-decisions N` 到点做 C0；`--eval-async 1` 时评测交给独立子进程
+（默认 `--eval-device cuda:4`），主循环不等待，结果由轻量线程追加到
+`eval/history.json`；`--eval-async 0` 保持旧的同步阻塞行为。
+
 日志：`history.jsonl`（逐 iteration 追加，O(1)；不再全量重写 `history.json`），
 `summary.json` 只存聚合信息；`--trainer-state` 可精确续训。
 
@@ -26,6 +30,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional, Tuple
@@ -55,6 +60,29 @@ from hsbg.az.train.process_pool import ProcessActorPool  # noqa: E402
 from hsbg.az.train.runlog import (append_record, read_run, slim_collect,  # noqa: E402
                                   write_header, write_summary)
 from hsbg.az.train.seq_aux import SeqCoefSchedule  # noqa: E402
+from scripts.async_eval import (AsyncEvalRunner, parse_c0_result,  # noqa: E402
+                                write_json_atomic)
+
+
+def _gpu_used_mib() -> Dict[int, int]:
+    """``nvidia-smi`` 查询每张 GPU 已用显存（MiB）；查询失败返回 {}（=不做剔除）。"""
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=index,memory.used",
+             "--format=csv,noheader,nounits"],
+            text=True, timeout=10, stderr=subprocess.DEVNULL)
+    except Exception:  # noqa: BLE001
+        return {}
+    used: Dict[int, int] = {}
+    for line in out.splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 2:
+            continue
+        try:
+            used[int(parts[0])] = int(float(parts[1]))
+        except ValueError:
+            continue
+    return used
 
 
 def _atomic_torch_save(obj: Any, path: str) -> None:
@@ -133,6 +161,13 @@ def main() -> int:
                     help="1=worker 侧采样（省 245 维 prior 回传）；0=旧路径（A/B 用）")
     ap.add_argument("--amp", default="off", choices=["off", "bf16"],
                     help="PPO 前向/反向精度；bf16 实测 2.03×（loss 侧仍 fp32）")
+    ap.add_argument("--compile-train", type=int, default=0, choices=[0, 1, 2],
+                    help="训练侧 torch.compile（只 learner 的 fwd+bwd + anchor 参考前向）："
+                         "0=关（默认）1=默认模式 2=max-autotune。失败自动回退 eager；"
+                         "叶前向/自对弈/评测路径不受影响（docs/TRAINING_COMPILE.md）")
+    ap.add_argument("--anchor-amp", type=int, default=0, choices=[0, 1],
+                    help="1=anchor 参考前向也用 --amp 的精度（bf16，实测约 1.8×）；"
+                         "只影响 KL 正则项参考分布，默认 0=旧行为 fp32")
     ap.add_argument("--pi-coef", type=float, default=0.1)
     # ---- 动作序列辅助任务（默认关闭，见 docs/ACTION_SEQUENCE_AUX.md）----
     ap.add_argument("--seq-coef", type=float, default=0.0,
@@ -154,7 +189,13 @@ def main() -> int:
     ap.add_argument("--processes", type=int, default=1,
                     help=">1 时用进程级 actor pool（每进程绑定一张 GPU）")
     ap.add_argument("--gpus", default="",
-                    help="actor pool 使用的物理 GPU 序号，如 0,5,6,7（不要设 CUDA_VISIBLE_DEVICES）")
+                    help="actor pool 使用的物理 GPU 序号（任意列表，如 1,3,0,4,5；"
+                         "不要设 CUDA_VISIBLE_DEVICES）")
+    ap.add_argument("--gpu-free-check", type=int, default=1,
+                    help="1=启动 actor pool 前用 nvidia-smi 剔除已被占用的 GPU"
+                         "（邻居抢占；0=不检查）")
+    ap.add_argument("--gpu-free-mib", type=int, default=1024,
+                    help="--gpu-free-check 阈值：已用显存 > 该值（MiB）视为被占用")
     ap.add_argument("--threads", type=int, default=16,
                     help="每个 actor 进程内的采集线程数（每轮 games 应 >= processes*threads）")
     ap.add_argument("--pipeline", type=int, default=0,
@@ -178,8 +219,16 @@ def main() -> int:
     ap.add_argument("--eval-games", type=int, default=512)
     ap.add_argument("--eval-seats", type=int, default=8)
     ap.add_argument("--eval-seed-base", type=int, default=420000)
+    ap.add_argument("--eval-async", type=int, default=0,
+                    help="1=异步评测：ckpt 交给独立子进程跑 c0_gate，主循环不等待"
+                         "（并发上限 1；默认 0=同步阻塞，旧行为）")
     ap.add_argument("--eval-device", default="",
-                    help="评测用的 GPU（默认跟随 --device；建议用没跑 actor 的卡）")
+                    help="评测用的 GPU（同步默认跟随 --device；异步默认 cuda:4）")
+    ap.add_argument("--eval-drain", type=int, default=0,
+                    help="1=训练退出时等待在跑的异步评测完成（默认 0=直接终止，不拖 wall）")
+    ap.add_argument("--eval-stop-mean-rank", type=float, default=0.0,
+                    help="评测 mean_rank <= 该值时在下一个 iteration 边界停止训练"
+                         "（0=关闭；异步/同步共用，结果到达时判定）")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--checkpoint", default="")
     ap.add_argument("--trainer-state", default="")
@@ -279,6 +328,8 @@ def main() -> int:
         grad_accum=int(args.grad_accum), amp=str(args.amp),
         device=str(args.device), seed=int(args.seed),
         log_every=int(args.log_every),
+        compile_train=int(args.compile_train),
+        anchor_amp=bool(int(args.anchor_amp)),
         # 动作序列辅助任务：初始系数由 ramp 在 dec=0 处给出（无 ramp 时=--seq-coef）
         seq_coef=(seq_schedule.coef(0) if seq_enabled else 0.0),
         seq_coef_ramp=(str(args.seq_coef_ramp) if seq_enabled else ""))
@@ -318,22 +369,74 @@ def main() -> int:
         print(f"[anchor] beta={args.anchor_beta} for first "
               f"{int(args.anchor_iterations)} iters (stage-start policy frozen)",
               flush=True)
+    if int(args.compile_train) > 0:
+        tf = getattr(trainer, "train_forward", None)
+        if tf is None:
+            print("[compile] train compile 请求但未生效（回退 eager）", flush=True)
+        else:
+            print(f"[compile] train compile={int(args.compile_train)} "
+                  f"active={tf.active} main={tf.main_compiled} aux={tf.aux_compiled} "
+                  f"warmup={tf.warmup_seconds:.1f}s"
+                  + (f" warnings={tf.warnings}" if tf.warnings else ""), flush=True)
+        af = getattr(trainer, "anchor_forward", None)
+        if af is not None:
+            print(f"[compile] anchor compile active={af.active} "
+                  f"warmup={af.warmup_seconds:.1f}s", flush=True)
 
     # ---- 周期 C0 评测（监控曲线；avg rank<=3.0 触发镜像库）----
+    # 同步（--eval-async 0，旧行为）在主循环里阻塞；异步（1）把 ckpt 丢给独立子进程，
+    # 由轻量线程回收结果。两条路径共用 _post_eval 做 TRIGGER / 早停判定。
     evals: list = []
     eval_dir = os.path.join(args.out, "eval")
+    eval_async = bool(int(args.eval_async))
+    eval_device = str(args.eval_device or ("cuda:4" if eval_async else args.device))
+    eval_stop = threading.Event()
+    eval_state: Dict[str, Any] = {"stop_reason": ""}
+    eval_history_lock = threading.Lock()
 
-    def _run_eval(decisions_done: int) -> None:
+    def _save_eval_ckpt(decisions_done: int) -> Tuple[str, str]:
+        """落一份评测专用 ckpt（与训练权重解耦，子进程只读它）。"""
         os.makedirs(eval_dir, exist_ok=True)
         tag = f"{int(decisions_done):09d}"
         ckpt = os.path.join(eval_dir, f"ckpt_{tag}.pt")
         save_checkpoint(model, ckpt, meta={**meta, "arch": arch},
                         norm_mean=norm_mean, norm_std=norm_std)
+        return tag, ckpt
+
+    def _post_eval(rec: Dict[str, Any]) -> None:
+        """评测结果后处理（同步/异步共用，异步时在 monitor 线程执行）。"""
+        mr = rec.get("mean_rank")
+        if mr is None:
+            return
+        mr = float(mr)
+        if mr <= 3.0:
+            trig = os.path.join(args.out, "TRIGGER_library.json")
+            write_json_atomic(trig, {"decisions": int(rec["decisions"]),
+                                     "mean_rank": mr,
+                                     "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z")})
+            print(f"[TRIGGER] avg rank {mr:.3f} <= 3.0 -> "
+                  f"构建高质量对局镜像库 ({trig})", flush=True)
+        th = float(args.eval_stop_mean_rank)
+        if th > 0.0 and mr <= th:
+            eval_state["stop_reason"] = (f"mean_rank={mr:.4f} <= {th:.4f} "
+                                         f"@dec={int(rec['decisions'])}")
+            eval_stop.set()
+            print(f"[eval] stop requested: {eval_state['stop_reason']} "
+                  f"-> 下一个 iteration 边界停止", flush=True)
+
+    def _append_eval_history(rec: Dict[str, Any]) -> None:
+        with eval_history_lock:
+            evals.append(rec)
+            write_json_atomic(os.path.join(eval_dir, "history.json"), {"evals": evals})
+
+    def _run_eval(decisions_done: int) -> None:
+        """同步评测（旧行为）：主循环阻塞到 c0_gate 结束。"""
+        tag, ckpt = _save_eval_ckpt(decisions_done)
         out_json = os.path.join(eval_dir, f"c0_{tag}.json")
         log_path = os.path.join(eval_dir, f"c0_{tag}.log")
         cmd = [sys.executable, os.path.join(ROOT, "scripts", "c0_gate.py"),
                "--checkpoint", ckpt, "--arch", str(arch),
-               "--device", str(args.eval_device or args.device),
+               "--device", eval_device,
                "--games", str(int(args.eval_games)), "--seats", str(int(args.eval_seats)),
                "--seed-base", str(int(args.eval_seed_base)), "--smoke",
                "--bootstrap", "1000", "--out", out_json]
@@ -341,42 +444,51 @@ def main() -> int:
         print(f"[eval] dec={int(decisions_done)} start games={args.eval_games}", flush=True)
         with open(log_path, "w", encoding="utf-8") as lf:
             rc = subprocess.call(cmd, cwd=ROOT, stdout=lf, stderr=lf)
-        rec: Dict[str, Any] = {"decisions": int(decisions_done), "rc": int(rc),
-                               "seconds": round(time.time() - t_eval, 1)}
-        try:
-            with open(out_json, encoding="utf-8") as f:
-                d = json.load(f)
-            p = d["panels"][0]
-            rec.update({
-                "mean_rank": float(p["model_mean_rank"]),
-                "bot_mean_rank": float(p["bot_mean_rank"]),
-                "top4": float(p["model_top4"]), "win": float(p["model_win"]),
-                "mean_diff": float(p["mean_diff"]),
-                "ci_low": float(p["ci_low"]), "ci_high": float(p["ci_high"]),
-                "illegal": int(p["illegal"]), "truncated": int(p["truncated"]),
-                "passed": bool(d.get("passed")),
-            })
-        except Exception as exc:  # noqa: BLE001
-            rec["error"] = repr(exc)
-        evals.append(rec)
-        with open(os.path.join(eval_dir, "history.json"), "w", encoding="utf-8") as f:
-            json.dump({"evals": evals}, f, ensure_ascii=False, indent=2)
+        rec = parse_c0_result(decisions_done, rc, time.time() - t_eval, out_json)
+        _append_eval_history(rec)
         if rec.get("mean_rank") is not None:
             print(f"[eval] dec={int(decisions_done)} mean_rank={rec['mean_rank']:.3f} "
                   f"bot={rec['bot_mean_rank']:.3f} top4={rec['top4']:.3f} "
                   f"win={rec['win']:.3f} ({rec['seconds']}s)", flush=True)
-            if rec["mean_rank"] <= 3.0:
-                trig = os.path.join(args.out, "TRIGGER_library.json")
-                with open(trig, "w", encoding="utf-8") as f:
-                    json.dump({"decisions": int(decisions_done),
-                               "mean_rank": rec["mean_rank"],
-                               "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z")}, f,
-                              ensure_ascii=False, indent=2)
-                print(f"[TRIGGER] avg rank {rec['mean_rank']:.3f} <= 3.0 -> "
-                      f"构建高质量对局镜像库 ({trig})", flush=True)
         else:
             print(f"[eval] dec={int(decisions_done)} FAILED rc={rc} "
                   f"error={rec.get('error')} log={log_path}", flush=True)
+        _post_eval(rec)
+
+    # 异步评测：独立子进程 + 一个轻量回收线程（并发上限 1，提交本身只花 ~0.3s 存 ckpt）
+    eval_runner: Optional[AsyncEvalRunner] = None
+    if eval_async:
+        eval_runner = AsyncEvalRunner(
+            out_dir=args.out, root=ROOT, arch=arch, device=eval_device,
+            games=int(args.eval_games), seats=int(args.eval_seats),
+            seed_base=int(args.eval_seed_base), on_result=_post_eval)
+        print(f"[eval-async] on：device={eval_device} games={args.eval_games} "
+              f"seats={args.eval_seats}；主循环不等待（并发上限 1，"
+              f"drain={int(args.eval_drain)}）", flush=True)
+        if int(args.eval_every_decisions) <= 0:
+            print("[warn] --eval-async 1 但 --eval-every-decisions=0：不会触发评测",
+                  flush=True)
+        if str(eval_device).startswith("cuda") and int(args.gpu_free_check):
+            try:
+                _eidx = int(str(eval_device).split(":")[1]) if ":" in str(eval_device) else 0
+            except ValueError:
+                _eidx = None
+            _used = _gpu_used_mib()
+            if _eidx is not None and _used.get(_eidx, 0) > int(args.gpu_free_mib):
+                print(f"[warn] 评测卡 {eval_device} 已被占用 "
+                      f"{_used[_eidx]}MiB（>{int(args.gpu_free_mib)}MiB）：评测子进程可能 "
+                      f"OOM/变慢，建议换 --eval-device（如 cuda:6/7）", flush=True)
+
+    def _submit_eval(decisions_done: int) -> None:
+        """异步提交：只保存 ckpt + spawn，不等待（跳过时 runner 自己记 eval_skipped）。
+
+        已有一个评测在跑时**不落 61MB ckpt**：直接让 runner 记一条 skipped。
+        """
+        if eval_runner.running():
+            eval_runner.submit(decisions_done, "")
+            return
+        _tag, ckpt = _save_eval_ckpt(decisions_done)
+        eval_runner.submit(decisions_done, ckpt)
 
     search_fn = search_cfg = None
     if int(args.sims) > 0:
@@ -401,6 +513,29 @@ def main() -> int:
             print("[error] 请 unset CUDA_VISIBLE_DEVICES：--gpus 用物理序号", file=sys.stderr)
             return 2
         gpus = [int(x) for x in str(args.gpus).split(",") if x.strip()]
+        # 邻居抢占检测：显存已用 > 阈值（默认 1 GiB）的卡从 actor 列表剔除并 warn。
+        # 失败（nvidia-smi 不可用）时不做剔除，按用户给的列表跑。
+        if int(args.gpu_free_check):
+            used = _gpu_used_mib()
+            if used:
+                threshold = int(args.gpu_free_mib)
+                busy = [g for g in gpus if used.get(g, 0) > threshold]
+                if busy:
+                    detail = ", ".join(f"cuda:{g}={used.get(g)}MiB" for g in busy)
+                    warn = (f"[warn] GPU 已被占用（>{threshold}MiB，疑似邻居进程）：{detail}"
+                            f" -> 从 actor 列表剔除")
+                    print(warn, flush=True)
+                    gpus = [g for g in gpus if g not in busy]
+                if not gpus:
+                    print("[error] --gpu-free-check 后没有可用 GPU（可用 --gpu-free-check 0 "
+                          "跳过检查）", file=sys.stderr)
+                    return 2
+        per_gpu = {g: sum(1 for k in range(int(args.processes)) if gpus[k % len(gpus)] == g)
+                   for g in gpus}
+        print(f"[pool] processes={int(args.processes)} gpus={gpus} "
+              f"workers/gpu={per_gpu}", flush=True)
+        if len(gpus) != len(set(gpus)):
+            print(f"[warn] --gpus 有重复项: {gpus}", flush=True)
         save_checkpoint(model, pool_ckpt, meta={**meta, "arch": arch},
                         norm_mean=norm_mean, norm_std=norm_std)
         pool = ProcessActorPool(
@@ -411,6 +546,15 @@ def main() -> int:
             max_wait_ms=float(args.leaf_wait_ms),
             tmpdir=os.path.join(args.out, "_proc_tmp"))
         print(f"[pool] {json.dumps(pool.describe(), ensure_ascii=False)}", flush=True)
+        if eval_async and str(eval_device).startswith("cuda"):
+            try:
+                _eidx = int(str(eval_device).split(":")[1]) if ":" in str(eval_device) else 0
+            except ValueError:
+                _eidx = None
+            if _eidx is not None and _eidx in gpus:
+                print(f"[warn] 评测卡 {eval_device} 同时是 actor 卡：异步评测不会阻塞主循环，"
+                      f"但会与 actor 抢算力（想完全隔离可换 --eval-device cuda:6/7）",
+                      flush=True)
     batch_server = None
     evaluator = None
     if pool is None and args.workers > 1:
@@ -556,6 +700,14 @@ def main() -> int:
             if last_len > 0 and (deadline - time.time()) < max(60.0, last_len):
                 print("[loop] remaining time < last iteration; stop", flush=True)
                 break
+            if eval_stop.is_set():
+                # 异步评测结果到达后置 flag：只在下个 iteration 边界停，已完成的 iteration
+                # 一定保留（history/snapshot 都已落盘）。
+                print(f"[loop] eval stop requested ({eval_state['stop_reason']}); "
+                      f"stop at iteration boundary", flush=True)
+                if pending is not None:
+                    pending.cancel()
+                break
             _history_s_prev = locals().get("_history_s", 0.0)
             iter_start = time.time()
             _tl = {"t_iter_start": time.monotonic()}
@@ -633,7 +785,8 @@ def main() -> int:
                    "batch_server": (dict(batch_server.stats) if batch_server is not None else None),
                    "seconds": time.time() - t0}
             history.append(rec)
-            print(f"[iter {i}] samples={len(batch)} updates={stats['trainer_updates']} "
+            print(f"[iter {i}] ts={time.strftime('%H:%M:%S')} samples={len(batch)} "
+                  f"updates={stats['trainer_updates']} "
                   f"lr={stats['lr']:.3g} total={stats['epochs'][-1]['total']:.4f}"
                   + (f" lag={lag} ratio={pre_ratio:.3f}" if pipeline_on else "")
                   + (f" seq={stats.get('seq_loss', 0.0):.4f}"
@@ -688,7 +841,12 @@ def main() -> int:
 
             cum_decisions += int(slim.get("decisions", 0))
             if cum_decisions >= next_eval:
-                _run_eval(cum_decisions)
+                if eval_runner is not None:
+                    # 异步：只花 ~0.3s 存 ckpt + spawn；评测在 cuda:4 独立跑，主循环继续
+                    if not eval_stop.is_set():
+                        _submit_eval(cum_decisions)
+                else:
+                    _run_eval(cum_decisions)
                 while next_eval <= cum_decisions:
                     next_eval += int(args.eval_every_decisions)
             last_len = time.time() - iter_start
@@ -708,6 +866,9 @@ def main() -> int:
             batch_server.close()
         if pool is not None:
             pool.close()
+        if eval_runner is not None:
+            # 默认直接终止在跑的评测（不拖 wall）；--eval-drain 1 才等它落 history
+            eval_runner.close(drain=bool(int(args.eval_drain)))
 
     # 收尾：导出最终模型（评测/续训都要用）
     try:
@@ -720,10 +881,17 @@ def main() -> int:
         print(f"[warn] final save failed: {exc!r}", flush=True)
     summary = {"iterations": i, "updates": trainer.updates,
                "elapsed_s": time.time() - t0, "config": vars(args),
-               "history_len": len(history), "evals": evals,
+               "history_len": len(history),
+               "evals": (eval_runner.results_snapshot() if eval_runner is not None
+                         else evals),
                "pipeline": {"enabled": pipeline_on,
                             "lag_max_allowed": 1},
                "last_records": history[-5:]}
+    if eval_runner is not None:
+        summary["eval_async"] = eval_runner.stats()
+        summary["evals_skipped"] = list(eval_runner.skipped)
+    if eval_state["stop_reason"]:
+        summary["eval_stop_reason"] = eval_state["stop_reason"]
     if seq_enabled:
         # 动作序列辅助任务：ramp 终点与累计 decisions（默认关闭时 summary 不变）
         summary["seq"] = {**seq_schedule.describe(),

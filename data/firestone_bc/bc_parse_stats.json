@@ -1,0 +1,507 @@
+{
+  "generated_at": "2026-10-29T13:30:23+0800",
+  "source": {
+    "root": "C:\\Users\\letgao\\AppData\\Local\\Temp\\fs_extract\\all\\firestone-full-replays\\players",
+    "cards": "C:\\Users\\letgao\\AppData\\Local\\Temp\\fs_extract\\cards.json",
+    "card_db_count": 3983,
+    "games_found": 1000,
+    "games_parsed": 1000,
+    "games_failed": 0
+  },
+  "samples_total": 308944,
+  "per_game_samples": {
+    "min": 47,
+    "max": 1078,
+    "mean": 308.9,
+    "total": 308944
+  },
+  "by_action_type": {
+    "play_minion": 76584,
+    "play_spell": 57337,
+    "sell": 51357,
+    "reroll": 40707,
+    "buy_minion": 24035,
+    "buy_spell": 13709,
+    "end_turn": 12159,
+    "reposition": 11655,
+    "triple": 5734,
+    "hero_power": 5317,
+    "upgrade": 4819,
+    "dark_gift": 2862,
+    "freeze": 2669
+  },
+  "by_turn": {
+    "1": 3852,
+    "2": 2962,
+    "3": 6674,
+    "4": 7224,
+    "5": 8543,
+    "6": 12714,
+    "7": 17270,
+    "8": 27038,
+    "9": 37126,
+    "10": 38143,
+    "11": 38592,
+    "12": 36914,
+    "13": 35655,
+    "14": 22421,
+    "15": 9815,
+    "16": 2612,
+    "17": 816,
+    "18": 108,
+    "19": 11
+  },
+  "action_mapping": {
+    "end_turn": {
+      "samples": 12159,
+      "mappable_slot": 12159,
+      "index_expr": "0",
+      "mappable": true,
+      "note": "EndTurn"
+    },
+    "reroll": {
+      "samples": 40707,
+      "mappable_slot": 40707,
+      "index_expr": "1",
+      "mappable": true,
+      "note": "Refresh"
+    },
+    "freeze": {
+      "samples": 2669,
+      "mappable_slot": 2669,
+      "index_expr": "2",
+      "mappable": true,
+      "note": "Freeze（整馆 toggle）"
+    },
+    "upgrade": {
+      "samples": 4819,
+      "mappable_slot": 4819,
+      "index_expr": "3",
+      "mappable": true,
+      "note": "Upgrade"
+    },
+    "hero_power": {
+      "samples": 5317,
+      "mappable_slot": 5317,
+      "index_expr": "4+slot",
+      "mappable": true,
+      "note": "HeroPower(slot)，slot 0..1"
+    },
+    "dark_gift": {
+      "samples": 2862,
+      "mappable_slot": 2862,
+      "index_expr": "6",
+      "mappable": true,
+      "note": "DarkGift"
+    },
+    "buy_minion": {
+      "samples": 24035,
+      "mappable_slot": 24035,
+      "index_expr": "8+slot",
+      "mappable": true,
+      "note": "Buy(shop slot 0..7)"
+    },
+    "buy_spell": {
+      "samples": 13709,
+      "mappable_slot": 13709,
+      "index_expr": "8+7",
+      "mappable": true,
+      "note": "Buy(tavern spell slot 7)"
+    },
+    "sell": {
+      "samples": 51357,
+      "mappable_slot": 51357,
+      "index_expr": "16+slot",
+      "mappable": true,
+      "note": "Sell(board slot 0..6)"
+    },
+    "play_minion": {
+      "samples": 76584,
+      "mappable_slot": 63423,
+      "index_expr": "46+hand*8+pos",
+      "mappable": true,
+      "note": "Play{hand 0..9, pos 0..7}"
+    },
+    "play_spell": {
+      "samples": 57337,
+      "mappable_slot": 57322,
+      "index_expr": "46+hand*8+pos",
+      "mappable": true,
+      "note": "Play{hand 0..9, pos 0..7}"
+    },
+    "reposition": {
+      "samples": 11655,
+      "mappable_slot": 11655,
+      "index_expr": "196+from*7+to",
+      "mappable": true,
+      "note": "Move{from 0..6, to 0..6}"
+    },
+    "triple": {
+      "samples": 5734,
+      "mappable_slot": 0,
+      "index_expr": "30+option",
+      "mappable": false,
+      "note": "Choose(option)：选项未知，不可直接映射"
+    },
+    "activate": {
+      "samples": 0,
+      "mappable_slot": 0,
+      "index_expr": "23+slot",
+      "mappable": false,
+      "note": "Activate：回放中未单独标注，未提取"
+    },
+    "magnetize": {
+      "samples": 0,
+      "mappable_slot": 0,
+      "index_expr": "126+...",
+      "mappable": false,
+      "note": "BG 无磁力，不适用"
+    }
+  },
+  "coverage": {
+    "shop_snapshot_ratio": 0.9778,
+    "shop_size_hist": {
+      "0": 235,
+      "1": 1266,
+      "2": 3516,
+      "3": 8395,
+      "4": 17104,
+      "5": 29588,
+      "6": 49428,
+      "7": 74453,
+      "8": 79744
+    },
+    "gold_missing_ratio": 0.0015,
+    "tier_missing_ratio": 0.0015,
+    "health_missing_ratio": 0.0015,
+    "board_empty_ratio": 0.0091,
+    "hand_empty_ratio": 0.0728,
+    "mappable_action_ratio": 0.9388
+  },
+  "card_mapping": {
+    "mentions_total": 6012268,
+    "mentions_exact": 6009406,
+    "mentions_normalized": 0,
+    "mentions_unmapped": 2862,
+    "exact_ratio": 0.9995,
+    "normalized_ratio": 0.9995,
+    "unique_ids": 878,
+    "unique_exact": 877,
+    "unique_normalized": 0,
+    "unique_unmapped": 1,
+    "top_unmapped": [
+      [
+        "BG36_Button_DarkGift",
+        2862
+      ]
+    ]
+  },
+  "errors": [],
+  "elapsed_s": 236.7,
+  "bc_feasibility": {
+    "samples_total": 308944,
+    "games": 1000,
+    "unique_heroes": 206,
+    "mmr_min": 4009,
+    "mmr_max": 15407,
+    "mmr_median": 6280,
+    "card_ok": 308944,
+    "action_ok": 290034,
+    "both": 290034,
+    "card_ok_ratio": 1.0,
+    "action_ok_ratio": 0.9388,
+    "both_ratio": 0.9388,
+    "strict_state_ok": 307085,
+    "strict_state_ratio": 0.994,
+    "strict_both": 288198,
+    "strict_both_ratio": 0.9328,
+    "upper_bound_estimate": 288198,
+    "headroom": {
+      "triple_option_unknown": 5734,
+      "play_minion_hand_slot_missing": 13161
+    },
+    "by_action_type": {
+      "play_minion": {
+        "samples": 76584,
+        "both": 63423,
+        "both_ratio": 0.8281
+      },
+      "play_spell": {
+        "samples": 57337,
+        "both": 57322,
+        "both_ratio": 0.9997
+      },
+      "sell": {
+        "samples": 51357,
+        "both": 51357,
+        "both_ratio": 1.0
+      },
+      "reroll": {
+        "samples": 40707,
+        "both": 40707,
+        "both_ratio": 1.0
+      },
+      "buy_minion": {
+        "samples": 24035,
+        "both": 24035,
+        "both_ratio": 1.0
+      },
+      "buy_spell": {
+        "samples": 13709,
+        "both": 13709,
+        "both_ratio": 1.0
+      },
+      "end_turn": {
+        "samples": 12159,
+        "both": 12159,
+        "both_ratio": 1.0
+      },
+      "reposition": {
+        "samples": 11655,
+        "both": 11655,
+        "both_ratio": 1.0
+      },
+      "triple": {
+        "samples": 5734,
+        "both": 0,
+        "both_ratio": 0.0
+      },
+      "hero_power": {
+        "samples": 5317,
+        "both": 5317,
+        "both_ratio": 1.0
+      },
+      "upgrade": {
+        "samples": 4819,
+        "both": 4819,
+        "both_ratio": 1.0
+      },
+      "dark_gift": {
+        "samples": 2862,
+        "both": 2862,
+        "both_ratio": 1.0
+      },
+      "freeze": {
+        "samples": 2669,
+        "both": 2669,
+        "both_ratio": 1.0
+      }
+    },
+    "shop_by_action_type": {
+      "buy_minion": {
+        "samples": 24035,
+        "shop_nonempty_ratio": 0.9993
+      },
+      "buy_spell": {
+        "samples": 13709,
+        "shop_nonempty_ratio": 0.9992
+      },
+      "reroll": {
+        "samples": 40707,
+        "shop_nonempty_ratio": 0.9985
+      },
+      "sell": {
+        "samples": 51357,
+        "shop_nonempty_ratio": 0.9991
+      },
+      "play_minion": {
+        "samples": 76584,
+        "shop_nonempty_ratio": 0.9992
+      },
+      "play_spell": {
+        "samples": 57337,
+        "shop_nonempty_ratio": 0.9994
+      }
+    },
+    "slot_hist": {
+      "board_slot:0": 1865,
+      "board_slot:1": 2205,
+      "board_slot:2": 4330,
+      "board_slot:3": 15200,
+      "board_slot:4": 13033,
+      "board_slot:5": 5542,
+      "board_slot:6": 9182,
+      "from_slot:0": 730,
+      "from_slot:1": 2369,
+      "from_slot:2": 2304,
+      "from_slot:3": 2117,
+      "from_slot:4": 1921,
+      "from_slot:5": 1467,
+      "from_slot:6": 747,
+      "hand_slot:0": 20395,
+      "hand_slot:1": 19001,
+      "hand_slot:2": 18216,
+      "hand_slot:3": 16477,
+      "hand_slot:4": 14873,
+      "hand_slot:5": 12245,
+      "hand_slot:6": 9677,
+      "hand_slot:7": 6866,
+      "hand_slot:8": 4119,
+      "hand_slot:9": 2249,
+      "play_pos:0": 63147,
+      "play_pos:1": 5378,
+      "play_pos:2": 7415,
+      "play_pos:3": 19324,
+      "play_pos:4": 16567,
+      "play_pos:5": 7483,
+      "play_pos:6": 11186,
+      "shop_slot:0": 5303,
+      "shop_slot:1": 5210,
+      "shop_slot:2": 5392,
+      "shop_slot:3": 5547,
+      "shop_slot:4": 5473,
+      "shop_slot:5": 5517,
+      "shop_slot:6": 5302,
+      "to_slot:0": 2803,
+      "to_slot:1": 2157,
+      "to_slot:2": 1831,
+      "to_slot:3": 1483,
+      "to_slot:4": 1251,
+      "to_slot:5": 1263,
+      "to_slot:6": 867
+    },
+    "turn_sizes": {
+      "1": 3852,
+      "2": 2962,
+      "3": 6674,
+      "4": 7224,
+      "5": 8543,
+      "6": 12714,
+      "7": 17270,
+      "8": 27038,
+      "9": 37126,
+      "10": 38143,
+      "11": 38592,
+      "12": 36914,
+      "13": 35655,
+      "14": 22421,
+      "15": 9815,
+      "16": 2612,
+      "17": 816,
+      "18": 108,
+      "19": 11
+    },
+    "top_action_cards": [
+      [
+        "play_spell|BG20_GEM",
+        16044
+      ],
+      [
+        "triple|TB_BaconShop_Triples_01",
+        5734
+      ],
+      [
+        "dark_gift|BG36_Button_DarkGift",
+        2862
+      ],
+      [
+        "play_minion|BG36_201",
+        2464
+      ],
+      [
+        "play_spell|BG35_911",
+        2272
+      ],
+      [
+        "play_spell|BG31_890",
+        1524
+      ],
+      [
+        "play_spell|EBG_Spell_014",
+        1498
+      ],
+      [
+        "play_spell|BG31_893",
+        1433
+      ],
+      [
+        "play_spell|BG28_503",
+        1303
+      ],
+      [
+        "play_spell|BG28_888",
+        1237
+      ],
+      [
+        "play_spell|BG28_810",
+        1201
+      ],
+      [
+        "play_spell|BG28_800",
+        1088
+      ],
+      [
+        "play_minion|BG36_370",
+        1066
+      ],
+      [
+        "play_spell|BG28_518",
+        1040
+      ],
+      [
+        "play_minion|BG30_123",
+        1038
+      ],
+      [
+        "play_spell|BG33_814",
+        1025
+      ],
+      [
+        "play_spell|BG34_689",
+        1015
+      ],
+      [
+        "play_spell|BG28_827",
+        1001
+      ],
+      [
+        "play_spell|BG33_815",
+        1000
+      ],
+      [
+        "play_minion|BG28_582",
+        998
+      ],
+      [
+        "sell|BG30_123",
+        961
+      ],
+      [
+        "play_spell|BG28_604",
+        956
+      ],
+      [
+        "play_minion|BG27_084",
+        903
+      ],
+      [
+        "play_minion|BG36_345",
+        900
+      ],
+      [
+        "play_spell|EBG_Spell_038",
+        900
+      ],
+      [
+        "play_minion|BG36_511",
+        890
+      ],
+      [
+        "play_minion|BG28_550",
+        889
+      ],
+      [
+        "sell|BG27_084",
+        883
+      ],
+      [
+        "play_minion|BG36_206",
+        877
+      ],
+      [
+        "play_spell|BG33_812",
+        875
+      ]
+    ]
+  }
+}
