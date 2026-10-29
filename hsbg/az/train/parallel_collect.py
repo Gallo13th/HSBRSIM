@@ -422,8 +422,15 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                 st["done"] = True
                 st["truncated"] = int(not g.is_over())
                 continue
+            # 缺口：最后一个 bot 动作可能已推进到新回合，while 条件随即让 learner 变为可行动而退出，
+            # 于是 learner 会在"注入之前"做出新回合的第一个决策。这里在交给 learner 前无条件再注入一次
+            # （_maybe_mirror 按 turn 幂等），并重新判断座位状态。
+            _maybe_mirror(st)
+            if g.is_over() or st["steps"] >= max_steps:
+                st["done"] = True
+                st["truncated"] = int(not g.is_over())
+                continue
             if not g.needs_action(seat):
-                # 没有任何座位需要动作但局未结束：上层语义按截断处理（与 _one_game 一致）
                 st["done"] = True
                 st["truncated"] = int(not g.is_over())
                 continue
