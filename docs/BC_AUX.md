@@ -217,16 +217,20 @@ class_w_c  = inv_c / mean_{c: count_c>0}(inv_c)
 | `bc_mmr_min` | 6000 | MMR 下限 |
 | `bc_mmr_boost` | 1.0 | 6000–8000 线性增强上限（1=关闭） |
 | `bc_samples_path` | `""` | 空=仓库默认 `data/firestone_bc/bc_samples.jsonl.gz` |
-| `bc_batch` | 256 | 每个 PPO minibatch 抽取/编码的 BC 条数 |
+| `bc_batch` | **128** | 每个 PPO 微批抽取/编码的 BC 条数（固定形状编译；原 256） |
+| `bc_every` | 1 | 每 N 个 PPO 微批做一次 BC；N>1 时该步权重乘 N（等效平均权重） |
+| `bc_compile` | 1 | `compile_train>0` 时把 BC 批次单独 `torch.compile`；0=保持 eager（A/B 基线） |
 
 ### 6.2 训练流程
 
 1. `PPOTrainer.__init__`：`bc_enabled`（常数系数>0 或 ramp 有正系数）时预加载一次
    `BCSamples`（CLI 预加载后通过 `bc_pool=` 注入，避免重复读 12 MB）；失败/空池
    **warn 一次**，自动 `bc_coef=0, bc_coef_ramp=""`；
-2. `train_ppo` 每个 minibatch：`rng.choice(池, min(bc_batch, n_pool))` -> `bc_obs_batch`
-   -> 额外一次 `forward_bc`（同一张图同时出 policy logits 与 card logits）
-   -> 分层 BC loss -> `total += bc_coef * (w_type*CE_type + w_card*CE_card)`；
+2. `train_ppo` 每个 PPO 微批（`bc_every>1` 时每 N 个微批）：从 BC 池用**独立 RNG**
+   抽 `min(bc_batch, n_pool)` 条 -> `bc_obs_batch` -> 额外一次 `forward_bc`（同一张图
+   同时出 policy logits 与 card logits；`compile_train>0` 且 `bc_compile=1` 时走
+   **单独编译的固定 `bc_batch` 形状图**）-> 分层 BC loss ->
+   `total += bc_coef*N * (w_type*CE_type + w_card*CE_card)`（跳过步不执行、不占开销）；
 3. 与 PPO/seq 共用同一次 `backward()`，不单独 `optimizer.step()`；
 4. stats 增加 `bc_loss` / `bc_type_loss` / `bc_card_loss` / `bc_coef` / `bc_samples` /
    `bc_pool_samples` / `bc_pool`（仅 bc 真正启用时）；`[ppo] step/epoch` 与
@@ -507,10 +511,10 @@ CE_type = 样本权重（MMR × 类型 class-balanced）加权的 9 类 CE
 
 ```text
 total = ppo + seq + bc_coef * (bc_type_weight * CE_type + bc_card_weight * CE_card)
-默认：bc_type_weight=1.0，bc_card_weight=0.5，bc_batch=256，bc_coef=0（关闭）
-CLI：--bc-type-weight / --bc-card-weight / --bc-batch / --bc-coef / --bc-coef-ramp
-stats：bc_loss, bc_type_loss, bc_card_loss, bc_coef, bc_samples,
-       bc_type_weight, bc_card_weight（仅 bc 启用时）
+默认：bc_type_weight=1.0，bc_card_weight=0.5，bc_batch=128，bc_every=1，bc_coef=0（关闭）
+CLI：--bc-type-weight / --bc-card-weight / --bc-batch / --bc-every / --bc-coef / --bc-coef-ramp
+stats：bc_loss, bc_type_loss, bc_card_loss, bc_coef, bc_coef_effective, bc_samples,
+       bc_every, bc_steps, bc_type_weight, bc_card_weight（仅 bc 启用时）
 ```
 
 `bc_coef=0` 时**不构建** `card_head`（模型参数量、前向、checkpoint 与旧版逐位一致）；
@@ -587,3 +591,121 @@ ramp 建议（按累计 decisions 的进度）：
    （说明 card_head 没学到东西 / 标签映射失败率异常）；
 2. `bc_card_loss` 远低于 `ln(3983)` 但 `bc_type_loss` 升高（两层梯度冲突）；
 3. 其余沿用 §9 的 C0 / KL / entropy / 合法率判据。
+
+---
+
+## 12. 训练侧编译、`--bc-every` 与开销 A/B（2026-10-29）
+
+### 12.1 接线
+
+- `bc_batch` 默认 **128**（原 256）；`bc_every` 默认 1；`bc_compile` 默认 1。
+- `TrainForward` 为 BC 批次单独编译一张**固定 `bc_batch` 形状**的图（BC 批次与 PPO
+  minibatch 1024 不同，复用主图会触发重编译）。warmup 与 main/aux 一起做；失败只
+  warn 一次并永久回退 eager；`compile_train=0` 或 `bc_compile=0` 时行为与旧版一致
+  （BC 走 eager `forward_bc_model`）。
+- `--bc-every N`：每 N 个 PPO **微批**做一次 BC（一个 iteration 通常 ~40 个微批），
+  跳过步不 `bc_obs_batch`、不 `forward_bc`、不进 `total`。该步系数严格折算为
+  `bc_coef_eff = bc_coef * m_total / n_bc`（`m_total = epochs*ceil(n/minibatch)`，
+  `n_bc = ceil(m_total/N)`），因此 `n_bc * bc_coef_eff = m_total * bc_coef`：无论 N 是否
+  整除微批数，BC 的总权重都与每步 `bc_coef` 等价。**不是**按外迭代跳整轮（那样 wall
+  会双峰、峰值不变）。
+- BC 采样使用**独立 RNG**（`PPOTrainer.bc_rng`，进 `trainer.pt`），不扰动 PPO 的
+  permutation/采样；`bc_coef=0` 与所有跳过步对其他指标逐位无影响（单测
+  `tests/test_bc_compile.py`）。
+- stats 新增：`bc_every` / `bc_steps` / `bc_coef_effective`，以及
+  `compile.bc_compiled/bc_batch/bc_calls/bc_eager_calls`；启动日志
+  `[ppo] train compile ... bc=on(B=128)`。
+
+### 12.2 A/B：任务指定规模（`--processes 2 --games 64 --iterations 8`，cuda:7）
+
+同 checkpoint `runs/champion_c0_1975.pt`、`--compile-train 1 --amp bf16
+--minibatch 1024 --grad-accum 8 --seq-coef 0.05 --bc-coef 5e-4 --bc-batch 128`
+（镜像 3 席 p0.3 + 人类 2 席 p0.15；中位数 8 iter）：
+
+| arm | BC | `ppo_s` 中位 | wall/iter 中位 | dec/s 中位 | `bc_type_loss` | `bc_card_loss` |
+|---|---|---:|---:|---:|---:|---:|
+| arm1 | 128 / eager / every1 | 2.71 s | 5.87 s | 2424 | 14.3724 | 8.2639 |
+| arm2 | 128 / compiled / every1 | **2.59 s** | 5.74 s | 2473 | 14.3757 | 8.2638 |
+| arm3 | 128 / compiled / every2 | **2.27 s** | 5.88 s | 2399 | 14.1719 | 8.2637 |
+
+- arm2/arm3 都远低于验收线 5.5 s；该规模下 collect（~5.7 s）主导 wall，所以 wall/dec/s
+  差异在噪声内，**看 `ppo_s`**：编译 −4%，再叠加 every2 −12%。
+- 首 iter（含 inductor 首跑/allocator 预热，warmup 在计时外）约 5.6–6.2 s，其余
+  2.0–2.9 s；**下文生产 batch 用中位数**。
+
+### 12.3 生产 batch（`--games 192`，每 iter 41–43 k decisions）
+
+2 workers + learner 共用 `cuda:7`（按任务约束），因此 `ppo_s` 含抢卡；`p0` 是同一
+配置下 `bc_coef=0` 的基线，BC 成本 = `ppo_s(arm) − ppo_s(p0)`：
+
+| arm | BC 配置 | `ppo_s` 中位 | wall/iter | dec/s | BC 步/iter | BC 成本 |
+|---|---|---:|---:|---:|---:|---:|
+| p0 | 关闭 | 6.57 s | 10.41 s | 4027 | 0 | — |
+| p1 | **现状** 256 / eager / every1 | 9.86 s | 11.42 s | 3632 | 39 | **3.29 s** |
+| p1b | 128 / eager / every1 | 8.60 s | 10.75 s | 3842 | 39 | 2.03 s |
+| p2 | 128 / compiled / every1 | 8.18 s | 10.97 s | 3765 | 39 | 1.61 s |
+| p3 | 128 / compiled / every2 | 7.52 s | 10.88 s | 3800 | 20 | 0.95 s |
+| p4 | 128 / compiled / every4 | 7.08 s | 10.93 s | 3732 | 11 | 0.51 s |
+| p5 | 512 / compiled / every16 | 7.08 s | 10.36 s | 3934 | 3 | 0.51 s |
+| p6 | 256 / compiled / every8 | 6.99 s | 11.10 s | 3810 | 5 | 0.42 s |
+| **p7** | **128 / compiled / every8** | **6.70 s** | 10.82 s | 3800 | 5 | **0.13 s** |
+| **p8** | **128 / compiled / every16** | **6.66 s** | 10.54 s | 3866 | 3 | **0.09 s** |
+
+读数：
+
+1. **编译 BC 本身只值 ~20%**（p1b 2.03 s → p2 1.61 s），因为 BC 前向是 B=128 的小
+   kernel，且真实循环里还有 CPU 编码/拷贝；单图编译是必要条件，但不是主杠杆。
+2. **主杠杆是每 iteration 的 BC 样本总数**（`bc_batch × 步数`）：
+   p2/p4/p5/p6 都是 ~1.3–5.0 k 样本/iter，BC 成本 0.4–1.6 s；p7 640、p8 384 样本/iter，
+   成本 0.13/0.09 s。`--bc-every` 按 N 折算权重后，**减少的是样本数/前向次数，不是权重**。
+3. 微基准（独占 cuda:7，`forward_bc`+分层 loss 的 fwd+bwd）：B=128 eager 25.9 ms /
+   compiled 15.2 ms；B=256 compiled 19.6 ms；B=512 compiled 37.2 ms；B=1024 compiled
+   75.2 ms。**样本编码 `bc_obs_batch` 是另一个固定成本**（每样本 ~0.2–0.3 ms 的 Python
+   循环），所以「大 batch 少步数」只在样本数相近时略优（p5≈p4、p6 略低于 p4）。
+
+隔离外推（production 的 learner 独占卡；s6 实测 BC 关闭基线 **5.15 s**）：
+`ppo_s ≈ 5.15 + (arm − p0)`：p7 **≈5.28 s**、p8 ≈5.24 s、p4 ≈5.66 s、p3 ≈6.10 s、
+p2 ≈6.76 s、p1 ≈8.44 s（s6 实测 8.83 s，含 20 worker 抢卡与 bc ramp）。同卡差值与
+12.3b 的 learner-only Δ 略有出入（p7 0.13 vs 0.25 s），以 12.3b 的直接测量为准。
+
+### 12.3b learner-only 直接测量（无 collect 抢卡，cuda:7 独占）
+
+上面的 p0..p8 是「learner + 2 actor 同卡」；为拿到不受抢卡影响的裸 `ppo_s`，用
+41 000 条**合成** `PPOBatch`（=生产每 iter decisions；只影响形状/样本数，不影响
+前向与 BC 计时）直接 `PPOTrainer.update`，同一 checkpoint、`--compile-train 1
+--anchor-amp 1 --anchor-beta 0.1`，每项跑 2 次取中位（合成 batch 没 `seq_target`，
+所以绝对值比 production 低 ~0.9 s；**看差值**）：
+
+| BC | `ppo_s` | Δ vs BC 关闭 |
+|---|---:|---:|
+| 关闭 | 4.21 s | — |
+| 128 / eager / every1 | 6.24 s | **+2.03 s** |
+| 128 / compiled / every1 | 5.81 s | **+1.60 s**（编译 −21%） |
+| 128 / compiled / every2 | 5.09 s | +0.88 s |
+| 128 / compiled / every4 | 4.68 s | +0.47 s |
+| **128 / compiled / every8** | **4.46 s** | **+0.25 s** |
+| 128 / compiled / every16 | 4.37 s | +0.16 s |
+
+换算到 production（BC 关闭 5.15 s）：`--bc-every 2` ≈6.03、`--bc-every 4` ≈5.62、
+**`--bc-every 8` ≈5.40 s**、`--bc-every 16` ≈5.31 s。即 **every8 就能把 s6 的
+`ppo_s` 从 8.83 s 压到 5.4 s 左右（≤5.5 s 验收线）**，同时保持等效 BC 权重。
+
+### 12.4 结论与推荐
+
+- 任务 A/B（64 games）验收线：arm2 **2.59 s** / arm3 **2.27 s** ≤ 5.5 s ✅。
+- 生产 s6（192 games、隔离 learner）建议：
+
+  ```text
+  --compile-train 1 --anchor-amp 1 \
+  --bc-coef 5e-4 --bc-batch 128 --bc-every 8 --bc-compile 1
+  ```
+
+  learner-only 实测 Δ=+0.25 s，production 外推 ≈ **5.4 s**（BC 成本 0.25 s；现状
+  256/eager/every1 为 +2.03 s / s6 实测 8.83 s）。若想给 BC 更多梯度信号，用
+  `--bc-every 4`（≈5.62 s）或 `--bc-every 2`（≈6.03 s）；不要再用
+  `bc_batch 256 + every1`。`--bc-every 16`（≈5.31 s）收益已很小、方差更大，不推荐。
+- **实测下界**：BC 完全关闭时 `ppo_s` = 6.57 s（同卡抢占）/ 4.21 s（learner-only）。
+  every8 只剩 ~0.25 s BC 开销；要再往下只能改 BC 实现：把 `bc_obs_batch` 的逐样本
+  Python 编码向量化/缓存（当前占 BC 成本一半以上），或把 BC 拆成独立 optimizer step
+  每 K 个 iteration 跑一次。**不建议**再降 `bc_coef` 来换速度（那是目标权重，不是
+  开销开关）。

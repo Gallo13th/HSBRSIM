@@ -216,8 +216,14 @@ def main() -> int:
                     help="MMR 线性增强：1=不加权（默认）；1.5=在 6000..8000 上从 1.0 线性升到 1.5")
     ap.add_argument("--bc-samples", default="data/firestone_bc/bc_samples.jsonl.gz",
                     help="BC 样本 JSONL(.gz) 路径（默认仓库 data/firestone_bc/bc_samples.jsonl.gz）")
-    ap.add_argument("--bc-batch", type=int, default=256,
-                    help="每个 PPO minibatch 抽取/编码的 BC 样本数（默认 256）")
+    ap.add_argument("--bc-batch", type=int, default=128,
+                    help="每个 PPO 微批抽取/编码的 BC 样本数（默认 128；固定形状编译）")
+    ap.add_argument("--bc-every", type=int, default=1,
+                    help="每 N 个 PPO 微批做一次 BC（默认 1=每个微批）；N>1 时该步 "
+                         "BC 权重乘 N 保持等效平均权重，跳过步不跑 forward_bc")
+    ap.add_argument("--bc-compile", type=int, default=1, choices=[0, 1],
+                    help="--compile-train>0 时是否也把 BC 批次单独 torch.compile（默认 1）；"
+                         "0=BC 保持 eager（A/B 基线，其余不变）")
     ap.add_argument("--bc-type-weight", type=float, default=1.0,
                     help="分层 BC 的类型级 CE 权重（9 类 log-sum-exp 聚合；默认 1.0）")
     ap.add_argument("--bc-card-weight", type=float, default=0.5,
@@ -336,9 +342,43 @@ def main() -> int:
         print("[error] --seq-coef 必须 >= 0", file=sys.stderr)
         return 2
 
+    # ---- 注入（镜像快照 / 人类战团）：先校验引擎构建是否带注入 API ----
+    # 典型事故：conda env 里 `hsbg_engine` 指向旧 clone（/tmp/...），训练命令又没设
+    # PYTHONPATH → worker 每回合 AttributeError，注入全部静默失败。这里在父进程
+    # 启动前 fail-fast，并给出修复命令。
+    _inject_wanted = bool(int(args.lockstep)) and (
+        (bool(args.mirror_snaps) and int(args.mirror_seats) > 0
+         and (float(args.mirror_p) > 0.0 or str(args.mirror_p_ramp).strip()))
+        or (bool(args.human_boards) and int(args.human_board_seats) > 0
+            and float(args.human_board_p) > 0.0))
+    if _inject_wanted:
+        try:
+            import hsbg_engine as _engine
+            _need = []
+            if bool(args.mirror_snaps) and int(args.mirror_seats) > 0 and \
+                    (float(args.mirror_p) > 0.0 or str(args.mirror_p_ramp).strip()):
+                _need.append("apply_turn_snapshots")
+            if bool(args.human_boards) and int(args.human_board_seats) > 0 and \
+                    float(args.human_board_p) > 0.0:
+                _need.append("inject_board")
+            _missing = [n for n in _need if not hasattr(_engine.Game, n)]
+        except Exception as exc:  # noqa: BLE001
+            print(f"[error] 无法 import hsbg_engine：{exc!r}", file=sys.stderr)
+            return 2
+        if _missing:
+            print("[error] 当前 hsbg_engine 缺少注入 API "
+                  f"{_missing}（import 自 {getattr(_engine, '__file__', '?')}）。"
+                  "这是旧构建，注入会 100% 静默失败。请设置 "
+                  "`PYTHONPATH=rust/python:.` 或 `pip install -e rust/python` 后重跑。",
+                  file=sys.stderr)
+            return 2
+
     # ---- 真实人类 BC 辅助正则：系数 ramp + 预加载池（默认关闭 = 零影响）----
     if float(args.bc_coef) < 0.0:
         print("[error] --bc-coef 必须 >= 0", file=sys.stderr)
+        return 2
+    if int(args.bc_batch) <= 0 or int(args.bc_every) <= 0:
+        print("[error] --bc-batch 必须 > 0 且 --bc-every 必须 >= 1", file=sys.stderr)
         return 2
     if float(args.bc_type_weight) < 0.0 or float(args.bc_card_weight) < 0.0:
         print("[error] --bc-type-weight/--bc-card-weight 必须 >= 0", file=sys.stderr)
@@ -480,6 +520,8 @@ def main() -> int:
         bc_mmr_boost=float(args.bc_mmr_boost),
         bc_samples_path=str(args.bc_samples),
         bc_batch=int(args.bc_batch),
+        bc_every=int(args.bc_every),
+        bc_compile=int(args.bc_compile),
         bc_type_weight=float(args.bc_type_weight),
         bc_card_weight=float(args.bc_card_weight))
     trainer: Optional[PPOTrainer] = None
@@ -1077,6 +1119,9 @@ def main() -> int:
             **bc_schedule.describe(),
             "coef_final": float(bc_schedule.coef(cum_decisions)),
             "cum_decisions": int(cum_decisions),
+            "batch": int(args.bc_batch),
+            "every": int(args.bc_every),
+            "compile": bool(int(args.bc_compile)),
             "type_weight": float(args.bc_type_weight),
             "card_weight": float(args.bc_card_weight),
             "card_head": bool(bc_card_head),

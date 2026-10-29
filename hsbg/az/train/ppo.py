@@ -387,13 +387,22 @@ class PPOConfig:
     #: BC 样本 JSONL(.gz) 路径；空 = 用仓库默认
     #: ``data/firestone_bc/bc_samples.jsonl.gz``。
     bc_samples_path: str = ""
-    #: 每个 PPO minibatch 抽取并编码的 BC 样本数。
-    bc_batch: int = 256
+    #: 每个 PPO（微）minibatch 抽取并编码的 BC 样本数。
+    #: 默认 128（原 256）：BC 前向与 PPO 主前向同图编译时，128 的固定形状更省时，
+    #: 且实测分层 BC loss 与 256 无实质差异（见 docs/BC_AUX.md §12）。
+    bc_batch: int = 128
+    #: BC 采样周期：1=每个 PPO 微批都算（默认）；N>1 时每 N 个微批算一次 BC，
+    #: 同时把该步的 BC 权重乘 N 以保持等效平均权重（``bc_coef * N``）。
+    #: 跳过步完全不前向 ``forward_bc``、不占显存带宽，其他损失项逐位不变。
+    bc_every: int = 1
     #: 分层 BC 的类型级 CE 权重（245 动作 logits 按类型 log-sum-exp 聚合后的 9 类 CE）。
     bc_type_weight: float = DEFAULT_BC_TYPE_WEIGHT
     #: 分层 BC 的卡牌身份级 CE 权重（buy/play 样本上的 3983 类 ``card_head``）；
     #: 0 = 不训练/不使用卡牌头（此时也不需要 ``bc_card_head``）。
     bc_card_weight: float = DEFAULT_BC_CARD_WEIGHT
+    #: ``compile_train>0`` 时是否也把 BC 批次（固定 ``bc_batch`` 形状）单独编译。
+    #: 1=编（默认，见 docs/TRAINING_COMPILE.md）；0=BC 保持 eager（A/B 基线）。
+    bc_compile: int = 1
     #: KL anchor 到 stage 起点的系数 β（论文 Table 7：0.1，前 100 个 iteration 后放开）。
     #: >0 时必须由 trainer 提供 anchor 分布（见 PPOTrainer.set_anchor）。
     anchor_coef: float = 0.0
@@ -436,6 +445,7 @@ class PPOConfig:
         self.value_loss = mode
         self.compile_train = compile_train_mode(self.compile_train)
         self.anchor_amp = bool(self.anchor_amp)
+        self.bc_compile = bool(int(self.bc_compile))
         # 早失败：ramp 规格写错时不要等到训练循环里才炸
         if str(self.seq_coef_ramp or "").strip():
             parse_coef_ramp(self.seq_coef_ramp)
@@ -448,6 +458,8 @@ class PPOConfig:
             raise ValueError(f"bc_coef 必须 >= 0，得到 {self.bc_coef!r}")
         if int(self.bc_batch) <= 0:
             raise ValueError(f"bc_batch 必须 > 0，得到 {self.bc_batch!r}")
+        if int(self.bc_every) <= 0:
+            raise ValueError(f"bc_every 必须 >= 1，得到 {self.bc_every!r}")
         if int(self.bc_mmr_min) < 0:
             raise ValueError(f"bc_mmr_min 必须 >= 0，得到 {self.bc_mmr_min!r}")
         if float(self.bc_mmr_boost) < 1.0:
@@ -1067,7 +1079,8 @@ class TrainForward:
     """
 
     def __init__(self, model: Any, mode: int = 1, *, minibatch: int = 0,
-                 device: str = "cpu", use_amp: bool = False) -> None:
+                 device: str = "cpu", use_amp: bool = False,
+                 bc_batch: int = 0) -> None:
         torch = _torch()
         self.torch = torch
         self.model = model
@@ -1079,14 +1092,22 @@ class TrainForward:
         # **kwargs)，不能再靠 inspect 判断，必须用编译前的原模型签名。
         self.accepts_mask = _accepts_mask(model)
         self.accepts_mask_aux = _accepts_mask_aux(model)
+        self.accepts_mask_bc = _accepts_mask_aux(model, "forward_bc")
         self.has_aux = getattr(model, "forward_aux", None) is not None
+        self.has_bc = getattr(model, "forward_bc", None) is not None
         self._main_fn: Any = None
         self._aux_fn: Any = None
+        self._bc_fn: Any = None
         self.main_compiled = False
         self.aux_compiled = False
+        self.bc_compiled = False
+        #: BC 编译图的固定 batch（= ``bc_batch``；0=未知，任何形状都走 eager）
+        self.bc_size = int(bc_batch or 0)
         self.warnings: List[str] = []
         self.eager_calls = 0
         self.compiled_calls = 0
+        self.bc_calls = 0
+        self.bc_eager_calls = 0
         self.warmup_seconds = 0.0
 
     # ── eager 原路径（与 forward_model / forward_model_aux 逐位一致）────────
@@ -1101,6 +1122,16 @@ class TrainForward:
             logits, rank_logits, scalar = split_model_outputs(self._raw_main(x, c, m))
             return logits, rank_logits, scalar, None
         if self.accepts_mask_aux:
+            return fn(x, c, m)
+        return fn(x, c)
+
+    def _raw_bc(self, x: Any, c: Any, m: Any):
+        """eager 版 ``forward_bc``（与 ``forward_bc_model`` 的分支逐位一致）。"""
+        fn = getattr(self.model, "forward_bc", None)
+        if fn is None:  # 老模型/测试替身：只有类型级（card_logits=None）
+            logits, _rank_logits, _scalar = split_model_outputs(self._raw_main(x, c, m))
+            return logits, None
+        if self.accepts_mask_bc:
             return fn(x, c, m)
         return fn(x, c)
 
@@ -1120,7 +1151,8 @@ class TrainForward:
     def _warm_one(self, kind: str, x: Any, c: Any, m: Any,
                   backward: bool = True) -> bool:
         torch = self.torch
-        fn_raw = self._raw_main if kind == "main" else self._raw_aux
+        fn_raw = {"main": self._raw_main, "aux": self._raw_aux,
+                  "bc": self._raw_bc}[kind]
         try:
             mode = _COMPILE_TRAIN_MODES[self.mode]
             fn = torch.compile(fn_raw, mode=mode, dynamic=False, fullgraph=False)
@@ -1142,13 +1174,21 @@ class TrainForward:
         self._zero_grads()
         if kind == "main":
             self._main_fn, self.main_compiled = fn, True
+        elif kind == "bc":
+            self._bc_fn, self.bc_compiled = fn, True
         else:
             self._aux_fn, self.aux_compiled = fn, True
         return True
 
-    def warmup(self, *, need_aux: bool = False, batch_size: Optional[int] = None,
+    def warmup(self, *, need_aux: bool = False, need_bc: bool = False,
+               batch_size: Optional[int] = None,
+               bc_batch: Optional[int] = None,
                backward: bool = True, verbose: bool = True) -> "TrainForward":
-        """固定形状 warmup（forward+backward 各一次）：把编译开销挪到训练计时之外。"""
+        """固定形状 warmup（forward+backward 各一次）：把编译开销挪到训练计时之外。
+
+        ``need_bc=True`` 时额外为 BC 批次（固定 ``bc_batch`` 形状）编一张独立图：
+        BC 批次通常远小于 PPO minibatch（128 vs 1024），复用主图会触发重编译。
+        """
         torch = self.torch
         t0 = time.time()
         # torch.compile 与训练同口径：保持 eval（dropout 关闭）与固定 batch 形状
@@ -1168,11 +1208,24 @@ class TrainForward:
                 self._warm_one("aux", *warm, backward=backward)
             else:
                 self._warn("aux", RuntimeError("模型没有 forward_aux，seq 路径保持 eager"))
+        if need_bc:
+            bmb = max(1, int(bc_batch or self.bc_size or 1))
+            if not self.has_bc:
+                self._warn("bc", RuntimeError(
+                    "模型没有 forward_bc，BC 路径保持 eager（只算类型级）"))
+            else:
+                bc_warm = (torch.zeros((bmb, OBS_FLOATS), dtype=torch.float32, device=d),
+                           torch.zeros((bmb, OBS_CARDS), dtype=torch.long, device=d),
+                           torch.ones((bmb, N_ACTIONS), dtype=torch.bool, device=d))
+                if self._warm_one("bc", *bc_warm, backward=backward):
+                    self.bc_size = bmb
         self.warmup_seconds = time.time() - t0
         if verbose:
             print(f"[ppo] train compile mode={self.mode} "
                   f"main={'on' if self.main_compiled else 'eager'} "
                   f"aux={'on' if self.aux_compiled else ('eager' if need_aux else 'off')} "
+                  f"bc={'on' if self.bc_compiled else ('eager' if need_bc else 'off')}"
+                  f"{f'(B={self.bc_size})' if self.bc_compiled else ''} "
                   f"warmup={self.warmup_seconds:.1f}s"
                   + (f" warnings={len(self.warnings)}" if self.warnings else ""),
                   flush=True)
@@ -1181,26 +1234,39 @@ class TrainForward:
     # ── 训练调用入口 ───────────────────────────────────────────────────────
     @property
     def active(self) -> bool:
-        return bool(self.main_compiled or self.aux_compiled)
+        return bool(self.main_compiled or self.aux_compiled or self.bc_compiled)
 
-    def _size_ok(self, n: int) -> bool:
-        return self.minibatch <= 0 or int(n) == self.minibatch
+    def _size_ok(self, n: int, kind: str = "main") -> bool:
+        want = self.bc_size if kind == "bc" else self.minibatch
+        return want <= 0 or int(n) == want
 
     def _call(self, kind: str, x: Any, c: Any, m: Any):
-        compiled = self.main_compiled if kind == "main" else self.aux_compiled
-        if compiled and self._size_ok(int(x.shape[0])):
-            fn = self._main_fn if kind == "main" else self._aux_fn
+        if kind == "main":
+            compiled, fn, raw = self.main_compiled, self._main_fn, self._raw_main
+        elif kind == "aux":
+            compiled, fn, raw = self.aux_compiled, self._aux_fn, self._raw_aux
+        else:
+            compiled, fn, raw = self.bc_compiled, self._bc_fn, self._raw_bc
+        if compiled and self._size_ok(int(x.shape[0]), kind):
             try:
-                self.compiled_calls += 1
+                if kind == "bc":
+                    self.bc_calls += 1
+                else:
+                    self.compiled_calls += 1
                 return fn(x, c, m)
             except Exception as exc:  # noqa: BLE001 - 运行期失败同样回退 eager
                 self._warn(kind, exc)
                 if kind == "main":
                     self.main_compiled, self._main_fn = False, None
-                else:
+                elif kind == "aux":
                     self.aux_compiled, self._aux_fn = False, None
-        self.eager_calls += 1
-        return self._raw_main(x, c, m) if kind == "main" else self._raw_aux(x, c, m)
+                else:
+                    self.bc_compiled, self._bc_fn = False, None
+        if kind == "bc":
+            self.bc_eager_calls += 1
+        else:
+            self.eager_calls += 1
+        return raw(x, c, m)
 
     def main(self, x: Any, c: Any, m: Any):
         """训练主前向 ``(logits, rank_logits[, value])``。"""
@@ -1210,6 +1276,10 @@ class TrainForward:
         """训练辅前向 ``(logits, rank_logits, value|None, seq_logits|None)``。"""
         return self._call("aux", x, c, m)
 
+    def bc(self, x: Any, c: Any, m: Any):
+        """分层 BC 前向 ``(policy_logits, card_logits|None)``（独立固定形状图）。"""
+        return self._call("bc", x, c, m)
+
     def describe(self) -> Dict[str, Any]:
         """进 stats 的诊断信息（可 JSON 序列化）。"""
         return {
@@ -1217,9 +1287,13 @@ class TrainForward:
             "active": bool(self.active),
             "main_compiled": bool(self.main_compiled),
             "aux_compiled": bool(self.aux_compiled),
+            "bc_compiled": bool(self.bc_compiled),
+            "bc_batch": int(self.bc_size),
             "warmup_s": round(float(self.warmup_seconds), 3),
             "compiled_calls": int(self.compiled_calls),
             "eager_calls": int(self.eager_calls),
+            "bc_calls": int(self.bc_calls),
+            "bc_eager_calls": int(self.bc_eager_calls),
             "warnings": list(self.warnings),
         }
 
@@ -1227,15 +1301,18 @@ class TrainForward:
 def build_train_forward(model: Any, config: Any = None, *,
                         minibatch: Optional[int] = None,
                         warmup: bool = True, need_aux: Optional[bool] = None,
+                        need_bc: Optional[bool] = None,
+                        bc_batch: Optional[int] = None,
                         use_amp: Optional[bool] = None,
                         warmup_backward: bool = True,
                         verbose: bool = True) -> Optional[TrainForward]:
     """按 ``PPOConfig.compile_train`` 构建训练侧编译包装；0=返回 ``None``（纯 eager）。
 
     ``need_aux`` 默认由 ``seq_coef>0`` 或 ``seq_coef_ramp`` 非空推断（seq 辅助任务路径
-    走 ``forward_aux``，需要单独编译）。``minibatch``/``use_amp`` 可覆盖配置（anchor 参考
-    前向用固定 chunk + 自己的精度口径）；``warmup_backward=False`` 用于 no_grad 的
-    anchor 参考前向（只编 forward 图）。
+    走 ``forward_aux``，需要单独编译）。``need_bc`` 默认由 ``bc_coef>0`` 或
+    ``bc_coef_ramp`` 非空推断，并按 ``bc_batch`` 固定形状单独编译一张 BC 图。
+    ``minibatch``/``use_amp`` 可覆盖配置（anchor 参考前向用固定 chunk + 自己的精度
+    口径）；``warmup_backward=False`` 用于 no_grad 的 anchor 参考前向（只编 forward 图）。
     """
     cfg = config if config is not None else PPOConfig()
     mode = compile_train_mode(getattr(cfg, "compile_train", 0))
@@ -1244,17 +1321,25 @@ def build_train_forward(model: Any, config: Any = None, *,
     if need_aux is None:
         need_aux = (float(getattr(cfg, "seq_coef", 0.0) or 0.0) > 0.0
                     or bool(str(getattr(cfg, "seq_coef_ramp", "") or "").strip()))
+    if need_bc is None:
+        bc_on = (float(getattr(cfg, "bc_coef", 0.0) or 0.0) > 0.0
+                 or bool(str(getattr(cfg, "bc_coef_ramp", "") or "").strip()))
+        need_bc = bool(bc_on and int(getattr(cfg, "bc_batch", 0) or 0) > 0
+                       and bool(getattr(cfg, "bc_compile", True)))
     if use_amp is None:
         amp = str(getattr(cfg, "amp", "off")).strip().lower()
         use_amp = amp in ("bf16", "bfloat16")
+    bsz = (int(bc_batch) if bc_batch is not None
+           else int(getattr(cfg, "bc_batch", 0) or 0))
     tf = TrainForward(
         model, mode=mode,
         minibatch=(int(minibatch) if minibatch is not None
                    else int(getattr(cfg, "minibatch", 0) or 0)),
         device=str(getattr(cfg, "device", "cpu")),
-        use_amp=bool(use_amp))
+        use_amp=bool(use_amp), bc_batch=bsz)
     if warmup:
-        tf.warmup(need_aux=bool(need_aux), backward=bool(warmup_backward),
+        tf.warmup(need_aux=bool(need_aux), need_bc=bool(need_bc),
+                  bc_batch=bsz, backward=bool(warmup_backward),
                   verbose=verbose)
     return tf
 
@@ -1266,7 +1351,8 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
                indices: Optional[np.ndarray] = None,
                anchor_logp: Any = None,
                train_forward: Optional[TrainForward] = None,
-               bc_batch: Optional[BCObsBatch] = None) -> Dict[str, Any]:
+               bc_batch: Optional[BCObsBatch] = None,
+               bc_coef_override: Optional[float] = None) -> Dict[str, Any]:
     """计算一个 minibatch 的 PPO 损失（返回 torch 张量字典）。
 
     - policy: ``-min(r*A, clip(r,1±ε)*A).mean()``；
@@ -1386,8 +1472,11 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     # 每个 PPO minibatch 用同一个 model、同一张图做一次额外 forward（forward_bc）：
     #   类型级：245 动作 logits -> 9 类 log-sum-exp 聚合 -> CE(action_type)
     #   卡牌级：card_head(3983) 在 buy/play 样本上 CE(card_id 映射标签)
-    # 两层加权后乘 bc_coef 直接加进 total，因此与 PPO/seq 共享同一次 backward。
-    bc_coef = float(getattr(config, "bc_coef", 0.0) or 0.0)
+    # 两层加权后乘 bc_coef 直接加进 total,因此与 PPO/seq 共享同一次 backward。
+    # ``bc_coef_override``：``bc_every>1`` 时由 train_ppo 传入 ``bc_coef * bc_every``，
+    # 只在真正做 BC 的步上生效（跳过步不传 bc_batch,本段整体不执行）。
+    bc_coef = (float(getattr(config, "bc_coef", 0.0) or 0.0)
+               if bc_coef_override is None else float(bc_coef_override))
     bc_loss = None
     bc_type_ce = None
     bc_card_ce = None
@@ -1410,8 +1499,9 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
             bc_batch.card_target.astype(np.int64))).to(dev)
         bc_card_ok = torch.from_numpy(np.ascontiguousarray(
             bc_batch.card_valid.astype(bool))).to(dev)
-        bc_policy_logits, bc_card_logits = forward_bc_model(
-            model, bx, bc_cards, bc_m)
+        bc_policy_logits, bc_card_logits = (
+            train_forward.bc(bx, bc_cards, bc_m) if train_forward is not None
+            else forward_bc_model(model, bx, bc_cards, bc_m))
         bc_policy_logits = bc_policy_logits.float()
         if bc_card_logits is not None:
             bc_card_logits = bc_card_logits.float()
@@ -1473,12 +1563,15 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
               optimizer: Any = None, rng: Optional[np.random.Generator] = None,
               anchor_logp: Any = None,
               train_forward: Optional[TrainForward] = None,
-              bc_pool: Any = None) -> Dict[str, Any]:
+              bc_pool: Any = None,
+              bc_rng: Optional[np.random.Generator] = None) -> Dict[str, Any]:
     """执行 PPO 更新（minibatch × epochs，clip、entropy、KL 早停）。
 
     ``train_forward``：复用外部构建的 ``TrainForward``（``PPOTrainer`` 在启动时构建并
     warmup，避免把编译开销算进第一个 iteration）；为 ``None`` 且
     ``config.compile_train>0`` 时在此处构建 + warmup。
+    ``bc_rng``：BC 采样专用 Generator（``PPOTrainer`` 跨 iteration 持有）；
+    None 时按 ``cfg.seed`` 新建（独立于 ``rng``，不影响 PPO 采样序列）。
 
     返回可 JSON 序列化的统计字典。
     """
@@ -1522,6 +1615,14 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         bc_wanted = False
     bc_active = bool(bc_wanted and float(getattr(cfg, "bc_coef", 0.0) or 0.0) > 0.0
                      and bc_pool is not None and len(bc_pool) > 0)
+    # ``bc_every``：每 N 个 PPO 微批做一次 BC，并把该步权重乘 N 保持等效平均权重。
+    # BC 采样用**独立 RNG**：跳过/开启 BC 都不会改变 PPO 的 permutation/采样序列，
+    # 因此 bc_coef=0 与 bc_every>1 的跳过路径对其他指标严格无影响。
+    bc_every = max(1, int(getattr(cfg, "bc_every", 1) or 1))
+    bc_step = 0
+    bc_done = 0
+    if bc_rng is None:
+        bc_rng = np.random.default_rng([int(getattr(cfg, "seed", 0) or 0), 0xBC])
     device = torch.device(cfg.device)
     model.to(device)
     # 保持 eval（关闭 dropout）：old_logprob 是采集时 eval 前向算出的，若 PPO 前向
@@ -1550,6 +1651,14 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     eff = mb * accum
     amp_mode = str(getattr(cfg, "amp", "off")).strip().lower()
     use_amp = amp_mode in ("bf16", "bfloat16") and device.type == "cuda"
+    # 本次 update 的微批总数（与循环里 slices 的个数一致）：epochs × ceil(n/minibatch)。
+    # 每 N 个微批做一次 BC -> 实际 BC 步数；系数按「总权重不变」精确折算：
+    #   n_bc * bc_coef_eff == m_total * bc_coef
+    # 因此 N 不整除 m_total 时也不会多算 BC 权重（N=16、m_total=40 -> 40/3×coef）。
+    _m_total = int(epochs) * int(math.ceil(n / float(mb)))
+    _bc_n_steps = (int(math.ceil(_m_total / float(bc_every))) if bc_active else 0)
+    bc_coef_eff = (float(getattr(cfg, "bc_coef", 0.0) or 0.0)
+                   * float(_m_total) / float(max(1, _bc_n_steps))) if bc_active else 0.0
     for epoch in range(epochs):
         order = rng.permutation(n)
         acc: Dict[str, List[float]] = {}
@@ -1563,31 +1672,44 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                 break
             opt.zero_grad(set_to_none=True)
             step_metrics: Dict[str, float] = {}
+            step_counts: Dict[str, int] = {}
             served = 0
             for a, b in slices:
                 sel = base_idx[order[a:b]]
                 bc_batch = None
+                do_bc = False
                 if bc_active:
-                    k = min(int(cfg.bc_batch), len(bc_pool))
-                    bc_sel = rng.choice(len(bc_pool), size=k, replace=False)
-                    bc_batch = bc_obs_batch(bc_pool, BC_OBS_LAYOUT,
-                                            indices=bc_sel)
+                    do_bc = (bc_step % bc_every) == 0
+                    bc_step += 1
+                    if do_bc:
+                        bc_done += 1
+                        k = min(int(cfg.bc_batch), len(bc_pool))
+                        bc_sel = bc_rng.choice(len(bc_pool), size=k, replace=False)
+                        bc_batch = bc_obs_batch(bc_pool, BC_OBS_LAYOUT,
+                                                indices=bc_sel)
                 if use_amp:
                     with torch.autocast("cuda", dtype=torch.bfloat16):
                         out = ppo_losses(model, batch, cfg, indices=sel,
                                          anchor_logp=anchor_logp,
                                          train_forward=train_forward,
-                                         bc_batch=bc_batch)
+                                         bc_batch=bc_batch,
+                                         bc_coef_override=bc_coef_eff)
                 else:
                     out = ppo_losses(model, batch, cfg, indices=sel,
                                      anchor_logp=anchor_logp,
                                      train_forward=train_forward,
-                                     bc_batch=bc_batch)
+                                     bc_batch=bc_batch,
+                                     bc_coef_override=bc_coef_eff)
                 (out["total"] / float(len(slices))).backward()
                 served += int(sel.size)
                 for k, v in out.items():
                     step_metrics[k] = (step_metrics.get(k, 0.0)
-                                       + float(v.detach().cpu()) / float(len(slices)))
+                                       + float(v.detach().cpu()))
+                    step_counts[k] = step_counts.get(k, 0) + 1
+            # 按「该键实际出现的微批数」平均：bc_every>1 时 bc_* 只在 BC 步出现，
+            # 不能被跳过步稀释；其他键每个微批都有，结果与旧版逐位一致。
+            step_metrics = {k: v / float(step_counts[k])
+                            for k, v in step_metrics.items()}
             torch.nn.utils.clip_grad_norm_(model.parameters(), float(cfg.max_grad_norm))
             for k, v in step_metrics.items():
                 acc.setdefault(k, []).append(v)
@@ -1682,6 +1804,9 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         stats["bc_card_loss"] = float(np.mean(
             [r.get("bc_card_loss", 0.0) for r in logs]))
         stats["bc_coef"] = float(getattr(cfg, "bc_coef", 0.0) or 0.0)
+        stats["bc_coef_effective"] = float(bc_coef_eff)
+        stats["bc_every"] = int(bc_every)
+        stats["bc_steps"] = int(bc_done)
         stats["bc_type_weight"] = float(
             getattr(cfg, "bc_type_weight", DEFAULT_BC_TYPE_WEIGHT) or 0.0)
         stats["bc_card_weight"] = float(
@@ -1695,8 +1820,8 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         cfg_echo = stats.get("config")
         if isinstance(cfg_echo, dict):
             for key in ("bc_coef", "bc_coef_ramp", "bc_mmr_min", "bc_mmr_boost",
-                        "bc_samples_path", "bc_batch", "bc_type_weight",
-                        "bc_card_weight"):
+                        "bc_samples_path", "bc_batch", "bc_every", "bc_compile",
+                        "bc_type_weight", "bc_card_weight"):
                 cfg_echo.pop(key, None)
     return stats
 

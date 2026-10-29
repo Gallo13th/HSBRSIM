@@ -350,6 +350,19 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                 and int(human_board_seats) > 0)
     human_targets = int(human_board_seats) if human_on else 0
     human_set_tier = bool(human_board_set_tier)
+    # 引擎能力校验：注入 API 只在较新的 hsbg_engine 构建里；缺失时**必须显式失败**，
+    # 否则每回合都会静默计 errors、注入实际上完全没生效（历史上曾因此白跑）。
+    _probe = states[0]["game"]
+    if mirror_on and not hasattr(_probe, "apply_turn_snapshots"):
+        raise RuntimeError(
+            "hsbg_engine.Game 缺少 apply_turn_snapshots：当前 import 的引擎是旧构建"
+            f"（{getattr(__import__('hsbg_engine'), '__file__', '?')}）。"
+            "请用 `PYTHONPATH=rust/python:.` 或 `pip install -e rust/python` 后重跑。")
+    if human_on and not hasattr(_probe, "inject_board"):
+        raise RuntimeError(
+            "hsbg_engine.Game 缺少 inject_board：当前 import 的引擎是旧构建"
+            f"（{getattr(__import__('hsbg_engine'), '__file__', '?')}）。"
+            "请用 `PYTHONPATH=rust/python:.` 或 `pip install -e rust/python` 后重跑。")
 
     def _maybe_mirror(st: Dict[str, Any]) -> None:
         """新回合开始、任何座位行动前注入该 turn 的快照（每 turn 只尝试一次）。"""

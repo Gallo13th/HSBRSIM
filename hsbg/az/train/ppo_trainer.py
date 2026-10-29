@@ -61,6 +61,8 @@ class PPOTrainer:
                 1.0 - (1.0 - self.lr_min_ratio) * float(step) / float(self.max_updates)),
         )
         self.rng = np.random.default_rng(int(self.config.seed))
+        #: BC 采样专用 RNG（与 PPO permutation/采样解耦；跨 iteration 持久）
+        self.bc_rng = np.random.default_rng([int(self.config.seed), 0xBC])
         self.updates = 0
         self.extra: Dict[str, Any] = {}
         #: 真实人类 BC 样本池（``bc_coef=0`` 时 None；加载失败自动关闭）
@@ -93,7 +95,7 @@ class PPOTrainer:
         if compile_train_mode(getattr(self.config, "compile_train", 0)) > 0:
             self.anchor_forward = build_train_forward(
                 self.anchor_model, self.config, minibatch=ANCHOR_CHUNK,
-                need_aux=False, use_amp=self._anchor_use_amp(),
+                need_aux=False, need_bc=False, use_amp=self._anchor_use_amp(),
                 warmup_backward=False, verbose=False)
 
     def clear_anchor(self) -> None:
@@ -184,7 +186,8 @@ class PPOTrainer:
                           optimizer=self.optimizer, rng=self.rng,
                           anchor_logp=anchor_logp,
                           train_forward=self.train_forward,
-                          bc_pool=self.bc_pool)
+                          bc_pool=self.bc_pool,
+                          bc_rng=self.bc_rng)
         self.scheduler.step()
         self.updates += 1
         stats["trainer_updates"] = int(self.updates)
@@ -200,6 +203,7 @@ class PPOTrainer:
             "optimizer": self.optimizer.state_dict(),
             "scheduler": self.scheduler.state_dict(),
             "rng": self.rng.bit_generator.state,
+            "bc_rng": self.bc_rng.bit_generator.state,
             "updates": int(self.updates),
             "lr_min_ratio": float(self.lr_min_ratio),
             "max_updates": int(self.max_updates),
@@ -225,6 +229,8 @@ class PPOTrainer:
         for group, lr in zip(self.optimizer.param_groups, self.scheduler.get_last_lr()):
             group["lr"] = float(lr)
         self.rng.bit_generator.state = state["rng"]
+        if "bc_rng" in state:  # 旧 trainer.pt 没有该键：保留构造期的新 RNG
+            self.bc_rng.bit_generator.state = state["bc_rng"]
         self.updates = int(state.get("updates", 0))
         self.extra = dict(state.get("extra") or {})
 

@@ -104,9 +104,14 @@ env -u CUDA_VISIBLE_DEVICES python scripts/train_entity_sync.py \
 | `hsbg/az/train/ppo.py:367` | `PPOConfig.compile_train: int = 0` |
 | `hsbg/az/train/ppo.py:371` | `PPOConfig.anchor_amp: bool = False` |
 | `hsbg/az/train/ppo.py:958` | `class TrainForward`：编译/回退/尾批路由/warmup |
-| `hsbg/az/train/ppo.py:1143` | `build_train_forward()`：按配置构建（0→`None`） |
-| `hsbg/az/train/ppo.py:1181` | `ppo_losses(..., train_forward=None)` |
-| `hsbg/az/train/ppo.py:1331` | `train_ppo(..., train_forward=None)` |
+| `hsbg/az/train/ppo.py:397` | `PPOConfig.bc_every: int = 1`（每 N 个微批做一次 BC） |
+| `hsbg/az/train/ppo.py:405` | `PPOConfig.bc_compile: int = 1`（BC 批次是否单独编译） |
+| `hsbg/az/train/ppo.py:1103` | `TrainForward.bc_compiled` / `bc_size`（BC 固定形状图） |
+| `hsbg/az/train/ppo.py:1183` | `TrainForward.warmup(need_bc=True, bc_batch=...)` |
+| `hsbg/az/train/ppo.py:1279` | `TrainForward.bc()`：BC 前向入口（形状不符→eager） |
+| `hsbg/az/train/ppo.py:1301` | `build_train_forward()`：按配置构建（0→`None`） |
+| `hsbg/az/train/ppo.py:1350` | `ppo_losses(..., train_forward=None, bc_batch=None)` |
+| `hsbg/az/train/ppo.py:1561` | `train_ppo(..., train_forward=None)` |
 | `hsbg/az/train/ppo_trainer.py:73` | `PPOTrainer` 启动时编译训练前向（计时之外） |
 | `hsbg/az/train/ppo_trainer.py:86` | `set_anchor()` 编译 anchor 参考前向（forward-only warmup） |
 | `hsbg/az/train/ppo_trainer.py:103` | `_anchor_logp()` 走编译图 / `anchor_amp` |
@@ -144,6 +149,12 @@ env -u CUDA_VISIBLE_DEVICES python scripts/train_entity_sync.py \
   **no_grad** 的整批前向（不是叶/推理路径），实测占 `ppo_s` 约 36%，所以同一个
   `compile_train` 开关也编它（`minibatch=4096` 固定分块、forward-only warmup、
   尾块 eager）。它不经过 `PPOEvaluator` / BatchLeafServer，评测进程也不受影响。
+- **分层 BC 批次用独立固定形状图**：BC 批次是 `bc_batch`（默认 128），与 PPO
+  minibatch（1024）不同；复用主图会触发重编译。`TrainForward` 为 BC 单独编译一张
+  `bc_batch` 形状图（`bc_compiled/bc_size/bc_calls/bc_eager_calls`），warmup 时一并
+  预热；失败同样只 warn 一次并回退 eager。`--bc-compile 0` 可只让 BC 保持 eager
+  （A/B 基线）；`--bc-every N` 时每 N 个 PPO 微批才调一次 `forward_bc`，跳过步不产生
+  任何 BC 前向，该步权重乘 N 保持等效。详见 `docs/BC_AUX.md` §12。
 
 ## 5. A/B 之外：production batch 大小的 learner-only 测量
 
@@ -205,8 +216,46 @@ compile+anchor_amp 的收益更明显（0.638×）。
    - 尾批路由（`B==minibatch` 编译 / `B<minibatch` eager）；
    - monkeypatch 让 `torch.compile` 抛异常：只 warn 一次、`compile_active=False`、
      参数仍被更新（回退路径可用）。
+9. **注入 API 与引擎构建**（与编译无关，但同样会静默翻车）：训练命令如果开了
+   `--mirror-snaps/--human-boards`，必须让进程 import **本仓库**的 `hsbg_engine`
+   （`PYTHONPATH=rust/python:.` 或 `pip install -e rust/python`）。conda env 里若
+   残留指向旧 clone 的安装，`Game.apply_turn_snapshots/inject_board` 不存在，注入会
+   100% 失败（现在会在启动时 fail-fast，history 的 `mirror_errors` 也会计数）。
 
-## 8. 回退到 eager
+## 8. 覆盖 BC 批次（分层 BC）
+
+分层 BC 的批次与 PPO minibatch 形状不同（`bc_batch` 默认 128 vs `minibatch` 1024），
+因此 `TrainForward` 为它**单独编译一张固定形状图**，而不是复用 main/aux 图：
+
+| 项 | 行为 |
+|---|---|
+| 何时编 | `compile_train>0` 且（`bc_coef>0` 或 `bc_coef_ramp` 非空）且 `bc_compile=1` |
+| 形状 | 固定 `[bc_batch, 3227] + [bc_batch,124] + [bc_batch,245]`；`dynamic=False` |
+| warmup | 与 main/aux 同一次 `warmup(need_bc=True, bc_batch=...)`，fwd+bwd 各一次 |
+| 路由 | `B == bc_batch` 走编译图；池不足/自定义 batch 走 eager，不触发重编译 |
+| 失败 | 编译/运行期异常 → 只 warn 一次 `...（bc）不可用，自动回退 eager`，BC 仍可训练 |
+| 关闭 | `--bc-compile 0`（保持 main/aux 编译，只让 BC eager，A/B 基线）；`compile_train=0` 时整条路径不变 |
+| 诊断 | `stats["compile"]` 增加 `bc_compiled/bc_batch/bc_calls/bc_eager_calls`；启动日志 `bc=on(B=128)` |
+
+`--bc-every N` 只影响**调用次数**（跳过步根本不进 `TrainForward.bc`），不影响图形状；
+系数按 `n_bc*bc_coef_eff = m_total*bc_coef` 精确折算（见 `docs/BC_AUX.md` §12.1）。
+
+实测（192 games、41–43 k decisions/iter、cuda:7，详见 `docs/BC_AUX.md` §12.3）：
+
+| BC | `ppo_s` 中位 | BC 成本（相对 BC 关闭） |
+|---|---:|---:|
+| 256 / eager / every1（s6 现状） | 9.86 s | 3.29 s |
+| 128 / eager / every1 | 8.60 s | 2.03 s |
+| 128 / compiled / every1 | 8.18 s | 1.61 s |
+| 128 / compiled / every8 | **6.70 s** | **0.13 s** |
+
+编译 BC 本身约 −20%；更大的收益来自 `--bc-every` 减少每 iteration 的 BC 样本数
+（CPU 编码 `bc_obs_batch` + 小 batch 前向）。learner-only 直接测量（cuda:7 独占、
+41 k 合成 batch，BC 关闭 4.21 s）：compiled every1 5.81 s、every2 5.09 s、
+every4 4.68 s、**every8 4.46 s（Δ+0.25 s）**、every16 4.37 s。隔离 learner 后推荐
+`--bc-batch 128 --bc-every 8 --bc-compile 1`；按 production 5.15 s 基线 ≈**5.40 s**。
+
+## 9. 回退到 eager
 
 - 运行期：去掉 `--compile-train`（或设 `PPOConfig(compile_train=0)`）即可，零开销。
 - 代码里：`build_train_forward()` 返回 `None`，`ppo_losses` 自动走 eager 分支。
