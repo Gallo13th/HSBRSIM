@@ -1,14 +1,19 @@
 """真实人类对局（Firestone 回放）→ PPO 的 **BC 辅助正则**（形态 A：小权重辅助 CE）。
 
-本模块只做三件事，默认不参与任何训练路径（``bc_coef=0`` 时零影响）：
+本模块做四件事，默认不参与任何训练路径（``bc_coef=0`` 时零影响）：
 
 1. :func:`load_bc_samples`：读 ``data/firestone_bc/bc_samples.jsonl.gz``，按动作白名单、
-   动作下标合法性、MMR 下限过滤，返回 numpy 数组池（含 MMR 权重 / 类别计数）；
+   动作下标合法性、MMR 下限过滤，返回 numpy 数组池（含 MMR 权重 / 类别计数 /
+   卡牌身份标签）；
 2. :func:`bc_obs_batch`：把样本编码成我们固定 ``3227 floats + 124 cards`` 观测的
    **部分观测**（只填回放可见的槽位：商店 8 槽、手牌 10 槽、棋盘 7 槽、gold/tier/
-   health/turn/hero；未知槽位补 0 并写 mask）；
-3. :func:`bc_ce_loss`：class-balanced（动作类别频率倒数归一）+ MMR 加权 + 样本 mask
-   的交叉熵。
+   health/turn/hero；未知槽位补 0 并写 mask），同时产出 245 动作 -> 9 类的
+   ``type_ids`` 与卡牌身份标签；
+3. :func:`bc_type_logits` / :func:`bc_hier_loss`：**分层目标**——245 动作 logits 按动作
+   类型做 log-sum-exp 聚合的 9 类 CE（对槽位错位不敏感）+ buy/play 样本上的
+   3983 类卡牌身份 CE；两层按 ``bc_type_weight`` / ``bc_card_weight`` 加权；
+4. :func:`bc_ce_loss`：旧的 245 维 class-balanced（动作类别频率倒数归一）+ MMR 加权
+   CE，保留给对照/兼容测试；新训练路径使用分层目标。
 
 设计/数据质量/风险/启用方式见 ``docs/BC_AUX.md``。数据字段以
 ``data/firestone_bc/SCHEMA.md`` 与实际抽样为准（``action_index`` 已映射到 245 动作）。
@@ -16,7 +21,8 @@
 约束
 ----
 - 本模块在**没有 torch / 没有引擎**的机器上仍可 import（torch 在 CE 内惰性导入）；
-- 所有布局偏移来自 :mod:`hsbg.env.obs_std`，不硬编码 3227/124 的内部偏移；
+- 所有布局偏移来自 :mod:`hsbg.env.obs_std`，动作段来自
+  :mod:`hsbg.env.action_space_std`，不硬编码偏移；
 - BC 是**条件辅助目标**：动作掩码只覆盖与白名单动作类型相关的“可观测候选动作”，
   不是引擎 ``legal_mask`` 的精确重建（见 docs 的风险一节）。
 """
@@ -42,6 +48,7 @@ from hsbg.az.train.seq_aux import (  # noqa: F401 - 对外复用/重导出
     ramp_coef,
     resolve_coef,
 )
+from hsbg.env import action_space_std as ACT
 from hsbg.env import obs_std as O
 
 __all__ = [
@@ -50,6 +57,13 @@ __all__ = [
     "DEFAULT_BC_ACTION_TYPES",
     "BC_ACTION_TYPES",
     "BC_ACTION_CLASSES",
+    "BC_TYPE_CLASSES",
+    "N_BC_TYPES",
+    "BC_CARD_TYPE_NAMES",
+    "BC_CARD_CLASS_IDS",
+    "BC_STATIC_TYPE_IDS",
+    "STD_ACTION_SEGMENT",
+    "ACTION_TYPE_TABLE",
     "BC_CARD_TABLE_PATH",
     "BCCardTable",
     "BCSamples",
@@ -58,10 +72,15 @@ __all__ = [
     "BCObsBatch",
     "mmr_weight",
     "load_bc_card_table",
+    "bc_card_head_size",
     "load_bc_samples",
     "bc_obs_batch",
+    "bc_type_ids",
     "bc_class_balance_weights",
     "bc_ce_loss",
+    "bc_type_logits",
+    "bc_card_ce_loss",
+    "bc_hier_loss",
     "parse_bc_coef_ramp",
     "bc_pool_summary",
 ]
@@ -87,10 +106,108 @@ BC_ACTION_CLASSES: Dict[str, int] = {
     name: i for i, name in enumerate(BC_ACTION_TYPES)
 }
 
+#: 分层 BC 的「动作类型」类别 = BC 白名单顺序（9 类；与 ``action_class`` 对齐）。
+BC_TYPE_CLASSES: Tuple[str, ...] = tuple(BC_ACTION_TYPES)
+N_BC_TYPES: int = len(BC_TYPE_CLASSES)
+if N_BC_TYPES != 9:  # pragma: no cover - 常量漂移防御
+    raise AssertionError(f"分层 BC 类型数应为 9，得到 {N_BC_TYPES}")
+
+#: 需要「卡牌身份」监督的 BC 类型（buy/play 四类；其余类型的 card CE 不参与）。
+BC_CARD_TYPE_NAMES: Tuple[str, ...] = (
+    "buy_minion", "buy_spell", "play_minion", "play_spell")
+BC_CARD_CLASS_IDS: Tuple[int, ...] = tuple(
+    BC_ACTION_CLASSES[name] for name in BC_CARD_TYPE_NAMES)
+
+#: 默认两层权重（总 BC = ``w_type*CE_type + w_card*CE_card``，再乘 ``bc_coef``）。
+DEFAULT_BC_TYPE_WEIGHT = 1.0
+DEFAULT_BC_CARD_WEIGHT = 0.5
+
 #: 卡表里 ``_G`` 是金色变体（卡表有独立条目），这里只用于 golden 位。
 _GOLDEN_RE = re.compile(r"_G$")
 #: 英雄皮肤后缀（与 ``scripts/import_real_library.py`` 同一规则）。
 _SKIN_RE = re.compile(r"_SKIN_[A-Z0-9]+$")
+
+
+# ── 动作段 / 类型映射（分层 BC）───────────────────────────────────────────
+def _build_action_segment_table(n_actions: int = N_ACTIONS) -> Tuple[str, ...]:
+    """245 个标准动作 -> 段名（来自 :data:`hsbg.env.action_space_std.SEGMENTS`）。
+
+    前 245 项必须恰好被标准段连续覆盖一次；扩展段（>=245）不参与 BC。
+    """
+    seg = [""] * int(n_actions)
+    for name, lo, hi, _count, _desc in ACT.SEGMENTS:
+        for i in range(max(0, int(lo)), min(int(hi), int(n_actions))):
+            if seg[i]:
+                raise AssertionError(
+                    f"动作 {i} 同时属于动作段 {seg[i]!r} 与 {name!r}（段重叠）")
+            seg[i] = str(name)
+    missing = [i for i, s in enumerate(seg) if not s]
+    if missing:
+        raise AssertionError(f"动作段未覆盖标准动作下标：{missing[:8]}...")
+    return tuple(seg)
+
+
+#: ``STD_ACTION_SEGMENT[i]`` = 标准动作 ``i`` 所属段名（14 段，唯一归属）。
+STD_ACTION_SEGMENT: Tuple[str, ...] = _build_action_segment_table()
+
+
+def _build_static_type_ids() -> np.ndarray:
+    """与样本无关的 245 -> 9 类映射（``-1`` = 不参与类型聚合）。
+
+    静态可分的 7 类：end_turn / reroll / upgrade / hero_power / sell /
+    buy_minion（商店 0..6）/ buy_spell（商店第 7 槽 = 酒馆法术槽）。
+    ``play_spell`` / ``play_minion`` 无法从动作下标静态区分（取决于手牌该槽是
+    随从还是法术），由 :func:`bc_type_ids` 按样本观测的手牌卡种动态细分。
+    """
+    ids = np.full(N_ACTIONS, -1, dtype=np.int16)
+
+    def _fill(name: str, actions: Iterable[int]) -> None:
+        cls = int(BC_ACTION_CLASSES[name])
+        for a in actions:
+            ai = int(a)
+            if not 0 <= ai < N_ACTIONS:
+                raise AssertionError(f"类型 {name} 的动作下标越界：{ai}")
+            if ids[ai] != -1 and int(ids[ai]) != cls:
+                raise AssertionError(
+                    f"动作 {ai} 同时映射到类型 {int(ids[ai])} 与 {cls}")
+            ids[ai] = cls
+
+    _fill("end_turn", (ACT.A_END,))
+    _fill("reroll", (ACT.A_REFRESH,))
+    _fill("upgrade", (ACT.A_UPGRADE,))
+    _fill("hero_power", range(ACT.A_HERO_POWER, ACT.A_HERO_POWER + ACT.N_POWERS))
+    _fill("sell", range(ACT.A_SELL, ACT.A_SELL + ACT.N_BOARD))
+    # 酒馆第 7 槽（``A_BUY+7``）是酒馆法术槽；0..6 是随从槽。
+    _fill("buy_minion", range(ACT.A_BUY, ACT.A_BUY + ACT.N_SHOP - 1))
+    _fill("buy_spell", (ACT.A_BUY + ACT.N_SHOP - 1,))
+    return ids
+
+
+#: 245 -> 9 类静态映射（play_* 为 -1，见 :func:`bc_type_ids`）。
+BC_STATIC_TYPE_IDS: np.ndarray = _build_static_type_ids()
+
+
+def _build_action_type_table() -> Tuple[str, ...]:
+    """245 个动作 -> **唯一**动作类型名（段级；``play`` 段保留 ``"play"``）。
+
+    与 :func:`bc_type_ids` 的区别：本表与样本无关，用于“每个动作唯一归属”的静态
+    校验；``play`` 段在运行时按手牌卡种细分为 ``play_spell`` / ``play_minion``。
+    """
+    out = []
+    for a in range(N_ACTIONS):
+        seg = STD_ACTION_SEGMENT[a]
+        if seg == "buy":
+            out.append("buy_spell" if a == ACT.A_BUY + ACT.N_SHOP - 1
+                       else "buy_minion")
+        elif seg == "refresh":  # BC 白名单里叫 reroll
+            out.append("reroll")
+        else:
+            out.append(seg)
+    return tuple(out)
+
+
+#: ``ACTION_TYPE_TABLE[i]`` = 标准动作 ``i`` 的唯一类型名（245 项）。
+ACTION_TYPE_TABLE: Tuple[str, ...] = _build_action_type_table()
 
 #: 观测里我们实际填写/可信的“叶子”切片（用于单测验证不重叠）。
 #: 由 :func:`_build_bc_obs_layout` 从 obs_std 常量生成。
@@ -116,6 +233,11 @@ class BCCardTable:
     @property
     def n_cards(self) -> int:
         return int(self.kind.shape[0])
+
+    @property
+    def n_ids(self) -> int:
+        """卡牌条目数（不含 index 0 空槽；37.0.0 = 3983）。"""
+        return int(self.kind.shape[0]) - 1
 
 
 def load_bc_card_table(path: Optional[str] = None) -> BCCardTable:
@@ -169,6 +291,27 @@ def load_bc_card_table(path: Optional[str] = None) -> BCCardTable:
                        keywords=keywords, races=races)
 
 
+_CARD_HEAD_SIZE_CACHE: Optional[int] = None
+
+
+def bc_card_head_size(cards_path: Optional[str] = None) -> int:
+    """卡牌身份头输出维度 = 卡表条目数（不含空槽；37.0.0 = 3983）。
+
+    标签是 ``card_id`` 经 :meth:`BCCardTable.id_to_index` 映射后的 **0-based** 下标
+    （= 卡表下标 - 1），与模型侧 ``card_head`` 的输出维一致。
+    ``cards_path`` 为 None 时用仓库默认卡表并缓存；换卡表版本时缓存需重建进程。
+    """
+    global _CARD_HEAD_SIZE_CACHE
+    if cards_path is None and _CARD_HEAD_SIZE_CACHE is not None:
+        return int(_CARD_HEAD_SIZE_CACHE)
+    n = int(load_bc_card_table(cards_path).n_ids)
+    if n <= 0:
+        raise ValueError("卡表为空：无法确定 card_head 维度")
+    if cards_path is None:
+        _CARD_HEAD_SIZE_CACHE = int(n)
+    return int(n)
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # 1. 样本池
 # ══════════════════════════════════════════════════════════════════════════
@@ -199,6 +342,10 @@ class BCSamples:
     board: np.ndarray                 # int32[n, N_BOARD]
     board_present: np.ndarray         # bool[n, N_BOARD]
     class_counts: np.ndarray          # int64[C]（全池类别计数）
+    #: 卡牌身份标签：``card_id`` -> 卡表下标-1（0-based）；-1 = 不可用/不适用。
+    card_target: np.ndarray            # int32[n]
+    #: 该样本是否参与卡牌身份 CE（buy/play 四类且 card_id 映射成功）。
+    card_valid: np.ndarray             # bool[n]
     card_table: BCCardTable
     path: str = ""
     mmr_min: int = DEFAULT_MMR_MIN
@@ -320,6 +467,21 @@ def _map_hero(hero: Any, table: BCCardTable) -> int:
     return 0
 
 
+def _map_card_label(card_id: Any, table: BCCardTable) -> int:
+    """动作卡牌 id -> 卡牌身份头标签（0-based，= 卡表下标 - 1）。失败返回 -1。
+
+    只接受卡表里能命中的 id（金色 ``_G`` 变体在卡表中有独立条目）；映射失败
+    的样本只是**不参与 card CE**，仍参与 type CE（见 :data:`BC_CARD_CLASS_IDS`）。
+    """
+    if not isinstance(card_id, str) or not card_id:
+        return -1
+    ci = table.id_to_index.get(card_id)
+    if ci is None:
+        return -1
+    label = int(ci) - 1
+    return label if 0 <= label < table.n_ids else -1
+
+
 def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
                     actions: Optional[Any] = None,
                     mmr_min: int = DEFAULT_MMR_MIN,
@@ -365,6 +527,8 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
     hand_p: List[np.ndarray] = []
     board_l: List[np.ndarray] = []
     board_p: List[np.ndarray] = []
+    card_l: List[int] = []
+    card_valid_l: List[bool] = []
 
     total_lines = 0
     skipped = {k: 0 for k in (
@@ -411,10 +575,14 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
                 skipped["mmr_low"] += 1
                 continue
 
+            cls = int(class_map[atype])
             action_index.append(int(ai))
-            action_class.append(int(class_map[atype]))
+            action_class.append(cls)
             mmr_list.append(int(m))
             weight_list.append(float(w))
+            label = _map_card_label(r.get("card_id"), table)
+            card_l.append(int(label))
+            card_valid_l.append(bool(label >= 0 and cls in BC_CARD_CLASS_IDS))
             for key, dst in (("turn", turn_l), ("gold", gold_l), ("tier", tier_l),
                              ("health", health_l), ("armor", armor_l)):
                 v = _int_or_none(r.get(key))
@@ -454,7 +622,10 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
             hand_present=np.zeros((0, O.N_HAND), dtype=bool),
             board=np.zeros((0, O.N_BOARD), dtype=np.int32),
             board_present=np.zeros((0, O.N_BOARD), dtype=bool),
-            class_counts=counts, card_table=table, path=_resolve_path(path),
+            class_counts=counts,
+            card_target=np.zeros(0, dtype=np.int32),
+            card_valid=np.zeros(0, dtype=bool),
+            card_table=table, path=_resolve_path(path),
             mmr_min=int(mmr_min),
             meta={"lines": total_lines, "kept": 0, "skipped": skipped,
                   "mmr_boost": float(mmr_boost), "mmr_full": int(mmr_full)})
@@ -479,7 +650,10 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
         shop=np.stack(shop_l), shop_present=np.stack(shop_p),
         hand=np.stack(hand_l), hand_present=np.stack(hand_p),
         board=np.stack(board_l), board_present=np.stack(board_p),
-        class_counts=counts, card_table=table, path=_resolve_path(path),
+        class_counts=counts,
+        card_target=np.asarray(card_l, dtype=np.int32),
+        card_valid=np.asarray(card_valid_l, dtype=bool),
+        card_table=table, path=_resolve_path(path),
         mmr_min=int(mmr_min),
         meta={"lines": total_lines, "kept": int(n), "skipped": skipped,
               "mmr_boost": float(mmr_boost), "mmr_full": int(mmr_full)})
@@ -498,6 +672,8 @@ def bc_pool_summary(samples: BCSamples) -> Dict[str, Any]:
         "class_fractions": {
             k: (float(v) / n if n else 0.0)
             for k, v in samples.class_distribution().items()},
+        "card_valid": int(samples.card_valid.sum()) if n else 0,
+        "card_valid_rate": float(samples.card_valid.mean()) if n else 0.0,
         "filter": dict(samples.meta),
     }
     return out
@@ -590,6 +766,12 @@ class BCObsBatch:
     weights: np.ndarray         # float32[n]（MMR 权重）
     class_ids: np.ndarray       # int16[n]
     class_counts: np.ndarray    # int64[C]（全池类别计数）
+    #: 每个动作位归属的 9 类类型 id（``-1`` = 不参与类型聚合；play_* 按手牌卡种细分）。
+    type_ids: np.ndarray        # int8/int16[n, 245]
+    #: 卡牌身份标签（0-based；-1 = 不可用/不适用）。
+    card_target: np.ndarray     # int32[n]
+    #: 是否参与卡牌身份 CE（buy/play 四类且映射成功）。
+    card_valid: np.ndarray      # bool[n]
 
     def __len__(self) -> int:
         return int(self.features.shape[0])
@@ -675,6 +857,49 @@ def _place_slots(features: np.ndarray, fbase: int, fstride: int,
                    golden=bool(_GOLDEN_RE.search(table.ids[card] or "")))
         cards_out[card_slice.start + slot] = card
         card_mask[card_slice.start + slot] = True
+
+
+def bc_type_ids(samples: BCSamples,
+                indices: Optional[Any] = None) -> np.ndarray:
+    """样本 + 观测手牌 -> ``int16[n, 245]`` 的 9 类归属（``-1`` = 不参与聚合）。
+
+    ``play_spell`` / ``play_minion`` 无法只靠动作下标区分，因此按**该样本观测到的
+    手牌卡种**细分：手牌槽是法术 -> 只有 ``pos=0`` 的那个 play 动作属于
+    ``play_spell``；是随从 -> 该槽 8 个 play 动作都属于 ``play_minion``。
+    手牌卡种未知的动作保持 ``-1``（不参与聚合），但**真实动作**总是被强制写回
+    其 ``action_type`` 对应类别（标签优先，保证类型 CE 的分母非空）。
+
+    其余 7 类（end_turn / reroll / upgrade / hero_power / sell / buy_minion /
+    buy_spell）来自 :data:`BC_STATIC_TYPE_IDS`，与样本无关。
+    """
+    n_total = len(samples) if indices is None else 0
+    if indices is None:
+        idx = np.arange(n_total, dtype=np.int64)
+    else:
+        idx = np.asarray(indices, dtype=np.int64).reshape(-1)
+    n = int(idx.size)
+    out = np.tile(BC_STATIC_TYPE_IDS.astype(np.int16), (n, 1))
+    table = samples.card_table
+    play_spell_id = int(BC_ACTION_CLASSES["play_spell"])
+    play_minion_id = int(BC_ACTION_CLASSES["play_minion"])
+    for row, si in enumerate(idx):
+        si = int(si)
+        for slot in range(ACT.N_HAND):
+            if not bool(samples.hand_present[si, slot]):
+                continue
+            card = int(samples.hand[si, slot])
+            if not (0 <= card < table.n_cards):
+                continue
+            kind = int(table.kind[card])
+            base = ACT.A_PLAY + int(slot) * ACT.N_POS
+            if kind == 2:      # 法术：只有 pos=0 合法
+                out[row, base] = play_spell_id
+            elif kind == 1:    # 随从：8 个落位都属于 play_minion
+                out[row, base:base + ACT.N_POS] = play_minion_id
+        ai = int(samples.action_index[si])
+        if 0 <= ai < N_ACTIONS:
+            out[row, ai] = int(samples.action_class[si])
+    return out
 
 
 def bc_obs_batch(samples: BCSamples, layout: Optional[BCObsLayout] = None, *,
@@ -800,7 +1025,10 @@ def bc_obs_batch(samples: BCSamples, layout: Optional[BCObsLayout] = None, *,
             samples.action_index[idx], dtype=np.int64),
         weights=np.asarray(samples.weight[idx], dtype=np.float32),
         class_ids=np.asarray(samples.action_class[idx], dtype=np.int16),
-        class_counts=np.asarray(samples.class_counts, dtype=np.int64))
+        class_counts=np.asarray(samples.class_counts, dtype=np.int64),
+        type_ids=bc_type_ids(samples, idx),
+        card_target=np.asarray(samples.card_target[idx], dtype=np.int32),
+        card_valid=np.asarray(samples.card_valid[idx], dtype=bool))
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -892,6 +1120,134 @@ def bc_ce_loss(logits: Any, target_action: Any, weights: Any = None,
     if float(denom.detach().cpu()) <= 0.0:
         return logits.float().sum() * 0.0
     return (per * w).sum() / denom
+
+
+#: 某类型在当前样本上没有任何候选动作时，类型 logits 的填充值（避免 -inf）。
+BC_EMPTY_TYPE_LOGIT = -1e30
+
+
+def bc_type_logits(policy_logits: Any, type_ids: Any, action_mask: Any = None,
+                   n_types: int = N_BC_TYPES):
+    """245 维动作 logits -> 9 类**聚合** logits（log-sum-exp，数值稳定）。
+
+    对每个类型 ``c``：
+
+    ``L_c = logsumexp_{a: type_ids[a]==c 且 legal(a)} logits[a]``
+
+    即“先选类型、再在该类型的候选动作里任选”的边际概率 ``p(c)=Σ_{a∈c} p(a)``
+    对应的 log 概率。空类型（无候选）填 :data:`BC_EMPTY_TYPE_LOGIT`，不会产生
+    ``-inf``/NaN；调用方应保证 target 类型至少有一个候选（``bc_type_ids`` 会把
+    真实动作强制归入其 ``action_type``）。
+
+    ``policy_logits`` ``[B,245]``；``type_ids`` ``[B,245]``（``-1`` 忽略）；
+    ``action_mask`` ``[B,245]`` bool（None = 全部参与）。
+    """
+    torch = _torch()
+    logits = policy_logits.float()
+    tids = (type_ids if torch.is_tensor(type_ids)
+            else torch.as_tensor(type_ids))
+    tids = tids.to(device=logits.device, dtype=torch.long).reshape(
+        logits.shape[0], -1)
+    if tids.shape != logits.shape:
+        raise ValueError(
+            f"type_ids 形状 {tuple(tids.shape)} != policy_logits {tuple(logits.shape)}")
+    am = None
+    if action_mask is not None:
+        am = (action_mask if torch.is_tensor(action_mask)
+              else torch.as_tensor(action_mask))
+        am = am.to(device=logits.device, dtype=torch.bool).reshape(
+            logits.shape[0], -1)
+    cols = []
+    for c in range(int(n_types)):
+        sel = (tids == int(c))
+        if am is not None:
+            sel = sel & am
+        z = logits.masked_fill(~sel, float("-inf"))
+        lse = torch.logsumexp(z, dim=-1)
+        # 空类型 -> 有限哨兵（CE 的 log_softmax 仍稳定；不会 NaN）
+        lse = torch.where(torch.isfinite(lse), lse,
+                          torch.full_like(lse, float(BC_EMPTY_TYPE_LOGIT)))
+        cols.append(lse)
+    return torch.stack(cols, dim=-1)
+
+
+def bc_card_ce_loss(card_logits: Any, card_target: Any, weights: Any = None,
+                    mask: Any = None):
+    """卡牌身份交叉熵（3983 类；只在 ``mask`` 为 True 的 buy/play 样本上平均）。
+
+    ``card_target`` 里的 ``-1`` 表示“本样本没有卡牌身份标签”（非 buy/play 或
+    ``card_id`` 映射失败），在 CE 前替换成 0 并用 mask 排除——因此不会因为
+    ``cross_entropy`` 的 target 越界报错，也不会稀释分母。
+
+    与 :func:`bc_ce_loss` 不同，这里**不做** class-balanced（3983 类频率倒数在
+    小 batch 上噪声过大）；只用 MMR 权重。
+    """
+    torch = _torch()
+    F = torch.nn.functional
+    logits = card_logits.float()
+    tgt = (card_target if torch.is_tensor(card_target)
+           else torch.as_tensor(card_target)).to(
+        device=logits.device, dtype=torch.long).reshape(-1)
+    if tgt.numel() != logits.shape[0]:
+        raise ValueError(
+            f"card_target 长度 {tgt.numel()} != card_logits 行数 {logits.shape[0]}")
+    valid = tgt >= 0
+    if mask is not None:
+        mt = (mask if torch.is_tensor(mask) else torch.as_tensor(mask))
+        valid = valid & mt.to(device=logits.device, dtype=torch.bool).reshape(-1)
+    safe = torch.where(valid, tgt, torch.zeros_like(tgt))
+    per = F.cross_entropy(logits, safe, reduction="none")
+    w = valid.to(per.dtype)
+    if weights is not None:
+        wt = (weights if torch.is_tensor(weights) else torch.as_tensor(weights))
+        w = w * wt.to(device=per.device, dtype=per.dtype).reshape(-1)
+    w = w.clamp_min(0.0)
+    denom = w.sum()
+    if float(denom.detach().cpu()) <= 0.0:
+        return logits.sum() * 0.0
+    return (per * w).sum() / denom
+
+
+def bc_hier_loss(policy_logits: Any, type_ids: Any, target_class: Any, *,
+                 action_mask: Any = None, card_logits: Any = None,
+                 card_target: Any = None, card_valid: Any = None,
+                 weights: Any = None, class_counts: Any = None,
+                 type_weight: float = DEFAULT_BC_TYPE_WEIGHT,
+                 card_weight: float = DEFAULT_BC_CARD_WEIGHT) -> Dict[str, Any]:
+    """分层 BC 损失：``w_type*CE_type + w_card*CE_card``（torch 标量字典）。
+
+    参数
+    ----
+    policy_logits : ``[B,245]`` 主策略头 logits（同一 forward 的输出）
+    type_ids : ``[B,245]`` 动作 -> 9 类归属（-1 忽略）
+    target_class : ``[B]`` 真实 ``action_type`` 的类别 id（0..8）
+    action_mask : ``[B,245]`` 合法/候选动作（类型聚合只在这些动作上取 log-sum-exp）
+    card_logits : ``[B,3983]`` 卡牌身份头输出（None 或 ``card_weight<=0`` 时不算）
+    card_target : ``[B]`` 卡牌标签（0..3982；-1 = 无标签）
+    card_valid : ``[B]`` bool（buy/play 且映射成功）
+    weights : ``[B]`` 样本权重（MMR；类型层还叠加 class-balanced）
+    class_counts : ``[9]`` 全池类型计数（class-balanced）
+
+    返回 ``{"loss", "type_loss", "card_loss", "type_logits"}``；所有项都保留
+    计算图。全空/全 0 时返回 0（不 NaN）。
+    """
+    tw = max(0.0, float(type_weight))
+    cw = max(0.0, float(card_weight))
+    type_logits = bc_type_logits(policy_logits, type_ids,
+                                 action_mask=action_mask)
+    type_loss = bc_ce_loss(type_logits, target_class, weights=weights, mask=None,
+                           class_ids=target_class, class_counts=class_counts)
+    if card_logits is not None and cw > 0.0 and card_target is not None:
+        card_loss = bc_card_ce_loss(card_logits, card_target, weights=weights,
+                                    mask=card_valid)
+    else:
+        card_loss = policy_logits.float().sum() * 0.0
+    return {
+        "loss": tw * type_loss + cw * card_loss,
+        "type_loss": type_loss,
+        "card_loss": card_loss,
+        "type_logits": type_logits,
+    }
 
 
 def parse_bc_coef_ramp(spec: str) -> RampPoints:

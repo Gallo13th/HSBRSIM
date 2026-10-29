@@ -31,6 +31,8 @@ from .common import (N_ACTIONS, N_PLAYERS, load_engine, mask_from_bytes,
 from .ppo import (CollectConfig, PPOBatch, PPOSelfPlayPolicy, _attach_rank,
                   build_batch_from_records, _weak_bot_action)
 from .library_pool import board_signature
+from .human_board_pool import HumanBoardStats, SOURCE as HUMAN_BOARD_SOURCE
+from .human_board_pool import inject_turn as inject_human_boards
 from .mirror_snapshots import (MirrorStats, inject_turn, mirror_seats,
                                mirror_seats_random)
 
@@ -237,6 +239,11 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                          mirror_pool: Any = None, mirror_seats_count: int = 0,
                          mirror_p: float = 0.0, mirror_p_ramp: str = "",
                          mirror_seat_random: bool = False,
+                         human_board_pool: Any = None,
+                         human_board_p: float = 0.0,
+                         human_board_seats: int = 2,
+                         human_board_sample: str = "auto",
+                         human_board_set_tier: bool = True,
                          ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """lock-step 采集：N 局同步推进，每轮把所有待决策局拼成一个 batch 前向一次。
 
@@ -248,6 +255,14 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     回合末场面快照镜像（``mirror_pool`` 非空且 ``mirror_p>0``）：在每个**新回合**开始、
     任何座位行动前，按概率给 seat ``1..mirror_seats_count`` 注入该 turn 的快照
     （缺帧跳过；引擎拒绝的座位保持原 bot 状态）。默认关闭（``mirror_p=0``）。
+
+    **人类战团注入**（``human_board_pool`` 非空且 ``human_board_p>0``）：同样在**新回合**
+    开始、任何座位行动前，从全部非 learner 座位里随机抽 ``human_board_seats`` 个，按
+    ``human_board_p`` 逐个注入该 turn 的人类战团（board-only；见
+    ``docs/HUMAN_BOARD_OPPONENT.md``）。与镜像快照可同时开，但**同座位同回合只允许一个**：
+    镜像快照优先（镜像注过 / 被它置 ``ended_turn`` 的座位记 ``skipped_by_mirror``）。
+    被注入了人类战团的座位**本回合照常行动**（bot 在人类战团之上继续打），这与镜像
+    「整场面 = 回合末 → ended_turn」的语义不同。
 
     课程模式（``mirror_seat_random=True``）：每回合用 :func:`mirror_seats_random` 从全部
     非 learner 座位重抽 ``mirror_seats_count`` 个（learner 一定不在其中）；默认 False 时
@@ -278,6 +293,13 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             "mirror_turn": int(g0.turn),
             "mirror_rng": __import__("random").Random(int(cfg.seed) + int(seed) + gi * 31),
             "mirror_stats": MirrorStats(),
+            # 本回合镜像快照实际注入的座位（人类战团据此让路 → skipped_by_mirror）
+            "mirror_applied_seats": [],
+            # 人类战团（board-only）注入：独立的 turn 游标 / RNG / 计数
+            "human_turn": int(g0.turn),
+            "human_rng": __import__("random").Random(
+                int(cfg.seed) + int(seed) + gi * 53 + 11),
+            "human_stats": HumanBoardStats(),
         })
     rounds = 0
     trajectory_p = max(0.0, min(1.0, float(trajectory_p)))
@@ -322,6 +344,12 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     mirror_on = mirror_pool is not None and mirror_p > 0.0 and int(mirror_seats_count) > 0
     mirror_targets = (mirror_seats(int(mirror_seats_count), N_PLAYERS, seat)
                       if mirror_on else [])
+    # ── 人类战团（board-only）注入（默认关闭） ──────────────────────────────
+    human_p = max(0.0, min(1.0, float(human_board_p)))
+    human_on = (human_board_pool is not None and human_p > 0.0
+                and int(human_board_seats) > 0)
+    human_targets = int(human_board_seats) if human_on else 0
+    human_set_tier = bool(human_board_set_tier)
 
     def _maybe_mirror(st: Dict[str, Any]) -> None:
         """新回合开始、任何座位行动前注入该 turn 的快照（每 turn 只尝试一次）。"""
@@ -332,13 +360,39 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         if t == int(st.get("mirror_turn", t)):
             return
         st["mirror_turn"] = t
+        st["mirror_applied_seats"] = []
         # 课程模式：每回合从全部非 learner 座位重抽；默认仍用固定 1..N。
         targets = (mirror_seats_random(int(mirror_seats_count), st["mirror_rng"],
                                        N_PLAYERS, seat)
                    if mirror_seat_random else mirror_targets)
         inject_turn(g, mirror_pool, t, seats=targets, p=mirror_p,
                     rng=st["mirror_rng"], learner_seat=seat,
-                    stats=st["mirror_stats"])
+                    stats=st["mirror_stats"],
+                    applied_out=st["mirror_applied_seats"])
+
+    def _maybe_human_board(st: Dict[str, Any]) -> None:
+        """新回合开始、任何座位行动前注入人类战团（每 turn 只尝试一次）。
+
+        必须在 :func:`_maybe_mirror` **之后**调用：镜像快照占用过的座位（本回合已
+        ``ended_turn``）一律让路，并记 ``skipped_by_mirror``。
+        """
+        if not human_on:
+            return
+        g = st["game"]
+        t = int(g.turn)
+        if t == int(st.get("human_turn", t)):
+            return
+        st["human_turn"] = t
+        inject_human_boards(
+            g, human_board_pool, t, seats_count=human_targets, p=human_p,
+            rng=st["human_rng"], learner_seat=seat, stats=st["human_stats"],
+            mirror_seats=st.get("mirror_applied_seats") or (),
+            num_players=N_PLAYERS, set_tier=human_set_tier)
+
+    def _maybe_inject(st: Dict[str, Any]) -> None:
+        """新回合注入总入口（顺序固定：镜像快照 → 人类战团）。"""
+        _maybe_mirror(st)
+        _maybe_human_board(st)
 
     library_p = max(0.0, min(1.0, float(library_p)))
     if library_pool is not None and library_p > 0.0:
@@ -358,13 +412,14 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         for st in states:
             if st["done"]:
                 continue
-            # 新回合（上一轮 learner 的 EndTurn 可能已推进）：任何座位行动前注入快照。
-            _maybe_mirror(st)
+            # 新回合（上一轮 learner 的 EndTurn 可能已推进）：任何座位行动前注入
+            # （镜像快照 → 人类战团）。
+            _maybe_inject(st)
             g = st["game"]
             guard = 0
             while (not g.is_over()) and (not g.needs_action(seat)) and guard < 10 ** 6:
                 # 回合可能在 bot 推进中切换（最后一个座位结束后立刻战斗 + 进入下一回合）。
-                _maybe_mirror(st)
+                _maybe_inject(st)
                 q = next((p for p in range(N_PLAYERS) if g.needs_action(p)), None)
                 if q is None:
                     break
@@ -436,8 +491,8 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                 continue
             # 缺口：最后一个 bot 动作可能已推进到新回合，while 条件随即让 learner 变为可行动而退出，
             # 于是 learner 会在"注入之前"做出新回合的第一个决策。这里在交给 learner 前无条件再注入一次
-            # （_maybe_mirror 按 turn 幂等），并重新判断座位状态。
-            _maybe_mirror(st)
+            # （_maybe_inject 按 turn 幂等），并重新判断座位状态。
+            _maybe_inject(st)
             if g.is_over() or st["steps"] >= max_steps:
                 st["done"] = True
                 st["truncated"] = int(not g.is_over())
@@ -511,6 +566,15 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                               if mirror_pool is not None else ""),
             "mirror_p_ramp": str(mirror_p_ramp),
             "mirror_frames": int(getattr(mirror_pool, "frames", 0)) if mirror_on else 0,
+            # 人类战团（board-only）注入：开关 / 参数 / 数据源
+            "human_board_on": bool(human_on), "human_board_p": float(human_p),
+            "human_board_seats": int(human_targets),
+            "human_board_sample": (str(getattr(human_board_pool, "sample_mode", ""))
+                                   if human_board_pool is not None else ""),
+            "human_board_set_tier": bool(human_set_tier),
+            "human_board_boards": (int(getattr(human_board_pool, "kept", 0))
+                                   if human_on else 0),
+            "human_board_source": HUMAN_BOARD_SOURCE,
             "records": int(len(records)), "illegal_actions": int(illegal),
             "truncated_games": int(truncated),
             "games_meta": metas, "forced_end_turns": int(policy.forced_actions)}
@@ -519,4 +583,10 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     for st in states:
         mstats.add(st.get("mirror_stats") or MirrorStats())
     meta.update(mstats.to_meta())
+    # 人类战团注入同样按「每座位每回合」计数（source=human_board_approx）。
+    hstats = HumanBoardStats()
+    for st in states:
+        hstats.add(st.get("human_stats") or HumanBoardStats())
+    hmeta = hstats.to_meta()
+    meta.update(hmeta)
     return records, meta

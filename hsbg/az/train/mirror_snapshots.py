@@ -551,7 +551,8 @@ def inject_turn(game: Any, pool: MirrorSnapshotPool, turn: int, *,
                 advance: Optional[bool] = None,
                 seat_rng: Optional[random.Random] = None,
                 resample_seats: bool = False,
-                num_players: int = 8) -> MirrorStats:
+                num_players: int = 8,
+                applied_out: Optional[List[int]] = None) -> MirrorStats:
     """新回合开始（任何座位行动前）按概率给 ``seats`` 注入该 ``turn`` 的快照。
 
     - 每个座位独立掷 ``p``；缺帧 -> ``missing``；引擎拒绝 -> ``rejected``；
@@ -560,6 +561,8 @@ def inject_turn(game: Any, pool: MirrorSnapshotPool, turn: int, *,
     - **课程模式（随机座位）**：给 ``seat_rng``（或 ``resample_seats=True``）时，每次调用
       用 :func:`mirror_seats_random` 从全部非 learner 座位重抽 ``len(seats)`` 个；默认
       （两者都不给）保持旧的固定 ``seats`` 行为不变。
+    - ``applied_out``：可选的输出列表；本批次**实际成功**注入的座位会追加进去。训练侧
+      用它实现「同座位同回合只允许一个注入源」（镜像快照优先于人类战团）。
     """
     st = stats if stats is not None else MirrorStats()
     r = rng or random
@@ -612,6 +615,9 @@ def inject_turn(game: Any, pool: MirrorSnapshotPool, turn: int, *,
     for item in rejected[:4]:
         if len(st.last_rejected) < 16:
             st.last_rejected.append([int(item[0]), str(item[1])[:200]])
+    if applied_out is not None:
+        rej_seats = {int(item[0]) for item in rejected}
+        applied_out.extend([int(s) for s in used if int(s) not in rej_seats])
     if not bool(rep.get("pool_balance_ok", True)):
         st.pool_unbalanced += 1
     if not bool(rep.get("pool_species_ok", True)):

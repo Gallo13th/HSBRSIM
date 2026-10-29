@@ -108,18 +108,27 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
                      dim_ff: Optional[int] = None, dropout: float = 0.1,
                      card_dim: int = 48, tables: Optional[CardTables] = None,
                      n_extra_tokens: int = 0, pos_size: int = 16,
-                     arch: str = "entity", seq_head: bool = False):
+                     arch: str = "entity", seq_head: bool = False,
+                     bc_card_head: bool = False,
+                     bc_card_dim: Optional[int] = None):
     """构造 EntityAZNet（torch 模块）。
 
     ``seq_head=True`` 时在 global token 上加一个 245 维的「动作序列辅助头」
     （``forward_aux()`` 返回其 logits；见 ``docs/ACTION_SEQUENCE_AUX.md``）。
     默认 False：不构建，参数量/前向/checkpoint 与之前完全一致。
+
+    ``bc_card_head=True`` 时在 global token 上加「卡牌身份头」（3983 类，分层 BC）；
+    默认 False：不构建（``bc_coef=0`` 逐位等价）。
     """
     torch = _torch()
     nn = torch.nn
     d = int(d_model)
     n_heads = int(n_heads)
     dim_ff = int(dim_ff or 4 * d)
+    if bc_card_head and bc_card_dim is None:
+        from .bc_aux import bc_card_head_size
+        bc_card_dim = int(bc_card_head_size())
+    card_head_dim = int(bc_card_dim or 0)
     tables = tables or load_card_tables()
     n_cards = int(tables.n_cards)
     model_arch = str(arch)
@@ -187,6 +196,14 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             self.value_head = nn.Linear(d, 1)
             # 动作序列辅助头（turn 内动作 multi-hot）：默认 None = 不构建、不计算
             self.seq_head = nn.Linear(d, N_ACTIONS) if seq_head else None
+            # 卡牌身份头（分层 BC）：默认 None = 不构建、参数/checkpoint 不变
+            self.card_head = (nn.Linear(d, int(card_head_dim))
+                              if bc_card_head else None)
+            if self.card_head is not None:
+                # 零初始化 = 初始均匀先验：card CE 起点 = ln(3983)，梯度稳定
+                nn.init.zeros_(self.card_head.weight)
+                nn.init.zeros_(self.card_head.bias)
+            self.bc_card_dim = int(card_head_dim) if bc_card_head else 0
 
         def _card_repr(self, idx):
             # idx [B, ...] long; 返回 [B, ..., d]
@@ -207,6 +224,15 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             logits, rank, value, g = self._forward_impl(features, cards, mask)
             seq = None if self.seq_head is None else self.seq_head(g)
             return logits, rank, value, seq
+
+        def forward_bc(self, features, cards, mask=None):
+            """分层 BC 用的一次前向：``(policy_logits, card_logits|None)``。
+
+            只在 ``bc_coef>0`` 的 BC 分支调用；``card_head`` 未构建时第二项为 None。
+            """
+            logits, _rank, _value, g = self._forward_impl(features, cards, mask)
+            card = None if self.card_head is None else self.card_head(g)
+            return logits, card
 
         def _forward_impl(self, features, cards, mask=None):
             B = features.shape[0]

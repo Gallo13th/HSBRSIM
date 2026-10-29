@@ -56,6 +56,7 @@ from .ppo import (CollectConfig, PPOBatch, PPOSelfPlayPolicy, build_batch_from_a
 _LIB_CACHE: Dict[str, Any] = {}
 _TRAJ_CACHE: Dict[str, Any] = {}
 _MIRROR_CACHE: Dict[Any, Any] = {}
+_HUMAN_BOARD_CACHE: Dict[Any, Any] = {}
 _OPP_CACHE: Dict[Any, Any] = {}
 
 
@@ -291,6 +292,27 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                             print(f"[warn] 回合末快照库为空/不存在: {mdir}", flush=True)
                     else:
                         mpool = cached[1]
+                # 人类战团（board-only）注入库（--human-boards/--human-board-p；默认关闭）。
+                # 与镜像快照可同时开：同座位同回合镜像优先（引擎里镜像座位已 ended_turn）。
+                hpool = None
+                if str(getattr(cfg, "human_boards", "")) and \
+                        float(getattr(cfg, "human_board_p", 0.0)) > 0.0:
+                    from .human_board_pool import load_pool as _load_human
+                    hpath = str(cfg.human_boards)
+                    hsample = str(getattr(cfg, "human_board_sample", "auto") or "auto")
+                    if os.path.isfile(hpath):
+                        hkey = os.path.getmtime(hpath)
+                    else:
+                        hkey = None
+                    hck = (hpath, hsample)
+                    cached = _HUMAN_BOARD_CACHE.get(hck)
+                    if cached is None or cached[0] != hkey:
+                        hpool = _load_human(hpath, sample=hsample) if hkey is not None else None
+                        _HUMAN_BOARD_CACHE[hck] = (hkey, hpool)
+                        if hpool is None:
+                            print(f"[warn] 人类战团库为空/不存在: {hpath}", flush=True)
+                    else:
+                        hpool = cached[1]
                 opp_pol = None
                 fck = str(getattr(cfg, "frozen_opponent", "") or "")
                 if fck:
@@ -321,6 +343,11 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     mirror_p=float(getattr(cfg, "mirror_p", 0.0)),
                     mirror_p_ramp=str(getattr(cfg, "mirror_p_ramp", "")),
                     mirror_seat_random=bool(getattr(cfg, "mirror_seat_random", False)),
+                    human_board_pool=hpool,
+                    human_board_p=float(getattr(cfg, "human_board_p", 0.0)),
+                    human_board_seats=int(getattr(cfg, "human_board_seats", 2)),
+                    human_board_sample=str(getattr(cfg, "human_board_sample", "auto")),
+                    human_board_set_tier=bool(getattr(cfg, "human_board_set_tier", True)),
                     opponent_policy=opp_pol)
             else:
                 if str(getattr(cfg, "library_pool", "")) and \
@@ -331,6 +358,10 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                         float(getattr(cfg, "mirror_p", 0.0)) > 0.0 or
                         str(getattr(cfg, "mirror_p_ramp", "")).strip()):
                     print("[warn] 回合末快照镜像只在 --lockstep 1 路径生效，本次请求被忽略",
+                          flush=True)
+                if str(getattr(cfg, "human_boards", "")) and \
+                        float(getattr(cfg, "human_board_p", 0.0)) > 0.0:
+                    print("[warn] 人类战团注入只在 --lockstep 1 路径生效，本次请求被忽略",
                           flush=True)
                 records, cmeta = collect_ppo_records_parallel(
                     model, cfg, workers=int(task.get("threads", 4)),

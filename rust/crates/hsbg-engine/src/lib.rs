@@ -53,7 +53,7 @@ pub use batch::{BatchEnv, SlotResult};
 pub use config::RulesConfig;
 pub use engine::Game;
 pub use env::SoloEnv;
-pub use snapshot::{SNAPSHOT_SCHEMA_VERSION, SnapshotReport};
+pub use snapshot::{BoardInjectReport, SNAPSHOT_SCHEMA_VERSION, SnapshotReport};
 
 /// Simulator library version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

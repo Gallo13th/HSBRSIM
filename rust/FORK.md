@@ -32,6 +32,13 @@
    `invariant_violations()` 与 `snapshot_schema_version()`）。语义与白名单见 `docs/MIRROR_SNAPSHOT_DESIGN.md`
    「实现状态」：字段白名单替换 + typed EID 重映射 + `pool_delta_unknown`（旧持有物按 pool parts 归还、
    注入实体 `pool_copies=0`）。不改变任何既有机制/数值与默认行为（无调用时零影响）。
+7. **人类战团（board-only）注入**（新增能力，默认不启用）：`src/snapshot.rs` 的
+   `Game::inject_board(seat, minions, tier)` + PyO3 `Game.inject_board(seat, [[card, atk, hp], ...], tier=None)`。
+   只替换 `board`（+ 可选 `tier`）与派生 `last_board`；hand/shop/资源/生命周期/配对全部保留；
+   新随从 `alloc_eid()` 重分配且 `pool_copies=0`（`pool_delta_unknown`），旧 board 持有量归还共享池；
+   指向被移除旧实体的 typed 引用（`link/group/src`、`hats`、`revert_golden`、`discover_targets`）就地清空；
+   逐座位事务（非法输入不改状态/`next_eid`）；**不设置** `ended_turn`。语义与近似边界见
+   `docs/HUMAN_BOARD_OPPONENT.md`。不改变任何既有机制/数值与默认行为（无调用时零影响）。
 
 除此之外，公开 API/行为、245 动作、3227+124 观测、`state_json`、seed 确定性、BatchEnv 语义与上游一致。
 

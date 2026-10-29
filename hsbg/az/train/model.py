@@ -29,22 +29,69 @@ def _torch():
     return torch
 
 
+def _default_bc_card_dim() -> int:
+    """卡牌身份头输出维度（惰性读卡表；默认 37.0.0 = 3983）。"""
+    from .bc_aux import bc_card_head_size
+    return int(bc_card_head_size())
+
+
+def bc_card_head_dim(model: Any) -> int:
+    """模型 trunk 的输出维度（tiny=policy_head.in_features；entity=d_model）。"""
+    if hasattr(model, "d_model"):
+        return int(model.d_model)
+    if hasattr(model, "policy_head"):
+        return int(model.policy_head.in_features)
+    raise ValueError("无法推断模型 trunk 维度：既无 d_model 也无 policy_head")
+
+
+def attach_bc_card_head(model: Any, dim: Optional[int] = None) -> Any:
+    """给已有模型**追加**（或复用）卡牌身份头，返回同一模型。
+
+    用于「从旧 checkpoint 续训 + ``bc_coef>0``」：旧 ckpt 没有 ``card_head``，加载后
+    在这里新建一个（正态初始化，随后的 BC 梯度训练它）。``dim`` 默认 3983（卡表条目数）。
+    幂等：已有 ``card_head`` 时直接返回。
+    """
+    torch = _torch()
+    nn = torch.nn
+    if getattr(model, "card_head", None) is not None:
+        return model
+    n = int(dim) if dim is not None else _default_bc_card_dim()
+    d = bc_card_head_dim(model)
+    model.card_head = nn.Linear(d, n)
+    # 与 build_net 一致：零初始化 = 初始均匀先验（CE=ln(n_cards)）
+    nn.init.zeros_(model.card_head.weight)
+    nn.init.zeros_(model.card_head.bias)
+    try:
+        model.bc_card_dim = n
+    except Exception:  # noqa: BLE001 - 非 nn.Module 的测试替身忽略
+        pass
+    return model
+
+
 if True:  # 命名空间占位：TinyAZNet 在下方用 torch.nn 定义（需要 torch 时惰性加载）
     pass
 
 
 def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FLOATS,
               n_actions: int = N_ACTIONS, n_ranks: int = N_RANKS,
-              seq_head: bool = False, **kwargs):
+              seq_head: bool = False, bc_card_head: bool = False,
+              bc_card_dim: Optional[int] = None, **kwargs):
     """构造策略网络：tiny（MLP）或 entity（AutoTavern 风格实体 Transformer）。
 
     ``seq_head=True`` 时额外构建「动作序列辅助头」（trunk -> 245 logits，
     ``docs/ACTION_SEQUENCE_AUX.md``）；**默认 False = 不构建**，因此默认路径的参数量、
     前向与 checkpoint 与之前完全一致。
+
+    ``bc_card_head=True`` 时额外构建「卡牌身份头」（trunk -> ``bc_card_dim`` 类，
+    默认 = 卡表条目数 3983；``docs/BC_AUX.md`` 分层 BC）。**默认 False =
+    不构建**：``bc_coef=0`` 时模型参数/前向/checkpoint 与旧版本逐位一致。
     """
     if arch == "entity":
         from .entity_model import build_entity_net
         kwargs["seq_head"] = bool(seq_head)
+        kwargs["bc_card_head"] = bool(bc_card_head)
+        if bc_card_dim is not None:
+            kwargs["bc_card_dim"] = int(bc_card_dim)
         return build_entity_net(**kwargs)
     if arch == "entity18m":
         from .entity_model import build_entity_net
@@ -53,9 +100,15 @@ def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FL
         kwargs.setdefault("pos_size", 24)
         kwargs.setdefault("arch", "entity18m")
         kwargs["seq_head"] = bool(seq_head)
+        kwargs["bc_card_head"] = bool(bc_card_head)
+        if bc_card_dim is not None:
+            kwargs["bc_card_dim"] = int(bc_card_dim)
         return build_entity_net(**kwargs)
     torch = _torch()
     nn = torch.nn
+    card_dim = int(bc_card_dim) if bc_card_dim is not None else 0
+    if bc_card_head and card_dim <= 0:
+        card_dim = int(_default_bc_card_dim())
 
     class TinyAZNet(nn.Module):
         """3227 -> hidden -> {245 policy logits, 8 rank logits[, 245 seq logits]}。"""
@@ -74,6 +127,14 @@ def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FL
             self.rank_head = nn.Linear(int(hidden), self.n_ranks)
             # 动作序列辅助头（turn 内动作 multi-hot）：默认 None = 不构建、不计算
             self.seq_head = nn.Linear(int(hidden), self.n_actions) if seq_head else None
+            # 卡牌身份头（分层 BC）：默认 None = 不构建、参数/checkpoint 不变
+            self.card_head = (nn.Linear(int(hidden), int(card_dim))
+                              if bc_card_head else None)
+            if self.card_head is not None:
+                # 零初始化 = 初始均匀先验：card CE 起点 = ln(3983)，梯度稳定
+                nn.init.zeros_(self.card_head.weight)
+                nn.init.zeros_(self.card_head.bias)
+            self.bc_card_dim = int(card_dim) if bc_card_head else 0
 
         def forward(self, features, cards=None):  # cards 暂不编码（保留接口）
             x = self.norm(features)
@@ -90,6 +151,17 @@ def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FL
             h = self.trunk(x)
             seq = None if self.seq_head is None else self.seq_head(h)
             return self.policy_head(h), self.rank_head(h), None, seq
+
+        def forward_bc(self, features, cards=None, mask=None):
+            """分层 BC 用的一次前向：``(policy_logits, card_logits|None)``。
+
+            只在 ``bc_coef>0`` 的 BC 分支调用；未建 ``card_head`` 时第二项为 None
+            （此时只有类型级 CE）。默认路径完全不调用本方法。
+            """
+            x = self.norm(features)
+            h = self.trunk(x)
+            card = None if self.card_head is None else self.card_head(h)
+            return self.policy_head(h), card
 
     return TinyAZNet()
 
@@ -202,6 +274,11 @@ def save_checkpoint(model: Any, path: str, *, meta: Optional[Dict[str, Any]] = N
     payload["meta"].setdefault("arch", getattr(model, "arch", "tiny"))
     # 动作序列辅助头：有无随 checkpoint 保存，load 时据此重建（默认 False = 旧 checkpoint）
     payload["meta"].setdefault("seq_head", bool(getattr(model, "seq_head", None) is not None))
+    # 卡牌身份头（分层 BC）：默认 False = 不建、旧 checkpoint 逐位一致
+    _card_head = getattr(model, "card_head", None)
+    payload["meta"].setdefault("bc_card_head", bool(_card_head is not None))
+    if _card_head is not None:
+        payload["meta"].setdefault("bc_card_dim", int(_card_head.out_features))
     if hasattr(model, "d_model"):
         payload["meta"].setdefault("d_model", int(model.d_model))
         payload["meta"].setdefault("n_layers", int(getattr(model.trunk, "num_layers", 8)))
@@ -227,15 +304,24 @@ def load_checkpoint(path: str, device: str = "cpu") -> tuple[Any, Dict[str, Any]
     hidden = int(meta.get("hidden", 256))
     arch = str(meta.get("arch", "tiny"))
     seq_head = bool(meta.get("seq_head", False))
+    # 卡牌身份头（分层 BC）：meta 声明或 state_dict 里确有 card_head.* 都重建
+    state = payload.get("state_dict") or {}
+    has_card_head = bool(meta.get("bc_card_head", False)) or any(
+        str(k).startswith("card_head.") for k in state)
+    card_dim = int(meta.get("bc_card_dim", 0) or 0)
     if arch == "entity18m":
-        model = build_net(arch="entity18m", seq_head=seq_head)
+        model = build_net(arch="entity18m", seq_head=seq_head,
+                          bc_card_head=has_card_head,
+                          bc_card_dim=(card_dim or None))
     elif arch == "entity":
         model = build_net(arch="entity", d_model=int(meta.get("d_model", 384)),
                           n_layers=int(meta.get("n_layers", 8)),
                           n_heads=int(meta.get("n_heads", 8)),
-                          seq_head=seq_head)
+                          seq_head=seq_head, bc_card_head=has_card_head,
+                          bc_card_dim=(card_dim or None))
     else:
-        model = build_net(hidden, seq_head=seq_head)
+        model = build_net(hidden, seq_head=seq_head, bc_card_head=has_card_head,
+                          bc_card_dim=(card_dim or None))
     model.load_state_dict(payload["state_dict"])
     model.to(torch.device(device))
     model.eval()
@@ -248,6 +334,8 @@ def load_checkpoint(path: str, device: str = "cpu") -> tuple[Any, Dict[str, Any]
 
 __all__ = [
     "build_net",
+    "attach_bc_card_head",
+    "bc_card_head_dim",
     "NetEvaluator",
     "feature_stats",
     "Meta",

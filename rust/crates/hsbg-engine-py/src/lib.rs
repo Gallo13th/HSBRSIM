@@ -256,6 +256,85 @@ impl PyGame {
         Ok(d)
     }
 
+    /// 人类战团（board-only）注入：只替换某座位的 `board`（+ 可选 `tier`）。
+    ///
+    /// `minions` = `[[card:int, atk:int, hp:int], ...]`（按位置从左到右，长度 ≤ 棋盘上限）；
+    /// `tier=None` 保留当前局 tier。语义见 `docs/HUMAN_BOARD_OPPONENT.md`：
+    ///
+    /// - 只改 `board` / `tier` / 派生 `last_board`；hand / shop / 资源 / 生命周期 / 配对 /
+    ///   侦察 / pending / effects 全部保留当前局原值，**不**设置 `ended_turn`（该座位本回合
+    ///   照常行动）；
+    /// - 新随从由 `alloc_eid()` 重新分配 EID（旧 EID 不复用），`pool_copies=0`、
+    ///   `pool_parts` 清空（人类数据没有池差量 → `pool_delta_unknown`）；
+    /// - 旧 board 的持有量按 `visit_pool_parts` 归还共享池，注入前后 `pool_balance` 守恒；
+    /// - 逐座位事务：非法输入**不改任何状态**（含 `next_eid` / pool），返回
+    ///   `{"applied": bool, "reason": str, ...}`（不抛异常）。
+    #[pyo3(signature = (seat, minions, tier=None))]
+    fn inject_board<'py>(
+        &mut self,
+        py: Python<'py>,
+        seat: usize,
+        minions: &Bound<'py, PyAny>,
+        tier: Option<u8>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let d = PyDict::new(py);
+        // 解析载荷：形状/类型错误也走 `applied=false`（调用方不需要 try/except 分支）。
+        let mut items: Vec<(hsbg_engine::cards::CardId, i32, i32)> = vec![];
+        let bad = |d: &Bound<'py, PyDict>, reason: String| -> PyResult<Bound<'py, PyDict>> {
+            d.set_item("applied", false)?;
+            d.set_item("reason", reason)?;
+            d.set_item("board_len", 0)?;
+            d.set_item("tier", tier)?;
+            d.set_item("pool_balance_ok", true)?;
+            Ok(d.clone())
+        };
+        let mut it = match minions.try_iter() {
+            Ok(it) => it,
+            Err(e) => return bad(&d, format!("bad_minions({e})")),
+        };
+        for (i, m) in it.by_ref().enumerate() {
+            let m = match m {
+                Ok(m) => m,
+                Err(e) => return bad(&d, format!("bad_minions({e})")),
+            };
+            let len = match m.len() {
+                Ok(len) => len,
+                Err(_) => return bad(&d, format!("bad_minion#{i}(not a sequence)")),
+            };
+            if len != 3 {
+                return bad(&d, format!("bad_minion#{i}({len} items, expected 3)"));
+            }
+            let card: u16 = match m.get_item(0).and_then(|v| v.extract()) {
+                Ok(v) => v,
+                Err(e) => return bad(&d, format!("bad_minion#{i}.card({e})")),
+            };
+            let atk: i32 = match m.get_item(1).and_then(|v| v.extract()) {
+                Ok(v) => v,
+                Err(e) => return bad(&d, format!("bad_minion#{i}.atk({e})")),
+            };
+            let hp: i32 = match m.get_item(2).and_then(|v| v.extract()) {
+                Ok(v) => v,
+                Err(e) => return bad(&d, format!("bad_minion#{i}.hp({e})")),
+            };
+            items.push((hsbg_engine::cards::CardId(card), atk, hp));
+        }
+        let rep = py.detach(|| self.g.inject_board(seat, &items, tier));
+        d.set_item("applied", rep.applied)?;
+        d.set_item("reason", rep.reason.as_str())?;
+        d.set_item("board_len", rep.board_len)?;
+        d.set_item("tier", rep.tier)?;
+        d.set_item("pool_balance_ok", rep.pool_balance_ok)?;
+        d.set_item("pool_held", rep.pool_held)?;
+        d.set_item("pool_initial", rep.pool_initial)?;
+        let returned = PyList::empty(py);
+        for (c, n) in &rep.returned_parts {
+            returned.append((c.0, *n))?;
+        }
+        d.set_item("returned_parts", returned)?;
+        d.set_item("summary", rep.summary())?;
+        Ok(d)
+    }
+
     /// 共享池总量守恒 `(held, initial)`；两者相等即平衡（见 `invariants::pool_balance`）。
     fn pool_balance(&self) -> (u64, u64) {
         hsbg_engine::invariants::pool_balance(&self.g)

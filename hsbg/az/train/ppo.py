@@ -62,9 +62,11 @@ from .common import (
 from .policies import Decision, Policy
 from .bc_aux import (
     DEFAULT_BC_SAMPLES_PATH,
+    DEFAULT_BC_CARD_WEIGHT,
+    DEFAULT_BC_TYPE_WEIGHT,
     BC_OBS_LAYOUT,
     BCObsBatch,
-    bc_ce_loss,
+    bc_hier_loss,
     bc_obs_batch,
     bc_pool_summary,
     load_bc_samples,
@@ -307,6 +309,18 @@ class CollectConfig:
     mirror_p_ramp: str = ""
     #: True=每个回合从全部非 learner 座位随机抽 mirror_seats 个（课程模式）；默认 False。
     mirror_seat_random: bool = False
+    #: 人类战团（board-only）注入库：``data/real_library/library_real_degraded.jsonl``
+    #: （空=不用）。只替换 board + 派生 tier，见 docs/HUMAN_BOARD_OPPONENT.md。
+    human_boards: str = ""
+    #: 每个候选座位每回合的注入概率（默认 0=关闭，零影响）。
+    human_board_p: float = 0.0
+    #: 每回合随机选的座位数（从全部非 learner 座位里抽）。
+    human_board_seats: int = 2
+    #: 桶内分位：auto=按 turn 走难度曲线（t<=8 p50 / 9..12 p75 / t>=13 p90）；
+    #: 也接受 p50/p75/p90/max 固定分位。
+    human_board_sample: str = "auto"
+    #: True=同时写入按 turn 派生的酒馆等级（人类数据没有 tier 字段）。
+    human_board_set_tier: bool = True
     #: 冻结对手模型（分裂模型/自对弈的对手）：空=引擎 bot；给 checkpoint 则 bot 座位由它驱动
     frozen_opponent: str = ""
     #: 由冻结对手模型驱动的 bot 座位数（0=全 bot，7=全部 7 席；1–2 性价比最高）
@@ -375,6 +389,11 @@ class PPOConfig:
     bc_samples_path: str = ""
     #: 每个 PPO minibatch 抽取并编码的 BC 样本数。
     bc_batch: int = 256
+    #: 分层 BC 的类型级 CE 权重（245 动作 logits 按类型 log-sum-exp 聚合后的 9 类 CE）。
+    bc_type_weight: float = DEFAULT_BC_TYPE_WEIGHT
+    #: 分层 BC 的卡牌身份级 CE 权重（buy/play 样本上的 3983 类 ``card_head``）；
+    #: 0 = 不训练/不使用卡牌头（此时也不需要 ``bc_card_head``）。
+    bc_card_weight: float = DEFAULT_BC_CARD_WEIGHT
     #: KL anchor 到 stage 起点的系数 β（论文 Table 7：0.1，前 100 个 iteration 后放开）。
     #: >0 时必须由 trainer 提供 anchor 分布（见 PPOTrainer.set_anchor）。
     anchor_coef: float = 0.0
@@ -434,6 +453,12 @@ class PPOConfig:
         if float(self.bc_mmr_boost) < 1.0:
             raise ValueError(
                 f"bc_mmr_boost 必须 >= 1，得到 {self.bc_mmr_boost!r}")
+        if float(self.bc_type_weight) < 0.0:
+            raise ValueError(
+                f"bc_type_weight 必须 >= 0，得到 {self.bc_type_weight!r}")
+        if float(self.bc_card_weight) < 0.0:
+            raise ValueError(
+                f"bc_card_weight 必须 >= 0，得到 {self.bc_card_weight!r}")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -789,11 +814,30 @@ def forward_model_aux(model: Any, features: Any, cards: Any, mask: Any = None):
     return logits, rank_logits, scalar, None
 
 
-def _accepts_mask_aux(model: Any) -> bool:
-    """``forward_aux`` 是否吃 mask（tiny 的 forward_aux(features, cards=None, mask=None)）。"""
+def forward_bc_model(model: Any, features: Any, cards: Any, mask: Any = None):
+    """分层 BC 的一次前向：``(policy_logits, card_logits|None)``。
+
+    优先走模型的 ``forward_bc``（tiny/entity 都有；一次 forward 同时出两个头）；
+    老模型/测试替身没有该方法时退回 ``forward_model``（card_logits=None，只算类型级）。
+    只有 ``bc_coef>0`` 的分支调用它，默认关闭时前向路径完全不变。
+    """
+    fn = getattr(model, "forward_bc", None)
+    if fn is not None:
+        out = fn(features, cards, mask) if _accepts_mask_aux(model, "forward_bc") \
+            else fn(features, cards)
+        if not isinstance(out, (tuple, list)) or len(out) != 2:
+            raise ValueError("forward_bc 必须返回 (policy_logits, card_logits|None)")
+        return out[0], out[1]
+    logits, _rank_logits, _scalar = split_model_outputs(
+        forward_model(model, features, cards, mask))
+    return logits, None
+
+
+def _accepts_mask_aux(model: Any, name: str = "forward_aux") -> bool:
+    """``forward_aux``/``forward_bc`` 是否吃 mask（tiny/entity 都接受 ``mask``）。"""
     import inspect
 
-    fn = getattr(model, "forward_aux", None)
+    fn = getattr(model, name, None)
     if fn is None:
         return False
     try:
@@ -1338,12 +1382,15 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
              - float(config.entropy_coef) * entropy)
     if seq_loss is not None:
         total = total + seq_coef * seq_loss
-    # ── 真实人类 BC 辅助正则（形态 A；默认 bc_coef=0 时整段不执行）──────────
-    # 每个 PPO minibatch 用同一个 model、同一张图做一次额外 forward，CE 直接加进 total，
-    # 因此与 PPO/seq 共享同一次 backward（不单独 step）。loss 只对 BC 样本平均，
-    # 再按类别频率倒数 + MMR 权重加权。
+    # ── 真实人类 BC 辅助正则（分层目标；默认 bc_coef=0 时整段不执行）─────────
+    # 每个 PPO minibatch 用同一个 model、同一张图做一次额外 forward（forward_bc）：
+    #   类型级：245 动作 logits -> 9 类 log-sum-exp 聚合 -> CE(action_type)
+    #   卡牌级：card_head(3983) 在 buy/play 样本上 CE(card_id 映射标签)
+    # 两层加权后乘 bc_coef 直接加进 total，因此与 PPO/seq 共享同一次 backward。
     bc_coef = float(getattr(config, "bc_coef", 0.0) or 0.0)
     bc_loss = None
+    bc_type_ce = None
+    bc_card_ce = None
     bc_n = 0
     if bc_coef > 0.0 and bc_batch is not None and len(bc_batch) > 0:
         bc_n = int(len(bc_batch))
@@ -1353,18 +1400,33 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
             bc_batch.cards.astype(np.int64))).to(dev)
         bc_m = torch.from_numpy(np.ascontiguousarray(
             bc_batch.action_mask.astype(bool))).to(dev)
-        bc_a = torch.from_numpy(np.ascontiguousarray(
-            bc_batch.action_index.astype(np.int64))).to(dev)
-        bc_w = torch.from_numpy(np.ascontiguousarray(
-            bc_batch.weights.astype(np.float32))).to(dev)
         bc_cls = torch.from_numpy(np.ascontiguousarray(
             bc_batch.class_ids.astype(np.int64))).to(dev)
-        bc_out = forward_model(model, bx, bc_cards, bc_m)
-        bc_logits, _bc_rank, _bc_scalar = split_model_outputs(bc_out)
-        bc_logits = bc_logits.float().masked_fill(~bc_m, float(MASKED_LOGIT))
-        bc_loss = bc_ce_loss(
-            bc_logits, bc_a, weights=bc_w, mask=None, class_ids=bc_cls,
-            class_counts=bc_batch.class_counts)
+        bc_w = torch.from_numpy(np.ascontiguousarray(
+            bc_batch.weights.astype(np.float32))).to(dev)
+        bc_tids = torch.from_numpy(np.ascontiguousarray(
+            bc_batch.type_ids.astype(np.int64))).to(dev)
+        bc_card_tgt = torch.from_numpy(np.ascontiguousarray(
+            bc_batch.card_target.astype(np.int64))).to(dev)
+        bc_card_ok = torch.from_numpy(np.ascontiguousarray(
+            bc_batch.card_valid.astype(bool))).to(dev)
+        bc_policy_logits, bc_card_logits = forward_bc_model(
+            model, bx, bc_cards, bc_m)
+        bc_policy_logits = bc_policy_logits.float()
+        if bc_card_logits is not None:
+            bc_card_logits = bc_card_logits.float()
+        hier = bc_hier_loss(
+            bc_policy_logits, bc_tids, bc_cls, action_mask=bc_m,
+            card_logits=bc_card_logits, card_target=bc_card_tgt,
+            card_valid=bc_card_ok, weights=bc_w,
+            class_counts=bc_batch.class_counts,
+            type_weight=float(getattr(config, "bc_type_weight",
+                                    DEFAULT_BC_TYPE_WEIGHT) or 0.0),
+            card_weight=float(getattr(config, "bc_card_weight",
+                                    DEFAULT_BC_CARD_WEIGHT) or 0.0))
+        bc_loss = hier["loss"]
+        bc_type_ce = hier["type_loss"]
+        bc_card_ce = hier["card_loss"]
         total = total + bc_coef * bc_loss
     anchor_kl = torch.zeros((), device=dev)
     beta = float(config.anchor_coef)
@@ -1397,6 +1459,10 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     # BC 辅助正则：只有 bc_coef>0 才出现；bc_coef=0 时 stats 结构与旧版一致
     if bc_loss is not None:
         result["bc_loss"] = bc_loss.detach()
+        if bc_type_ce is not None:
+            result["bc_type_loss"] = bc_type_ce.detach()
+        if bc_card_ce is not None:
+            result["bc_card_loss"] = bc_card_ce.detach()
         result["bc_coef"] = torch.as_tensor(bc_coef, device=dev)
         result["bc_samples"] = torch.as_tensor(float(bc_n), device=dev)
     return result
@@ -1529,6 +1595,8 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                 on_step({"step": updates, "epoch": epoch + 1, **step_metrics})
             if int(cfg.log_every) > 0 and updates % int(cfg.log_every) == 0:
                 bc_note = (f" bc={step_metrics['bc_loss']:.4f}"
+                           f" bc_type={step_metrics.get('bc_type_loss', 0.0):.4f}"
+                           f" bc_card={step_metrics.get('bc_card_loss', 0.0):.4f}"
                            f" bc_coef={step_metrics['bc_coef']:.4g}"
                            if "bc_loss" in step_metrics else "")
                 print(f"[ppo] step {updates} total={step_metrics['total']:.4f} "
@@ -1552,7 +1620,9 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         logs.append(rec)
         # seq=... / bc=... 只在启用对应辅助任务时出现（默认关闭 -> 日志行与旧版逐字节一致）
         seq_note = f" seq={rec['seq_loss']:.4f}" if "seq_loss" in rec else ""
-        bc_note = (f" bc={rec['bc_loss']:.4f} bc_coef={rec['bc_coef']:.4g}"
+        bc_note = (f" bc={rec['bc_loss']:.4f} bc_type={rec.get('bc_type_loss', 0.0):.4f}"
+                   f" bc_card={rec.get('bc_card_loss', 0.0):.4f}"
+                   f" bc_coef={rec['bc_coef']:.4g}"
                    f" bc_samples={rec['bc_samples']:.0f}"
                    if "bc_loss" in rec else "")
         print(f"[ppo] epoch {epoch + 1}/{epochs} total={rec['total']:.4f} "
@@ -1607,7 +1677,15 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     bc_on = any("bc_loss" in r for r in logs)
     if bc_on:
         stats["bc_loss"] = float(np.mean([r.get("bc_loss", 0.0) for r in logs]))
+        stats["bc_type_loss"] = float(np.mean(
+            [r.get("bc_type_loss", 0.0) for r in logs]))
+        stats["bc_card_loss"] = float(np.mean(
+            [r.get("bc_card_loss", 0.0) for r in logs]))
         stats["bc_coef"] = float(getattr(cfg, "bc_coef", 0.0) or 0.0)
+        stats["bc_type_weight"] = float(
+            getattr(cfg, "bc_type_weight", DEFAULT_BC_TYPE_WEIGHT) or 0.0)
+        stats["bc_card_weight"] = float(
+            getattr(cfg, "bc_card_weight", DEFAULT_BC_CARD_WEIGHT) or 0.0)
         stats["bc_samples"] = float(np.mean(
             [r.get("bc_samples", 0.0) for r in logs]))
         stats["bc_pool_samples"] = int(len(bc_pool)) if bc_pool is not None else 0
@@ -1617,7 +1695,8 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         cfg_echo = stats.get("config")
         if isinstance(cfg_echo, dict):
             for key in ("bc_coef", "bc_coef_ramp", "bc_mmr_min", "bc_mmr_boost",
-                        "bc_samples_path", "bc_batch"):
+                        "bc_samples_path", "bc_batch", "bc_type_weight",
+                        "bc_card_weight"):
                 cfg_echo.pop(key, None)
     return stats
 

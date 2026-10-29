@@ -33,6 +33,54 @@ use crate::invariants;
 use crate::state::{Item, Minion, Player, QueueMark};
 use crate::types::EntityId;
 
+/// 人类战团（board-only）注入的结果（Python 侧转成 dict；拒绝不抛异常）。
+///
+/// 设计：`docs/HUMAN_BOARD_OPPONENT.md`。与 [`SnapshotReport`] 的整场面快照不同，
+/// 这里只替换 `board`（+ 可选 `tier`），其余字段（hand / shop / 资源 / 生命周期 /
+/// 配对 / 侦察）全部保留当前局原值。
+#[derive(Clone, Debug, Default)]
+pub struct BoardInjectReport {
+    /// 是否成功替换（拒绝时状态一位都没动）。
+    pub applied: bool,
+    /// `"ok"` 或拒绝原因（`not_recruit` / `already_ended` / `unknown_card(0:...=123)` ...）。
+    pub reason: String,
+    /// 载荷里的随从数（拒绝时也回填，便于打点）。
+    pub board_len: usize,
+    /// 本次写入的 tier（`None` = 保留当前局 tier）。
+    pub tier: Option<u8>,
+    /// 注入后共享池 `(held, initial)`：两者相等即平衡（`invariants::pool_balance`）。
+    pub pool_held: u64,
+    pub pool_initial: u64,
+    /// `pool_balance` 检查结果（构造上恒真；调用方仍应对 False 报警）。
+    pub pool_balance_ok: bool,
+    /// 旧 board 归还给共享池的副本 `[(card, copies), ...]`。
+    pub returned_parts: Vec<(CardId, u16)>,
+}
+
+impl BoardInjectReport {
+    fn rejected(reason: impl Into<String>) -> Self {
+        BoardInjectReport {
+            applied: false,
+            reason: reason.into(),
+            ..Default::default()
+        }
+    }
+
+    /// 结构化摘要（日志/manifest 打点用）。
+    pub fn summary(&self) -> String {
+        format!(
+            "applied={} reason={} board={} tier={:?} pool_balance_ok={} (held={} initial={})",
+            self.applied,
+            self.reason,
+            self.board_len,
+            self.tier,
+            self.pool_balance_ok,
+            self.pool_held,
+            self.pool_initial
+        )
+    }
+}
+
 /// 快照载荷的 schema 版本：Python 采集端写进文件，引擎只做记录（不解析文件）。
 pub const SNAPSHOT_SCHEMA_VERSION: u32 = 1;
 
@@ -469,5 +517,197 @@ impl Game {
         t.mishmash_seen = None;
         t.revert_golden.clear();
         t.discover_targets.clear();
+    }
+}
+
+// ────────────────────────── 人类战团（board-only）注入 ──────────────────────────
+
+impl Game {
+    /// **只替换战团**的人类观测注入：`minions` 为按位置排列的 `(card, atk, hp)`（≤ `cfg.board_size`）。
+    ///
+    /// 语义（`docs/HUMAN_BOARD_OPPONENT.md`）：
+    /// - 只改 `board`（+ 可选的 `tier`）与派生字段 `last_board`；hand / shop / hand_queue /
+    ///   gold / 资源 / alive / health / placement / hero / 能力 / 统计 / 配对 / 侦察 /
+    ///   pending / scheduled / effects 全部保留当前局原值；
+    /// - 新随从一律 `alloc_eid()` 重新分配 EID（旧 EID 不复用），`pool_copies = 0`、
+    ///   `pool_parts` 清空（**不占共享池**，人类数据没有 pool 差量）；
+    /// - 旧 board 的持有量按 `visit_pool_parts` 归还共享池；因此注入前后
+    ///   `invariants::pool_balance` 的总量/逐物种都保持守恒；
+    /// - 指向被移除旧实体的 typed 引用（手牌 `link`/`group`/`src`、队列 `hid`/`link`/`src`、
+    ///   `hats` / `revert_golden` / `discover_targets`）就地清空，避免悬空 EID；
+    /// - **逐座位事务**：先完整校验（不分配 EID、不动 pool、不改玩家），再一次性提交；
+    ///   非法输入（阶段/座位/存活/已结束/pending/数量/卡面/数值/池溢出）只返回
+    ///   `applied=false` + `reason`，**状态与 `next_eid` 都不变**；
+    /// - 不设置 `ended_turn`：被注入的座位本回合照常行动（bot 在人类战团之上继续打），
+    ///   这与镜像快照「整场面 = 回合末」的语义不同（那边必须 `ended_turn = true`）。
+    pub fn inject_board(
+        &mut self,
+        seat: usize,
+        minions: &[(CardId, i32, i32)],
+        tier: Option<u8>,
+    ) -> BoardInjectReport {
+        let mut rep = match self.try_inject_board(seat, minions, tier) {
+            Ok(returned) => BoardInjectReport {
+                applied: true,
+                reason: "ok".to_string(),
+                board_len: minions.len(),
+                tier,
+                returned_parts: returned,
+                ..Default::default()
+            },
+            Err(reason) => {
+                let mut r = BoardInjectReport::rejected(reason);
+                r.board_len = minions.len();
+                r.tier = tier;
+                r
+            }
+        };
+        // 注入后立刻检查共享池（调用方只看 `pool_balance_ok`，不因失败回滚）。
+        let (held, initial) = invariants::pool_balance(self);
+        rep.pool_held = held;
+        rep.pool_initial = initial;
+        rep.pool_balance_ok = held == initial;
+        rep
+    }
+
+    /// 校验 + 提交（`inject_board` 的实现；返回值是旧 board 归还的池副本）。
+    fn try_inject_board(
+        &mut self,
+        seat: usize,
+        minions: &[(CardId, i32, i32)],
+        tier: Option<u8>,
+    ) -> Result<Vec<(CardId, u16)>, String> {
+        // ---- 校验阶段（无副作用） ----
+        if self.phase != Phase::Recruit {
+            return Err("not_recruit".to_string());
+        }
+        if seat >= self.players.len() {
+            return Err(format!("seat_out_of_range({seat})"));
+        }
+        {
+            let p = &self.players[seat];
+            if !p.alive {
+                return Err("not_alive".to_string());
+            }
+            if p.ended_turn {
+                return Err("already_ended".to_string());
+            }
+            if p.health <= 0 {
+                return Err(format!("dying(health={})", p.health));
+            }
+            if !p.pending.is_empty() {
+                return Err(format!("pending_choice({})", p.pending.len()));
+            }
+        }
+        if minions.len() > self.cfg.board_size {
+            return Err(format!(
+                "too_many_minions({}>{})",
+                minions.len(),
+                self.cfg.board_size
+            ));
+        }
+        if let Some(t) = tier {
+            if !(1..=7).contains(&t) {
+                return Err(format!("bad_tier({t})"));
+            }
+        }
+        for (i, (card, atk, hp)) in minions.iter().enumerate() {
+            let d = db()
+                .try_get(*card)
+                .ok_or_else(|| format!("unknown_card({i}:{})", card.0))?;
+            if d.kind != CardKind::Minion {
+                return Err(format!("not_minion({i}:{})", d.id));
+            }
+            if *atk < 0 || *hp <= 0 {
+                return Err(format!("bad_stats({i}:{}/{})", atk, hp));
+            }
+        }
+        // 旧 board 的持有量（聚合后在 i64 语义下判定池写回不溢出；绝不 saturating）。
+        let mut old_parts: Vec<(CardId, u16)> = Vec::new();
+        for m in &self.players[seat].board {
+            m.visit_pool_parts(|c, n| old_parts.push((c, n)));
+        }
+        let mut delta: HashMap<usize, i64> = HashMap::new();
+        for (c, n) in &old_parts {
+            *delta.entry(c.0 as usize).or_insert(0) += *n as i64;
+        }
+        for (idx, n) in &delta {
+            let cur = *self
+                .pool
+                .counts
+                .get(*idx)
+                .ok_or_else(|| format!("pool_index({idx})"))?;
+            let after = cur as i64 + *n;
+            if !(0..=u16::MAX as i64).contains(&after) {
+                return Err(format!("pool_overflow(card={idx}, {cur}+{n})"));
+            }
+        }
+        // ---- 提交阶段（此后不再失败） ----
+        self.commit_inject_board(seat, minions, tier, &old_parts);
+        Ok(old_parts)
+    }
+
+    /// 提交 board-only 注入：逐随从分配新 EID → 归还旧持有量 → 清悬空引用 → 替换 board。
+    fn commit_inject_board(
+        &mut self,
+        seat: usize,
+        minions: &[(CardId, i32, i32)],
+        tier: Option<u8>,
+        old_parts: &[(CardId, u16)],
+    ) {
+        let removed: HashSet<EntityId> = self.players[seat].board.iter().map(|m| m.eid).collect();
+        let mut board: Vec<Minion> = Vec::with_capacity(minions.len());
+        for (card, atk, hp) in minions {
+            let eid = self.alloc_eid();
+            let mut m = Minion::new(eid, *card);
+            // 人类数据只给当前 atk / hp：recruit 阶段的战团是满血，故 max_hp = hp。
+            m.atk = *atk;
+            m.hp = *hp;
+            m.max_hp = *hp;
+            m.peak_atk = *atk;
+            m.peak_hp = *hp;
+            // `pool_delta_unknown`：人类数据没有池差量，注入实体一份都不占。
+            m.pool_copies = 0;
+            m.pool_parts.clear();
+            m.killed_by = 0;
+            board.push(m);
+        }
+        for (c, n) in old_parts {
+            self.pool.put(*c, *n);
+        }
+        let t = &mut self.players[seat];
+        if !removed.is_empty() {
+            for h in t.hand.iter_mut() {
+                if removed.contains(&h.link) {
+                    h.link = 0;
+                }
+                if removed.contains(&h.group) {
+                    h.group = 0;
+                }
+                if removed.contains(&h.src) {
+                    h.src = 0;
+                }
+            }
+            for q in t.hand_queue_marks.iter_mut() {
+                if removed.contains(&q.hid) {
+                    q.hid = 0;
+                }
+                if removed.contains(&q.link) {
+                    q.link = 0;
+                }
+                if removed.contains(&q.src) {
+                    q.src = 0;
+                }
+            }
+            t.hats.retain(|e| !removed.contains(e));
+            t.revert_golden.retain(|(e, _, _, _)| !removed.contains(e));
+            t.discover_targets.retain(|(_, e)| !removed.contains(e));
+        }
+        t.board = board;
+        if let Some(tr) = tier {
+            t.tier = tr;
+        }
+        // EOT 语义：`last_board` 与当前 board 同步（幽灵/侦察/回合末钩子读它）。
+        t.last_board = t.board.clone();
     }
 }

@@ -42,7 +42,13 @@ sys.path.insert(0, ROOT)
 
 from hsbg.az.train.common import engine_available, engine_info, to_jsonable  # noqa: E402
 from hsbg.az.train.mirror_snapshots import ramp_p  # noqa: E402
-from hsbg.az.train.model import build_net, load_checkpoint, save_checkpoint  # noqa: E402
+from hsbg.az.train.model import (  # noqa: E402
+    attach_bc_card_head,
+    bc_card_head_dim,
+    build_net,
+    load_checkpoint,
+    save_checkpoint,
+)
 from hsbg.az.train.ppo import (  # noqa: E402
     CollectConfig,
     PPOConfig,
@@ -157,6 +163,20 @@ def main() -> int:
                          "空=用固定 --mirror-p")
     ap.add_argument("--mirror-seat-random", type=int, default=0,
                     help="1=每回合从全部非 learner 座位随机抽 --mirror-seats 个（课程模式）")
+    ap.add_argument("--human-boards", default="",
+                    help="人类战团（board-only）JSONL（默认 "
+                         "data/real_library/library_real_degraded.jsonl；空=不用）；见 "
+                         "docs/HUMAN_BOARD_OPPONENT.md")
+    ap.add_argument("--human-board-p", type=float, default=0.0,
+                    help="每个候选座位每回合注入人类战团的概率（默认 0=关闭，零影响）")
+    ap.add_argument("--human-board-seats", type=int, default=2,
+                    help="每回合从全部非 learner 座位里随机抽几个座位注入（默认 2）")
+    ap.add_argument("--human-board-sample", default="auto",
+                    choices=["auto", "p50", "p75", "p90", "max"],
+                    help="人类战团桶内分位：auto=按 turn 走难度曲线（t<=8 p50 / 9..12 p75 "
+                         "/ t>=13 p90，默认）")
+    ap.add_argument("--human-board-set-tier", type=int, default=1,
+                    help="1=同时写入按 turn 派生的酒馆等级（人类数据没有 tier 字段；默认 1）")
     ap.add_argument("--library-p", type=float, default=0.0,
                     help="每回合每个 bot 座位的注入概率（建议 0.3 起）")
     ap.add_argument("--lockstep", type=int, default=0,
@@ -198,6 +218,11 @@ def main() -> int:
                     help="BC 样本 JSONL(.gz) 路径（默认仓库 data/firestone_bc/bc_samples.jsonl.gz）")
     ap.add_argument("--bc-batch", type=int, default=256,
                     help="每个 PPO minibatch 抽取/编码的 BC 样本数（默认 256）")
+    ap.add_argument("--bc-type-weight", type=float, default=1.0,
+                    help="分层 BC 的类型级 CE 权重（9 类 log-sum-exp 聚合；默认 1.0）")
+    ap.add_argument("--bc-card-weight", type=float, default=0.5,
+                    help="分层 BC 的卡牌身份 CE 权重（3983 类 card_head，仅 buy/play；"
+                         "默认 0.5；0=不建/不用 card_head）")
     ap.add_argument("--entropy-coef", type=float, default=0.005)
     ap.add_argument("--max-actions-per-turn", type=int, default=40)
     ap.add_argument("--max-steps", type=int, default=20000)
@@ -274,6 +299,23 @@ def main() -> int:
         print("[warn] 回合末快照镜像只在 --lockstep 1 路径生效", flush=True)
     if str(args.mirror_snaps) and not os.path.isdir(str(args.mirror_snaps)):
         print(f"[warn] --mirror-snaps 目录不存在: {args.mirror_snaps}", flush=True)
+    # 人类战团（board-only）注入（默认关闭；--human-board-p 0 时完全零影响）
+    if float(args.human_board_p) > 0.0:
+        if int(args.human_board_seats) <= 0:
+            print("[error] --human-board-p>0 需要 --human-board-seats>0", file=sys.stderr)
+            return 2
+        if not str(args.human_boards):
+            args.human_boards = "data/real_library/library_real_degraded.jsonl"
+        if not os.path.isfile(str(args.human_boards)):
+            print(f"[error] --human-boards 文件不存在: {args.human_boards}", file=sys.stderr)
+            return 2
+        if not int(args.lockstep):
+            print("[warn] 人类战团注入只在 --lockstep 1 路径生效", flush=True)
+        elif (float(args.mirror_p) > 0.0 or _mirror_ramp):
+            print("[info] 人类战团 + 回合末快照镜像同时开启："
+                  "同座位同回合镜像快照优先（记 human_board_skipped_by_mirror）", flush=True)
+    elif str(args.human_boards):
+        print("[warn] --human-boards 已设置但 --human-board-p=0：本次不注入", flush=True)
 
     # ---- 动作序列辅助任务：系数 ramp（默认关闭 = 零影响）----
     try:
@@ -298,6 +340,9 @@ def main() -> int:
     if float(args.bc_coef) < 0.0:
         print("[error] --bc-coef 必须 >= 0", file=sys.stderr)
         return 2
+    if float(args.bc_type_weight) < 0.0 or float(args.bc_card_weight) < 0.0:
+        print("[error] --bc-type-weight/--bc-card-weight 必须 >= 0", file=sys.stderr)
+        return 2
     try:
         bc_schedule = SeqCoefSchedule.from_spec(
             base_coef=float(args.bc_coef), spec=str(args.bc_coef_ramp),
@@ -307,6 +352,14 @@ def main() -> int:
         print(f"[error] --bc-coef-ramp 非法: {exc}", file=sys.stderr)
         return 2
     bc_enabled = bool(bc_schedule.enabled)
+    if bc_enabled and float(args.bc_type_weight) <= 0.0 \
+            and float(args.bc_card_weight) <= 0.0:
+        print("[warn] BC 已启用但两层权重都为 0：自动关闭 bc_coef=0", flush=True)
+        bc_enabled = False
+        args.bc_coef = 0.0
+        args.bc_coef_ramp = ""
+    #: 是否构建/使用卡牌身份头（只在 BC 启用且 card 权重 > 0 时；bc_coef=0 不建）
+    bc_card_head = bool(bc_enabled and float(args.bc_card_weight) > 0.0)
     bc_pool = None
     if bc_enabled:
         try:
@@ -325,13 +378,17 @@ def main() -> int:
             print(f"[bc] class_fractions="
                   f"{json.dumps({k: round(v, 4) for k, v in _sum['class_fractions'].items()}, ensure_ascii=False)}",
                   flush=True)
-            print(f"[bc] coef(dec=0)={bc_schedule.coef(0):.4g} "
+            print(f"[bc] 分层目标: type_weight={float(args.bc_type_weight):g} "
+                  f"card_weight={float(args.bc_card_weight):g} "
+                  f"card_head={'on' if bc_card_head else 'off'} "
+                  f"coef(dec=0)={bc_schedule.coef(0):.4g} "
                   f"ramp={json.dumps(bc_schedule.describe(), ensure_ascii=False)}",
                   flush=True)
         except Exception as exc:  # noqa: BLE001 - BC 可选，失败自动关闭
             print(f"[warn] BC 数据加载失败，自动关闭 bc_coef=0（不中断训练）："
                   f"{type(exc).__name__}: {exc}", flush=True)
             bc_enabled = False
+            bc_card_head = False
             args.bc_coef = 0.0
             args.bc_coef_ramp = ""
             bc_pool = None
@@ -368,15 +425,36 @@ def main() -> int:
             print("[warn] checkpoint 没有动作序列辅助头（旧 checkpoint）：本次关闭 seq 辅助任务",
                   flush=True)
             seq_enabled = False
+        if bc_card_head and getattr(model, "card_head", None) is None:
+            # 旧 checkpoint（如 champion_c0_1975）没有 card_head：加载后追加，
+            # 随机初始化，随后由 BC 卡牌身份 CE 训练。
+            try:
+                attach_bc_card_head(model)
+                print(f"[bc] checkpoint 无 card_head：已追加 "
+                      f"Linear({bc_card_head_dim(model)}, 3983)", flush=True)
+            except Exception as exc:  # noqa: BLE001 - 退化到只做类型级 BC
+                print(f"[warn] 追加 card_head 失败（本次只用类型级 BC）：{exc!r}",
+                      flush=True)
+                bc_card_head = False
+                args.bc_card_weight = 0.0
     elif args.trainer_state and os.path.isfile(args.trainer_state):
-        model = build_net(arch=args.arch, seq_head=seq_enabled)
+        # trainer.pt 的 model state 是 strict 加载：老 state 没有 card_head 时不能
+        # 在加载前追加（会 unexpected key），因此 trainer-state 路径要求 state 已含该头。
+        model = build_net(arch=args.arch, seq_head=seq_enabled,
+                          bc_card_head=False)
         meta = {"arch": args.arch}
         arch = args.arch
         print(f"[net] empty model for trainer-state={args.trainer_state}", flush=True)
     else:
-        model = build_net(arch=args.arch, seq_head=seq_enabled)
+        model = build_net(arch=args.arch, seq_head=seq_enabled,
+                          bc_card_head=bc_card_head)
         meta = {"arch": args.arch}
         arch = args.arch
+    if bc_enabled and bc_card_head and getattr(model, "card_head", None) is None:
+        print("[warn] 模型没有 card_head（trainer-state/旧 ckpt）：本次只用类型级 BC "
+              "(bc_card_weight=0)", flush=True)
+        bc_card_head = False
+        args.bc_card_weight = 0.0
     model.to(torch.device(args.device))
     print(f"[net] arch={arch} params={sum(p.numel() for p in model.parameters()):,}",
           flush=True)
@@ -394,13 +472,16 @@ def main() -> int:
         # 动作序列辅助任务：初始系数由 ramp 在 dec=0 处给出（无 ramp 时=--seq-coef）
         seq_coef=(seq_schedule.coef(0) if seq_enabled else 0.0),
         seq_coef_ramp=(str(args.seq_coef_ramp) if seq_enabled else ""),
-        # 真实人类 BC 辅助正则：初始系数由 ramp 在 dec=0 处给出；池在下方注入 trainer
+        # 真实人类 BC 辅助正则（分层目标）：初始系数由 ramp 在 dec=0 处给出；
+        # 池在下方注入 trainer。
         bc_coef=(bc_schedule.coef(0) if bc_enabled else 0.0),
         bc_coef_ramp=(str(args.bc_coef_ramp) if bc_enabled else ""),
         bc_mmr_min=int(args.bc_mmr_min),
         bc_mmr_boost=float(args.bc_mmr_boost),
         bc_samples_path=str(args.bc_samples),
-        bc_batch=int(args.bc_batch))
+        bc_batch=int(args.bc_batch),
+        bc_type_weight=float(args.bc_type_weight),
+        bc_card_weight=float(args.bc_card_weight))
     trainer: Optional[PPOTrainer] = None
     if args.trainer_state and os.path.isfile(args.trainer_state):
         trainer = PPOTrainer.load(model, args.trainer_state, config=p_cfg,
@@ -705,6 +786,11 @@ def main() -> int:
             mirror_p=_mp, mirror_sample=str(args.mirror_sample),
             mirror_p_ramp=str(args.mirror_p_ramp),
             mirror_seat_random=bool(int(args.mirror_seat_random)),
+            human_boards=str(args.human_boards),
+            human_board_p=float(args.human_board_p),
+            human_board_seats=int(args.human_board_seats),
+            human_board_sample=str(args.human_board_sample),
+            human_board_set_tier=bool(int(args.human_board_set_tier)),
             frozen_opponent=str(args.frozen_opponent),
             frozen_seats=int(args.frozen_seats),
             rust_collector=bool(int(args.rust_collector)),
@@ -875,6 +961,8 @@ def main() -> int:
                   + (f" seq={stats.get('seq_loss', 0.0):.4f}"
                      f" seq_coef={stats.get('seq_coef', 0.0):.4g}" if seq_enabled else "")
                   + (f" bc={stats.get('bc_loss', 0.0):.4f}"
+                     f" bc_type={stats.get('bc_type_loss', 0.0):.4f}"
+                     f" bc_card={stats.get('bc_card_loss', 0.0):.4f}"
                      f" bc_coef={stats.get('bc_coef', 0.0):.4g}"
                      f" bc_samples={stats.get('bc_samples', 0.0):.0f}"
                      if bc_enabled else ""),
@@ -989,6 +1077,9 @@ def main() -> int:
             **bc_schedule.describe(),
             "coef_final": float(bc_schedule.coef(cum_decisions)),
             "cum_decisions": int(cum_decisions),
+            "type_weight": float(args.bc_type_weight),
+            "card_weight": float(args.bc_card_weight),
+            "card_head": bool(bc_card_head),
             "pool": (bc_pool_summary(bc_pool) if bc_pool is not None else None),
         }
     write_summary(os.path.join(args.out, "summary.json"), to_jsonable(summary))
