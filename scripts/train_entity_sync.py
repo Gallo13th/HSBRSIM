@@ -36,6 +36,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from hsbg.az.train.common import engine_available, engine_info, to_jsonable  # noqa: E402
+from hsbg.az.train.mirror_snapshots import ramp_p  # noqa: E402
 from hsbg.az.train.model import build_net, load_checkpoint, save_checkpoint  # noqa: E402
 from hsbg.az.train.ppo import (  # noqa: E402
     CollectConfig,
@@ -53,6 +54,7 @@ from hsbg.az.train.parallel_collect import collect_ppo_batch_parallel  # noqa: E
 from hsbg.az.train.process_pool import ProcessActorPool  # noqa: E402
 from hsbg.az.train.runlog import (append_record, read_run, slim_collect,  # noqa: E402
                                   write_header, write_summary)
+from hsbg.az.train.seq_aux import SeqCoefSchedule  # noqa: E402
 
 
 def _atomic_torch_save(obj: Any, path: str) -> None:
@@ -66,6 +68,8 @@ def _atomic_torch_save(obj: Any, path: str) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Entity PPO（持久 trainer + 进程 pool + 流水线）")
     ap.add_argument("--minutes", type=float, default=30.0)
+    ap.add_argument("--stop-at-decisions", type=float, default=0.0,
+                    help="累计 learner decisions 达到该值后停止（0=不启用）；与 --minutes 取先到者")
     ap.add_argument("--iterations", type=int, default=0)
     ap.add_argument("--games", type=int, default=4)
     ap.add_argument("--arch", default="entity", choices=["tiny", "entity", "entity18m"])
@@ -89,7 +93,7 @@ def main() -> int:
     ap.add_argument("--leaf-compile", type=int, default=0,
                     help="1=叶前向 torch.compile + TF32（实测 B=64 5.4→0.7 ms）")
     ap.add_argument("--leaf-amp", default="off", choices=["off", "bf16"],
-                    help="采集/评测叶前向精度（bf16 实测 collect 约 -5%）")
+                    help="采集/评测叶前向精度（bf16 实测 collect 约 -5%%）")
     ap.add_argument("--leaf-wait-ms", type=float, default=2.0,
                     help="批量叶服务器聚批等待（ms）；单客户端建议 0.1")
     ap.add_argument("--rc-threads", type=int, default=8,
@@ -113,6 +117,14 @@ def main() -> int:
                     help="回合末快照镜像的座位数：给 seat 1..N 注入（0=关闭，最大 7）")
     ap.add_argument("--mirror-p", type=float, default=0.0,
                     help="每座位每回合注入快照的概率（默认 0=关闭，零影响）")
+    ap.add_argument("--mirror-sample", "--sample", dest="mirror_sample", default="p50",
+                    choices=["p50", "p75", "p90", "max", "strong", "weak", "random"],
+                    help="快照桶内采样：p50/p75/p90=强度分位课程（默认），max/strong=旧上限")
+    ap.add_argument("--mirror-p-ramp", default="",
+                    help="线性 p ramp，如 0.1@0,0.25@0.3,0.25@1.0（x 与 iteration 同单位）；"
+                         "空=用固定 --mirror-p")
+    ap.add_argument("--mirror-seat-random", type=int, default=0,
+                    help="1=每回合从全部非 learner 座位随机抽 --mirror-seats 个（课程模式）")
     ap.add_argument("--library-p", type=float, default=0.0,
                     help="每回合每个 bot 座位的注入概率（建议 0.3 起）")
     ap.add_argument("--lockstep", type=int, default=0,
@@ -122,6 +134,16 @@ def main() -> int:
     ap.add_argument("--amp", default="off", choices=["off", "bf16"],
                     help="PPO 前向/反向精度；bf16 实测 2.03×（loss 侧仍 fp32）")
     ap.add_argument("--pi-coef", type=float, default=0.1)
+    # ---- 动作序列辅助任务（默认关闭，见 docs/ACTION_SEQUENCE_AUX.md）----
+    ap.add_argument("--seq-coef", type=float, default=0.0,
+                    help="动作序列辅助头（该 seat 在本 turn 内动作 multi-hot 的 BCE）权重；"
+                         "0=关闭（默认，records→batch→loss 与旧路径逐字节等价）")
+    ap.add_argument("--seq-coef-ramp", default="",
+                    help='按 decisions 比例的线性 ramp，如 "0.02@0,0.05@0.5"；'
+                         "给了 ramp 时本 iteration 的系数由 ramp 决定")
+    ap.add_argument("--seq-ramp-total-decisions", type=float, default=0.0,
+                    help="ramp 的 100%% 进度对应的累计 decisions（0=用 --stop-at-decisions，"
+                         "再缺省 30M）")
     ap.add_argument("--entropy-coef", type=float, default=0.005)
     ap.add_argument("--max-actions-per-turn", type=int, default=40)
     ap.add_argument("--max-steps", type=int, default=20000)
@@ -168,15 +190,41 @@ def main() -> int:
         print("[error] --library-p（v1 单座位注入）未通过终审，已禁用；"
               "请用 --trajectory-pool/--trajectory-p", file=sys.stderr)
         return 2
-    # 回合末场面快照镜像（默认关闭；--mirror-p 0 时完全零影响）
-    if float(args.mirror_p) > 0.0 and int(args.mirror_seats) <= 0:
-        print("[error] --mirror-p>0 需要 --mirror-seats>0（给 seat 1..N 注入）",
-              file=sys.stderr)
+    # 回合末场面快照镜像（默认关闭；--mirror-p 0 且无 ramp 时完全零影响）
+    _mirror_ramp = str(args.mirror_p_ramp).strip()
+    if _mirror_ramp:
+        try:
+            ramp_p(0, _mirror_ramp)      # 提前校验格式，避免训练中途才报错
+        except ValueError as exc:
+            print(f"[error] --mirror-p-ramp 格式错误: {exc}", file=sys.stderr)
+            return 2
+    if (float(args.mirror_p) > 0.0 or _mirror_ramp) and int(args.mirror_seats) <= 0:
+        print("[error] --mirror-p>0/--mirror-p-ramp 需要 --mirror-seats>0"
+              "（给随机/固定座位注入）", file=sys.stderr)
         return 2
-    if float(args.mirror_p) > 0.0 and not int(args.lockstep):
+    if (float(args.mirror_p) > 0.0 or _mirror_ramp) and not int(args.lockstep):
         print("[warn] 回合末快照镜像只在 --lockstep 1 路径生效", flush=True)
     if str(args.mirror_snaps) and not os.path.isdir(str(args.mirror_snaps)):
         print(f"[warn] --mirror-snaps 目录不存在: {args.mirror_snaps}", flush=True)
+
+    # ---- 动作序列辅助任务：系数 ramp（默认关闭 = 零影响）----
+    try:
+        seq_schedule = SeqCoefSchedule.from_spec(
+            base_coef=float(args.seq_coef), spec=str(args.seq_coef_ramp),
+            total_decisions=(float(args.seq_ramp_total_decisions) if
+                             float(args.seq_ramp_total_decisions) > 0 else
+                             (float(args.stop_at_decisions) if
+                              float(args.stop_at_decisions) > 0 else 3.0e7)))
+    except ValueError as exc:
+        print(f"[error] --seq-coef-ramp 非法: {exc}", file=sys.stderr)
+        return 2
+    seq_enabled = bool(seq_schedule.enabled)
+    if seq_enabled:
+        print(f"[seq] 动作序列辅助任务开启: {json.dumps(seq_schedule.describe(), ensure_ascii=False)}"
+              f" coef(dec=0)={seq_schedule.coef(0):.4f}", flush=True)
+    elif float(args.seq_coef) < 0.0:
+        print("[error] --seq-coef 必须 >= 0", file=sys.stderr)
+        return 2
 
     if not engine_available():
         print("[error] hsbg_engine 不可用", file=sys.stderr)
@@ -206,13 +254,17 @@ def main() -> int:
         arch = str(meta.get("arch", args.arch))
         norm_mean, norm_std = meta.get("norm_mean"), meta.get("norm_std")
         print(f"[net] checkpoint={args.checkpoint} arch={arch}", flush=True)
+        if seq_enabled and getattr(model, "seq_head", None) is None:
+            print("[warn] checkpoint 没有动作序列辅助头（旧 checkpoint）：本次关闭 seq 辅助任务",
+                  flush=True)
+            seq_enabled = False
     elif args.trainer_state and os.path.isfile(args.trainer_state):
-        model = build_net(arch=args.arch)
+        model = build_net(arch=args.arch, seq_head=seq_enabled)
         meta = {"arch": args.arch}
         arch = args.arch
         print(f"[net] empty model for trainer-state={args.trainer_state}", flush=True)
     else:
-        model = build_net(arch=args.arch)
+        model = build_net(arch=args.arch, seq_head=seq_enabled)
         meta = {"arch": args.arch}
         arch = args.arch
     model.to(torch.device(args.device))
@@ -226,7 +278,10 @@ def main() -> int:
         max_grad_norm=float(args.max_grad_norm),
         grad_accum=int(args.grad_accum), amp=str(args.amp),
         device=str(args.device), seed=int(args.seed),
-        log_every=int(args.log_every))
+        log_every=int(args.log_every),
+        # 动作序列辅助任务：初始系数由 ramp 在 dec=0 处给出（无 ramp 时=--seq-coef）
+        seq_coef=(seq_schedule.coef(0) if seq_enabled else 0.0),
+        seq_coef_ramp=(str(args.seq_coef_ramp) if seq_enabled else ""))
     trainer: Optional[PPOTrainer] = None
     if args.trainer_state and os.path.isfile(args.trainer_state):
         trainer = PPOTrainer.load(model, args.trainer_state, config=p_cfg,
@@ -410,6 +465,10 @@ def main() -> int:
 
     def _collect_for(idx: int, wv: Optional[int] = None,
                      wp: Optional[str] = None) -> Tuple[Any, Dict[str, Any], CollectConfig, float]:
+        # p ramp：按 iteration 下标求值（空 schedule = 固定 --mirror-p）。
+        _mp = float(args.mirror_p)
+        if str(args.mirror_p_ramp).strip():
+            _mp = float(ramp_p(int(idx), str(args.mirror_p_ramp)))
         c_cfg = CollectConfig(
             games=int(args.games), seed=int(args.seed) + idx * 1000,
             opponent=str(args.opponent), behavior=str(args.behavior),
@@ -419,13 +478,17 @@ def main() -> int:
             library_pool=str(args.library_pool), library_p=float(args.library_p),
             trajectory_pool=str(args.trajectory_pool), trajectory_p=float(args.trajectory_p),
             mirror_snaps=str(args.mirror_snaps), mirror_seats=int(args.mirror_seats),
-            mirror_p=float(args.mirror_p),
+            mirror_p=_mp, mirror_sample=str(args.mirror_sample),
+            mirror_p_ramp=str(args.mirror_p_ramp),
+            mirror_seat_random=bool(int(args.mirror_seat_random)),
             frozen_opponent=str(args.frozen_opponent),
             frozen_seats=int(args.frozen_seats),
             rust_collector=bool(int(args.rust_collector)),
             rc_threads=int(args.rc_threads), leaf_amp=str(args.leaf_amp),
             leaf_compile=bool(int(args.leaf_compile)),
-            leaf_wait_ms=float(args.leaf_wait_ms))
+            leaf_wait_ms=float(args.leaf_wait_ms),
+            # 动作序列辅助任务：只在启用时让采集/打包侧产出 seq_target（默认 False）
+            seq_aux=bool(seq_enabled))
         t_c = time.time()
         if pool is not None:
             batch, collect_meta = pool.collect(
@@ -486,6 +549,10 @@ def main() -> int:
         while time.time() < deadline:
             if end_i > 0 and i >= end_i:
                 break
+            if float(args.stop_at_decisions) > 0 and cum_decisions >= float(args.stop_at_decisions):
+                print(f"[loop] decisions {cum_decisions} >= {int(args.stop_at_decisions)}; stop",
+                      flush=True)
+                break
             if last_len > 0 and (deadline - time.time()) < max(60.0, last_len):
                 print("[loop] remaining time < last iteration; stop", flush=True)
                 break
@@ -533,6 +600,13 @@ def main() -> int:
             trainer.config.anchor_coef = (
                 float(args.anchor_beta) if i < int(args.anchor_iterations)
                 else float(args.anchor_beta_tail))
+            if seq_enabled:
+                # 权重 ramp：按**已累计** decisions 的进度插值（本 iteration 生效）
+                trainer.config.seq_coef = float(seq_schedule.coef(cum_decisions))
+                if getattr(batch, "seq_target", None) is None and i == start_i:
+                    print("[warn] seq 辅助任务已开启但批次没有 seq_target"
+                          "（--rust-collector 路径暂不产出标签）-> 本批次 seq_loss=0",
+                          flush=True)
             _t_ppo = time.time()
             _tl["t_ppo_start"] = time.monotonic()
             stats = trainer.update(batch)
@@ -561,7 +635,9 @@ def main() -> int:
             history.append(rec)
             print(f"[iter {i}] samples={len(batch)} updates={stats['trainer_updates']} "
                   f"lr={stats['lr']:.3g} total={stats['epochs'][-1]['total']:.4f}"
-                  + (f" lag={lag} ratio={pre_ratio:.3f}" if pipeline_on else ""),
+                  + (f" lag={lag} ratio={pre_ratio:.3f}" if pipeline_on else "")
+                  + (f" seq={stats.get('seq_loss', 0.0):.4f}"
+                     f" seq_coef={stats.get('seq_coef', 0.0):.4g}" if seq_enabled else ""),
                   flush=True)
 
             # 版本化快照：trainer 为权威，model 为导出；manifest 最后原子发布
@@ -648,6 +724,11 @@ def main() -> int:
                "pipeline": {"enabled": pipeline_on,
                             "lag_max_allowed": 1},
                "last_records": history[-5:]}
+    if seq_enabled:
+        # 动作序列辅助任务：ramp 终点与累计 decisions（默认关闭时 summary 不变）
+        summary["seq"] = {**seq_schedule.describe(),
+                          "coef_final": float(seq_schedule.coef(cum_decisions)),
+                          "cum_decisions": int(cum_decisions)}
     write_summary(os.path.join(args.out, "summary.json"), to_jsonable(summary))
     print(f"[done] iters={i} updates={trainer.updates} "
           f"elapsed={time.time()-t0:.0f}s -> {args.out}", flush=True)

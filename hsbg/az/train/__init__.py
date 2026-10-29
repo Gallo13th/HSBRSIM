@@ -9,6 +9,8 @@
 - ``selfplay``   BatchEnv / Game 两条 8 座自对弈与轨迹采集路径；
 - ``train_loop`` 策略 CE + 名次价值 CE 的初期训练（loss/吞吐）与监督评估；
 - ``ppo``        MCTS 引导的 PPO（masked、clip、GAE、KL 早停）与自对弈采集；
+- ``seq_aux``    动作序列辅助任务：turn 内动作 multi-hot 标签、权重 ramp、BCE 损失
+                 （默认关闭，见 docs/ACTION_SEQUENCE_AUX.md）；
 - ``evaluate``   固定 seed 策略评测（rank/top4/win/legal/truncated/耗时）；
 - ``report``     JSON 报告 schema（``hsbg.az.eval/v1`` / ``hsbg.az.train_smoke/v1``）。
 

@@ -59,6 +59,12 @@ from .common import (
     utility_from_rank,
 )
 from .policies import Decision, Policy
+from .seq_aux import (
+    SEQ_TARGET_KEY,
+    parse_coef_ramp,
+    seq_bce_loss,
+    seq_targets_from_records,
+)
 
 # ── 数值边界 ──────────────────────────────────────────────────────────────
 #: torch 侧非法 logits 的填充值（float32 下 ``exp(-1e30)=0``，避免 -inf 制造 NaN 梯度）。
@@ -283,12 +289,23 @@ class CollectConfig:
     mirror_snaps: str = ""
     mirror_seats: int = 0
     mirror_p: float = 0.0
+    #: 桶内采样模式：p50/p75/p90（分位课程，默认）、max（旧 strong 别名）/weak/random。
+    mirror_sample: str = "p50"
+    #: 线性 p ramp（例如 "0.1@0,0.25@0.3,0.25@1.0"）：空=用固定 mirror_p。
+    #: 训练入口按 iteration 求值后写入 mirror_p，本字段只透传/记录。
+    mirror_p_ramp: str = ""
+    #: True=每个回合从全部非 learner 座位随机抽 mirror_seats 个（课程模式）；默认 False。
+    mirror_seat_random: bool = False
     #: 冻结对手模型（分裂模型/自对弈的对手）：空=引擎 bot；给 checkpoint 则 bot 座位由它驱动
     frozen_opponent: str = ""
     #: 由冻结对手模型驱动的 bot 座位数（0=全 bot，7=全部 7 席；1–2 性价比最高）
     frozen_seats: int = 0
     #: 批量叶服务器的聚批等待窗口（ms）。单客户端（lockstep/rust collector）应设很小。
     leaf_wait_ms: float = 2.0
+    #: 动作序列辅助任务：采集侧是否产出 turn 内动作 multi-hot 标签（``seq_target``）。
+    #: **默认 False = 不产出、不占内存**（records→batch→loss 与旧路径完全一致）；
+    #: 打开后 batch 会多 ``[n,245] uint8`` 标签，见 docs/ACTION_SEQUENCE_AUX.md。
+    seq_aux: bool = False
 
 
 @dataclass
@@ -305,6 +322,13 @@ class PPOConfig:
     value_coef: float = 0.5
     #: MCTS visit π 辅助交叉熵权重 alpha（0 = 关闭，退化为纯 PPO）
     pi_coef: float = 0.5
+    #: 动作序列辅助任务权重（turn 内动作 multi-hot 的 BCEWithLogits）；
+    #: **0 = 关闭（默认）**：不构建 seq 头、不算 seq loss、stats 里不出现 seq 字段。
+    #: 需要模型带 seq 头（``build_net(..., seq_head=True)``）且 batch 有 ``seq_target``。
+    seq_coef: float = 0.0
+    #: 权重 ramp 规格（``"0.02@0,0.05@0.5"``，按 decisions 进度线性插值）；由训练循环
+    #: 每个 iteration 用它算出实际的 ``seq_coef`` 后写回本字段。空 = 用常数 ``seq_coef``。
+    seq_coef_ramp: str = ""
     #: KL anchor 到 stage 起点的系数 β（论文 Table 7：0.1，前 100 个 iteration 后放开）。
     #: >0 时必须由 trainer 提供 anchor 分布（见 PPOTrainer.set_anchor）。
     anchor_coef: float = 0.0
@@ -334,17 +358,27 @@ class PPOConfig:
         if mode not in ("rank", "mse"):
             raise ValueError(f"value_loss 只能是 rank|mse，得到 {self.value_loss!r}")
         self.value_loss = mode
+        # 早失败：ramp 规格写错时不要等到训练循环里才炸
+        if str(self.seq_coef_ramp or "").strip():
+            parse_coef_ramp(self.seq_coef_ramp)
+        if float(self.seq_coef) < 0.0:
+            raise ValueError(f"seq_coef 必须 >= 0，得到 {self.seq_coef!r}")
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # 4. 轨迹批次
 # ══════════════════════════════════════════════════════════════════════════
-#: 批次字段（保存/加载顺序）
+#: 批次字段（保存/加载顺序）。注意：这些都是**必填**基础字段；可选的
+#: ``seq_target``（动作序列辅助标签）只在启用 ``seq_aux`` 时出现，由
+#: ``save()/load()`` 作为扩展字段处理，因此关闭时 npz 与旧版本逐字节一致。
 BATCH_FIELDS: Tuple[str, ...] = (
     "features", "cards", "masks", "actions", "old_logprobs", "values", "rewards",
     "dones", "advantages", "returns", "seats", "game_ids", "ranks", "turns",
     "target_pi", "has_pi", "episode_ids", "forced",
 )
+
+#: 可选扩展字段（存在才写/读 npz）：动作序列辅助任务标签。
+BATCH_OPTIONAL_FIELDS: Tuple[str, ...] = (SEQ_TARGET_KEY,)
 
 
 @dataclass
@@ -359,6 +393,7 @@ class PPOBatch:
         seats int32[n]        game_ids int64[n]   ranks int64[n]  turns int32[n]
         target_pi f32[n,245]  has_pi bool[n]      episode_ids int32[n]
         forced bool[n]（确定性守卫样本：只参与 value/critic，不参与 policy/aux）
+        seq_target uint8[n,245]（可选：turn 内动作 multi-hot；启用 seq 辅助任务时才有）
     """
 
     features: np.ndarray
@@ -379,6 +414,8 @@ class PPOBatch:
     has_pi: np.ndarray
     episode_ids: np.ndarray
     forced: Optional[np.ndarray] = None
+    #: 动作序列辅助标签（multi-hot uint8[n,245]）；None = 未启用（默认）
+    seq_target: Optional[np.ndarray] = None
     meta: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -386,6 +423,8 @@ class PPOBatch:
             self.forced = np.zeros(len(self.actions), dtype=bool)
         else:
             self.forced = np.asarray(self.forced, dtype=bool).reshape(-1)
+        if self.seq_target is not None:
+            self.seq_target = np.asarray(self.seq_target, dtype=np.uint8)
 
     def __len__(self) -> int:
         return int(self.actions.shape[0])
@@ -407,6 +446,20 @@ class PPOBatch:
             arr = getattr(self, name)
             if tuple(arr.shape) != shape:
                 errs.append(f"{name}: shape {tuple(arr.shape)} != {shape}")
+        if self.seq_target is not None:
+            st = np.asarray(self.seq_target)
+            if tuple(st.shape) != (n, N_ACTIONS):
+                errs.append(f"seq_target: shape {tuple(st.shape)} != {(n, N_ACTIONS)}")
+            elif n:
+                if not np.isin(st, (0, 1)).all():
+                    errs.append("seq_target 必须是 0/1 multi-hot")
+                # 标签必须包含本步实际执行的动作（turn 内动作集合的定义）
+                a_chk = self.actions.astype(np.int64)
+                if bool(((a_chk >= 0) & (a_chk < N_ACTIONS)).all()):
+                    got = st[np.arange(n), a_chk]
+                    if not bool((got == 1).all()):
+                        errs.append(
+                            f"{int((got != 1).sum())} 条样本的 seq_target 未标本步动作")
         if n == 0:
             return errs
         m = self.masks.astype(bool)
@@ -451,14 +504,14 @@ class PPOBatch:
         return errs
 
     def summary(self) -> Dict[str, Any]:
-        """批次质量摘要（进 JSON 报告，不含大数组）。"""
+        """批次质量摘要（进 JSON 报告，不含大数组）；seq 字段只在启用时出现。"""
         n = len(self)
         if n == 0:
             return {"samples": 0}
         m = self.masks.astype(bool)
         a = self.actions.astype(np.int64)
         hp = self.has_pi.astype(bool)
-        return {
+        out = {
             "samples": int(n),
             "games": int(np.unique(self.game_ids).size),
             "episodes": int(np.unique(self.episode_ids).size),
@@ -473,13 +526,25 @@ class PPOBatch:
             "rank_mean": float(self.ranks.mean()),
             "target_pi_rate": float(hp.mean()) if n else 0.0,
         }
+        if self.seq_target is not None:
+            st = np.asarray(self.seq_target)
+            out["seq_target_rate"] = float((st.sum(axis=1) > 0).mean()) if st.size else 0.0
+            out["seq_target_density"] = float(st.sum() / max(st.shape[0] * st.shape[1], 1))
+        return out
 
     # ── 存储 ──
     def save(self, path: str) -> str:
-        """保存为 npz（数组 + meta json）。"""
+        """保存为 npz（基础数组 + 可选扩展数组 + meta json）。
+
+        ``seq_target`` 只在启用动作序列辅助任务时写入，因此关闭时 npz 内容与旧版本一致。
+        """
         path = str(path)
         os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
         payload = {f"arr_{k}": getattr(self, k) for k in BATCH_FIELDS}
+        for k in BATCH_OPTIONAL_FIELDS:
+            arr = getattr(self, k, None)
+            if arr is not None:
+                payload[f"arr_{k}"] = arr
         payload["meta_json"] = np.asarray(
             json.dumps(to_jsonable(self.meta), ensure_ascii=False))
         np.savez_compressed(path, **payload)
@@ -492,6 +557,9 @@ class PPOBatch:
             if missing:
                 raise ValueError(f"PPO 批次文件缺少字段: {missing}")
             arrays = {k: np.asarray(z[f"arr_{k}"]) for k in BATCH_FIELDS}
+            for k in BATCH_OPTIONAL_FIELDS:
+                if f"arr_{k}" in z:
+                    arrays[k] = np.asarray(z[f"arr_{k}"])
             meta = json.loads(str(z["meta_json"])) if "meta_json" in z else {}
         return cls(meta=meta, **arrays)
 
@@ -505,7 +573,8 @@ def _group_order(records: List[Dict[str, Any]]) -> List[int]:
 def build_batch_from_records(records: List[Dict[str, Any]], *,
                              gamma: float = 1.0, lam: float = 0.95,
                              step_penalty: float = 0.0,
-                             meta: Optional[Dict[str, Any]] = None) -> PPOBatch:
+                             meta: Optional[Dict[str, Any]] = None,
+                             seq_aux: bool = False) -> PPOBatch:
     """把决策记录列表整理成 ``PPOBatch``（奖励/GAE 均已计算）。
 
     ``records`` 每条至少包含::
@@ -515,6 +584,10 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
 
     rank=0（截断/未知）的样本丢弃。奖励：每步 ``-step_penalty``，该座位 episode
     末步再加终局 ``u(rank)``；``done`` 只在该座位末步为 1。
+
+    ``seq_aux=True`` 时额外产出动作序列辅助标签 ``seq_target``（uint8[n,245]，
+    该 seat 在该 turn 内实际执行过的动作 multi-hot，见 ``seq_aux.py``）；默认 False
+    时批次字段与旧版本完全一致（零影响）。
     """
     if not isinstance(records, (list, tuple)):
         raise TypeError("records 必须是决策记录列表")
@@ -582,12 +655,18 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
         "gamma": float(gamma), "lam": float(lam), "step_penalty": float(step_penalty),
         "dropped_unknown_rank": int(dropped), "episodes": int(ep),
     })
+    # 动作序列辅助标签：同 (game_id, seat, turn) 的动作集合 = multi-hot(245) uint8。
+    # 只在 seq_aux=True 时构造（默认关闭 -> 批次字段/内存与旧路径完全一致）。
+    seq_target = (seq_targets_from_records(recs) if seq_aux else None)
+    if seq_target is not None:
+        merged_meta["seq_aux"] = True
     return PPOBatch(
         features=features, cards=cards, masks=masks, actions=actions,
         old_logprobs=old_logprobs, values=values, rewards=rewards, dones=dones,
         advantages=advantages, returns=returns, seats=seats, game_ids=game_ids,
         ranks=ranks, turns=turns, target_pi=target_pi, has_pi=has_pi,
-        episode_ids=episode_ids, forced=forced, meta=merged_meta)
+        episode_ids=episode_ids, forced=forced, seq_target=seq_target,
+        meta=merged_meta)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -619,6 +698,37 @@ def forward_model(model: Any, features: Any, cards: Any, mask: Any = None):
     if _accepts_mask(model):
         return model(features, cards, mask)
     return model(features, cards)
+
+
+def forward_model_aux(model: Any, features: Any, cards: Any, mask: Any = None):
+    """带动作序列辅助头的统一前向：``(logits, rank_logits, scalar|None, seq_logits|None)``。
+
+    模型提供 ``forward_aux``（tiny/entity 在 ``seq_head=True`` 时都提供）时一次前向同时
+    拿到主头与 seq 头；否则退回 ``forward_model`` + ``split_model_outputs``（seq 为 None）。
+    只有 ``seq_coef>0`` 的损失路径会调用它，默认关闭时前向路径完全不变。
+    """
+    fn = getattr(model, "forward_aux", None)
+    if fn is not None:
+        out = fn(features, cards, mask) if _accepts_mask_aux(model) else fn(features, cards)
+        if not isinstance(out, (tuple, list)) or len(out) != 4:
+            raise ValueError("forward_aux 必须返回 (logits, rank_logits, value|None, seq|None)")
+        return out[0], out[1], out[2], out[3]
+    logits, rank_logits, scalar = split_model_outputs(
+        forward_model(model, features, cards, mask))
+    return logits, rank_logits, scalar, None
+
+
+def _accepts_mask_aux(model: Any) -> bool:
+    """``forward_aux`` 是否吃 mask（tiny 的 forward_aux(features, cards=None, mask=None)）。"""
+    import inspect
+
+    fn = getattr(model, "forward_aux", None)
+    if fn is None:
+        return False
+    try:
+        return "mask" in inspect.signature(fn).parameters
+    except (TypeError, ValueError):  # pragma: no cover - 内建 forward
+        return False
 
 
 def policy_values(model: Any, features: Any, cards: Any, mask: Any):
@@ -822,6 +932,8 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     - policy: ``-min(r*A, clip(r,1±ε)*A).mean()``；
     - value: ``rank``（名次 CE）或 ``mse``（``E[u(rank)]`` vs returns）；
     - aux: ``pi_coef * CE(π_MCTS, π_θ)``（仅 ``has_pi`` 样本）；
+    - seq（动作序列辅助任务，默认关闭）: ``seq_coef * BCEWithLogits(seq_logits, seq_target)``，
+      只在 ``valid & ~forced`` 且标签非空的样本上平均；
     - entropy: masked 策略熵（鼓励探索）；
     - anchor: ``anchor_coef * KL(π_θ ‖ π_anchor)``（``anchor_logp`` 为 stage 起点在整批
       样本上的 masked log-prob，形状 ``[len(batch), 245]``）；
@@ -861,8 +973,16 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         vvar = (((adv - vmean) ** 2) * valid).sum() / n_valid
         adv = (adv - vmean) / vvar.sqrt().clamp_min(1e-8)
 
-    out = forward_model(model, x, c, m)
-    logits, rank_logits, scalar_value = split_model_outputs(out)
+    # 动作序列辅助任务（默认关闭）：只有 seq_coef>0 才走 forward_aux 取 seq logits，
+    # 否则前向调用链与旧版本完全一致（byte-identical）。
+    seq_coef = float(getattr(config, "seq_coef", 0.0) or 0.0)
+    seq_logits = None
+    if seq_coef > 0.0:
+        _l, _r, _s, seq_logits = forward_model_aux(model, x, c, m)
+        logits, rank_logits, scalar_value = _l, _r, _s
+    else:
+        out = forward_model(model, x, c, m)
+        logits, rank_logits, scalar_value = split_model_outputs(out)
     # 无论是否 autocast，loss 侧一律 fp32：KL/entropy/cross_entropy 的数值稳定性依赖它
     logits = logits.float()
     rank_logits = rank_logits.float()
@@ -894,9 +1014,26 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     else:
         aux_pi_loss = torch.zeros((), device=dev)
 
+    # ── 动作序列辅助头（turn 内动作 multi-hot 的 BCEWithLogits）────────────────
+    # 只在 seq_coef>0 且模型带 seq 头、批次带 seq_target 时计算；只对 valid（~forced）
+    # 且标签非空的行平均。默认关闭时既不前向 seq 头、也不往 total 里加任何项。
+    seq_loss = None
+    if seq_coef > 0.0:
+        target_np = getattr(batch, "seq_target", None)
+        if seq_logits is not None and target_np is not None:
+            tgt = torch.from_numpy(np.ascontiguousarray(
+                np.asarray(target_np)[idx].astype(np.float32))).to(dev)
+            has_target = (tgt.sum(dim=-1) > 0).to(torch.float32)
+            seq_loss = seq_bce_loss(seq_logits, tgt, weight=valid * has_target)
+        else:
+            # 缺标签（如 Rust 采集器未产出）或模型未建 seq 头：记 0，不制造假梯度
+            seq_loss = torch.zeros((), device=dev)
+
     total = (policy_loss + float(config.value_coef) * value_loss
              + float(config.pi_coef) * aux_pi_loss
              - float(config.entropy_coef) * entropy)
+    if seq_loss is not None:
+        total = total + seq_coef * seq_loss
     anchor_kl = torch.zeros((), device=dev)
     beta = float(config.anchor_coef)
     if beta > 0.0 and anchor_logp is not None:
@@ -908,7 +1045,7 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         total = total + beta * anchor_kl
     approx_kl = ((old_logp - action_logp) * valid).sum() / valid.sum().clamp_min(1.0)
     illegal_prob_max = (probs * (~m).to(probs.dtype)).max()
-    return {
+    result = {
         "total": total,
         "policy_loss": policy_loss,
         "value_loss": value_loss,
@@ -922,6 +1059,10 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         "adv_mean": adv.mean(),
         "value_pred_mean": value_pred.mean(),
     }
+    # 默认关闭时不出现该键（保持 stats/日志与旧版本逐字节一致）
+    if seq_loss is not None:
+        result["seq_loss"] = seq_loss
+    return result
 
 
 def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
@@ -1021,17 +1162,20 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         rec["elapsed_s"] = time.time() - t0
         rec["kl_early_stopped"] = bool(epoch_stopped)
         logs.append(rec)
+        # seq=... 只在启用动作序列辅助任务时出现（默认关闭 -> 日志行与旧版逐字节一致）
+        seq_note = f" seq={rec['seq_loss']:.4f}" if "seq_loss" in rec else ""
         print(f"[ppo] epoch {epoch + 1}/{epochs} total={rec['total']:.4f} "
               f"(policy={rec['policy_loss']:.4f} value={rec['value_loss']:.4f} "
               f"aux_pi={rec['aux_pi_loss']:.4f} ent={rec['entropy']:.4f} "
-              f"kl={rec['approx_kl']:.5f} clip={rec['clip_frac']:.3f})", flush=True)
+              f"kl={rec['approx_kl']:.5f} clip={rec['clip_frac']:.3f}){seq_note}",
+              flush=True)
         if epoch_stopped:
             print(f"[ppo] KL 早停：minibatch approx_kl 超过 "
                   f"1.5*target_kl={1.5 * float(cfg.target_kl):.5f}", flush=True)
             break
     model.eval()
     elapsed = time.time() - t0
-    return {
+    stats: Dict[str, Any] = {
         "epochs": logs,
         "updates": int(updates),
         "samples": n,
@@ -1047,6 +1191,20 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         "amp": str(getattr(cfg, "amp", "off")),
         "config": to_jsonable(asdict(cfg)),
     }
+    # 动作序列辅助任务：只有「当前系数>0 或配置了 ramp」才出现，
+    # 且关闭（默认）时连 config 回显里的两个 seq 键也去掉 -> stats 与旧版逐字节一致。
+    seq_points = parse_coef_ramp(str(getattr(cfg, "seq_coef_ramp", "") or ""))
+    seq_on = float(getattr(cfg, "seq_coef", 0.0) or 0.0) > 0.0 or bool(seq_points)
+    if seq_on:
+        stats["seq_coef"] = float(getattr(cfg, "seq_coef", 0.0) or 0.0)
+        stats["seq_coef_ramp"] = str(getattr(cfg, "seq_coef_ramp", "") or "")
+        stats["seq_loss"] = float(np.mean([r.get("seq_loss", 0.0) for r in logs]))
+    else:
+        cfg_echo = stats.get("config")
+        if isinstance(cfg_echo, dict):
+            cfg_echo.pop("seq_coef", None)
+            cfg_echo.pop("seq_coef_ramp", None)
+    return stats
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1330,8 +1488,13 @@ def _weak_bot_action(game: Any, seat: int, rng: np.random.Generator) -> int:
     return int(legal[int(rng.integers(0, legal.size))])
 
 
-def pack_records_arrays(records: Sequence[Dict[str, Any]]) -> Dict[str, np.ndarray]:
-    """records(list[dict]) → SoA 数组（L3：一次性 stack，供 npz 传输）。"""
+def pack_records_arrays(records: Sequence[Dict[str, Any]],
+                        *, seq_aux: bool = False) -> Dict[str, np.ndarray]:
+    """records(list[dict]) → SoA 数组（L3：一次性 stack，供 npz 传输）。
+
+    ``seq_aux=True`` 时额外产出 ``seq_target``（uint8[n,245] multi-hot）；默认 False
+    时返回的字段集合与旧版本完全一致。
+    """
     n = len(records)
     f0 = records[0]["features"]
     has_pi = any(r.get("target_pi") is not None for r in records)
@@ -1373,13 +1536,20 @@ def pack_records_arrays(records: Sequence[Dict[str, Any]]) -> Dict[str, np.ndarr
                 pi = pi / s_pi if s_pi > 1e-8 else (m_i / max(float(m_i.sum()), 1.0))
                 out["has_pi"][i] = True
                 out["target_pi"][i] = pi
+    if seq_aux:
+        # 动作序列辅助标签：同一 (game_id, seat, turn) 的动作集合（向量化一次算完）
+        out[SEQ_TARGET_KEY] = seq_targets_from_records(records)
     return out
 
 
 def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0,
                             lam: float = 0.95, step_penalty: float = 0.0,
                             meta: Optional[Dict[str, Any]] = None) -> "PPOBatch":
-    """SoA 数组 → PPOBatch（与 ``build_batch_from_records`` 等价，但零 dict）。"""
+    """SoA 数组 → PPOBatch（与 ``build_batch_from_records`` 等价，但零 dict）。
+
+    可选字段 ``seq_target``（动作序列辅助标签）存在且形状正确时透传给批次；
+    缺字段/形状不符时批次 ``seq_target=None``（= 该批次不参与 seq 辅助损失）。
+    """
     n0 = len(np.asarray(packed["ranks"]))
     # 丢掉形状与样本数不匹配的字段（例如无 MCTS 时的空 target_pi）
     packed = {k: v for k, v in packed.items()
@@ -1423,6 +1593,14 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
     merged_meta.update({"gamma": float(gamma), "lam": float(lam),
                         "step_penalty": float(step_penalty),
                         "dropped_unknown_rank": dropped, "episodes": int(ep)})
+    # 动作序列辅助标签：有则透传（缺字段/形状不符 -> None，不报错）
+    seq_target = t.get(SEQ_TARGET_KEY)
+    if seq_target is not None:
+        seq_target = np.asarray(seq_target, dtype=np.uint8)
+        if seq_target.shape != (n, N_ACTIONS):
+            seq_target = None
+        else:
+            merged_meta["seq_aux"] = True
     return PPOBatch(
         features=t["features"], cards=t["cards"], masks=t["masks"],
         actions=t["actions"], old_logprobs=t["old_logprobs"], values=values,
@@ -1433,7 +1611,8 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
                    else np.zeros((n, N_ACTIONS), dtype=np.float32))(t.get("target_pi")),
         has_pi=(lambda hp: hp if (hp is not None and np.asarray(hp).shape == (n,))
                 else np.zeros(n, dtype=bool))(t.get("has_pi")),
-        episode_ids=episode_ids, forced=t["forced"], meta=merged_meta)
+        episode_ids=episode_ids, forced=t["forced"], seq_target=seq_target,
+        meta=merged_meta)
 
 
 def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
@@ -1582,7 +1761,8 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
             "内未结束（rank=0），没有可用轨迹。请增大 --max-steps、调整 --seed，或从已有 "
             "checkpoint 续训（随机网络可能陷入 Play/Cancel 循环）。")
     batch = build_batch_from_records(records, gamma=gamma, lam=lam,
-                                     step_penalty=step_penalty, meta=collect_meta)
+                                     step_penalty=step_penalty, meta=collect_meta,
+                                     seq_aux=bool(cfg.seq_aux))
     batch.meta.update({
         "collect_seconds": float(time.time() - t0),
         "collect": {k: v for k, v in collect_meta.items() if k != "games_meta"},
@@ -1609,8 +1789,12 @@ __all__ = [
     "PPOConfig",
     "PPOBatch",
     "BATCH_FIELDS",
+    "BATCH_OPTIONAL_FIELDS",
     "build_batch_from_records",
+    "pack_records_arrays",
+    "build_batch_from_arrays",
     "forward_model",
+    "forward_model_aux",
     "split_model_outputs",
     "PPOEvaluator",
     "PPOGreedyPolicy",

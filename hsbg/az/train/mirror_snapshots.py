@@ -34,6 +34,7 @@ import glob
 import gzip
 import hashlib
 import json
+import math
 import os
 import random
 import time
@@ -45,6 +46,11 @@ SCHEMA = "hsbg.mirror_snapshots"
 SCHEMA_VERSION = 1
 #: 帧的阶段标记：EOT 完成、combat 之前（唯一合法阶段）。
 STAGE_EOT = "recruitment_end_before_combat"
+
+#: 采样模式：``p50``/``p75``/``p90`` 按桶内 strength 分位；``max`` 取最大（旧 ``strong``
+#: 的别名，保留向后兼容）；``weak``/``random`` 保留旧行为。未知模式退化为随机。
+SAMPLE_PERCENTILES = {"p50": 0.50, "p75": 0.75, "p90": 0.90}
+SAMPLE_MODES = ("p50", "p75", "p90", "max", "strong", "weak", "random")
 
 
 # ────────────────────────── Player JSON 工具 ──────────────────────────
@@ -341,16 +347,37 @@ class MirrorSnapshotPool:
 
     def get(self, turn: int, seat: int,
             rng: Optional[random.Random] = None) -> Optional[SnapshotFrame]:
-        """取 ``(turn, seat)`` 的帧；同键多来源时按 ``sample_mode`` 选（缺帧返回 None）。"""
+        """取 ``(turn, seat)`` 的帧；同键多来源时按 ``sample_mode`` 选（缺帧返回 None）。
+
+        采样模式：
+
+        - ``p50``/``p75``/``p90``：按桶内 ``strength`` 升序的最近秩分位取样；同强度多条时
+          用 ``rng`` 随机抽取（不再默认取上限，形成可控难度课程）；
+        - ``max``（旧名 ``strong``）：取强度最大帧（向后兼容）；
+        - ``weak``：取强度最小帧；``random``/未知：均匀随机。
+        """
         cands = self.index.get((int(turn), int(seat)))
         if not cands:
             return None
         if len(cands) == 1:
             return cands[0]
-        if self.sample_mode == "strong":
+        mode = str(self.sample_mode or "strong").strip().lower()
+        if mode in ("max", "strong"):
             return max(cands, key=lambda f: f.strength)
-        if self.sample_mode == "weak":
+        if mode == "weak":
             return min(cands, key=lambda f: f.strength)
+        q = SAMPLE_PERCENTILES.get(mode)
+        if q is None and mode.startswith("p") and mode[1:].isdigit():
+            # 额外支持任意 ``pNN``（例如 p33），仍限制在 (0, 1]。
+            q = min(1.0, max(0.0, int(mode[1:]) / 100.0))
+        if q is not None:
+            ordered = sorted(cands, key=lambda f: f.strength)
+            idx = min(len(ordered) - 1,
+                      max(0, int(math.floor(q * (len(ordered) - 1) + 0.5))))
+            target = ordered[idx].strength
+            ties = [f for f in cands if f.strength == target]
+            r = rng or random
+            return ties[r.randrange(len(ties))]
         r = rng or random
         return cands[r.randrange(len(cands))]
 
@@ -359,13 +386,15 @@ class MirrorSnapshotPool:
 
     def stats(self) -> Dict[str, Any]:
         if not self.index:
-            return {"files": self.files, "frames": 0, "keys": 0}
+            return {"files": self.files, "frames": 0, "keys": 0,
+                    "sample": str(self.sample_mode)}
         turns = self.turns()
         seats = sorted({s for _, s in self.index})
         per_key = [len(v) for v in self.index.values()]
         return {"files": int(self.files), "frames": int(self.frames),
                 "bad_files": int(self.bad_files), "keys": len(self.index),
                 "turn_min": turns[0], "turn_max": turns[-1], "seats": seats,
+                "sample": str(self.sample_mode),
                 "frames_per_key_p50": sorted(per_key)[len(per_key) // 2],
                 "schema_versions": dict(self.schema_versions)}
 
@@ -386,6 +415,11 @@ class MirrorStats:
     pool_unbalanced: int = 0        # 注入后 pool_balance 不守恒的次数
     pool_species_unbalanced: int = 0  # 注入后逐物种不守恒的次数
     last_rejected: List[List[Any]] = field(default_factory=list)
+    #: 拒绝原因分类（完整计数，不受 ``last_rejected`` 截断影响），如
+    #: ``{"pending_choice": 3, "not_alive": 2}``。
+    rejected_by_reason: Dict[str, int] = field(default_factory=dict)
+    #: 成功注入且帧里带非空 ``hand_queue`` 的次数（硬门用它触发全量 EID 校验）。
+    applied_with_hand_queue: int = 0
 
     def add(self, other: "MirrorStats") -> None:
         self.attempt += other.attempt
@@ -396,6 +430,9 @@ class MirrorStats:
         self.errors += other.errors
         self.pool_unbalanced += other.pool_unbalanced
         self.pool_species_unbalanced += other.pool_species_unbalanced
+        self.applied_with_hand_queue += other.applied_with_hand_queue
+        for k, v in other.rejected_by_reason.items():
+            self.rejected_by_reason[k] = self.rejected_by_reason.get(k, 0) + int(v)
         for r in other.last_rejected[:4]:
             if len(self.last_rejected) < 16:
                 self.last_rejected.append(list(r))
@@ -406,7 +443,28 @@ class MirrorStats:
                 "mirror_fallback": int(self.fallback), "mirror_errors": int(self.errors),
                 "mirror_pool_unbalanced": int(self.pool_unbalanced),
                 "mirror_pool_species_unbalanced": int(self.pool_species_unbalanced),
-                "mirror_last_rejected": [list(x) for x in self.last_rejected]}
+                "mirror_applied_with_hand_queue": int(self.applied_with_hand_queue),
+                "mirror_last_rejected": [list(x) for x in self.last_rejected],
+                "mirror_rejected_by_reason": {
+                    str(k): int(v) for k, v in sorted(self.rejected_by_reason.items())}}
+
+
+#: 引擎里属于**预期**的拒绝原因：饰品回合 pending 待选、座位已死/待淘汰。
+EXPECTED_REJECT_REASONS = frozenset({"pending_choice", "not_alive", "dying"})
+
+
+def reject_reason_class(reason: Any) -> str:
+    """把引擎拒绝原因（``"pending_choice(1)"`` / ``"unknown_ref:...=7"``）归类。"""
+    txt = str(reason or "").strip()
+    for sep in ("(", ":"):
+        if sep in txt:
+            txt = txt.split(sep, 1)[0]
+    return txt.strip() or "unknown"
+
+
+def is_expected_reject(reason: Any) -> bool:
+    """``pending``/死亡座位属于预期拒绝；其余一律视为非预期。"""
+    return reject_reason_class(reason) in EXPECTED_REJECT_REASONS
 
 
 def mirror_seats(count: int, num_players: int = 8, learner_seat: int = 0) -> List[int]:
@@ -419,23 +477,101 @@ def mirror_seats(count: int, num_players: int = 8, learner_seat: int = 0) -> Lis
     return out
 
 
+def mirror_seats_random(count: int, rng: Optional[random.Random] = None,
+                        num_players: int = 8, learner_seat: int = 0) -> List[int]:
+    """从**所有非 learner 座位**里不放回随机抽 ``count`` 个（升序返回）。
+
+    与 :func:`mirror_seats` 的固定 ``1..N`` 不同：learner 一定不在结果里，且不会因为
+    learner 落在 ``1..N`` 里而少选一个；``count`` 超过可用座位数时截断到全部座位。
+    """
+    pool = [s for s in range(int(num_players)) if s != int(learner_seat)]
+    k = max(0, min(int(count), len(pool)))
+    if k <= 0:
+        return []
+    r = rng or random
+    return sorted(r.sample(pool, k))
+
+
+def parse_p_ramp(schedule: Optional[str]) -> List[Tuple[float, float]]:
+    """解析 ``"0.1@0,0.25@0.3,0.25@1.0"`` -> ``[(x0,p0), (x1,p1), ...]``（按 x 升序）。"""
+    if schedule is None:
+        return []
+    text = str(schedule).strip()
+    if not text:
+        return []
+    pts: List[Tuple[float, float]] = []
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "@" not in part:
+            raise ValueError(f"p-ramp 片段缺少 '@': {part!r}（应为 p@x）")
+        p_txt, x_txt = part.split("@", 1)
+        p = float(p_txt.strip())
+        x = float(x_txt.strip())
+        if not (0.0 <= p <= 1.0):
+            raise ValueError(f"p-ramp 概率越界 [0,1]: {part!r}")
+        pts.append((x, p))
+    pts.sort(key=lambda z: z[0])
+    for (x0, _), (x1, _) in zip(pts, pts[1:]):
+        if x1 == x0:
+            raise ValueError(f"p-ramp 控制点 x 必须严格递增: {schedule!r}")
+    return pts
+
+
+def ramp_p(iter_or_decisions: float, schedule: Optional[str]) -> float:
+    """线性 p ramp：``schedule="0.1@0,0.25@0.3,0.25@1.0"``，``x`` 与第一个参数同单位。
+
+    - ``x`` 落在控制点区间内按线性插值；
+    - 早于第一个控制点取第一段 p，晚于最后一个控制点取最后一段 p；
+    - 空 schedule（默认）返回 0.0（调用方继续用固定 ``--mirror-p``）。
+
+    训练入口按 iteration 下标求值；若要用「训练进度比例」，把 schedule 的 x 写成 0..1
+    并在调用处传入同样的比例即可。纯函数，无副作用。
+    """
+    pts = parse_p_ramp(schedule)
+    if not pts:
+        return 0.0
+    x = float(iter_or_decisions)
+    if x <= pts[0][0]:
+        return float(pts[0][1])
+    if x >= pts[-1][0]:
+        return float(pts[-1][1])
+    for (x0, p0), (x1, p1) in zip(pts, pts[1:]):
+        if x0 <= x <= x1:
+            t = 0.0 if x1 == x0 else (x - x0) / (x1 - x0)
+            return float(p0 + (p1 - p0) * t)
+    return float(pts[-1][1])
+
+
 def inject_turn(game: Any, pool: MirrorSnapshotPool, turn: int, *,
                 seats: Sequence[int], p: float = 1.0,
                 rng: Optional[random.Random] = None, learner_seat: int = 0,
                 stats: Optional[MirrorStats] = None,
-                advance: Optional[bool] = None) -> MirrorStats:
+                advance: Optional[bool] = None,
+                seat_rng: Optional[random.Random] = None,
+                resample_seats: bool = False,
+                num_players: int = 8) -> MirrorStats:
     """新回合开始（任何座位行动前）按概率给 ``seats`` 注入该 ``turn`` 的快照。
 
     - 每个座位独立掷 ``p``；缺帧 -> ``missing``；引擎拒绝 -> ``rejected``；
     - 整批只调用一次 ``apply_turn_snapshots``（``advance`` 透传给引擎）；
     - 被注入的座位在引擎里 ``ended_turn=true``，本回合不再行动（不消耗 bot 动作）。
+    - **课程模式（随机座位）**：给 ``seat_rng``（或 ``resample_seats=True``）时，每次调用
+      用 :func:`mirror_seats_random` 从全部非 learner 座位重抽 ``len(seats)`` 个；默认
+      （两者都不给）保持旧的固定 ``seats`` 行为不变。
     """
     st = stats if stats is not None else MirrorStats()
     r = rng or random
     prob = max(0.0, min(1.0, float(p)))
+    seat_list = [int(s) for s in seats]
+    if resample_seats or seat_rng is not None:
+        sr = seat_rng if seat_rng is not None else r
+        seat_list = mirror_seats_random(len(seat_list), sr, num_players, learner_seat)
     snaps: List[List[Any]] = []
     used: List[int] = []
-    for seat in seats:
+    any_queue = False
+    for seat in seat_list:
         seat = int(seat)
         if seat == int(learner_seat):
             continue
@@ -451,6 +587,8 @@ def inject_turn(game: Any, pool: MirrorSnapshotPool, turn: int, *,
             st.missing += 1
             st.fallback += 1
             continue
+        if frame.player.get("hand_queue"):
+            any_queue = True
         snaps.append([seat, frame.player_json])
         used.append(seat)
     if not snaps:
@@ -463,9 +601,14 @@ def inject_turn(game: Any, pool: MirrorSnapshotPool, turn: int, *,
         st.last_rejected.append([-1, repr(exc)[:200]])
         return st
     st.applied += int(rep.get("applied", 0))
+    if int(rep.get("applied", 0)) > 0 and any_queue:
+        st.applied_with_hand_queue += 1
     rejected = rep.get("rejected") or []
     st.rejected += len(rejected)
     st.fallback += len(rejected)
+    for item in rejected:
+        cls = reject_reason_class(item[1])
+        st.rejected_by_reason[cls] = st.rejected_by_reason.get(cls, 0) + 1
     for item in rejected[:4]:
         if len(st.last_rejected) < 16:
             st.last_rejected.append([int(item[0]), str(item[1])[:200]])
@@ -487,8 +630,10 @@ def load_pool(root: Optional[str], *, sample: str = "strong") -> Optional[Mirror
 
 
 __all__ = [
-    "SCHEMA", "SCHEMA_VERSION", "STAGE_EOT", "SnapshotFrame", "MirrorSnapshotPool",
+    "SCHEMA", "SCHEMA_VERSION", "STAGE_EOT", "SAMPLE_MODES", "SAMPLE_PERCENTILES",
+    "EXPECTED_REJECT_REASONS", "SnapshotFrame", "MirrorSnapshotPool",
     "MirrorStats", "board_strength", "capture_eot", "engine_stamp", "held_pool_parts",
-    "inject_turn", "load_pool", "mirror_seats", "normal_card_map", "player_zones",
-    "snapshot_file_record", "write_snapshot_file",
+    "inject_turn", "is_expected_reject", "load_pool", "mirror_seats",
+    "mirror_seats_random", "normal_card_map", "parse_p_ramp", "player_zones",
+    "ramp_p", "reject_reason_class", "snapshot_file_record", "write_snapshot_file",
 ]

@@ -490,3 +490,176 @@ def test_collect_ppo_lockstep_wiring():
     for key in ("mirror_attempt", "mirror_applied", "mirror_rejected", "mirror_missing",
                 "mirror_fallback"):
         assert key in meta, key
+
+
+# ────────────────────────── 8. 课程采样 / 随机座位 / p ramp ──────────────────────────
+
+
+def _synth_pool(strengths, sample):
+    """构造 ``(turn=3, seat=1)`` 桶：每条帧的 strength == strengths[i]。"""
+    pool = MR.MirrorSnapshotPool(None, sample=sample)
+    frames = [MR.SnapshotFrame(turn=3, seat=1,
+                               player={"board": [{"atk": int(s), "hp": 0}]})
+              for s in strengths]
+    pool.index[(3, 1)] = frames
+    return pool
+
+
+def test_percentile_sampling_p50_p75_p90_and_max():
+    """分位采样：p50 取中位、p90 接近上限、max/strong 取最大（旧行为别名）。"""
+    strengths = [0, 10, 20, 30, 40]
+    picks = {mode: _synth_pool(strengths, mode).get(3, 1).strength
+             for mode in ("p50", "p75", "p90", "max", "strong", "weak")}
+    assert picks["p50"] == 20, picks
+    assert picks["p75"] == 30, picks
+    assert picks["p90"] == 40, picks
+    assert picks["max"] == 40 and picks["strong"] == 40, picks
+    assert picks["weak"] == 0, picks
+    # 偶数条：p50 落在中间两条之一（最近秩，偏上中位）。
+    even = _synth_pool([0, 10, 20, 30], "p50").get(3, 1).strength
+    assert even in (10, 20), even
+    assert _synth_pool([0, 10], "p90").get(3, 1).strength == 10
+    assert _synth_pool([7], "p50").get(3, 1).strength == 7
+    assert _synth_pool([0], "max").get(3, 1).strength == 0
+    assert _synth_pool([5], "p50").stats()["sample"] == "p50"
+
+
+def test_percentile_ties_are_randomized_but_same_strength():
+    """分位处同强度多条时随机抽取，但强度必须等于分位值。"""
+    pool = _synth_pool([10, 10, 10, 30, 40], "p50")
+    rng = random.Random(123)
+    chosen = {id(pool.get(3, 1, rng=rng)) for _ in range(40)}
+    for frame in pool.index[(3, 1)]:
+        if id(frame) in chosen:
+            assert frame.strength == 10
+    assert len(chosen) >= 2, "同分位多条应随机抽取而不是固定一条"
+
+
+def test_sample_mode_unknown_falls_back_to_random():
+    pool = _synth_pool([10, 20, 30], "no-such-mode")
+    got = {pool.get(3, 1, rng=random.Random(i)).strength for i in range(60)}
+    assert got <= {10, 20, 30} and len(got) >= 2, got
+
+
+def test_mirror_seats_random_excludes_learner_and_count():
+    rng = random.Random(7)
+    picked = MR.mirror_seats_random(3, rng, 8, 0)
+    assert len(picked) == 3
+    assert 0 not in picked and set(picked) <= set(range(1, 8))
+    assert picked == sorted(picked)
+    # learner=3 时仍能抽满 7 个（旧 mirror_seats 会少选一个）。
+    all_but_learner = MR.mirror_seats_random(7, random.Random(1), 8, 3)
+    assert all_but_learner == [0, 1, 2, 4, 5, 6, 7]
+    assert MR.mirror_seats_random(99, random.Random(1), 8, 0) == list(range(1, 8))
+    assert MR.mirror_seats_random(0, rng, 8, 0) == []
+    assert MR.mirror_seats_random(-2, rng, 8, 0) == []
+    # 多次抽样应真的随机（不是固定 1..N）。
+    draws = {tuple(MR.mirror_seats_random(2, random.Random(i), 8, 0)) for i in range(30)}
+    assert len(draws) > 1, draws
+
+
+def test_ramp_p_boundaries_and_linear_interpolation():
+    sched = "0.1@0,0.25@0.3,0.25@1.0"
+    assert MR.ramp_p(-5, sched) == pytest.approx(0.1)
+    assert MR.ramp_p(0, sched) == pytest.approx(0.1)
+    assert MR.ramp_p(0.15, sched) == pytest.approx(0.175)   # 0.1 + (0.25-0.1)/2
+    assert MR.ramp_p(0.3, sched) == pytest.approx(0.25)
+    assert MR.ramp_p(0.6, sched) == pytest.approx(0.25)
+    assert MR.ramp_p(1.0, sched) == pytest.approx(0.25)
+    assert MR.ramp_p(99, sched) == pytest.approx(0.25)
+    # 空 schedule = 固定 --mirror-p（返回 0，由调用方决定）
+    assert MR.ramp_p(3, "") == 0.0 and MR.ramp_p(3, None) == 0.0
+    # 单控制点 = 常量
+    assert MR.ramp_p(0, "0.4@10") == pytest.approx(0.4)
+    assert MR.ramp_p(10 ** 9, "0.4@10") == pytest.approx(0.4)
+    # 0 -> 1 的整段线性
+    assert MR.ramp_p(5, "0@0,1@10") == pytest.approx(0.5)
+    # 单调递增的 schedule 在区间内严格线性
+    xs = [i / 10 for i in range(11)]
+    vals = [MR.ramp_p(x, "0.1@0,0.2@0.5,0.3@1.0") for x in xs]
+    assert vals[0] == pytest.approx(0.1) and vals[-1] == pytest.approx(0.3)
+    assert vals[5] == pytest.approx(0.2)
+    for a, b in zip(vals, vals[1:]):
+        assert b - a > -1e-12
+    for bad in ("0.3", "1.2@0", "-0.1@0", "0.1@1,0.2@1", "x@0"):
+        with pytest.raises(ValueError):
+            MR.ramp_p(0, bad)
+
+
+def test_ramp_p_accepts_iteration_units():
+    """x 与控制点同单位：既可用 0..1 进度，也可用 iteration/decisions 计数。"""
+    sched = "0.05@0,0.2@100,0.25@300"
+    assert MR.ramp_p(0, sched) == pytest.approx(0.05)
+    assert MR.ramp_p(50, sched) == pytest.approx(0.125)
+    assert MR.ramp_p(100, sched) == pytest.approx(0.2)
+    assert MR.ramp_p(200, sched) == pytest.approx(0.225)
+    assert MR.ramp_p(300, sched) == pytest.approx(0.25)
+    assert MR.ramp_p(10 ** 6, sched) == pytest.approx(0.25)
+
+
+def test_inject_turn_p_zero_is_noop_and_no_attempt():
+    """p=0：不掷骰、不取帧、不调引擎，状态字节一致。"""
+    g = hsbg_engine.Game(seed=1001)
+    s0 = g.state_json()
+    st = MR.MirrorStats()
+    MR.inject_turn(g, None, int(g.turn), seats=[1, 2, 3], p=0.0, rng=random.Random(0),
+                   learner_seat=0, stats=st)
+    assert (st.attempt, st.applied, st.rejected, st.missing, st.errors) == (0, 0, 0, 0, 0)
+    assert g.state_json() == s0
+    meta = st.to_meta()
+    assert meta["mirror_attempt"] == 0 and meta["mirror_applied"] == 0
+    assert meta["mirror_applied_with_hand_queue"] == 0
+
+
+class _RecordingPool:
+    """记录 ``get`` 请求座位的假池（永远缺帧）。"""
+
+    def __init__(self):
+        self.calls = []
+
+    def get(self, turn, seat, rng=None):
+        self.calls.append(int(seat))
+        return None
+
+
+def test_inject_turn_resample_seats_excludes_learner_per_turn():
+    """课程模式：seat_rng 每回合重抽，learner 永不出现；默认仍用固定 seats。"""
+    # 默认行为不变：严格按传入 seats 顺序请求。
+    g0 = hsbg_engine.Game(seed=1002)
+    rec0 = _RecordingPool()
+    st0 = MR.MirrorStats()
+    MR.inject_turn(g0, rec0, int(g0.turn), seats=[2, 5], p=1.0, stats=st0)
+    assert rec0.calls == [2, 5], rec0.calls
+    assert st0.attempt == 2 and st0.missing == 2
+
+    rng = random.Random(2026)
+    seen = set()
+    for i in range(12):
+        g = hsbg_engine.Game(seed=2000 + i)
+        rec = _RecordingPool()
+        st = MR.MirrorStats()
+        MR.inject_turn(g, rec, int(g.turn), seats=[1, 2, 3], p=1.0,
+                       seat_rng=rng, resample_seats=True, learner_seat=3, stats=st)
+        assert len(rec.calls) == 3, rec.calls
+        assert rec.calls == sorted(rec.calls)
+        assert 3 not in rec.calls, "learner 不允许被注入"
+        assert set(rec.calls) <= {0, 1, 2, 4, 5, 6, 7}
+        assert st.attempt == 3 and st.missing == 3
+        seen.add(tuple(rec.calls))
+    assert len(seen) > 1, f"每回合应重抽座位，实际固定: {seen}"
+
+
+def test_reject_reason_classification():
+    assert MR.reject_reason_class("pending_choice(1)") == "pending_choice"
+    assert MR.reject_reason_class("not_alive") == "not_alive"
+    assert MR.reject_reason_class("unknown_ref:minion.killed_by=7") == "unknown_ref"
+    assert MR.reject_reason_class("") == "unknown"
+    assert MR.is_expected_reject("pending_choice(2)")
+    assert MR.is_expected_reject("not_alive")
+    assert not MR.is_expected_reject("already_ended")
+    assert not MR.is_expected_reject("unknown_ref:x=1")
+    a = MR.MirrorStats(rejected_by_reason={"pending_choice": 2})
+    b = MR.MirrorStats(rejected_by_reason={"pending_choice": 1, "not_alive": 4})
+    a.add(b)
+    assert a.rejected_by_reason == {"pending_choice": 3, "not_alive": 4}
+    assert a.to_meta()["mirror_rejected_by_reason"]["not_alive"] == 4

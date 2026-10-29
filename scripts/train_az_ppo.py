@@ -56,6 +56,7 @@ from hsbg.az.train.ppo import (  # noqa: E402
     train_ppo,
 )
 from hsbg.az.train.report import write_report  # noqa: E402
+from hsbg.az.train.seq_aux import SeqCoefSchedule  # noqa: E402
 
 SCHEMA = "hsbg.az.ppo_train/v1"
 
@@ -111,6 +112,12 @@ def _parse_args() -> argparse.Namespace:
     ap.add_argument("--value-coef", type=float, default=0.5)
     ap.add_argument("--pi-coef", type=float, default=0.5,
                     help="MCTS visit π 辅助 CE 权重 α（0=关闭，退化为纯 PPO）")
+    ap.add_argument("--seq-coef", type=float, default=0.0,
+                    help="动作序列辅助头（该 seat 在本 turn 内动作 multi-hot 的 BCE）权重；"
+                         "0=关闭（默认）。见 docs/ACTION_SEQUENCE_AUX.md")
+    ap.add_argument("--seq-coef-ramp", default="",
+                    help='按 decisions 比例的线性 ramp（如 "0.02@0,0.05@0.5"）；'
+                         "本入口只跑一轮，ramp 进度取 0")
     ap.add_argument("--value-loss", default="rank", choices=["rank", "mse"],
                     help="价值损失：rank=名次 CE；mse=value MSE（critic=E[u(rank)]）")
     ap.add_argument("--value-head-coef", type=float, default=0.0,
@@ -176,6 +183,16 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         print(f"[error] import torch 失败: {exc!r}", file=sys.stderr)
         return 2
+    # 动作序列辅助任务（默认关闭）：系数 = ramp 在进度 0 处的值（无 ramp 时 = --seq-coef）
+    try:
+        seq_schedule = SeqCoefSchedule.from_spec(
+            base_coef=float(args.seq_coef), spec=str(args.seq_coef_ramp),
+            total_decisions=1.0)  # 单轮入口：ramp 进度恒为 0
+    except ValueError as exc:
+        print(f"[error] --seq-coef-ramp 非法: {exc}", file=sys.stderr)
+        return 2
+    seq_enabled = bool(seq_schedule.enabled)
+    seq_coef = float(seq_schedule.coef(0)) if seq_enabled else 0.0
     torch.manual_seed(int(args.seed))
     np.random.seed(int(args.seed) % (2 ** 32))
     os.makedirs(args.out, exist_ok=True)
@@ -192,12 +209,19 @@ def main() -> int:
         norm_mean = ckpt_meta.get("norm_mean")
         norm_std = ckpt_meta.get("norm_std")
         print(f"[net] 从 checkpoint 续训: {args.checkpoint} (arch={arch})", flush=True)
+        if seq_enabled and getattr(model, "seq_head", None) is None:
+            print("[warn] checkpoint 没有动作序列辅助头：本次关闭 seq 辅助任务", flush=True)
+            seq_enabled = False
+            seq_coef = 0.0
     else:
-        model = build_net(int(args.hidden), arch=args.arch)
+        model = build_net(int(args.hidden), arch=args.arch, seq_head=seq_enabled)
         arch = str(args.arch)
     model.to(torch.device(args.device))
     print(f"[net] arch={arch} params={sum(p.numel() for p in model.parameters()):,} "
           f"device={args.device}", flush=True)
+    if seq_enabled:
+        print(f"[seq] 动作序列辅助头已启用 coef={seq_coef:.4g}"
+              f" ramp={args.seq_coef_ramp or '(none)'}", flush=True)
 
     # ── 2) 搜索（MCTS visit π 采集 / 辅助目标）──
     search_fn = None
@@ -229,7 +253,8 @@ def main() -> int:
         learner_seat=int(args.learner_seat), behavior=behavior,
         temperature=float(args.temperature), pi_epsilon=float(args.pi_epsilon),
         step_penalty=float(args.step_penalty),
-        max_actions_per_turn=int(args.max_actions_per_turn))
+        max_actions_per_turn=int(args.max_actions_per_turn),
+        seq_aux=bool(seq_enabled))
     evaluator = PPOEvaluator(model, device=args.device,
                              norm_mean=norm_mean, norm_std=norm_std)
     t_collect = time.time()
@@ -287,7 +312,9 @@ def main() -> int:
         normalize_advantage=True, max_grad_norm=float(args.max_grad_norm),
         device=str(args.device), seed=int(args.seed),
         max_samples=(None if int(args.max_samples) <= 0 else int(args.max_samples)),
-        log_every=int(args.log_every))
+        log_every=int(args.log_every),
+        seq_coef=(seq_coef if seq_enabled else 0.0),
+        seq_coef_ramp=(str(args.seq_coef_ramp) if seq_enabled else ""))
     t_train = time.time()
     train_stats = train_ppo(model, batch, p_cfg)
     train_stats["seconds_wall"] = time.time() - t_train
@@ -307,6 +334,9 @@ def main() -> int:
         "engine_version": eng.get("engine_version"),
         "repro": _repro_command(args),
     }
+    if seq_enabled:
+        ckpt_meta["seq_coef"] = float(seq_coef)
+        ckpt_meta["seq_coef_ramp"] = str(args.seq_coef_ramp)
     ckpt_path = os.path.join(args.out, "model.pt")
     save_checkpoint(model, ckpt_path, meta=ckpt_meta,
                     norm_mean=norm_mean, norm_std=norm_std)
@@ -388,6 +418,16 @@ def main() -> int:
         "notes": notes,
         "total_seconds": time.time() - t_start,
     }
+    if seq_enabled:
+        # 动作序列辅助任务：只在启用时写入 report（默认关闭时 report 与旧版一致）
+        report["config"].update({"seq_coef": float(seq_coef),
+                                 "seq_coef_ramp": str(args.seq_coef_ramp)})
+        report["seq"] = {"coef": float(seq_coef),
+                         "loss": float(train_stats.get("seq_loss", 0.0)),
+                         "note": "turn 内动作 multi-hot 的 BCE；标签含本回合后续动作（见 "
+                                 "docs/ACTION_SEQUENCE_AUX.md）"}
+        notes.append("已开启动作序列辅助头（--seq-coef>0）：标签=该 seat 在本 turn 内"
+                     "实际执行过的动作集合 multi-hot，仅作辅助正则；forced 样本不参与。")
     report_path = os.path.join(args.out, "report.json")
     write_report(report_path, report)
     print(f"[report] {report_path}", flush=True)

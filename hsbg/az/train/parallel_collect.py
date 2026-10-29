@@ -31,7 +31,8 @@ from .common import (N_ACTIONS, N_PLAYERS, load_engine, mask_from_bytes,
 from .ppo import (CollectConfig, PPOBatch, PPOSelfPlayPolicy, _attach_rank,
                   build_batch_from_records, _weak_bot_action)
 from .library_pool import board_signature
-from .mirror_snapshots import MirrorStats, inject_turn, mirror_seats
+from .mirror_snapshots import (MirrorStats, inject_turn, mirror_seats,
+                               mirror_seats_random)
 
 
 def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
@@ -213,7 +214,8 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
         engine_backend=engine_backend, device=device, seed=seed,
         norm_mean=norm_mean, norm_std=norm_std, progress=progress)
     batch = build_batch_from_records(records, gamma=gamma, lam=lam,
-                                     step_penalty=step_penalty, meta=meta_out)
+                                     step_penalty=step_penalty, meta=meta_out,
+                                     seq_aux=bool(getattr(config, "seq_aux", False)))
     batch.meta.update({"collect_seconds": time.time() - t0,
                        "collect": {k: v for k, v in meta_out.items()
                                    if k != "games_meta"}})
@@ -233,7 +235,8 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                          trajectory_pool: Any = None, trajectory_p: float = 0.0,
                          opponent_policy: Any = None,
                          mirror_pool: Any = None, mirror_seats_count: int = 0,
-                         mirror_p: float = 0.0,
+                         mirror_p: float = 0.0, mirror_p_ramp: str = "",
+                         mirror_seat_random: bool = False,
                          ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """lock-step 采集：N 局同步推进，每轮把所有待决策局拼成一个 batch 前向一次。
 
@@ -245,6 +248,11 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     回合末场面快照镜像（``mirror_pool`` 非空且 ``mirror_p>0``）：在每个**新回合**开始、
     任何座位行动前，按概率给 seat ``1..mirror_seats_count`` 注入该 turn 的快照
     （缺帧跳过；引擎拒绝的座位保持原 bot 状态）。默认关闭（``mirror_p=0``）。
+
+    课程模式（``mirror_seat_random=True``）：每回合用 :func:`mirror_seats_random` 从全部
+    非 learner 座位重抽 ``mirror_seats_count`` 个（learner 一定不在其中）；默认 False 时
+    仍用固定 ``seat 1..N``，行为与旧版一致。``mirror_p_ramp`` 只用于 meta 记录（有效 p 由
+    训练入口按 iteration 求值后写入 ``mirror_p``）。
     """
     if str(gamemode) not in ("bot", "weak"):
         raise ValueError(f"lockstep 只支持 bot/weak，收到 {gamemode!r}")
@@ -324,7 +332,11 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         if t == int(st.get("mirror_turn", t)):
             return
         st["mirror_turn"] = t
-        inject_turn(g, mirror_pool, t, seats=mirror_targets, p=mirror_p,
+        # 课程模式：每回合从全部非 learner 座位重抽；默认仍用固定 1..N。
+        targets = (mirror_seats_random(int(mirror_seats_count), st["mirror_rng"],
+                                       N_PLAYERS, seat)
+                   if mirror_seat_random else mirror_targets)
+        inject_turn(g, mirror_pool, t, seats=targets, p=mirror_p,
                     rng=st["mirror_rng"], learner_seat=seat,
                     stats=st["mirror_stats"])
 
@@ -494,6 +506,10 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             "mirror_on": bool(mirror_on), "mirror_p": float(mirror_p),
             "mirror_seats": int(len(mirror_targets)),
             "mirror_targets": list(mirror_targets),
+            "mirror_seat_random": bool(mirror_seat_random),
+            "mirror_sample": (str(getattr(mirror_pool, "sample_mode", ""))
+                              if mirror_pool is not None else ""),
+            "mirror_p_ramp": str(mirror_p_ramp),
             "mirror_frames": int(getattr(mirror_pool, "frames", 0)) if mirror_on else 0,
             "records": int(len(records)), "illegal_actions": int(illegal),
             "truncated_games": int(truncated),

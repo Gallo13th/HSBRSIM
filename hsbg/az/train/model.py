@@ -34,10 +34,17 @@ if True:  # 命名空间占位：TinyAZNet 在下方用 torch.nn 定义（需要
 
 
 def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FLOATS,
-              n_actions: int = N_ACTIONS, n_ranks: int = N_RANKS, **kwargs):
-    """构造策略网络：tiny（MLP）或 entity（AutoTavern 风格实体 Transformer）。"""
+              n_actions: int = N_ACTIONS, n_ranks: int = N_RANKS,
+              seq_head: bool = False, **kwargs):
+    """构造策略网络：tiny（MLP）或 entity（AutoTavern 风格实体 Transformer）。
+
+    ``seq_head=True`` 时额外构建「动作序列辅助头」（trunk -> 245 logits，
+    ``docs/ACTION_SEQUENCE_AUX.md``）；**默认 False = 不构建**，因此默认路径的参数量、
+    前向与 checkpoint 与之前完全一致。
+    """
     if arch == "entity":
         from .entity_model import build_entity_net
+        kwargs["seq_head"] = bool(seq_head)
         return build_entity_net(**kwargs)
     if arch == "entity18m":
         from .entity_model import build_entity_net
@@ -45,12 +52,13 @@ def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FL
         kwargs.setdefault("n_extra_tokens", 8)
         kwargs.setdefault("pos_size", 24)
         kwargs.setdefault("arch", "entity18m")
+        kwargs["seq_head"] = bool(seq_head)
         return build_entity_net(**kwargs)
     torch = _torch()
     nn = torch.nn
 
     class TinyAZNet(nn.Module):
-        """3227 -> hidden -> {245 policy logits, 8 rank logits}。"""
+        """3227 -> hidden -> {245 policy logits, 8 rank logits[, 245 seq logits]}。"""
 
         def __init__(self) -> None:
             super().__init__()
@@ -64,11 +72,24 @@ def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FL
             )
             self.policy_head = nn.Linear(int(hidden), self.n_actions)
             self.rank_head = nn.Linear(int(hidden), self.n_ranks)
+            # 动作序列辅助头（turn 内动作 multi-hot）：默认 None = 不构建、不计算
+            self.seq_head = nn.Linear(int(hidden), self.n_actions) if seq_head else None
 
         def forward(self, features, cards=None):  # cards 暂不编码（保留接口）
             x = self.norm(features)
             h = self.trunk(x)
             return self.policy_head(h), self.rank_head(h)
+
+        def forward_aux(self, features, cards=None, mask=None):
+            """``(logits, rank_logits, None, seq_logits|None)``（tiny 无标量 value 头）。
+
+            只有 ``seq_head`` 被构建（``build_net(..., seq_head=True)``）时最后一项非 None；
+            其余调用方仍用 ``forward()``，行为完全不变。
+            """
+            x = self.norm(features)
+            h = self.trunk(x)
+            seq = None if self.seq_head is None else self.seq_head(h)
+            return self.policy_head(h), self.rank_head(h), None, seq
 
     return TinyAZNet()
 
@@ -179,6 +200,8 @@ def save_checkpoint(model: Any, path: str, *, meta: Optional[Dict[str, Any]] = N
     if norm_std is not None:
         payload["norm_std"] = [float(v) for v in np.asarray(norm_std, dtype=np.float32).tolist()]
     payload["meta"].setdefault("arch", getattr(model, "arch", "tiny"))
+    # 动作序列辅助头：有无随 checkpoint 保存，load 时据此重建（默认 False = 旧 checkpoint）
+    payload["meta"].setdefault("seq_head", bool(getattr(model, "seq_head", None) is not None))
     if hasattr(model, "d_model"):
         payload["meta"].setdefault("d_model", int(model.d_model))
         payload["meta"].setdefault("n_layers", int(getattr(model.trunk, "num_layers", 8)))
@@ -203,14 +226,16 @@ def load_checkpoint(path: str, device: str = "cpu") -> tuple[Any, Dict[str, Any]
     meta = dict(payload.get("meta") or {})
     hidden = int(meta.get("hidden", 256))
     arch = str(meta.get("arch", "tiny"))
+    seq_head = bool(meta.get("seq_head", False))
     if arch == "entity18m":
-        model = build_net(arch="entity18m")
+        model = build_net(arch="entity18m", seq_head=seq_head)
     elif arch == "entity":
         model = build_net(arch="entity", d_model=int(meta.get("d_model", 384)),
                           n_layers=int(meta.get("n_layers", 8)),
-                          n_heads=int(meta.get("n_heads", 8)))
+                          n_heads=int(meta.get("n_heads", 8)),
+                          seq_head=seq_head)
     else:
-        model = build_net(hidden)
+        model = build_net(hidden, seq_head=seq_head)
     model.load_state_dict(payload["state_dict"])
     model.to(torch.device(device))
     model.eval()

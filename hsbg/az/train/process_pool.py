@@ -55,12 +55,16 @@ from .ppo import (CollectConfig, PPOBatch, PPOSelfPlayPolicy, build_batch_from_a
 #: 每个 worker 进程内的镜像库缓存（按路径）
 _LIB_CACHE: Dict[str, Any] = {}
 _TRAJ_CACHE: Dict[str, Any] = {}
-_MIRROR_CACHE: Dict[str, Any] = {}
+_MIRROR_CACHE: Dict[Any, Any] = {}
 _OPP_CACHE: Dict[Any, Any] = {}
 
 
 def _save_built_batch(batch: Any, path: str) -> None:
     """把已构建的 PPOBatch 写成 npz（episode_id 用全局唯一键 game_id*8+seat）。"""
+    extra = {}
+    if getattr(batch, "seq_target", None) is not None:
+        # 动作序列辅助标签（默认关闭时不写，保持 npz 字段与旧版本一致）
+        extra["seq_target"] = batch.seq_target
     np.savez(path, features=batch.features, cards=batch.cards, masks=batch.masks,
              actions=batch.actions, old_logprobs=batch.old_logprobs,
              values=batch.values, rewards=batch.rewards, dones=batch.dones,
@@ -69,7 +73,8 @@ def _save_built_batch(batch: Any, path: str) -> None:
              turns=batch.turns, forced=batch.forced, has_pi=batch.has_pi,
              episode_ids=(batch.game_ids * 8 + batch.seats).astype(np.int64),
              target_pi=(batch.target_pi if batch.target_pi is not None
-                        else np.zeros((len(batch.actions), 245), np.float32)))
+                        else np.zeros((len(batch.actions), 245), np.float32)),
+             **extra)
 
 
 def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
@@ -262,12 +267,14 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                         tpool = cached[1]
                     if tpool is not None and not tpool.items:
                         tpool = None
-                # 回合末场面快照镜像库（--mirror-snaps/--mirror-p；默认关闭）
+                # 回合末场面快照镜像库（--mirror-snaps/--mirror-p/--mirror-p-ramp；默认关闭）
                 mpool = None
-                if str(getattr(cfg, "mirror_snaps", "")) and \
-                        float(getattr(cfg, "mirror_p", 0.0)) > 0.0:
+                if str(getattr(cfg, "mirror_snaps", "")) and (
+                        float(getattr(cfg, "mirror_p", 0.0)) > 0.0 or
+                        str(getattr(cfg, "mirror_p_ramp", "")).strip()):
                     from .mirror_snapshots import load_pool as _load_mirror
                     mdir = str(cfg.mirror_snaps)
+                    msample = str(getattr(cfg, "mirror_sample", "p50") or "p50")
                     if os.path.isdir(mdir):
                         mfiles = [os.path.join(mdir, f) for f in os.listdir(mdir)
                                   if f.endswith(".json.gz")]
@@ -275,10 +282,11 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                                 max((os.path.getmtime(f) for f in mfiles), default=0.0))
                     else:
                         mkey = None
-                    cached = _MIRROR_CACHE.get(mdir)
+                    cache_key = (mdir, msample)
+                    cached = _MIRROR_CACHE.get(cache_key)
                     if cached is None or cached[0] != mkey:
-                        mpool = _load_mirror(mdir) if mkey is not None else None
-                        _MIRROR_CACHE[mdir] = (mkey, mpool)
+                        mpool = _load_mirror(mdir, sample=msample) if mkey is not None else None
+                        _MIRROR_CACHE[cache_key] = (mkey, mpool)
                         if mpool is None:
                             print(f"[warn] 回合末快照库为空/不存在: {mdir}", flush=True)
                     else:
@@ -311,14 +319,17 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     mirror_pool=mpool,
                     mirror_seats_count=int(getattr(cfg, "mirror_seats", 0)),
                     mirror_p=float(getattr(cfg, "mirror_p", 0.0)),
+                    mirror_p_ramp=str(getattr(cfg, "mirror_p_ramp", "")),
+                    mirror_seat_random=bool(getattr(cfg, "mirror_seat_random", False)),
                     opponent_policy=opp_pol)
             else:
                 if str(getattr(cfg, "library_pool", "")) and \
                         float(getattr(cfg, "library_p", 0.0)) > 0.0:
                     print("[warn] 镜像库目前只在 --lockstep 1 路径生效，本次请求被忽略",
                           flush=True)
-                if str(getattr(cfg, "mirror_snaps", "")) and \
-                        float(getattr(cfg, "mirror_p", 0.0)) > 0.0:
+                if str(getattr(cfg, "mirror_snaps", "")) and (
+                        float(getattr(cfg, "mirror_p", 0.0)) > 0.0 or
+                        str(getattr(cfg, "mirror_p_ramp", "")).strip()):
                     print("[warn] 回合末快照镜像只在 --lockstep 1 路径生效，本次请求被忽略",
                           flush=True)
                 records, cmeta = collect_ppo_records_parallel(
@@ -341,7 +352,8 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                                                 lam=float(task.get("lam", 0.95))),
                         records_file)
                 else:
-                    packed = pack_records_arrays(records)
+                    packed = pack_records_arrays(
+                        records, seq_aux=bool(getattr(cfg, "seq_aux", False)))
                     try:
                         _save_built_batch(
                             build_batch_from_arrays(
@@ -798,11 +810,15 @@ class ProcessActorPool:
                     "target_pi": (lb.target_pi if lb.target_pi is not None
                                   else np.zeros((len(lb.actions), 245), np.float32)),
                 }
+                if getattr(lb, "seq_target", None) is not None:
+                    packed_all[i]["seq_target"] = lb.seq_target
         if packed_all and all("advantages" in p for p in packed_all):
             # L4：worker 已构建好 batch（episode_id 全局唯一）→ 父进程只拼接
             keys = ["features", "cards", "masks", "actions", "old_logprobs", "values",
                     "rewards", "dones", "advantages", "returns", "seats", "game_ids",
                     "ranks", "turns", "forced", "has_pi", "episode_ids", "target_pi"]
+            # 可选字段：所有 shard 都带才拼接（动作序列辅助标签；默认关闭时全都没有）
+            keys += [k for k in ("seq_target",) if all(k in p for p in packed_all)]
             merged = {k: np.concatenate([p[k] for p in packed_all], axis=0) for k in keys}
             meta["episodes"] = int(len(np.unique(merged["episode_ids"])))
             meta["built_in"] = "worker"

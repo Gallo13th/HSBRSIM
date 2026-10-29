@@ -108,8 +108,13 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
                      dim_ff: Optional[int] = None, dropout: float = 0.1,
                      card_dim: int = 48, tables: Optional[CardTables] = None,
                      n_extra_tokens: int = 0, pos_size: int = 16,
-                     arch: str = "entity"):
-    """构造 EntityAZNet（torch 模块）。"""
+                     arch: str = "entity", seq_head: bool = False):
+    """构造 EntityAZNet（torch 模块）。
+
+    ``seq_head=True`` 时在 global token 上加一个 245 维的「动作序列辅助头」
+    （``forward_aux()`` 返回其 logits；见 ``docs/ACTION_SEQUENCE_AUX.md``）。
+    默认 False：不构建，参数量/前向/checkpoint 与之前完全一致。
+    """
     torch = _torch()
     nn = torch.nn
     d = int(d_model)
@@ -180,6 +185,8 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             self.pointer_scale = 1.0 / math.sqrt(float(d))
             self.rank_head = nn.Linear(d, N_PLAYERS)
             self.value_head = nn.Linear(d, 1)
+            # 动作序列辅助头（turn 内动作 multi-hot）：默认 None = 不构建、不计算
+            self.seq_head = nn.Linear(d, N_ACTIONS) if seq_head else None
 
         def _card_repr(self, idx):
             # idx [B, ...] long; 返回 [B, ..., d]
@@ -189,6 +196,19 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             return self.card_to_d(emb)
 
         def forward(self, features, cards, mask=None):
+            logits, rank, value, _g = self._forward_impl(features, cards, mask)
+            return logits, rank, value
+
+        def forward_aux(self, features, cards, mask=None):
+            """``(logits, rank, value, seq_logits|None)``：只在训练损失里取 seq logits。
+
+            ``seq_head`` 未构建时最后一项为 None（默认关闭 = 全程不调用本方法）。
+            """
+            logits, rank, value, g = self._forward_impl(features, cards, mask)
+            seq = None if self.seq_head is None else self.seq_head(g)
+            return logits, rank, value, seq
+
+        def _forward_impl(self, features, cards, mask=None):
             B = features.shape[0]
             dev = features.device
             x = features.float()
@@ -294,6 +314,6 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
                 logits = logits.masked_fill(~mask.bool(), -1e9)
             rank = self.rank_head(g)
             value = torch.tanh(self.value_head(g)).squeeze(-1)
-            return logits, rank, value
+            return logits, rank, value, g
 
     return EntityAZNet()
