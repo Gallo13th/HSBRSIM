@@ -206,22 +206,29 @@ human_board_seats 3`：镜像占一部分座位（本回合不行动，整场面
 
 ## 8. 开销实测
 
+复现脚本：`scripts/bench_human_board.py`（CPU tiny，不需要 GPU）。
+
+```bash
+PYTHONPATH=rust/python:. python scripts/bench_human_board.py --reps 21 --games 4
+```
+
 环境：CPU、`arch=tiny`（`hidden=128`）、lockstep bot 对手、`sims=0`、4 局、同 seed，
-每个 arm 交替 21 次取中位数（机器同时有其它训练/竞技场任务，取中位更稳）。
+每个 arm 交替 21 次取中位数（机器同时有其它训练/竞技场任务，取中位更稳）：
 
-| arm | collect_s（中位） | 相对 off | 注入自身耗时 | 占 collect_s |
-|---|---|---|---|---|
-| off（默认） | 116.2 ms | — | 0 | — |
-| **p=0.15, seats=2** | **119.9 ms** | **+3.2%** | 1.39 ms / 4 局 | 1.2% |
-| p=1.0, seats=7（极端上界） | 138.3 ms | +19.0% | 6.94 ms / 4 局 | 5.0% |
+| arm | collect_s（中位） | 相对 off | 注入自身耗时 | 占 collect_s | 去掉注入后的 wall |
+|---|---|---|---|---|---|
+| off（默认） | 116.6 ms | — | 0 | — | — |
+| **p=0.15, seats=2（默认）** | **120.3 ms** | **+3.11%** | 1.41 ms / 4 局 | 1.17% | +1.91% |
+| p=1.0, seats=7（极端上界） | 138.2 ms | +18.49% | 6.88 ms / 4 局 | 4.98% | +12.59% |
 
-- 微基准（3000 次稳定态）：`Game.inject_board` **3.2 µs/次**；`pool.sample` 分位采样
-  3.0 µs/次（桶内排序缓存 + `bisect` 取同强度区间）；`inject_turn` 全路径
-  **7.5 µs**（p=0.15/2 座）、17.9 µs（p=0.15/7 座）、22.9 µs（p=1.0/2 座）；
-- 折算：默认配置每局约 15 回合 × 2 座位 → ~30 次引擎调用 ≈ **0.25 ms/局**，相对单局
+- 微基准（稳定态）：`Game.inject_board` **2.95 µs/次**；`pool.sample` 分位采样
+  2.84 µs/次（桶内排序缓存 + `bisect` 取同强度区间）；`inject_turn` 全路径
+  **6.2 µs/回合**（p=0.15 / 2 座）、22.9 µs（p=1.0 / 2 座）；
+- 折算：默认配置每局约 15 回合 × 2 座位 → ~30 次引擎调用 ≈ **0.2 ms/局**，相对单局
   collect（~30 ms）约 **0.4–1.2%**，满足「每回合每座位一次引擎调用 + <2% wall」的设计目标；
-- `p=0.15` 的 **+3.2%** 里有一半不是注入本身，而是**对手变强 → 战斗更久/更多死亡结算**
-  的合法开销（去掉注入自身耗时后为 +2.0%），故仍 **<5% 验收线**；`p=1.0/seats=7` 只是上界。
+- `p=0.15` 的 **+3.1%** 里有一半不是注入本身，而是**对手变强 → 战斗更久/更多死亡结算**
+  的合法开销（去掉注入自身耗时后为 +1.9%），故仍 **<5% 验收线**；`p=1.0/seats=7` 只是上界
+  （它是「7 座全人类 + auto 分位」的极端：既慢在注入 469 次，也慢在超大战斗）。
 
 ## 9. 测试与验收
 
@@ -231,7 +238,12 @@ cargo test --release --manifest-path rust/Cargo.toml -p hsbg-engine
 # Python（池 / 采样 / 过滤 / 驱动 / 接线）
 PYTHONPATH=rust/python:. python -m pytest tests/test_human_board_pool.py -q
 PYTHONPATH=rust/python:. python -m pytest tests -q
+# 开销实测（§8）
+PYTHONPATH=rust/python:. python scripts/bench_human_board.py --reps 21 --games 4
 ```
+
+实测结果（本机）：`cargo test --release -p hsbg-engine` **41 个测试套件全绿（0 failed）**；
+`pytest tests -q` **281 passed / 0 failed / 8 skipped**（含本文件相关的 15 项）。
 
 Rust（`rust/crates/hsbg-engine/tests/board_inject.rs`）：
 
