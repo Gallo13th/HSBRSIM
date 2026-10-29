@@ -36,6 +36,7 @@ try:
         mcts_search,
         run_bot_games,
         server_rules_version,
+        snapshot_schema_version,
         turn_search,
         version,
     )
@@ -128,6 +129,7 @@ __all__ = [
     "mcts_search",
     "run_bot_games",
     "server_rules_version",
+    "snapshot_schema_version",
     "turn_search",
     "source_hash",
     "version",

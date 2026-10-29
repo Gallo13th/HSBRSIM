@@ -42,6 +42,9 @@ pub mod script;
 pub mod search;
 pub mod turn_search;
 pub mod state;
+// 回合末场面快照镜像注入（docs/MIRROR_SNAPSHOT_DESIGN.md）；
+// 默认关闭，只有显式调用 `Game::apply_turn_snapshots` 才生效。
+pub mod snapshot;
 pub mod types;
 pub mod workers;
 
@@ -50,6 +53,7 @@ pub use batch::{BatchEnv, SlotResult};
 pub use config::RulesConfig;
 pub use engine::Game;
 pub use env::SoloEnv;
+pub use snapshot::{SNAPSHOT_SCHEMA_VERSION, SnapshotReport};
 
 /// Simulator library version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

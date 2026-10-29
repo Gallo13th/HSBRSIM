@@ -4,7 +4,7 @@
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyBytes};
+use pyo3::types::{PyAny, PyBytes, PyDict, PyList};
 
 use hsbg_engine::actions::{Action, N_ACTIONS};
 use hsbg_engine::batch::{BatchEnv, SlotResult};
@@ -199,6 +199,76 @@ impl PyGame {
         check_seat(&self.g, seat)?;
         py.detach(|| serde_json::to_string(&self.g.players[seat]))
             .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// 批量注入「回合末场面快照」（`docs/MIRROR_SNAPSHOT_DESIGN.md` 的安全版本）。
+    ///
+    /// `snaps` = `[[seat, player_json], ...]`（list/tuple 均可）；`player_json` 与
+    /// `player_json(seat)` 同构。逐座位：校验失败只拒绝该座位（不抛异常、不改状态）；
+    /// 成功则按字段白名单替换场面（board/hand/hand_queue/shop/tier/资源），保留
+    /// alive/placement/health/armor/对手簿记等当前局字段；新实体重新分配 EID 并同步
+    /// typed 引用；旧持有物按 `visit_pool_parts` 归还共享池，新实体 `pool_copies=0`
+    /// （`pool_delta_unknown`：共享池总量不变）。
+    ///
+    /// `advance=None/False` 只提交；`advance=True` 在整批提交后统一推进一次
+    /// （`fight_when_all_ended`）。返回
+    /// `{"applied", "rejected": [(seat, reason)], "pool_balance_ok", ...}`。
+    #[pyo3(signature = (snaps, advance=None))]
+    fn apply_turn_snapshots<'py>(
+        &mut self,
+        py: Python<'py>,
+        snaps: &Bound<'py, PyAny>,
+        advance: Option<bool>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let mut items: Vec<(usize, String)> = vec![];
+        for (i, it) in snaps.try_iter()?.enumerate() {
+            let it = it?;
+            let len = it.len().map_err(|_| {
+                PyValueError::new_err(format!("snapshot #{i} is not a [seat, player_json] pair"))
+            })?;
+            if len != 2 {
+                return Err(PyValueError::new_err(format!(
+                    "snapshot #{i} has {len} items, expected 2: [seat, player_json]"
+                )));
+            }
+            let seat: usize = it.get_item(0)?.extract().map_err(|e| {
+                PyValueError::new_err(format!("snapshot #{i} seat: {e}"))
+            })?;
+            let json: String = it.get_item(1)?.extract().map_err(|e| {
+                PyValueError::new_err(format!("snapshot #{i} player_json: {e}"))
+            })?;
+            items.push((seat, json));
+        }
+        let rep = py.detach(|| self.g.apply_turn_snapshots(&items, advance));
+        let d = PyDict::new(py);
+        d.set_item("applied", rep.applied)?;
+        let rejected = PyList::empty(py);
+        for (seat, reason) in &rep.rejected {
+            rejected.append((*seat, reason.as_str()))?;
+        }
+        d.set_item("rejected", rejected)?;
+        d.set_item("pool_balance_ok", rep.pool_balance_ok)?;
+        d.set_item("pool_species_ok", rep.pool_species_ok)?;
+        d.set_item("pool_held", rep.pool_held)?;
+        d.set_item("pool_initial", rep.pool_initial)?;
+        d.set_item("advanced", rep.advanced)?;
+        d.set_item("summary", rep.summary())?;
+        Ok(d)
+    }
+
+    /// 共享池总量守恒 `(held, initial)`；两者相等即平衡（见 `invariants::pool_balance`）。
+    fn pool_balance(&self) -> (u64, u64) {
+        hsbg_engine::invariants::pool_balance(&self.g)
+    }
+
+    /// 逐物种池守恒违规（空 = 每物种守恒；有 pending 待选时会合法地非空）。
+    fn pool_species_violations(&self) -> Vec<String> {
+        hsbg_engine::invariants::pool_species_violations(&self.g)
+    }
+
+    /// 结构不变量违规（fuzz 级检查；空 = 通过）。
+    fn invariant_violations(&self) -> Vec<String> {
+        hsbg_engine::invariants::check(&self.g)
     }
 
     /// Human-readable JSON view of seat `p` (`hsbg_engine::debug::view`).
@@ -407,6 +477,12 @@ fn catalog_json() -> String {
 #[pyfunction]
 fn version() -> &'static str {
     hsbg_engine::VERSION
+}
+
+/// 回合末场面快照载荷的 schema 版本（采集端写进 `snap_*.json.gz`，与引擎同源）。
+#[pyfunction]
+fn snapshot_schema_version() -> u32 {
+    hsbg_engine::SNAPSHOT_SCHEMA_VERSION
 }
 
 #[pyfunction]
@@ -784,6 +860,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBatchEnv>()?;
     m.add_class::<collector::PyRustCollector>()?;
     m.add_function(wrap_pyfunction!(version, m)?)?;
+    m.add_function(wrap_pyfunction!(snapshot_schema_version, m)?)?;
     m.add_function(wrap_pyfunction!(game_version, m)?)?;
     m.add_function(wrap_pyfunction!(server_rules_version, m)?)?;
     m.add_function(wrap_pyfunction!(db_info, m)?)?;

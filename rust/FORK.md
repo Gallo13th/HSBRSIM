@@ -27,6 +27,11 @@
 3. **搜索**：新增 `src/search.rs`（逐步 MCTS，PyO3 `mcts_search`）与 `src/turn_search.rs`（回合内搜索；不进入 AZ 主路径）。
 4. **Naga**：移除 HSBRSIM 早期的 Naga 全局过滤；37.0.0.255790 池内保留 1 张 DRAGON/NAGA 双种族卡 `BG32_820`，NAGA 仍不作为大厅种族开放。
 5. **构建**：macOS `cargo build --release` 的 `-undefined dynamic_lookup` 链接参数；maturin 兼容。
+6. **回合末场面快照镜像**（新增能力，默认不启用）：`src/snapshot.rs` 的 `Game::apply_turn_snapshots(snaps, advance)` +
+   PyO3 `Game.apply_turn_snapshots`（同时暴露只读 `Game.pool_balance()` / `pool_species_violations()` /
+   `invariant_violations()` 与 `snapshot_schema_version()`）。语义与白名单见 `docs/MIRROR_SNAPSHOT_DESIGN.md`
+   「实现状态」：字段白名单替换 + typed EID 重映射 + `pool_delta_unknown`（旧持有物按 pool parts 归还、
+   注入实体 `pool_copies=0`）。不改变任何既有机制/数值与默认行为（无调用时零影响）。
 
 除此之外，公开 API/行为、245 动作、3227+124 观测、`state_json`、seed 确定性、BatchEnv 语义与上游一致。
 

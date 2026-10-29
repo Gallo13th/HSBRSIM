@@ -31,6 +31,7 @@ from .common import (N_ACTIONS, N_PLAYERS, load_engine, mask_from_bytes,
 from .ppo import (CollectConfig, PPOBatch, PPOSelfPlayPolicy, _attach_rank,
                   build_batch_from_records, _weak_bot_action)
 from .library_pool import board_signature
+from .mirror_snapshots import MirrorStats, inject_turn, mirror_seats
 
 
 def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
@@ -231,6 +232,8 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                          library_rng: Any = None,
                          trajectory_pool: Any = None, trajectory_p: float = 0.0,
                          opponent_policy: Any = None,
+                         mirror_pool: Any = None, mirror_seats_count: int = 0,
+                         mirror_p: float = 0.0,
                          ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """lock-step 采集：N 局同步推进，每轮把所有待决策局拼成一个 batch 前向一次。
 
@@ -238,6 +241,10 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     区别只在调度：决策请求摊薄成「每轮一次批量前向」，batch fill 从 ~0.1 提到 ~1.0。
 
     只支持 ``gamemode in {"bot", "weak"}``（自对弈 8 座仍走逐局路径）。
+
+    回合末场面快照镜像（``mirror_pool`` 非空且 ``mirror_p>0``）：在每个**新回合**开始、
+    任何座位行动前，按概率给 seat ``1..mirror_seats_count`` 注入该 turn 的快照
+    （缺帧跳过；引擎拒绝的座位保持原 bot 状态）。默认关闭（``mirror_p=0``）。
     """
     if str(gamemode) not in ("bot", "weak"):
         raise ValueError(f"lockstep 只支持 bot/weak，收到 {gamemode!r}")
@@ -252,12 +259,17 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     max_steps = int(cfg.max_steps)
     states: List[Dict[str, Any]] = []
     for gi in range(n):
+        g0 = E.Game(seed=int(cfg.seed) + gi)
         states.append({
             "gi": gi, "gid": int(cfg.game_id_offset) + gi,
-            "game": E.Game(seed=int(cfg.seed) + gi),
+            "game": g0,
             "rng": np.random.default_rng(int(seed) + gi),
             "steps": 0, "decisions": 0, "illegal": 0, "done": False, "truncated": 0,
             "rec_start": 0,
+            # 回合末快照镜像：当前 turn 记作「已处理」→ 只在**新**回合注入
+            "mirror_turn": int(g0.turn),
+            "mirror_rng": __import__("random").Random(int(cfg.seed) + int(seed) + gi * 31),
+            "mirror_stats": MirrorStats(),
         })
     rounds = 0
     trajectory_p = max(0.0, min(1.0, float(trajectory_p)))
@@ -291,11 +303,31 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             st["traj_turn"] = int(traj.frames[0]["turn"])
             st["steps"] = 0
             st["rng"] = np.random.default_rng(int(seed) + st["gi"] + 7919)
+            st["mirror_turn"] = int(new_game.turn)
             lib_traj_used += 1
     n_frozen = max(0, min(7, int(getattr(cfg, "frozen_seats", 0))))
     frozen_set = tuple(range(1, 1 + n_frozen)) if opponent_policy is not None else ()
     for st in states:
         st["frozen_set"] = frozen_set
+    # ── 回合末场面快照镜像（默认关闭） ──────────────────────────────────────
+    mirror_p = max(0.0, min(1.0, float(mirror_p)))
+    mirror_on = mirror_pool is not None and mirror_p > 0.0 and int(mirror_seats_count) > 0
+    mirror_targets = (mirror_seats(int(mirror_seats_count), N_PLAYERS, seat)
+                      if mirror_on else [])
+
+    def _maybe_mirror(st: Dict[str, Any]) -> None:
+        """新回合开始、任何座位行动前注入该 turn 的快照（每 turn 只尝试一次）。"""
+        if not mirror_on:
+            return
+        g = st["game"]
+        t = int(g.turn)
+        if t == int(st.get("mirror_turn", t)):
+            return
+        st["mirror_turn"] = t
+        inject_turn(g, mirror_pool, t, seats=mirror_targets, p=mirror_p,
+                    rng=st["mirror_rng"], learner_seat=seat,
+                    stats=st["mirror_stats"])
+
     library_p = max(0.0, min(1.0, float(library_p)))
     if library_pool is not None and library_p > 0.0:
         raise RuntimeError(
@@ -314,9 +346,13 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         for st in states:
             if st["done"]:
                 continue
+            # 新回合（上一轮 learner 的 EndTurn 可能已推进）：任何座位行动前注入快照。
+            _maybe_mirror(st)
             g = st["game"]
             guard = 0
             while (not g.is_over()) and (not g.needs_action(seat)) and guard < 10 ** 6:
+                # 回合可能在 bot 推进中切换（最后一个座位结束后立刻战斗 + 进入下一回合）。
+                _maybe_mirror(st)
                 q = next((p for p in range(N_PLAYERS) if g.needs_action(p)), None)
                 if q is None:
                     break
@@ -448,7 +484,16 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             "trajectory_fallback": int(sum(st.get("traj_fallback", 0) for st in states)),
             "frozen_opponent": bool(opponent_policy is not None),
             "frozen_seats": int(len(frozen_set)),
+            "mirror_on": bool(mirror_on), "mirror_p": float(mirror_p),
+            "mirror_seats": int(len(mirror_targets)),
+            "mirror_targets": list(mirror_targets),
+            "mirror_frames": int(getattr(mirror_pool, "frames", 0)) if mirror_on else 0,
             "records": int(len(records)), "illegal_actions": int(illegal),
             "truncated_games": int(truncated),
             "games_meta": metas, "forced_end_turns": int(policy.forced_actions)}
+    # 回合末快照镜像是「每座位每回合」事件：逐局计数后汇总写入 meta。
+    mstats = MirrorStats()
+    for st in states:
+        mstats.add(st.get("mirror_stats") or MirrorStats())
+    meta.update(mstats.to_meta())
     return records, meta

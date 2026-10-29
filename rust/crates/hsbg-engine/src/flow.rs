@@ -806,7 +806,10 @@ impl Game {
     /// After a seat ends its turn: fight once every living seat has ended. A seat its own
     /// end-of-turn effects killed is eliminated first: it never fights as a living seat, whatever
     /// order the seats ended in. `recruit_deaths` starts the round itself when everyone is done.
-    fn fight_when_all_ended(&mut self) {
+    ///
+    /// `pub(crate)`：场面快照注入（`crate::snapshot`）在整批提交后也走这一条统一推进路径，
+    /// 避免每个快照各自推进。
+    pub(crate) fn fight_when_all_ended(&mut self) {
         if self.players.iter().any(|p| p.alive && p.health <= 0) {
             self.recruit_deaths();
         } else if self.players.iter().all(|p| !p.alive || p.ended_turn) {

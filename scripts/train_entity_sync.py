@@ -106,6 +106,13 @@ def main() -> int:
                     help="对手场面轨迹库目录（空=不用）；见 docs/LIBRARY_POOL_PLAN.md")
     ap.add_argument("--trajectory-p", type=float, default=0.0,
                     help="每局被轨迹镜像替换的概率（建议 0.1 起）")
+    ap.add_argument("--mirror-snaps", default="",
+                    help="回合末场面快照库目录（snap_*.json.gz；空=不用）；见 "
+                         "docs/MIRROR_SNAPSHOT_DESIGN.md")
+    ap.add_argument("--mirror-seats", type=int, default=0,
+                    help="回合末快照镜像的座位数：给 seat 1..N 注入（0=关闭，最大 7）")
+    ap.add_argument("--mirror-p", type=float, default=0.0,
+                    help="每座位每回合注入快照的概率（默认 0=关闭，零影响）")
     ap.add_argument("--library-p", type=float, default=0.0,
                     help="每回合每个 bot 座位的注入概率（建议 0.3 起）")
     ap.add_argument("--lockstep", type=int, default=0,
@@ -161,6 +168,15 @@ def main() -> int:
         print("[error] --library-p（v1 单座位注入）未通过终审，已禁用；"
               "请用 --trajectory-pool/--trajectory-p", file=sys.stderr)
         return 2
+    # 回合末场面快照镜像（默认关闭；--mirror-p 0 时完全零影响）
+    if float(args.mirror_p) > 0.0 and int(args.mirror_seats) <= 0:
+        print("[error] --mirror-p>0 需要 --mirror-seats>0（给 seat 1..N 注入）",
+              file=sys.stderr)
+        return 2
+    if float(args.mirror_p) > 0.0 and not int(args.lockstep):
+        print("[warn] 回合末快照镜像只在 --lockstep 1 路径生效", flush=True)
+    if str(args.mirror_snaps) and not os.path.isdir(str(args.mirror_snaps)):
+        print(f"[warn] --mirror-snaps 目录不存在: {args.mirror_snaps}", flush=True)
 
     if not engine_available():
         print("[error] hsbg_engine 不可用", file=sys.stderr)
@@ -402,6 +418,8 @@ def main() -> int:
             lockstep=bool(int(args.lockstep)),
             library_pool=str(args.library_pool), library_p=float(args.library_p),
             trajectory_pool=str(args.trajectory_pool), trajectory_p=float(args.trajectory_p),
+            mirror_snaps=str(args.mirror_snaps), mirror_seats=int(args.mirror_seats),
+            mirror_p=float(args.mirror_p),
             frozen_opponent=str(args.frozen_opponent),
             frozen_seats=int(args.frozen_seats),
             rust_collector=bool(int(args.rust_collector)),

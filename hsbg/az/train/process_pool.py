@@ -55,6 +55,7 @@ from .ppo import (CollectConfig, PPOBatch, PPOSelfPlayPolicy, build_batch_from_a
 #: 每个 worker 进程内的镜像库缓存（按路径）
 _LIB_CACHE: Dict[str, Any] = {}
 _TRAJ_CACHE: Dict[str, Any] = {}
+_MIRROR_CACHE: Dict[str, Any] = {}
 _OPP_CACHE: Dict[Any, Any] = {}
 
 
@@ -261,6 +262,27 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                         tpool = cached[1]
                     if tpool is not None and not tpool.items:
                         tpool = None
+                # 回合末场面快照镜像库（--mirror-snaps/--mirror-p；默认关闭）
+                mpool = None
+                if str(getattr(cfg, "mirror_snaps", "")) and \
+                        float(getattr(cfg, "mirror_p", 0.0)) > 0.0:
+                    from .mirror_snapshots import load_pool as _load_mirror
+                    mdir = str(cfg.mirror_snaps)
+                    if os.path.isdir(mdir):
+                        mfiles = [os.path.join(mdir, f) for f in os.listdir(mdir)
+                                  if f.endswith(".json.gz")]
+                        mkey = (len(mfiles),
+                                max((os.path.getmtime(f) for f in mfiles), default=0.0))
+                    else:
+                        mkey = None
+                    cached = _MIRROR_CACHE.get(mdir)
+                    if cached is None or cached[0] != mkey:
+                        mpool = _load_mirror(mdir) if mkey is not None else None
+                        _MIRROR_CACHE[mdir] = (mkey, mpool)
+                        if mpool is None:
+                            print(f"[warn] 回合末快照库为空/不存在: {mdir}", flush=True)
+                    else:
+                        mpool = cached[1]
                 opp_pol = None
                 fck = str(getattr(cfg, "frozen_opponent", "") or "")
                 if fck:
@@ -286,11 +308,18 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     library_p=float(getattr(cfg, "library_p", 0.0)),
                     trajectory_pool=tpool,
                     trajectory_p=float(getattr(cfg, "trajectory_p", 0.0)),
+                    mirror_pool=mpool,
+                    mirror_seats_count=int(getattr(cfg, "mirror_seats", 0)),
+                    mirror_p=float(getattr(cfg, "mirror_p", 0.0)),
                     opponent_policy=opp_pol)
             else:
                 if str(getattr(cfg, "library_pool", "")) and \
                         float(getattr(cfg, "library_p", 0.0)) > 0.0:
                     print("[warn] 镜像库目前只在 --lockstep 1 路径生效，本次请求被忽略",
+                          flush=True)
+                if str(getattr(cfg, "mirror_snaps", "")) and \
+                        float(getattr(cfg, "mirror_p", 0.0)) > 0.0:
+                    print("[warn] 回合末快照镜像只在 --lockstep 1 路径生效，本次请求被忽略",
                           flush=True)
                 records, cmeta = collect_ppo_records_parallel(
                     model, cfg, workers=int(task.get("threads", 4)),

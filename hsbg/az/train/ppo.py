@@ -277,6 +277,12 @@ class CollectConfig:
     #: 对手场面轨迹镜像库（目录）；trajectory_p=每局被轨迹替换的概率
     trajectory_pool: str = ""
     trajectory_p: float = 0.0
+    #: 回合末场面快照镜像库（目录）、镜像座位数（给 seat 1..N 注入）与每座位每回合注入概率。
+    #: 默认关闭（mirror_p=0）：走引擎 `Game.apply_turn_snapshots`，见
+    #: docs/MIRROR_SNAPSHOT_DESIGN.md 与 hsbg/az/train/mirror_snapshots.py。
+    mirror_snaps: str = ""
+    mirror_seats: int = 0
+    mirror_p: float = 0.0
     #: 冻结对手模型（分裂模型/自对弈的对手）：空=引擎 bot；给 checkpoint 则 bot 座位由它驱动
     frozen_opponent: str = ""
     #: 由冻结对手模型驱动的 bot 座位数（0=全 bot，7=全部 7 席；1–2 性价比最高）
