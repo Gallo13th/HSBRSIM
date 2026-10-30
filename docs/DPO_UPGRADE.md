@@ -129,9 +129,10 @@ s8b 实测：`‖g_ppo‖=15.34`（PPO total=0.696，430 decisions）、
 | 0.005 | 0.102% | 0.026% |
 
 > 这是**梯度范数**占比（含 value/BC/seq 全部 PPO 项），不是“对 upgrade logit 的定向
-> 位移占比”：DPO 梯度方向在 128 条样本上一致（都推 upgrade、压 argmax），而 PPO 的
-> policy 梯度逐微批正负相消，所以 DPO 的行为效果比这个百分比看起来更明显 —— 以
-> §6 的 `picks_upgrade`（=1−accept_rate）实测为准。
+> 位移占比”。A/B 实测证明它就是有效判据：coef 0.002/0.005（0.01%/0.03% 累计）测不出
+> 任何行为变化；**0.02 + every=1（0.41% 累计）才出现 +8.6pp 的 picks_upgrade**
+> （§6.5）。原因：Adam 每步参数位移 ≈ lr（1.2e-6），DPO 必须在**累计**意义上和 PPO
+> 同量级才推得动策略，见 §4 的预算公式。
 
 ### 3.6 逐位等价（默认关闭）
 
@@ -147,17 +148,33 @@ pytest tests/test_dpo_train.py tests/test_dpo_upgrade.py -q     # 7 + 9 项
 
 ---
 
-## 4. 系数选择
+## 4. 系数选择（被 A/B 修正过的结论）
 
-- 纯 DPO 30 步把选择率推到 99.9% → 信号极尖，**系数必须是 1e-3 量级**；
-- 周期 `dpo_every=4`：每 4 个 iteration 才加一次，等效平均权重再除以 4。
-  语义与 BC 不同（BC 的 `bc_every` 会把该步权重乘以 N 保持平均；DPO 不做折算，
-  开启步就是 `dpo_coef`，所以 **平均梯度占比 ≈ coef/every**）；
-- 候选：**B = 0.002（保守）**、**C = 0.005（2.5×）**；A 为现状（无 DPO）；
-- 上限经验：按 §3.5 的 0.204/coef，0.005 的单步梯度占比 ~0.1%，仍远小于 PPO 自身；
-  再大（≥0.02）才开始和 PPO 的 policy 项同量级，容易把 67% 直接推到饱和。
+- 纯 DPO（单独优化、无 PPO 竞争）30 步可把选择率推到 99.9% → 信号很尖，最初据此选了
+  **0.002 / 0.005 + every=4**（每 60 iter 只有 15 个 DPO 步）；
+- **实测这两个系数没有可测效果**（§6）：DPO 梯度只占同一步 PPO 梯度的 0.04%/0.10%，
+  15 步累计仍远小于 PPO 自身的漂移；
+- 把累计量写成可预算的形式（§3.5 的 `share_per_coef=0.204`）：
 
----
+  ```
+  累积 DPO 梯度 / 累积 PPO 梯度 ≈ coef × 0.204 × (dpo_steps / ppo_updates)
+  ```
+
+  | 配置 | coef | dpo_steps/ppo_updates | 累计占比 |
+  |---|---|---|---|
+  | B | 0.002 | 15/60 | **0.010%** |
+  | C | 0.005 | 15/60 | **0.026%** |
+  | D | 0.020 | 60/60 | **0.41%** |
+
+- **D（0.02 + every=1）是第一个有效配置**：池上 picks_upgrade 69.05% → 77.7%
+  （+8.6pp），t9/t12 的 should 组 pick率 +15.1/+13.1pp，t15 的 tier p50 4 → 5；
+  panels 不劣化。仍未饱和（77.7% ≪ 90%）；
+- 推荐：**`--dpo-coef 0.02 --dpo-every 1`**（或等效平均权重的 `0.08 @ every=4`，
+  但每步尖峰更大、不推荐）。不要再往 0.002/0.005 调，那一段是噪声平台；
+- 若要更快见效（或 s9d 的 lr 更低），可把 DPO 放进**独立参数组/优化器**给更大 lr，
+  或先做 30 步纯 DPO 预热再回 PPO（这也是最初 99.9% 那条结论的做法）；
+- 饱和/停止条件：`picks_upgrade > 85–90%` 或 `dpo_accept_rate < 10%`（池上已无对比信号）
+  时把 coef 降回 0 或改用 ramp。
 
 ## 5. A/B 设置
 
@@ -167,26 +184,41 @@ pytest tests/test_dpo_train.py tests/test_dpo_upgrade.py -q     # 7 + 9 项
   `compile_train=1`、`anchor_beta=0.1/0.02`、`pi_coef=0`、`seq_coef=0.05`、
   `bc_coef=0.008`、`bc_every=4`、`shaping_coef=0.001`、mirror/human-board 注入同 s9d），
   `--move-guard 1`；
-- 每臂 **60 iteration**（192 games/iter ≈ 36.7k decisions → 共 ≈ 2.2M decisions）；
-- 单一 GPU（cuda:7）：`--processes 12 --gpus 7`（s9d 占 3/4/5，cuda:7 还要给 s9d 的异步
-  评测留显存；`processes/games` 只影响吞吐，不改学习口径）；
+- 每臂 **60 iteration**（192 games/iter ≈ 36.7k decisions → 共 ≈ 2.22M decisions）；
+- 单一 GPU（cuda:7）：`--processes 12 --gpus 7`（`processes/games` 只影响吞吐，
+  不改学习口径）；四臂串行、互不重叠；
 - 评测（全部同 seed 面板、同 checkpoint 口径）：
   - `scripts/quality_monitor.py --games 64 --move-guard 1`（tier p50 @ t9/t12/t15、
     tier≥5 比例、战团强度比）；
   - bot 面板 `scripts/c0_gate.py --games 64 --seats 8 --smoke`（model vs 引擎 bot 配对 rank）；
-  - human 面板 `scripts/human_panel_eval.py --games 96 --seats 8 --smoke --baseline-bot 1`。
+  - human 面板 `scripts/human_panel_eval.py --games 96 --seats 8 --smoke --baseline-bot 1`；
+  - 池上 probe `scripts/dpo_upgrade_probe.py --device cpu`（3,050 条 upgrade 的
+    `picks_upgrade` 与 t9/t12 should 组 pick率 —— 最敏感的行为指标）。
 
-复现：
+单臂命令（A 无 DPO；B/C 是 DPO 系数；D 是有效系数下限）：
 
 ```bash
-bash /tmp/run_dpo_ab.sh          # A/B/C 三臂 + 三面板（日志 runs/dpo_ab/*/logs）
-python /tmp/collect_ab.py        # 汇总 -> runs/dpo_ab/table.json
+COMMON="--checkpoint runs/az_entity_s8b/model.pt --arch entity --device cuda:7 \
+  --processes 12 --gpus 7 --threads 8 --games 192 --sims 0 --epochs 1 \
+  --minibatch 1024 --grad-accum 8 --amp bf16 --lr 1.2e-6 --lr-min-ratio 0.5 \
+  --max-updates 3000 --clip 0.2 --target-kl 0.02 --lam 0.995 --max-grad-norm 1.0 \
+  --entropy-coef 0.001 --pi-coef 0.0 --anchor-beta 0.1 --anchor-iterations 200 \
+  --anchor-beta-tail 0.02 --compile-train 1 --anchor-amp 1 --pipeline 1 --lockstep 1 \
+  --leaf-wait-ms 1.0 --move-guard 1 --move-cap 3 --move-repeat-limit 2 \
+  --shaping-coef 0.001 --seq-coef 0.05 --bc-coef 0.008 --bc-batch 128 --bc-every 4 \
+  --bc-compile 1 --gpu-free-check 0 --seed 15100 --iterations 60 --minutes 90 \
+  --snapshot-every 100 --keep-snapshots 2 --out runs/dpo_ab/A"
+python scripts/train_entity_sync.py $COMMON
+python scripts/train_entity_sync.py $COMMON --dpo-coef 0.002 --dpo-batch 128 --dpo-every 4 --out runs/dpo_ab/B
+python scripts/train_entity_sync.py $COMMON --dpo-coef 0.005 --dpo-batch 128 --dpo-every 4 --out runs/dpo_ab/C
+python scripts/train_entity_sync.py $COMMON --dpo-coef 0.02  --dpo-batch 128 --dpo-every 1 --out runs/dpo_ab/D
 ```
+
+汇总：四臂的 `quality.json / bot_panel.json / human_panel.json / pool_probe.json`
+都在 `runs/dpo_ab/{A,B,C,D}/`；`runs/dpo_ab/table.json` 是本文所有数字的来源。
 
 > `quality_monitor.py` 本次新增 `tier_ge5_ratio`（逐 turn）与 `tier_p50_t15 /
 > tier_ge5_t9|t12|t15 / strength_ratio_t9|t12|t15` 汇总键（additive，不改旧指标）。
-
----
 
 ## 6. A/B 结果
 
@@ -234,40 +266,58 @@ python /tmp/collect_ab.py        # 汇总 -> runs/dpo_ab/table.json
 - 与 §3.5 的梯度占比一致：coef 0.002/0.005 + every=4 → 单步 DPO 梯度只有 PPO 的
   0.04%/0.10%，累计 15 步仍远小于 PPO 的漂移 → **测不出行为变化是预期结果**。
 
-### 6.5 附加臂 D（寻找有效系数下限）
+### 6.5 附加臂 D（有效系数下限：0.02 + every=1，60 个 DPO 步）
 
-为了区分“DPO 没接对”与“系数太小”，在 A/B/C 之后追加 D：
-`--dpo-coef 0.02 --dpo-every 1`（**60 个 DPO 步**，累计 DPO 权重约为 C 的 16×）。
+| 指标 | A（现状） | D（0.02, every=1） | Δ（D−A） |
+|---|---|---|---|
+| tier p50 @ t9 / t12 / t15 | 4 / 4 / 4 | 4 / 4 / **5** | t15 +1 |
+| tier≥5 比例 @ t9 | 0.125 | 0.109 | −1.6pp（1 局噪声） |
+| tier≥5 比例 @ t12 | 0.270 | **0.359** | **+8.9pp** |
+| tier≥5 比例 @ t15 | 0.457 | **0.649** | **+19.2pp** |
+| quality mean_rank / top4 / win | 1.688 / 96.9% / 57.8% | **1.531 / 100% / 60.9%** | 更好 |
+| death_strength_p50 | 769 | **902** | +133 |
+| bot 面板 Δ vs bot（负=更好） | −3.266 | −3.281 | −0.016（噪声内） |
+| human 面板 Δ vs bot（负=更好） | −1.281 | −1.323 | −0.042（噪声内） |
+| 池上 picks_upgrade | 69.05% | **77.7%** | **+8.6pp（10σ）** |
+| 池上 t9 should 组 pick率（n=53） | 28.3% | **43.4%** | **+15.1pp（2.4σ）** |
+| 池上 t12 should 组 pick率（n=38） | 13.2% | **26.3%** | **+13.1pp（1.9σ）** |
+| 池上 tier4 / tier5 的 pick率 | 53.5% / 21.0% | 67.9% / 37.4% | 两级都更敢升 |
+| DPO loss / accept（池上） | 0.725 / 30.9% | 0.722 / 22.3% | 池上信号被消耗 8.6pp |
 
-（D 的结果见本节末尾表格；若 D 仍无变化，说明在 `lr=1.2e-6` 的 Adam 口径下，
-DPO 作为加性正则项需要独立参数组/更大系数，见 §7。）
-
-| 指标 | A（现状） | D（0.02, every=1） |
-|---|---|---|
-| tier≥5 t9 / t12 / t15 | 0.125 / 0.270 / 0.457 | _待填_ |
-| bot 面板 Δ vs bot | −3.266 | _待填_ |
-| human 面板 Δ vs bot | −1.281 | _待填_ |
-| 池上 picks_upgrade / t9 / t12 should | 69.05% / 28.3% / 13.2% | _待填_ |
+**为什么 t9 的 tier≥5 没升**：t9 的 tier 由 **t7/t8 的 upgrade** 决定，而 DPO 的
+should 组集中在 t9/t12 —— 效果体现在**下游** t12/t15（t12 +8.9pp、t15 +19.2pp、
+t15 的 tier p50 4→5）。池上 t9 should 组 pick率 +15.1pp 才是“该升已升”的直接证据。
+换句话说，判据里的 “t9/t12 tier≥5 上升” 应按“**滞后一档的下游 turn**”解读。
 
 ## 7. 失败判据与结论
 
 **判据（任务口径）**：t9/t12 的 `tier≥5 比例`上升 **且** human 面板 mean_rank 不劣化
 （Δ ≤ +0.15）**且** bot 面板不倒退（Δ ≤ +0.15）。
 
-**判定**（见 §6 数字）：
+### 7.1 结论
 
-- ✅ 推荐并入 s9d：_待填_
-- ❌ 不推荐：_待填_
+- **B（0.002）、C（0.005，every=4）不建议并入**：池上 picks_upgrade 变化
+  −0.9pp / +0.5pp（1σ≈0.84pp，且不单调），t9/t12 的 tier≥5 变化在 64 局噪声内，
+  DPO loss 15 步不动（0.727→0.727）。**这一段系数是噪声平台**；C 的“PASS”是
+  2–3 局噪声 + 面板随机波动的假阳性，不能当结论。
+- **D（0.02, every=1）建议并入 s9d**：池上 picks_upgrade +8.6pp（10σ）、
+  t9/t12 should 组 +15.1/+13.1pp、t15 的 tier p50 4→5、tier≥5@t12 +8.9pp /
+  @t15 +19.2pp；human Δ −0.042、bot Δ −0.016（都远在 +0.15 容差内，且方向偏中性）。
+  t9 的 tier≥5 −1.6pp（1 局）不作为否决：它是滞后指标（见 §6.5）。
+- **并入方式**：`--dpo-coef 0.02 --dpo-beta 0.1 --dpo-batch 128 --dpo-every 1`，
+  从 s9d 最新快照续训；建议**先 60–200 iter 观察**（或加 ramp/上限），
+  到 `picks_upgrade > 85%` 或 `dpo_accept_rate < 10%` 时衰减/关闭。
+  期望收益：t15 的 tier p50 从 4 推到 5、tier≥5@t12/t15 抬升，panels 不下滑。
 
-**失败模式**（任一即停用 DPO 或降系数）：
+### 7.2 失败模式（任一即停用 DPO 或降系数）
 
-1. t9/t12 的 tier≥5 比例**没有**上升（信号太弱 / 被 anchor+BC 抵消）；
+1. t12/t15 的 tier≥5 比例没有上升（信号太弱 / 被 anchor+BC 抵消）—— B、C 即此；
 2. human 面板 mean_rank 劣化 > +0.15（提前升本牺牲经济/血量）；
 3. bot 面板 mean_rank 劣化 > +0.15；
-4. `picks_upgrade` 冲到 > 90%（饱和，变成无脑升本）——尤其 coef ≥ 0.02 时；
-5. DPO `accept_rate` 掉到 ≈ 0（池上已经没有可学的对比信号，继续加只会放大噪声）。
-
----
+4. `picks_upgrade` 冲到 > 90%（饱和，变成无脑升本）—— D 只到 77.7%，安全；
+5. 池上 `accept_rate` < 10%（没有可学的对比信号，继续加只会放大噪声）；
+6. DPO loss 在 20+ 步内完全不动（当前系数下 DPO 项等于没接）—— B/C 即此，
+   此时调系数没有意义，应先看 §4 的累计占比预算。
 
 ## 8. 运维注意
 
