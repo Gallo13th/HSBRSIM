@@ -5,11 +5,18 @@
 - 记录：平均名次（主）、前四率、冠军率、期望效用、合法动作率、truncated、耗时、决策数；
 - 引擎 bot 基线 = 同一循环里 seat0 也走 ``bot_action``（特权，仅作基线）。
 
+**人类战团对手面板**（``docs/EVAL_PANELS.md``）：``EvalConfig.human_board_pool`` 非空时，
+每个**新回合开始、任何座位行动前**，把该 turn 分位的人类战团（board-only）注入全部
+非 learner 座位。注入是 board-only 近似（无 hand/shop/池差量），只用于对手强度评测，
+不改变被评策略的观测/动作口径。注入 RNG 按 ``(seed, game, turn, seat)`` 独立派生，
+因此同一 seed 的 model / bot 基线面对的是同一批人类战团。
+
 只用 ``observe/legal_mask`` 作为被评策略的决策输入；``bot_action`` 只出现在基线策略里。
 """
 
 from __future__ import annotations
 
+import random
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -23,6 +30,7 @@ from .common import (
     obs_arrays,
     utility_from_rank,
 )
+from .human_board_pool import HumanBoardStats, inject_turn
 from .policies import EngineBotPolicy, Policy
 
 
@@ -36,10 +44,53 @@ class EvalConfig:
     max_steps: int = 50000
     opponent: str = "engine_bot"   # 其余座位策略（当前只支持引擎 bot）
     collect_examples: int = 0      # >0 时保留若干决策样本用于人工抽查
+    #: 人类战团池（``HumanBoardPool``）；None = 纯引擎 bot 面板（零影响）。
+    human_board_pool: Any = None
+    #: 注入时是否同时写入按 turn 派生的 tier（人类数据没有 tier 字段）。
+    human_board_set_tier: bool = True
+
+
+def _mix_seed(*parts: int) -> int:
+    """把 ``(seed, game, turn, seat)`` 混合成稳定的 63-bit 注入 RNG 种子。
+
+    **不能**依赖调用顺序：model / bot 两条基线局内死亡座位不同，若用单一 RNG 顺序
+    消耗，同一 seed 的两条基线在后期会抽到不同的战团，配对差分就失去了可比性。
+    """
+    h = 0x9E3779B97F4A7C15
+    for p in parts:
+        h ^= (int(p) + 0x9E3779B97F4A7C15 + (h << 6) + (h >> 2)) & 0xFFFFFFFFFFFFFFFF
+        h &= 0xFFFFFFFFFFFFFFFF
+    return int(h % ((1 << 63) - 1))
+
+
+def _inject_human_turn(game: Any, config: "EvalConfig", *, seed: int, gi: int,
+                       turn: int, stats: HumanBoardStats) -> int:
+    """新回合开始：给全部存活、非 learner 座位各注入该 turn 的一条人类战团。
+
+    逐座位独立调用 :func:`inject_turn`（``seats=[seat]``），这样每个座位的采样 RNG
+    只由 ``(seed, game, turn, seat)`` 决定，与其它座位是否存活/注入成功无关。
+    返回尝试注入的座位数。
+    """
+    pool = getattr(config, "human_board_pool", None)
+    if pool is None:
+        return 0
+    learner = int(config.policy_seat)
+    try:
+        health = [int(h) for h in game.health()]
+    except Exception:  # noqa: BLE001 - 旧构建没有 health() -> 不按血量过滤
+        health = [1] * N_PLAYERS
+    seats = [s for s in range(N_PLAYERS)
+             if s != learner and 0 <= s < len(health) and health[s] > 0]
+    for seat in seats:
+        rng = random.Random(_mix_seed(int(seed) + int(gi), int(turn), int(seat)))
+        inject_turn(game, pool, int(turn), seats=[int(seat)], p=1.0, rng=rng,
+                    learner_seat=learner, stats=stats,
+                    set_tier=bool(getattr(config, "human_board_set_tier", True)))
+    return len(seats)
 
 
 def evaluate_policy(policy: Policy, config: EvalConfig) -> Dict[str, Any]:
-    """评测一个策略（固定 seeds，seat0 vs 7 引擎 bot）。"""
+    """评测一个策略（固定 seeds，seat0 vs 7 引擎 bot / 可选人类战团注入）。"""
     E = load_engine()
     seat0 = int(config.policy_seat)
     ranks: List[int] = []
@@ -48,14 +99,44 @@ def evaluate_policy(policy: Policy, config: EvalConfig) -> Dict[str, Any]:
     illegal = 0
     examples: List[Dict[str, Any]] = []
     truncated_combats = 0
+    hb_stats = HumanBoardStats()
+    hb_turns = 0
     t0 = time.time()
     for gi in range(int(config.games)):
         game = E.Game(seed=int(config.seed) + gi)
+        game_seed = int(config.seed) + gi
         policy.reset()
         steps = 0
+        last_turn = -1
+        state: Dict[str, int] = {"turns": 0}
+
+        def _maybe_inject() -> None:
+            """在**任何座位行动前**检查是否进入新回合；新回合则注入一次。
+
+            必须在 while 顶层和 ``for p`` 内都调用：引擎可能在 ``for p`` 中途推进
+            turn（例如 learner 结束本回合后，后续座位的 ``bot_play`` 已经属于新回合），
+            只在 while 顶层注入会错过窗口、被 ``already_ended`` 拒绝。
+            """
+            nonlocal last_turn
+            if getattr(config, "human_board_pool", None) is None:
+                return
+            turn_now = int(game.turn)
+            if turn_now == last_turn:
+                return
+            last_turn = turn_now
+            if turn_now < 1:
+                # 引擎 turn=0 是开局准备帧（人类数据从 turn=1 起，且该帧注入会被
+                # 引擎以 not_recruit 拒绝）；直接从 turn=1 开始注入。
+                return
+            _inject_human_turn(game, config, seed=int(config.seed), gi=gi,
+                               turn=turn_now, stats=hb_stats)
+            state["turns"] += 1
+
         while not game.is_over() and steps < int(config.max_steps):
+            _maybe_inject()
             acted = False
             for p in range(N_PLAYERS):
+                _maybe_inject()
                 if not game.needs_action(p):
                     continue
                 seat = int(p)
@@ -71,7 +152,7 @@ def evaluate_policy(policy: Policy, config: EvalConfig) -> Dict[str, Any]:
                         f, c = obs_arrays(game.observe(seat))
                         examples.append({"features": f, "cards": c, "mask": mask,
                                          "action": action, "seat": seat,
-                                         "turn": int(game.turn), "seed": int(config.seed) + gi,
+                                         "turn": int(game.turn), "seed": game_seed,
                                          "info": dec.info})
                     game.step(seat, action)
                     decisions += 1
@@ -83,6 +164,7 @@ def evaluate_policy(policy: Policy, config: EvalConfig) -> Dict[str, Any]:
                     break
             if not acted:
                 break
+        hb_turns += int(state["turns"])
         if game.is_over():
             ranks.append(int(game.placements()[seat0]))
         else:
@@ -99,6 +181,7 @@ def evaluate_policy(policy: Policy, config: EvalConfig) -> Dict[str, Any]:
     rank_counts: Dict[int, int] = {}
     for r in ranks:
         rank_counts[int(r)] = rank_counts.get(int(r), 0) + 1
+    hb_meta = hb_stats.to_meta()
     return {
         "policy": getattr(policy, "name", "unknown"),
         "gameplay": getattr(policy, "playstyle", None),
@@ -123,6 +206,9 @@ def evaluate_policy(policy: Policy, config: EvalConfig) -> Dict[str, Any]:
         "seconds": float(elapsed),
         "ms_per_decision": float(1000.0 * elapsed / max(decisions, 1)),
         "games_per_s": float(config.games / max(elapsed, 1e-9)),
+        # 人类战团注入计数（纯 bot 面板时全为 0；写进 panel details 便于核对是否真的生效）
+        "human_board": hb_meta,
+        "human_board_turns": int(hb_turns),
         "examples": examples,
     }
 

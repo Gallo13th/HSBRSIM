@@ -9,9 +9,11 @@
    始终由同一个版本采集 → 滞后恒为 1，可断言；
 3. 多线程采集（`--workers > 1 --processes 1`）：老路径，保留兼容。
 
-评测：`--eval-every-decisions N` 到点做 C0；`--eval-async 1` 时评测交给独立子进程
+评测：`--eval-every-decisions N` 到点做评测；`--eval-async 1` 时评测交给独立子进程
 （默认 `--eval-device cuda:4`），主循环不等待，结果由轻量线程追加到
-`eval/history.json`；`--eval-async 0` 保持旧的同步阻塞行为。
+`eval/history.json`；`--eval-async 0` 保持旧的同步阻塞行为。`--eval-panel {bot,human,both}`
+决定跑哪个面板（默认 both；human=人类战团对手面板，新主指标，见 `docs/EVAL_PANELS.md`），
+两个 panel 各起一个子进程、串行排队（并发上限仍为 1）。
 
 日志：`history.jsonl`（逐 iteration 追加，O(1)；不再全量重写 `history.json`），
 `summary.json` 只存聚合信息；`--trainer-state` 可精确续训。
@@ -42,6 +44,7 @@ sys.path.insert(0, ROOT)
 
 from hsbg.az.train.common import engine_available, engine_info, to_jsonable  # noqa: E402
 from hsbg.az.train.mirror_snapshots import ramp_p  # noqa: E402
+from hsbg.az.train.reward_shaping import parse_tier_bonus  # noqa: E402
 from hsbg.az.train.model import (  # noqa: E402
     attach_bc_card_head,
     bc_card_head_dim,
@@ -70,8 +73,9 @@ from hsbg.az.train.bc_aux import (  # noqa: E402
     bc_pool_summary,
     load_bc_samples,
 )
-from scripts.async_eval import (AsyncEvalRunner, parse_c0_result,  # noqa: E402
-                                write_json_atomic)
+from scripts.async_eval import (AsyncEvalRunner, build_c0_cmd,  # noqa: E402
+                                build_human_cmd, panels_from_spec,
+                                parse_panel_result, write_json_atomic)
 
 
 def _gpu_used_mib() -> Dict[int, int]:
@@ -177,6 +181,15 @@ def main() -> int:
                          "/ t>=13 p90，默认）")
     ap.add_argument("--human-board-set-tier", type=int, default=1,
                     help="1=同时写入按 turn 派生的酒馆等级（人类数据没有 tier 字段；默认 1）")
+    # ---- 势函数奖励塑形（默认关闭，见 docs/REWARD_SHAPING.md）----
+    ap.add_argument("--shaping-coef", type=float, default=0.0,
+                    help="势函数奖励塑形系数 λ；0=关闭（默认，records/GAE 与旧路径逐位等价）")
+    ap.add_argument("--shaping-w-str", type=float, default=1.0,
+                    help="Φ 的 Σ(atk+hp) 权重（默认 1.0）")
+    ap.add_argument("--shaping-w-tier", type=float, default=0.5,
+                    help="Φ 的 TIER_BONUS 权重（默认 0.5）")
+    ap.add_argument("--shaping-tier-bonus", default="0,0,20,60,150,400,900",
+                    help="按 tier 直接索引的奖励表（逗号分隔；索引 0=占位，越界按 0）")
     ap.add_argument("--library-p", type=float, default=0.0,
                     help="每回合每个 bot 座位的注入概率（建议 0.3 起）")
     ap.add_argument("--lockstep", type=int, default=0,
@@ -279,6 +292,20 @@ def main() -> int:
     ap.add_argument("--eval-stop-mean-rank", type=float, default=0.0,
                     help="评测 mean_rank <= 该值时在下一个 iteration 边界停止训练"
                          "（0=关闭；异步/同步共用，结果到达时判定）")
+    ap.add_argument("--eval-panel", default="both", choices=["bot", "human", "both"],
+                    help="周期评测面板：bot=256/512 局 bot 面板（已饱和）；human=人类战团"
+                         "对手面板（新主指标）；both=两个面板各起一个子进程串行排队"
+                         "（默认 both；并发上限仍为 1）")
+    ap.add_argument("--eval-human-quantile", default="auto",
+                    choices=["auto", "p50", "p75", "p90"],
+                    help="human 面板的对手强度分位：auto=t<=8 p50 / 9-12 p75 / >=13 p90"
+                         "（默认，见 docs/EVAL_PANELS.md）")
+    ap.add_argument("--eval-human-boards", default="",
+                    help="human 面板使用的人类战团 JSONL（空=默认 "
+                         "data/real_library/library_real_degraded.jsonl）")
+    ap.add_argument("--eval-human-baseline-bot", type=int, default=0,
+                    help="1=human 面板同 seed 再跑 bot 基线（配对 CI；默认 0=只评 learner，"
+                         "省一半 wall；TRIGGER/早停只看 bot 面板）")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--checkpoint", default="")
     ap.add_argument("--trainer-state", default="")
@@ -322,6 +349,32 @@ def main() -> int:
                   "同座位同回合镜像快照优先（记 human_board_skipped_by_mirror）", flush=True)
     elif str(args.human_boards):
         print("[warn] --human-boards 已设置但 --human-board-p=0：本次不注入", flush=True)
+
+    # ---- 势函数奖励塑形（默认关闭；coef=0 时零影响）----
+    if float(args.shaping_coef) < 0.0:
+        print("[error] --shaping-coef 必须 >= 0", file=sys.stderr)
+        return 2
+    try:
+        parse_tier_bonus(str(args.shaping_tier_bonus))   # 启动期 fail-fast
+    except ValueError as exc:
+        print(f"[error] --shaping-tier-bonus 非法: {exc}", file=sys.stderr)
+        return 2
+    if float(args.shaping_coef) > 0.0:
+        if str(args.opponent) == "self":
+            print("[error] 奖励塑形只支持 --opponent bot|weak（单 learner seat）",
+                  file=sys.stderr)
+            return 2
+        if int(args.rust_collector):
+            print("[error] Rust 采集器暂不支持奖励塑形；请设 --shaping-coef 0 "
+                  "或 --rust-collector 0", file=sys.stderr)
+            return 2
+        print(f"[shaping] 势函数奖励塑形开启: coef={float(args.shaping_coef):g} "
+              f"Φ={float(args.shaping_w_str):g}*Σ(atk+hp)+"
+              f"{float(args.shaping_w_tier):g}*tier_bonus "
+              f"tier_bonus={args.shaping_tier_bonus}", flush=True)
+        if not int(args.lockstep):
+            print("[info] 非 lockstep 路径：塑形在逐局采集（collect_ppo_records_parallel）"
+                  "内生效", flush=True)
 
     # ---- 动作序列辅助任务：系数 ramp（默认关闭 = 零影响）----
     try:
@@ -593,9 +646,20 @@ def main() -> int:
     eval_dir = os.path.join(args.out, "eval")
     eval_async = bool(int(args.eval_async))
     eval_device = str(args.eval_device or ("cuda:4" if eval_async else args.device))
+    # panel 列表：bot=旧 c0_gate 面板；human=人类战团面板；both=两个子进程串行排队。
+    eval_panels = panels_from_spec(args.eval_panel)
+    eval_human_boards = str(args.eval_human_boards or os.path.join(
+        ROOT, "data", "real_library", "library_real_degraded.jsonl"))
+    if "human" in eval_panels and not os.path.isfile(eval_human_boards):
+        print(f"[error] human 评测面板需要人类战团数据: {eval_human_boards}",
+              file=sys.stderr)
+        return 2
     eval_stop = threading.Event()
     eval_state: Dict[str, Any] = {"stop_reason": ""}
     eval_history_lock = threading.Lock()
+    #: 最近一次各面板结果（写 history.jsonl 的 eval 段；bot -> mean_rank，
+    #: human -> human_mean_rank，见 docs/EVAL_PANELS.md）
+    latest_eval: Dict[str, Dict[str, Any]] = {}
 
     def _save_eval_ckpt(decisions_done: int) -> Tuple[str, str]:
         """落一份评测专用 ckpt（与训练权重解耦，子进程只读它）。"""
@@ -608,7 +672,14 @@ def main() -> int:
 
     def _post_eval(rec: Dict[str, Any]) -> None:
         """评测结果后处理（同步/异步共用，异步时在 monitor 线程执行）。"""
-        mr = rec.get("mean_rank")
+        panel = str(rec.get("panel") or "bot")
+        has = (rec.get("human_mean_rank") is not None if panel == "human"
+               else rec.get("mean_rank") is not None)
+        with eval_history_lock:
+            if has:
+                latest_eval[panel] = dict(rec)
+        # TRIGGER / 早停只按 bot 面板（旧语义），human 面板只作主指标记录。
+        mr = rec.get("mean_rank") if panel == "bot" else None
         if mr is None:
             return
         mr = float(mr)
@@ -627,36 +698,74 @@ def main() -> int:
             print(f"[eval] stop requested: {eval_state['stop_reason']} "
                   f"-> 下一个 iteration 边界停止", flush=True)
 
+    def _eval_snapshot() -> Dict[str, Any]:
+        """history.jsonl 的 ``eval`` 段：bot 面板 ``mean_rank`` + human 面板
+        ``human_mean_rank``（两个键并存，方便画图脚本直接读）。"""
+        with eval_history_lock:
+            bot = dict(latest_eval.get("bot") or {})
+            human = dict(latest_eval.get("human") or {})
+            if not bot and not human:
+                return {}
+            return {
+                "mean_rank": bot.get("mean_rank"),
+                "human_mean_rank": human.get("human_mean_rank"),
+                "bot_mean_rank": bot.get("bot_mean_rank"),
+                "top4": bot.get("top4"),
+                "win": bot.get("win"),
+                "human_top4": human.get("human_top4"),
+                "human_win": human.get("human_win"),
+                "human_quantile": human.get("quantile"),
+                "bot_decisions": bot.get("decisions"),
+                "human_decisions": human.get("decisions"),
+            }
+
     def _append_eval_history(rec: Dict[str, Any]) -> None:
         with eval_history_lock:
             evals.append(rec)
             write_json_atomic(os.path.join(eval_dir, "history.json"), {"evals": evals})
 
     def _run_eval(decisions_done: int) -> None:
-        """同步评测（旧行为）：主循环阻塞到 c0_gate 结束。"""
+        """同步评测：主循环阻塞到各 panel 的子进程依次结束。"""
         tag, ckpt = _save_eval_ckpt(decisions_done)
-        out_json = os.path.join(eval_dir, f"c0_{tag}.json")
-        log_path = os.path.join(eval_dir, f"c0_{tag}.log")
-        cmd = [sys.executable, os.path.join(ROOT, "scripts", "c0_gate.py"),
-               "--checkpoint", ckpt, "--arch", str(arch),
-               "--device", eval_device,
-               "--games", str(int(args.eval_games)), "--seats", str(int(args.eval_seats)),
-               "--seed-base", str(int(args.eval_seed_base)), "--smoke",
-               "--bootstrap", "1000", "--out", out_json]
-        t_eval = time.time()
-        print(f"[eval] dec={int(decisions_done)} start games={args.eval_games}", flush=True)
-        with open(log_path, "w", encoding="utf-8") as lf:
-            rc = subprocess.call(cmd, cwd=ROOT, stdout=lf, stderr=lf)
-        rec = parse_c0_result(decisions_done, rc, time.time() - t_eval, out_json)
-        _append_eval_history(rec)
-        if rec.get("mean_rank") is not None:
-            print(f"[eval] dec={int(decisions_done)} mean_rank={rec['mean_rank']:.3f} "
-                  f"bot={rec['bot_mean_rank']:.3f} top4={rec['top4']:.3f} "
-                  f"win={rec['win']:.3f} ({rec['seconds']}s)", flush=True)
-        else:
-            print(f"[eval] dec={int(decisions_done)} FAILED rc={rc} "
-                  f"error={rec.get('error')} log={log_path}", flush=True)
-        _post_eval(rec)
+        for panel in eval_panels:
+            prefix = "c0" if panel == "bot" else "human"
+            out_json = os.path.join(eval_dir, f"{prefix}_{tag}.json")
+            log_path = os.path.join(eval_dir, f"{prefix}_{tag}.log")
+            if panel == "bot":
+                cmd = build_c0_cmd(
+                    sys.executable, ROOT, ckpt, arch=str(arch), device=eval_device,
+                    games=int(args.eval_games), seats=int(args.eval_seats),
+                    seed_base=int(args.eval_seed_base), out_json=out_json)
+            else:
+                cmd = build_human_cmd(
+                    sys.executable, ROOT, ckpt, arch=str(arch), device=eval_device,
+                    games=int(args.eval_games), seats=int(args.eval_seats),
+                    seed_base=int(args.eval_seed_base), out_json=out_json,
+                    quantile=str(args.eval_human_quantile),
+                    human_boards=eval_human_boards,
+                    baseline_bot=bool(int(args.eval_human_baseline_bot)))
+            t_eval = time.time()
+            print(f"[eval] dec={int(decisions_done)} panel={panel} "
+                  f"start games={args.eval_games}", flush=True)
+            with open(log_path, "w", encoding="utf-8") as lf:
+                rc = subprocess.call(cmd, cwd=ROOT, stdout=lf, stderr=lf)
+            rec = parse_panel_result(decisions_done, rc, time.time() - t_eval,
+                                     out_json, panel=panel)
+            _append_eval_history(rec)
+            if panel == "human" and rec.get("human_mean_rank") is not None:
+                print(f"[eval] dec={int(decisions_done)} panel=human "
+                      f"human_mean_rank={rec['human_mean_rank']:.3f} "
+                      f"top4={rec['human_top4']:.3f} win={rec['human_win']:.3f} "
+                      f"({rec['seconds']}s)", flush=True)
+            elif panel == "bot" and rec.get("mean_rank") is not None:
+                print(f"[eval] dec={int(decisions_done)} panel=bot "
+                      f"mean_rank={rec['mean_rank']:.3f} "
+                      f"bot={rec['bot_mean_rank']:.3f} top4={rec['top4']:.3f} "
+                      f"win={rec['win']:.3f} ({rec['seconds']}s)", flush=True)
+            else:
+                print(f"[eval] dec={int(decisions_done)} panel={panel} FAILED rc={rc} "
+                      f"error={rec.get('error')} log={log_path}", flush=True)
+            _post_eval(rec)
 
     # 异步评测：独立子进程 + 一个轻量回收线程（并发上限 1，提交本身只花 ~0.3s 存 ckpt）
     eval_runner: Optional[AsyncEvalRunner] = None
@@ -664,10 +773,17 @@ def main() -> int:
         eval_runner = AsyncEvalRunner(
             out_dir=args.out, root=ROOT, arch=arch, device=eval_device,
             games=int(args.eval_games), seats=int(args.eval_seats),
-            seed_base=int(args.eval_seed_base), on_result=_post_eval)
+            seed_base=int(args.eval_seed_base),
+            panels=eval_panels,
+            human_quantile=str(args.eval_human_quantile),
+            human_boards=eval_human_boards,
+            baseline_bot=bool(int(args.eval_human_baseline_bot)),
+            on_result=_post_eval)
         print(f"[eval-async] on：device={eval_device} games={args.eval_games} "
-              f"seats={args.eval_seats}；主循环不等待（并发上限 1，"
-              f"drain={int(args.eval_drain)}）", flush=True)
+              f"seats={args.eval_seats} panels={eval_panels} "
+              f"human_quantile={args.eval_human_quantile}；主循环不等待"
+              f"（并发上限 1，panel 串行排队，drain={int(args.eval_drain)}）",
+              flush=True)
         if int(args.eval_every_decisions) <= 0:
             print("[warn] --eval-async 1 但 --eval-every-decisions=0：不会触发评测",
                   flush=True)
@@ -840,7 +956,12 @@ def main() -> int:
             leaf_compile=bool(int(args.leaf_compile)),
             leaf_wait_ms=float(args.leaf_wait_ms),
             # 动作序列辅助任务：只在启用时让采集/打包侧产出 seq_target（默认 False）
-            seq_aux=bool(seq_enabled))
+            seq_aux=bool(seq_enabled),
+            # 势函数奖励塑形（默认 coef=0 -> 零影响）
+            shaping_coef=float(args.shaping_coef),
+            shaping_w_str=float(args.shaping_w_str),
+            shaping_w_tier=float(args.shaping_w_tier),
+            shaping_tier_bonus=str(args.shaping_tier_bonus))
         t_c = time.time()
         if pool is not None:
             batch, collect_meta = pool.collect(
@@ -973,6 +1094,13 @@ def main() -> int:
             _t_ppo = time.time()
             _tl["t_ppo_start"] = time.monotonic()
             stats = trainer.update(batch)
+            # 塑形可观测性：history.jsonl 的 ppo 段带系数与实际 shaping 奖励均值。
+            _cmeta = collect_meta.get("collect") if isinstance(collect_meta, dict) else None
+            if not isinstance(_cmeta, dict):
+                _cmeta = collect_meta if isinstance(collect_meta, dict) else {}
+            stats["shaping_coef"] = float(args.shaping_coef)
+            stats["reward_shaping_mean"] = float(
+                _cmeta.get("reward_shaping_mean", 0.0) or 0.0)
             _ppo_s = time.time() - _t_ppo
             _tl["t_ppo_done"] = time.monotonic()
 
@@ -1053,6 +1181,12 @@ def main() -> int:
             _tl["t_history_done"] = time.monotonic()
             rec["profile"]["timeline"] = dict(_tl)
             rec["profile"]["collect_timeline"] = slim.get("timeline")
+            # history.jsonl 的 eval 段：bot 面板 mean_rank + human 面板
+            # human_mean_rank（结果到达后写入后续 iteration；绘图见
+            # scripts/plot_quality_curves.py）。
+            _eval_seg = _eval_snapshot()
+            if _eval_seg:
+                rec["eval"] = _eval_seg
             append_record(history_path, to_jsonable(rec))
             _history_s = time.time() - _th0
 

@@ -46,9 +46,9 @@ import numpy as np
 
 from .common import to_jsonable
 from .runlog import aggregate_injection
+from .reward_shaping import aggregate_shaping
 from .ppo import (CollectConfig, PPOBatch, PPOSelfPlayPolicy, build_batch_from_arrays,
                   build_batch_from_records, pack_records_arrays)
-
 
 # ---------------------------------------------------------------------------
 # 子进程
@@ -823,6 +823,8 @@ class ProcessActorPool:
         # 注入计数（mirror_* / human_board_*）：worker meta 逐 shard 回传，父进程按
         # 「计数 sum / 开关 any / p mean」聚合到 collect 段顶层（history 可直接验证生效）。
         meta.update(aggregate_injection(metas))
+        # 势函数塑形统计：worker meta（lockstep/逐局）逐 shard 回传，父进程汇总。
+        meta.update(aggregate_shaping(metas, elapsed_s=wall))
         if not records and not packed_all:
             # 采集侧没有有效记录（全部截断/非法），保持与单进程一致的报错语义
             raise RuntimeError(

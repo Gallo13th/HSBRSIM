@@ -78,6 +78,7 @@ from .seq_aux import (
     seq_bce_loss,
     seq_targets_from_records,
 )
+from .reward_shaping import RewardShaper
 
 # ── 数值边界 ──────────────────────────────────────────────────────────────
 #: torch 侧非法 logits 的填充值（float32 下 ``exp(-1e30)=0``，避免 -inf 制造 NaN 梯度）。
@@ -331,6 +332,14 @@ class CollectConfig:
     #: **默认 False = 不产出、不占内存**（records→batch→loss 与旧路径完全一致）；
     #: 打开后 batch 会多 ``[n,245] uint8`` 标签，见 docs/ACTION_SEQUENCE_AUX.md。
     seq_aux: bool = False
+    #: ── 势函数奖励塑形（默认关闭；见 docs/REWARD_SHAPING.md）──
+    #: λ：塑形系数。**0 = 关闭**：不读状态、不写 record，采集/打包/GAE 与旧路径逐位一致。
+    shaping_coef: float = 0.0
+    #: Φ(s) = shaping_w_str * Σ(atk+hp) + shaping_w_tier * TIER_BONUS[tier]
+    shaping_w_str: float = 1.0
+    shaping_w_tier: float = 0.5
+    #: 逗号分隔的 tier 奖励表，**按 tier 直接索引**（索引 0 为占位；越界按 0）。
+    shaping_tier_bonus: str = "0,0,20,60,150,400,900"
 
 
 #: ``compile_train`` 取值 -> ``torch.compile`` 模式（0=关闭，不在表内）。
@@ -739,8 +748,13 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
             target_pi[i] = pi_arr / s
             has_pi[i] = True
 
-    # 按 episode（game_id, seat 已连续）写 reward/done
+    # 按 episode（game_id, seat 已连续）写 reward/done。
+    # 可选逐决策 reward（势函数塑形）作为基础项；缺字段时与旧路径逐位一致。
+    has_reward = any("reward" in r for r in recs)
     rewards = np.full(n, -float(step_penalty), dtype=np.float32)
+    if has_reward:
+        rewards += np.asarray([float(r.get("reward", 0.0)) for r in recs],
+                              dtype=np.float32)
     dones = np.zeros(n, dtype=np.float32)
     episode_ids = np.zeros(n, dtype=np.int32)
     start = 0
@@ -753,6 +767,8 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
         episode_ids[start:end] = ep
         last = end - 1
         rewards[last] = float(utility_from_rank([int(ranks[last])])[0]) - float(step_penalty)
+        if has_reward:
+            rewards[last] += float(recs[last].get("reward", 0.0))
         dones[last] = 1.0
         ep += 1
         start = end
@@ -2155,6 +2171,10 @@ def pack_records_arrays(records: Sequence[Dict[str, Any]],
                 pi = pi / s_pi if s_pi > 1e-8 else (m_i / max(float(m_i.sum()), 1.0))
                 out["has_pi"][i] = True
                 out["target_pi"][i] = pi
+    if any("reward" in r for r in records):
+        # 势函数塑形的逐决策基础奖励（可选字段：默认关闭时输出键集合与旧版一致）
+        out["rewards"] = np.asarray([float(r.get("reward", 0.0)) for r in records],
+                                    dtype=np.float32)
     if seq_aux:
         # 动作序列辅助标签：同一 (game_id, seat, turn) 的动作集合（向量化一次算完）
         out[SEQ_TARGET_KEY] = seq_targets_from_records(records)
@@ -2191,7 +2211,18 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
     game_ids, seats, turns = t["game_ids"], t["seats"], t["turns"]
     values = t["values"]
 
+    ## 可选：``rewards`` = 逐决策基础奖励（势函数塑形）。只在**未构建**的 packed 上消费；
+    ## 已含 advantages 的批次字典里 ``rewards`` 是最终奖励，不能当基础项重复相加。
+    base_reward = None
+    if "advantages" not in packed:
+        base_reward = t.pop("rewards", None)
+        if base_reward is not None:
+            base_reward = np.asarray(base_reward, dtype=np.float32).reshape(-1)
+            if base_reward.size != n:
+                base_reward = None
     rewards = np.full(n, -float(step_penalty), dtype=np.float32)
+    if base_reward is not None:
+        rewards += base_reward
     dones = np.zeros(n, dtype=np.float32)
     episode_ids = np.zeros(n, dtype=np.int32)
     key_change = np.empty(n, dtype=bool)
@@ -2205,6 +2236,8 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
     last_of_ep[-1] = True
     util = utility_from_rank(ranks[valid][order])
     rewards[last_of_ep] = np.asarray(util, dtype=np.float32)[last_of_ep] - float(step_penalty)
+    if base_reward is not None:
+        rewards[last_of_ep] += base_reward[last_of_ep]
     dones[last_of_ep] = 1.0
 
     advantages, returns = compute_gae(rewards, values, dones, gamma=gamma, lam=lam)
@@ -2266,8 +2299,13 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
     decisions = 0
     truncated = 0
     t0 = time.time()
+    shaper = RewardShaper(cfg)
 
     if mode == "self":
+        if shaper.enabled:
+            raise ValueError(
+                "奖励塑形只支持 opponent=bot|weak（单 learner seat）；"
+                "self 模式（8 座都是 learner）请设 shaping_coef=0")
         from .selfplay import play_selfplay_game  # 惰性：无引擎机器也可 import 本模块
 
         for gi in range(int(cfg.games)):
@@ -2307,12 +2345,20 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
             steps = 0
             game_decisions = 0
             game_truncated = False
+            rec_prev: Optional[int] = None
+            phi_prev = 0.0
             while not game.is_over() and steps < int(cfg.max_steps):
                 acted = False
                 for p in range(N_PLAYERS):
                     if not game.needs_action(p):
                         continue
                     if int(p) == int(cfg.learner_seat):
+                        phi_now = 0.0
+                        if shaper.enabled:
+                            phi_now = shaper.potential(game, int(p))
+                            if rec_prev is not None:
+                                shaper.attach(policy.records, rec_prev, gid,
+                                              phi_prev, phi_now)
                         dec = policy.decide(game, int(p))
                         mask = mask_from_bytes(game.legal_mask(int(p)))
                         action = int(dec.action)
@@ -2320,6 +2366,9 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                             illegal += 1
                             action = int(np.flatnonzero(mask)[0]) if mask.any() else 0
                         game.step(int(p), action)
+                        if shaper.enabled:
+                            rec_prev = len(policy.records) - 1
+                            phi_prev = phi_now
                         game_decisions += 1
                     elif mode == "weak":
                         game.step(int(p), _weak_bot_action(game, int(p), weak_rng))
@@ -2331,6 +2380,9 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                         break
                 if not acted:
                     break
+            if shaper.enabled and rec_prev is not None:
+                # 局末/截断：Φ(terminal)=0。
+                shaper.attach(policy.records, rec_prev, gid, phi_prev, 0.0)
             over = bool(game.is_over())
             if over:
                 rank = int(list(game.placements())[int(cfg.learner_seat)])
@@ -2374,6 +2426,8 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
         "samples_per_game": float(len(records) / max(len(games_meta) - truncated, 1)),
         "games_meta": to_jsonable(games_meta),
     }
+    # 势函数塑形统计（默认关闭 -> 空 dict，不新增键）。
+    collect_meta.update(shaper.stats(elapsed_s=float(time.time() - t0)))
     if not records:
         raise RuntimeError(
             f"采集失败：{truncated}/{len(games_meta)} 局在 max_steps={int(cfg.max_steps)} "

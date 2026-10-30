@@ -35,6 +35,7 @@ from .human_board_pool import HumanBoardStats, SOURCE as HUMAN_BOARD_SOURCE
 from .human_board_pool import inject_turn as inject_human_boards
 from .mirror_snapshots import (MirrorStats, inject_turn, mirror_seats,
                                mirror_seats_random)
+from .reward_shaping import RewardShaper, aggregate_shaping
 
 
 def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
@@ -48,10 +49,15 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
         norm_mean=norm_mean, norm_std=norm_std, move_model=False)
     policy.game_id = int(cfg.game_id_offset) + gi
     records: List[Dict[str, Any]] = []
+    shaper = RewardShaper(cfg)
     illegal = 0
     truncated = 0
     decisions = 0
     if gamemode == "self":
+        if shaper.enabled:
+            raise ValueError(
+                "奖励塑形只支持 opponent=bot|weak（单 learner seat）；"
+                "self 模式（8 座都是 learner）请设 shaping_coef=0")
         from .selfplay import play_selfplay_game
         _samples, meta = play_selfplay_game(
             policy, seed=int(cfg.seed) + gi, game_id=policy.game_id,
@@ -74,6 +80,9 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
         policy.reset()
         weak_rng = np.random.default_rng(int(seed) + gi)
         game = E.Game(seed=int(cfg.seed) + gi)
+        # 塑形：上一决策的 Φ(s') 复用为本决策的 Φ(s)；局末/截断用 Φ(terminal)=0。
+        rec_prev: Optional[int] = None
+        phi_prev = 0.0
         steps = 0
         while not game.is_over() and steps < int(cfg.max_steps):
             acted = False
@@ -81,6 +90,12 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
                 if not game.needs_action(p):
                     continue
                 if int(p) == int(cfg.learner_seat):
+                    phi_now = 0.0
+                    if shaper.enabled:
+                        phi_now = shaper.potential(game, int(p))
+                        if rec_prev is not None:
+                            shaper.attach(policy.records, rec_prev, policy.game_id,
+                                          phi_prev, phi_now)
                     dec = policy.decide(game, int(p))
                     mask = mask_from_bytes(game.legal_mask(int(p)))
                     action = int(dec.action)
@@ -88,6 +103,9 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
                         illegal += 1
                         action = int(np.flatnonzero(mask)[0]) if mask.any() else 0
                     game.step(int(p), action)
+                    if shaper.enabled:
+                        rec_prev = len(policy.records) - 1
+                        phi_prev = phi_now
                     decisions += 1
                 elif gamemode == "weak":
                     game.step(int(p), _weak_bot_action(game, int(p), weak_rng))
@@ -99,6 +117,9 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
                     break
             if not acted:
                 break
+        if shaper.enabled and rec_prev is not None:
+            # 局末/截断：Φ(terminal)=0（有限时域目标；保证 F 望远镜求和）。
+            shaper.attach(policy.records, rec_prev, policy.game_id, phi_prev, 0.0)
         if game.is_over():
             rank = int(list(game.placements())[int(cfg.learner_seat)])
             _attach_rank(policy.records, rank)
@@ -120,6 +141,7 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
     meta["search_calls"] = int(policy.search_calls)
     meta["search_failures"] = int(policy.search_failures)
     meta["forced_end_turns"] = int(policy.forced_actions)
+    meta.update(shaper.stats())
     return records, meta
 
 
@@ -175,6 +197,7 @@ def collect_ppo_records_parallel(
         forced += int(meta.get("forced_end_turns", 0))
     if not records:
         raise RuntimeError(f"并行采集无有效轨迹（{truncated}/{len(games_meta)} 截断）")
+    elapsed_s = time.time() - t0
     meta_out: Dict[str, Any] = {
         "mode": ("vs_bot" if mode == "bot" else ("vs_weak" if mode == "weak" else "selfplay")),
         "parallel_workers": workers,
@@ -191,10 +214,12 @@ def collect_ppo_records_parallel(
         "search_failures": search_fail,
         "forced_end_turns": forced,
         "search_enabled": bool(search_fn is not None),
-        "elapsed_s": time.time() - t0,
+        "elapsed_s": elapsed_s,
         "samples_per_game": len(records) / max(len(games_meta) - truncated, 1),
         "games_meta": to_jsonable(games_meta),
     }
+    # 势函数塑形统计（默认关闭 -> 空 dict，不新增键）
+    meta_out.update(aggregate_shaping(games_meta, elapsed_s=elapsed_s))
     return records, meta_out
 
 
@@ -268,10 +293,17 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     非 learner 座位重抽 ``mirror_seats_count`` 个（learner 一定不在其中）；默认 False 时
     仍用固定 ``seat 1..N``，行为与旧版一致。``mirror_p_ramp`` 只用于 meta 记录（有效 p 由
     训练入口按 iteration 求值后写入 ``mirror_p``）。
+
+    **势函数奖励塑形**（``cfg.shaping_coef != 0``；默认 0 = 零影响）：每个 learner 决策
+    前读一次 Φ(s)（``observe`` 快路径，约 1.5–2 µs），它同时是上一决策的 Φ(s')；把
+    ``F = λ(γΦ(s') - Φ(s))`` 写到该决策 record 的 ``reward`` 字段（局末 Φ=0）。
+    见 ``docs/REWARD_SHAPING.md``。
     """
     if str(gamemode) not in ("bot", "weak"):
         raise ValueError(f"lockstep 只支持 bot/weak，收到 {gamemode!r}")
     E = load_engine()
+    t_start = time.time()
+    shaper = RewardShaper(cfg)
     n = int(games if games is not None else cfg.games)
     policy = PPOSelfPlayPolicy(
         model, device=device, config=cfg, search_fn=None, search_config=None,
@@ -517,11 +549,23 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             pending.append(st)
         if not pending:
             break
-        for st in pending:
-            st["rec_start"] = len(policy.records)
+        _rec_base = len(policy.records)
+        for k, st in enumerate(pending):
+            st["rec_start"] = _rec_base + k
+        # 势函数塑形：本决策的 Φ(s) 同时是上一决策的 Φ(s')（learner MDP 一步 =
+        # 本决策动作 + 对手回应到下一次 learner 决策）。每决策只读一次状态。
+        phi_now = ([shaper.potential(st["game"], seat) for st in pending]
+                   if shaper.enabled else [])
         decisions = policy.decide_batch([(st["game"], seat, st["gid"]) for st in pending])
-        for st, dec in zip(pending, decisions):
+        for k, (st, dec) in enumerate(zip(pending, decisions)):
             g = st["game"]
+            if shaper.enabled:
+                prev = st.get("shape_rec")
+                if prev is not None:
+                    shaper.attach(policy.records, prev, st["gid"],
+                                  float(st.get("shape_phi", 0.0)), phi_now[k])
+                st["shape_phi"] = phi_now[k]
+                st["shape_rec"] = int(st["rec_start"])
             mask = mask_from_bytes(g.legal_mask(seat))
             a = int(dec.action)
             if not (0 <= a < N_ACTIONS and bool(mask[a])):
@@ -533,6 +577,14 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         rounds += 1
         if rounds > 10 * max_steps:
             break
+
+    # 局末/截断：最后一决策的 Φ(s') 按 Φ(terminal)=0（有限时域；保证 F 望远镜求和）。
+    if shaper.enabled:
+        for st in states:
+            prev = st.get("shape_rec")
+            if prev is not None:
+                shaper.attach(policy.records, prev, st["gid"],
+                              float(st.get("shape_phi", 0.0)), 0.0)
 
     records: List[Dict[str, Any]] = []
     metas = []
@@ -602,4 +654,6 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         hstats.add(st.get("human_stats") or HumanBoardStats())
     hmeta = hstats.to_meta()
     meta.update(hmeta)
+    # 势函数塑形统计（默认关闭 -> 空 dict，不新增键）。
+    meta.update(shaper.stats(elapsed_s=time.time() - t_start))
     return records, meta
