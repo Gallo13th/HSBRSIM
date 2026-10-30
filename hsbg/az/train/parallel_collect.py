@@ -35,6 +35,7 @@ from .human_board_pool import HumanBoardStats, SOURCE as HUMAN_BOARD_SOURCE
 from .human_board_pool import inject_turn as inject_human_boards
 from .mirror_snapshots import (MirrorStats, inject_turn, mirror_seats,
                                mirror_seats_random)
+from .move_guard import aggregate_move_guard
 from .reward_shaping import RewardShaper, aggregate_shaping
 from .tier_target import TierTargetTracker, aggregate_tier_target
 
@@ -155,6 +156,7 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
     meta["forced_end_turns"] = int(policy.forced_actions)
     meta.update(shaper.stats())
     meta.update(tracker.stats())
+    meta.update(policy.move_guard_meta())
     return records, meta
 
 
@@ -235,6 +237,8 @@ def collect_ppo_records_parallel(
     meta_out.update(aggregate_shaping(games_meta, elapsed_s=elapsed_s))
     # 等级进度奖励统计（默认关闭 -> 空 dict，不新增键）
     meta_out.update(aggregate_tier_target(games_meta))
+    # 换位去抖守卫统计（默认关闭 -> 空 dict，不新增键）
+    meta_out.update(aggregate_move_guard(games_meta))
     return records, meta_out
 
 
@@ -694,4 +698,6 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     meta.update(shaper.stats(elapsed_s=time.time() - t_start))
     # 等级进度奖励统计（默认关闭 -> 空 dict，不新增键）。
     meta.update(aggregate_tier_target(metas))
+    # 换位去抖守卫统计（默认关闭 -> 空 dict，不新增键；policy 服务全部 N 局）。
+    meta.update(policy.move_guard_meta())
     return records, meta

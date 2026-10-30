@@ -77,6 +77,7 @@ __all__ = [
     "bc_obs_batch",
     "bc_type_ids",
     "bc_class_balance_weights",
+    "parse_bc_class_weights",
     "bc_ce_loss",
     "bc_type_logits",
     "bc_card_ce_loss",
@@ -324,6 +325,9 @@ class BCSamples:
     action_types: Tuple[str, ...]
     mmr: np.ndarray                   # int32[n]
     weight: np.ndarray                # float32[n]（MMR 权重）
+    #: 稀有动作类别覆盖权重（``class_weight_overrides``；默认全 1.0）。
+    #: 在 loss 里与 class-balanced 权重、MMR 权重逐样本相乘。
+    class_weight: np.ndarray          # float32[n]
     turn: np.ndarray                  # int16[n]（0 = 未知）
     gold: np.ndarray                  # int16[n]
     tier: np.ndarray                  # int16[n]
@@ -482,6 +486,40 @@ def _map_card_label(card_id: Any, table: BCCardTable) -> int:
     return label if 0 <= label < table.n_ids else -1
 
 
+def parse_bc_class_weights(spec: str,
+                          action_types: Optional[Sequence[str]] = None
+                          ) -> Dict[str, float]:
+    """解析稀有动作类别权重覆盖串：``"upgrade=4,hero_power=2"``。
+
+    空串 -> ``{}``（现状，零影响）。名称必须属于 ``action_types``（默认 9 类
+    白名单），值必须是有限正数；格式错误立刻 ``ValueError``（CLI 启动期 fail-fast）。
+    """
+    text = str(spec or "").strip()
+    if not text:
+        return {}
+    allowed = set(action_types or DEFAULT_BC_ACTION_TYPES)
+    out: Dict[str, float] = {}
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        name, sep, raw = part.partition("=")
+        name = name.strip()
+        if not sep or not name:
+            raise ValueError(f"类别权重项格式应为 name=value，得到 {part!r}")
+        if name not in allowed:
+            raise ValueError(
+                f"未知 BC 动作类别 {name!r}；可选: {sorted(allowed)}")
+        try:
+            value = float(raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"类别权重 {name!r} 不是数字: {raw!r}") from exc
+        if not math.isfinite(value) or value <= 0.0:
+            raise ValueError(f"类别权重 {name!r} 必须是有限正数，得到 {value!r}")
+        out[name] = float(value)
+    return out
+
+
 def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
                     actions: Optional[Any] = None,
                     mmr_min: int = DEFAULT_MMR_MIN,
@@ -489,7 +527,9 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
                     action_types: Optional[Sequence[str]] = None,
                     cards_path: Optional[str] = None,
                     mmr_full: int = 8000,
-                    mmr_boost: float = 1.0) -> BCSamples:
+                    mmr_boost: float = 1.0,
+                    class_weight_overrides: Optional[Mapping[str, float]] = None
+                    ) -> BCSamples:
     """加载并过滤 BC 样本。
 
     过滤规则（缺一即跳过）：
@@ -506,6 +546,19 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
     """
     types = tuple(action_types or DEFAULT_BC_ACTION_TYPES)
     class_map = {name: i for i, name in enumerate(types)}
+    # 稀有动作类别权重覆盖（默认空 = 现状）：在 class-balanced 权重之上再乘
+    overrides: Dict[str, float] = {}
+    if class_weight_overrides is not None:
+        for _name, _value in dict(class_weight_overrides).items():
+            _name = str(_name)
+            if _name not in class_map:
+                raise ValueError(
+                    f"未知 BC 动作类别 {_name!r}；可选: {sorted(class_map)}")
+            _v = float(_value)
+            if not math.isfinite(_v) or _v <= 0.0:
+                raise ValueError(
+                    f"类别权重 {_name!r} 必须是有限正数，得到 {_v!r}")
+            overrides[_name] = float(_v)
     allowed = _allowed_actions(actions)
     table = load_bc_card_table(cards_path)
     cap = int(limit) if limit is not None and int(limit) >= 0 else None
@@ -514,6 +567,7 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
     action_class: List[int] = []
     mmr_list: List[int] = []
     weight_list: List[float] = []
+    class_weight_list: List[float] = []
     turn_l: List[int] = []
     gold_l: List[int] = []
     tier_l: List[int] = []
@@ -580,6 +634,7 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
             action_class.append(cls)
             mmr_list.append(int(m))
             weight_list.append(float(w))
+            class_weight_list.append(float(overrides.get(atype, 1.0)))
             label = _map_card_label(r.get("card_id"), table)
             card_l.append(int(label))
             card_valid_l.append(bool(label >= 0 and cls in BC_CARD_CLASS_IDS))
@@ -610,6 +665,7 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
             action_class=np.zeros(0, dtype=np.int16),
             action_types=types, mmr=np.zeros(0, dtype=np.int32),
             weight=np.zeros(0, dtype=np.float32),
+            class_weight=np.zeros(0, dtype=np.float32),
             turn=np.zeros(0, dtype=np.int16), gold=np.zeros(0, dtype=np.int16),
             tier=np.zeros(0, dtype=np.int16), health=np.zeros(0, dtype=np.int16),
             armor=np.zeros(0, dtype=np.int16),
@@ -628,7 +684,8 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
             card_table=table, path=_resolve_path(path),
             mmr_min=int(mmr_min),
             meta={"lines": total_lines, "kept": 0, "skipped": skipped,
-                  "mmr_boost": float(mmr_boost), "mmr_full": int(mmr_full)})
+                  "mmr_boost": float(mmr_boost), "mmr_full": int(mmr_full),
+                  "class_weight_overrides": dict(overrides)})
 
     return BCSamples(
         action_index=np.asarray(action_index, dtype=np.int64),
@@ -636,6 +693,7 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
         action_types=types,
         mmr=np.asarray(mmr_list, dtype=np.int32),
         weight=np.asarray(weight_list, dtype=np.float32),
+        class_weight=np.asarray(class_weight_list, dtype=np.float32),
         turn=np.asarray(turn_l, dtype=np.int16),
         gold=np.asarray(gold_l, dtype=np.int16),
         tier=np.asarray(tier_l, dtype=np.int16),
@@ -656,7 +714,8 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
         card_table=table, path=_resolve_path(path),
         mmr_min=int(mmr_min),
         meta={"lines": total_lines, "kept": int(n), "skipped": skipped,
-              "mmr_boost": float(mmr_boost), "mmr_full": int(mmr_full)})
+              "mmr_boost": float(mmr_boost), "mmr_full": int(mmr_full),
+              "class_weight_overrides": dict(overrides)})
 
 
 def bc_pool_summary(samples: BCSamples) -> Dict[str, Any]:
@@ -764,6 +823,8 @@ class BCObsBatch:
     action_mask: np.ndarray     # bool[n, 245]（近似合法动作；含 target）
     action_index: np.ndarray    # int64[n]
     weights: np.ndarray         # float32[n]（MMR 权重）
+    #: 稀有动作类别覆盖权重（默认全 1.0；在 class-balanced 之上再乘）。
+    class_weight: np.ndarray    # float32[n]
     class_ids: np.ndarray       # int16[n]
     class_counts: np.ndarray    # int64[C]（全池类别计数）
     #: 每个动作位归属的 9 类类型 id（``-1`` = 不参与类型聚合；play_* 按手牌卡种细分）。
@@ -1024,6 +1085,7 @@ def bc_obs_batch(samples: BCSamples, layout: Optional[BCObsLayout] = None, *,
         action_mask=action_mask, action_index=np.asarray(
             samples.action_index[idx], dtype=np.int64),
         weights=np.asarray(samples.weight[idx], dtype=np.float32),
+        class_weight=np.asarray(samples.class_weight[idx], dtype=np.float32),
         class_ids=np.asarray(samples.action_class[idx], dtype=np.int16),
         class_counts=np.asarray(samples.class_counts, dtype=np.int64),
         type_ids=bc_type_ids(samples, idx),
@@ -1075,7 +1137,7 @@ def bc_class_balance_weights(class_ids: Any, class_counts: Any = None) -> np.nda
 
 def bc_ce_loss(logits: Any, target_action: Any, weights: Any = None,
                mask: Any = None, class_ids: Any = None,
-               class_counts: Any = None):
+               class_counts: Any = None, class_weight: Any = None):
     """class-balanced + MMR 加权的交叉熵（torch 标量；惰性导入 torch）。
 
     参数
@@ -1086,6 +1148,7 @@ def bc_ce_loss(logits: Any, target_action: Any, weights: Any = None,
     mask : ``[B]`` bool/0-1 样本 mask；**只对 True 的样本求均值**
     class_ids : ``[B]`` 动作类别 id（None = 不做 class-balanced）
     class_counts : ``[C]`` 全池类别计数（None = 用当前 batch 计数）
+    class_weight : ``[B]`` 稀有动作类别覆盖权重（None = 1；在 class-balanced 之上再乘）
 
     所有权重全 0 / mask 全 False 时返回 0（不产生 NaN，且保留计算图）。
     """
@@ -1112,6 +1175,10 @@ def bc_ce_loss(logits: Any, target_action: Any, weights: Any = None,
         cw_np = bc_class_balance_weights(ci.detach().cpu().numpy(), cc_np)
         cw = torch.as_tensor(cw_np, device=per.device, dtype=per.dtype)
         w = w * cw
+    if class_weight is not None:
+        cwt = (class_weight if torch.is_tensor(class_weight)
+               else torch.as_tensor(class_weight))
+        w = w * cwt.to(device=per.device, dtype=per.dtype).reshape(-1)
     if mask is not None:
         mt = mask if torch.is_tensor(mask) else torch.as_tensor(mask)
         w = w * mt.to(device=per.device, dtype=per.dtype).reshape(-1)
@@ -1212,6 +1279,7 @@ def bc_hier_loss(policy_logits: Any, type_ids: Any, target_class: Any, *,
                  action_mask: Any = None, card_logits: Any = None,
                  card_target: Any = None, card_valid: Any = None,
                  weights: Any = None, class_counts: Any = None,
+                 class_weight: Any = None,
                  type_weight: float = DEFAULT_BC_TYPE_WEIGHT,
                  card_weight: float = DEFAULT_BC_CARD_WEIGHT) -> Dict[str, Any]:
     """分层 BC 损失：``w_type*CE_type + w_card*CE_card``（torch 标量字典）。
@@ -1227,6 +1295,7 @@ def bc_hier_loss(policy_logits: Any, type_ids: Any, target_class: Any, *,
     card_valid : ``[B]`` bool（buy/play 且映射成功）
     weights : ``[B]`` 样本权重（MMR；类型层还叠加 class-balanced）
     class_counts : ``[9]`` 全池类型计数（class-balanced）
+    class_weight : ``[B]`` 稀有动作类别权重覆盖（类型层在 class-balanced 之上再乘）
 
     返回 ``{"loss", "type_loss", "card_loss", "type_logits"}``；所有项都保留
     计算图。全空/全 0 时返回 0（不 NaN）。
@@ -1236,7 +1305,8 @@ def bc_hier_loss(policy_logits: Any, type_ids: Any, target_class: Any, *,
     type_logits = bc_type_logits(policy_logits, type_ids,
                                  action_mask=action_mask)
     type_loss = bc_ce_loss(type_logits, target_class, weights=weights, mask=None,
-                           class_ids=target_class, class_counts=class_counts)
+                           class_ids=target_class, class_counts=class_counts,
+                           class_weight=class_weight)
     if card_logits is not None and cw > 0.0 and card_target is not None:
         card_loss = bc_card_ce_loss(card_logits, card_target, weights=weights,
                                     mask=card_valid)

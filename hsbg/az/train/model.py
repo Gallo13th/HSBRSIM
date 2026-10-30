@@ -68,6 +68,16 @@ def attach_bc_card_head(model: Any, dim: Optional[int] = None) -> Any:
     return model
 
 
+def attach_move_head_split(model: Any) -> Any:
+    """给已加载的旧 entity checkpoint 追加有向 Move 投影（move_from/move_to）。
+
+    见 :func:`hsbg.az.train.entity_model.attach_move_head_split`；这里只做入口转发，
+    方便训练脚本统一从 :mod:`hsbg.az.train.model` 导入。
+    """
+    from .entity_model import attach_move_head_split as _attach
+    return _attach(model)
+
+
 if True:  # 命名空间占位：TinyAZNet 在下方用 torch.nn 定义（需要 torch 时惰性加载）
     pass
 
@@ -75,7 +85,8 @@ if True:  # 命名空间占位：TinyAZNet 在下方用 torch.nn 定义（需要
 def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FLOATS,
               n_actions: int = N_ACTIONS, n_ranks: int = N_RANKS,
               seq_head: bool = False, bc_card_head: bool = False,
-              bc_card_dim: Optional[int] = None, **kwargs):
+              bc_card_dim: Optional[int] = None,
+              move_head_split: bool = False, **kwargs):
     """构造策略网络：tiny（MLP）或 entity（AutoTavern 风格实体 Transformer）。
 
     ``seq_head=True`` 时额外构建「动作序列辅助头」（trunk -> 245 logits，
@@ -85,11 +96,16 @@ def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FL
     ``bc_card_head=True`` 时额外构建「卡牌身份头」（trunk -> ``bc_card_dim`` 类，
     默认 = 卡表条目数 3983；``docs/BC_AUX.md`` 分层 BC）。**默认 False =
     不构建**：``bc_coef=0`` 时模型参数/前向/checkpoint 与旧版本逐位一致。
+
+    ``move_head_split=True`` 时 entity Move 段使用有向双投影（见
+    ``docs/POSITION_ACTION_AUDIT.md`` §6）；**默认 False = 不构建**，旧 checkpoint
+    的 state_dict/前向完全不变。
     """
     if arch == "entity":
         from .entity_model import build_entity_net
         kwargs["seq_head"] = bool(seq_head)
         kwargs["bc_card_head"] = bool(bc_card_head)
+        kwargs["move_head_split"] = bool(move_head_split)
         if bc_card_dim is not None:
             kwargs["bc_card_dim"] = int(bc_card_dim)
         return build_entity_net(**kwargs)
@@ -101,6 +117,7 @@ def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FL
         kwargs.setdefault("arch", "entity18m")
         kwargs["seq_head"] = bool(seq_head)
         kwargs["bc_card_head"] = bool(bc_card_head)
+        kwargs["move_head_split"] = bool(move_head_split)
         if bc_card_dim is not None:
             kwargs["bc_card_dim"] = int(bc_card_dim)
         return build_entity_net(**kwargs)
@@ -279,6 +296,9 @@ def save_checkpoint(model: Any, path: str, *, meta: Optional[Dict[str, Any]] = N
     payload["meta"].setdefault("bc_card_head", bool(_card_head is not None))
     if _card_head is not None:
         payload["meta"].setdefault("bc_card_dim", int(_card_head.out_features))
+    # 有向 Move 头（可选）：默认 False = 旧 checkpoint 逐位一致
+    payload["meta"].setdefault(
+        "move_head_split", bool(getattr(model, "move_head_split", False)))
     if hasattr(model, "d_model"):
         payload["meta"].setdefault("d_model", int(model.d_model))
         payload["meta"].setdefault("n_layers", int(getattr(model.trunk, "num_layers", 8)))
@@ -309,16 +329,21 @@ def load_checkpoint(path: str, device: str = "cpu") -> tuple[Any, Dict[str, Any]
     has_card_head = bool(meta.get("bc_card_head", False)) or any(
         str(k).startswith("card_head.") for k in state)
     card_dim = int(meta.get("bc_card_dim", 0) or 0)
+    # 有向 Move 头（可选）：meta 声明或 state_dict 里确有 move_from.* 都重建
+    has_move_split = bool(meta.get("move_head_split", False)) or any(
+        str(k).startswith("move_from.") for k in state)
     if arch == "entity18m":
         model = build_net(arch="entity18m", seq_head=seq_head,
                           bc_card_head=has_card_head,
-                          bc_card_dim=(card_dim or None))
+                          bc_card_dim=(card_dim or None),
+                          move_head_split=has_move_split)
     elif arch == "entity":
         model = build_net(arch="entity", d_model=int(meta.get("d_model", 384)),
                           n_layers=int(meta.get("n_layers", 8)),
                           n_heads=int(meta.get("n_heads", 8)),
                           seq_head=seq_head, bc_card_head=has_card_head,
-                          bc_card_dim=(card_dim or None))
+                          bc_card_dim=(card_dim or None),
+                          move_head_split=has_move_split)
     else:
         model = build_net(hidden, seq_head=seq_head, bc_card_head=has_card_head,
                           bc_card_dim=(card_dim or None))
@@ -335,6 +360,7 @@ def load_checkpoint(path: str, device: str = "cpu") -> tuple[Any, Dict[str, Any]
 __all__ = [
     "build_net",
     "attach_bc_card_head",
+    "attach_move_head_split",
     "bc_card_head_dim",
     "NetEvaluator",
     "feature_stats",

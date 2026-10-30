@@ -64,6 +64,7 @@ from .bc_aux import (
     DEFAULT_BC_SAMPLES_PATH,
     DEFAULT_BC_CARD_WEIGHT,
     DEFAULT_BC_TYPE_WEIGHT,
+    BC_ACTION_TYPES,
     BC_OBS_LAYOUT,
     BCObsBatch,
     bc_hier_loss,
@@ -78,6 +79,8 @@ from .seq_aux import (
     seq_bce_loss,
     seq_targets_from_records,
 )
+from .move_guard import (MoveGuard, DEFAULT_MOVE_CAP,
+                         DEFAULT_MOVE_REPEAT_LIMIT, aggregate_move_guard)
 from .reward_shaping import RewardShaper
 from .tier_target import TierTargetTracker, aggregate_tier_target
 
@@ -280,6 +283,15 @@ class CollectConfig:
     #: 单座位单回合决策数上限（超过且 EndTurn 合法则强制结束回合；0=关闭）。
     #: 未训练网络容易陷入 Play/Cancel 循环，默认 40 保证采集/评测能走到终局。
     max_actions_per_turn: int = 40
+    #: ── 换位去抖守卫（默认关闭；见 docs/MOVE_GUARD.md）──
+    #: True=采样前清掉「逆换位 / 重复超限 / 本回合换位超 cap」的 Move 动作位，
+    #: 再按剩余合法动作采样。**默认 False = 不构造守卫、不碰 mask、不新增
+    #: record/meta 字段，与旧路径逐位等价。**
+    move_guard: bool = False
+    #: 每回合换位次数上限（>=cap 后屏蔽全部 49 个 Move；0=本回合禁止换位）。
+    move_cap: int = DEFAULT_MOVE_CAP
+    #: 同一 ``(from,to)`` 本回合出现 >= 该次数后屏蔽（1=不允许重复）。
+    move_repeat_limit: int = DEFAULT_MOVE_REPEAT_LIMIT
     #: worker 侧采样（L2）：sims=0 + behavior=net 时跳过 245 维 prior 回传。
     fast_act: bool = True
     #: lock-step 批量 actor：每 worker 内 N 局同步推进（每轮一次批量前向）。
@@ -405,6 +417,9 @@ class PPOConfig:
     #: MMR 线性增强（可选）：1.0=所有 mmr>=bc_mmr_min 权重相同；>1 时在
     #: [bc_mmr_min, 8000] 上从 1.0 线性升到该值（6000–8000 线性增强）。
     bc_mmr_boost: float = 1.0
+    #: 稀有动作类别权重覆盖（``{"upgrade": 4.0, "hero_power": 2.0}``）：
+    #: 在 class-balanced 权重之上再乘。空（默认）= 现状、零影响。
+    bc_class_weights: Dict[str, float] = field(default_factory=dict)
     #: BC 样本 JSONL(.gz) 路径；空 = 用仓库默认
     #: ``data/firestone_bc/bc_samples.jsonl.gz``。
     bc_samples_path: str = ""
@@ -486,6 +501,17 @@ class PPOConfig:
         if float(self.bc_mmr_boost) < 1.0:
             raise ValueError(
                 f"bc_mmr_boost 必须 >= 1，得到 {self.bc_mmr_boost!r}")
+        # 稀有动作类别权重覆盖：键必须在 9 类白名单内，值有限且 > 0
+        for _name, _value in dict(self.bc_class_weights or {}).items():
+            if str(_name) not in BC_ACTION_TYPES:
+                raise ValueError(
+                    f"bc_class_weights 含未知类别 {_name!r}；可选: {BC_ACTION_TYPES}")
+            _v = float(_value)
+            if not math.isfinite(_v) or _v <= 0.0:
+                raise ValueError(
+                    f"bc_class_weights[{_name!r}] 必须是有限正数，得到 {_v!r}")
+        self.bc_class_weights = {
+            str(k): float(v) for k, v in dict(self.bc_class_weights or {}).items()}
         if float(self.bc_type_weight) < 0.0:
             raise ValueError(
                 f"bc_type_weight 必须 >= 0，得到 {self.bc_type_weight!r}")
@@ -1538,6 +1564,7 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
             card_logits=bc_card_logits, card_target=bc_card_tgt,
             card_valid=bc_card_ok, weights=bc_w,
             class_counts=bc_batch.class_counts,
+            class_weight=getattr(bc_batch, "class_weight", None),
             type_weight=float(getattr(config, "bc_type_weight",
                                     DEFAULT_BC_TYPE_WEIGHT) or 0.0),
             card_weight=float(getattr(config, "bc_card_weight",
@@ -1624,7 +1651,8 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         try:
             pool = load_bc_samples(
                 path, mmr_min=int(getattr(cfg, "bc_mmr_min", 6000)),
-                mmr_boost=float(getattr(cfg, "bc_mmr_boost", 1.0)))
+                mmr_boost=float(getattr(cfg, "bc_mmr_boost", 1.0)),
+                class_weight_overrides=getattr(cfg, "bc_class_weights", None))
             if len(pool) == 0:
                 raise ValueError("BC 样本池为空（白名单/MMR 过滤后 0 条）")
             bc_pool = pool
@@ -1839,6 +1867,9 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
             getattr(cfg, "bc_type_weight", DEFAULT_BC_TYPE_WEIGHT) or 0.0)
         stats["bc_card_weight"] = float(
             getattr(cfg, "bc_card_weight", DEFAULT_BC_CARD_WEIGHT) or 0.0)
+        _bcw = dict(getattr(cfg, "bc_class_weights", {}) or {})
+        if _bcw:  # 空覆盖（默认）= 不新增 stats 键，保持旧结构
+            stats["bc_class_weights"] = _bcw
         stats["bc_samples"] = float(np.mean(
             [r.get("bc_samples", 0.0) for r in logs]))
         stats["bc_pool_samples"] = int(len(bc_pool)) if bc_pool is not None else 0
@@ -1849,7 +1880,7 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         if isinstance(cfg_echo, dict):
             for key in ("bc_coef", "bc_coef_ramp", "bc_mmr_min", "bc_mmr_boost",
                         "bc_samples_path", "bc_batch", "bc_every", "bc_compile",
-                        "bc_type_weight", "bc_card_weight"):
+                        "bc_type_weight", "bc_card_weight", "bc_class_weights"):
                 cfg_echo.pop(key, None)
     return stats
 
@@ -1915,6 +1946,13 @@ class PPOSelfPlayPolicy(Policy):
         self.forced_actions = 0
         self.search_calls = 0
         self.search_failures = 0
+        # 换位去抖守卫（默认关闭 -> 不构造对象、零开销；见 docs/MOVE_GUARD.md）
+        self._guard = (MoveGuard(cap=int(getattr(self.config, "move_cap",
+                                                 DEFAULT_MOVE_CAP)),
+                                 repeat_limit=int(getattr(
+                                     self.config, "move_repeat_limit",
+                                     DEFAULT_MOVE_REPEAT_LIMIT)))
+                       if bool(getattr(self.config, "move_guard", False)) else None)
         if move_model:
             self.model.to(self.device)
         self.model.eval()
@@ -1924,6 +1962,14 @@ class PPOSelfPlayPolicy(Policy):
         self.records = []
         self._n = 0
         self._turn_counts = {}
+        # 守卫的**累计统计**跨局保留（采集 meta 需要整次采集的汇总）；
+        # 只清「本回合已选动作」历史（key 本身含 game_id，状态天然按局隔离）。
+        if self._guard is not None:
+            self._guard.clear_state()
+
+    def move_guard_meta(self) -> Dict[str, Any]:
+        """守卫统计（默认关闭 -> ``{}``，不新增 meta 键）。"""
+        return {} if self._guard is None else self._guard.to_meta()
 
     def reseed(self, seed: int) -> None:
         """每局固定 RNG：并行/串行都按 seed+game_id 重建，保证可复现。"""
@@ -1995,8 +2041,13 @@ class PPOSelfPlayPolicy(Policy):
 
     def _finish(self, game: Any, seat: int, f: Any, c: Any, mask: Any, *,
                 action: int, logprob: float, value: float,
-                target_pi: Optional[np.ndarray], out_pi: Optional[np.ndarray]) -> Decision:
-        """收尾：回合守卫 → 写 record → 构造 Decision（decide/decide_batch 共用）。"""
+                target_pi: Optional[np.ndarray], out_pi: Optional[np.ndarray],
+                guard_forced: bool = False) -> Decision:
+        """收尾：回合守卫 → 写 record → 构造 Decision（decide/decide_batch 共用）。
+
+        ``guard_forced=True``：换位守卫把合法动作清空后回退到 EndTurn（``mask`` 此时
+        只剩 EndTurn），与回合数守卫同样按「环境确定性约束」记 ``forced``/logprob=0。
+        """
         seat = int(seat)
         turn = int(getattr(game, "turn", -1))
         limit = int(getattr(self.config, "max_actions_per_turn", 0) or 0)
@@ -2004,7 +2055,8 @@ class PPOSelfPlayPolicy(Policy):
         key = (int(self.game_id), seat, turn)
         n_turn = self._turn_counts.get(key, 0) + 1
         self._turn_counts[key] = n_turn
-        forced = bool(limit > 0 and n_turn > limit and bool(mask[0]))
+        forced_turn = bool(limit > 0 and n_turn > limit and bool(mask[0]))
+        forced = bool(forced_turn or guard_forced)
 
         legal = np.flatnonzero(mask)
         if legal.size == 0:
@@ -2014,7 +2066,13 @@ class PPOSelfPlayPolicy(Policy):
             # 记录 logprob=0 且 forced=True；PPO 的策略/aux loss 会排除这些样本，
             # 只保留 value/critic/回报链，避免伪造 on-policy ratio。
             action, logprob = 0, 0.0
-            self.forced_actions += 1
+            if forced_turn:
+                self.forced_actions += 1
+        if self._guard is not None:
+            # 记录「实际执行」的动作：EndTurn/其它动作只更新 last_action，
+            # Move 才计入本回合换位历史（供下一决策计算逆换位/重复/cap）。
+            self._guard.note_action(action, game_id=self.game_id,
+                                    seat=seat, turn=turn)
         self.records.append({
             "features": (f.astype(np.float32, copy=True)
                          if self.norm_mean is None else np.asarray(
@@ -2043,13 +2101,20 @@ class PPOSelfPlayPolicy(Policy):
     def decide(self, game: Any, seat: int) -> Decision:
         seat = int(seat)
         f, c, mask = self._observe(game, seat)
+        guard_forced = False
+        if self._guard is not None:
+            # 采样前改写 mask：被禁的 Move 位置 0；空掩码回退 EndTurn/原 mask。
+            mask, guard_forced = self._guard.guarded_mask(
+                mask, game_id=self.game_id, seat=seat,
+                turn=int(getattr(game, "turn", -1)))
         if self._can_fast_act():
             # worker 侧采样：省掉 prior 回传 + 调用方 numpy softmax/采样
             seed = int(self._rng.integers(0, 2 ** 63 - 1))
             a, lp, value = self.eval_fn.act(f, c, mask,
                                             float(self.config.temperature), seed)
             return self._finish(game, seat, f, c, mask, action=int(a), logprob=float(lp),
-                                value=float(value), target_pi=None, out_pi=None)
+                                value=float(value), target_pi=None, out_pi=None,
+                                guard_forced=guard_forced)
 
         logits, value = self._net_predict(f, c, mask, seat)
         p_net = masked_probs_np(logits, mask, float(self.config.temperature))
@@ -2074,7 +2139,8 @@ class PPOSelfPlayPolicy(Policy):
                 action = int(legal[int(np.argmax(mu64[legal]))])
             logprob = float(math.log(max(float(mu64[action]), LOGPROB_FLOOR)))
         return self._finish(game, seat, f, c, mask, action=action, logprob=logprob,
-                            value=float(value), target_pi=target_pi, out_pi=mu)
+                            value=float(value), target_pi=target_pi, out_pi=mu,
+                            guard_forced=guard_forced)
 
     def decide_batch(self, pairs: Sequence[Any]) -> List[Decision]:
         """lock-step：对若干 ``(game, seat)`` 一次批量前向，再逐个收尾。"""
@@ -2096,20 +2162,29 @@ class PPOSelfPlayPolicy(Policy):
             return res
         prepared = []
         for g, s, gid in items:
+            if gid is not None:
+                self.game_id = int(gid)
             f, c, mask = self._observe(g, s)
-            prepared.append((g, s, gid, f, c, mask))
+            guard_forced = False
+            if self._guard is not None:
+                # 必须先按本行自己的 game_id 取历史，不能等批量采样后统一赋值
+                mask, guard_forced = self._guard.guarded_mask(
+                    mask, game_id=self.game_id, seat=s,
+                    turn=int(getattr(g, "turn", -1)))
+            prepared.append((g, s, gid, f, c, mask, guard_forced))
         F = np.stack([p[3] for p in prepared]).astype(np.float32, copy=False)
         C = np.stack([p[4] for p in prepared]).astype(np.int64, copy=False)
         M = np.stack([p[5] for p in prepared]).astype(bool, copy=False)
         seed = int(self._rng.integers(0, 2 ** 63 - 1))
         acts, lps, vals = self.eval_fn.act_batch(F, C, M,
                                                  float(self.config.temperature), seed)
-        for i, (g, s, gid, f, c, mask) in enumerate(prepared):
+        for i, (g, s, gid, f, c, mask, gf) in enumerate(prepared):
             if gid is not None:
                 self.game_id = int(gid)
             out.append(self._finish(g, s, f, c, mask, action=int(acts[i]),
                                     logprob=float(lps[i]), value=float(vals[i]),
-                                    target_pi=None, out_pi=None))
+                                    target_pi=None, out_pi=None,
+                                    guard_forced=gf))
         return out
 
 
@@ -2455,6 +2530,8 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
     collect_meta.update(shaper.stats(elapsed_s=float(time.time() - t0)))
     # 等级进度奖励统计（默认关闭 -> 空 dict，不新增键）。
     collect_meta.update(aggregate_tier_target(games_meta))
+    # 换位去抖守卫统计（默认关闭 -> 空 dict，不新增键）。
+    collect_meta.update(policy.move_guard_meta())
     if not records:
         raise RuntimeError(
             f"采集失败：{truncated}/{len(games_meta)} 局在 max_steps={int(cfg.max_steps)} "

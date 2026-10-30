@@ -47,6 +47,20 @@ SEG = {
     "play": (46, 125), "magnetize": (126, 195), "move": (196, 244),
 }
 
+#: 有向 Move 投影的初始化缩放：新头默认随机初始化会让方向项达 ~9 nats
+#: （实测 8.8），直接把策略推成「92% 换位、mean rank 7.6」。乘 0.25 后方向项
+#: 约 0.55 nats：仍 >1e-2（可学习、非对称），但初始策略接近原 checkpoint。
+MOVE_SPLIT_INIT_GAIN = 0.25
+
+
+def _scale_move_projection(linear: Any, gain: float = MOVE_SPLIT_INIT_GAIN) -> None:
+    """把新建的 ``Linear`` 权重/偏置整体乘以 ``gain``（原地、无梯度）。"""
+    torch = _torch()
+    with torch.no_grad():
+        linear.weight.mul_(float(gain))
+        if linear.bias is not None:
+            linear.bias.mul_(float(gain))
+
 
 def _torch():
     try:
@@ -110,7 +124,8 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
                      n_extra_tokens: int = 0, pos_size: int = 16,
                      arch: str = "entity", seq_head: bool = False,
                      bc_card_head: bool = False,
-                     bc_card_dim: Optional[int] = None):
+                     bc_card_dim: Optional[int] = None,
+                     move_head_split: bool = False):
     """构造 EntityAZNet（torch 模块）。
 
     ``seq_head=True`` 时在 global token 上加一个 245 维的「动作序列辅助头」
@@ -119,6 +134,12 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
 
     ``bc_card_head=True`` 时在 global token 上加「卡牌身份头」（3983 类，分层 BC）；
     默认 False：不构建（``bc_coef=0`` 逐位等价）。
+
+    ``move_head_split=True`` 时把 Move 段（196..244）的对称点积
+    ``hb_i · hb_j`` 换成两个独立投影 ``move_from(hb_i) · move_to(hb_j)``，
+    使 ``logit(i→j) - logit(j→i)`` 不再只由 ``move_bias`` 的反对称部分决定
+    （见 ``docs/POSITION_ACTION_AUDIT.md`` §6）。默认 False：不创建新参数，
+    前向与旧 checkpoint 逐位一致。
     """
     torch = _torch()
     nn = torch.nn
@@ -190,6 +211,16 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             self.play_bias = nn.Parameter(torch.zeros(N_HAND, 8))
             self.magnetize_bias = nn.Parameter(torch.zeros(N_HAND, N_BOARD))
             self.move_bias = nn.Parameter(torch.zeros(N_BOARD, N_BOARD))
+            # 有向 Move 头（可选）：默认 None = 不构建，state_dict/前向与旧版逐位一致
+            self.move_head_split = bool(move_head_split)
+            if self.move_head_split:
+                self.move_from = nn.Linear(d, d)   # 源位置 query
+                self.move_to = nn.Linear(d, d)     # 目标位置 key
+                _scale_move_projection(self.move_from)
+                _scale_move_projection(self.move_to)
+            else:
+                self.move_from = None
+                self.move_to = None
             self.pos_play = nn.Parameter(torch.zeros(8, d))
             self.pointer_scale = 1.0 / math.sqrt(float(d))
             self.rank_head = nn.Linear(d, N_PLAYERS)
@@ -334,7 +365,13 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             mag = torch.einsum("bhd,bjd->bhj", hh, hb)
             logits[:, 126:196] = self.pointer_scale * mag.reshape(B, N_HAND * N_BOARD) + self.magnetize_bias.reshape(1, -1)
             # move 196..244: board from × board to
-            mv = torch.einsum("bid,bjd->bij", hb, hb)
+            # 默认（对称）: mv[i,j] = hb_i · hb_j（方向差只剩 move_bias 的反对称部分）
+            # move_head_split: mv[i,j] = <move_from(hb_i), move_to(hb_j)>，有向
+            if self.move_head_split:
+                mv = torch.einsum("bid,bjd->bij",
+                                  self.move_from(hb), self.move_to(hb))
+            else:
+                mv = torch.einsum("bid,bjd->bij", hb, hb)
             logits[:, 196:245] = self.pointer_scale * mv.reshape(B, N_BOARD * N_BOARD) + self.move_bias.reshape(1, -1)
             if mask is not None:
                 logits = logits.masked_fill(~mask.bool(), -1e9)
@@ -343,3 +380,28 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             return logits, rank, value, g
 
     return EntityAZNet()
+
+
+def attach_move_head_split(model: Any) -> Any:
+    """给**已加载的旧 checkpoint** 追加有向 Move 投影（``move_from`` / ``move_to``）。
+
+    只新建两个 ``Linear(d_model, d_model)``（默认初始化后乘
+    :data:`MOVE_SPLIT_INIT_GAIN`），其余权重保持原样；随后 ``forward`` 走
+    ``move_head_split`` 分支。幂等：已开启时直接返回。
+    用于 ``--checkpoint old.pt --move-head-split 1``：旧权重继承、新增参数小初始化。
+    """
+    if getattr(model, "move_head_split", False) and \
+            getattr(model, "move_from", None) is not None:
+        return model
+    d = int(getattr(model, "d_model", 0) or 0)
+    if d <= 0:
+        raise ValueError(
+            f"模型不是 entity（d_model={d}）：move_head_split 只支持 entity/entity18m")
+    torch = _torch()
+    nn = torch.nn
+    model.move_from = nn.Linear(d, d)
+    model.move_to = nn.Linear(d, d)
+    _scale_move_projection(model.move_from)
+    _scale_move_projection(model.move_to)
+    model.move_head_split = True
+    return model

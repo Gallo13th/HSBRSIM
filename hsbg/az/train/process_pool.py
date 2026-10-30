@@ -48,6 +48,7 @@ from .common import to_jsonable
 from .runlog import aggregate_injection
 from .reward_shaping import aggregate_shaping
 from .tier_target import aggregate_tier_target
+from .move_guard import aggregate_move_guard
 from .ppo import (CollectConfig, PPOBatch, PPOSelfPlayPolicy, build_batch_from_arrays,
                   build_batch_from_records, pack_records_arrays)
 
@@ -828,6 +829,8 @@ class ProcessActorPool:
         meta.update(aggregate_shaping(metas, elapsed_s=wall))
         # 等级进度奖励统计：同样逐 shard 汇总（默认关闭 -> 空 dict，不新增键）。
         meta.update(aggregate_tier_target(metas))
+        # 换位去抖守卫：逐 shard 汇总（默认关闭 -> 空 dict，不新增键）。
+        meta.update(aggregate_move_guard(metas))
         if not records and not packed_all:
             # 采集侧没有有效记录（全部截断/非法），保持与单进程一致的报错语义
             raise RuntimeError(

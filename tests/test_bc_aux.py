@@ -28,6 +28,7 @@ from hsbg.az.train.bc_aux import (
     bc_obs_batch,
     load_bc_samples,
     mmr_weight,
+    parse_bc_class_weights,
     parse_bc_coef_ramp,
 )
 from hsbg.az.train.seq_aux import parse_coef_ramp
@@ -396,3 +397,98 @@ def test_real_bc_pool_smoke():
     summary = bc_pool_summary(s)
     assert summary["samples"] == 500
     assert summary["mmr_min"] == 6000
+
+
+# ── 8. 稀有动作类别权重覆盖（class_weight_overrides）──────────────────────
+def _class_weight_rows():
+    return [
+        _row(action_type="upgrade", action_index=3, mmr="7000"),
+        _row(action_type="sell", action_index=16, mmr="7000"),
+        _row(action_type="hero_power", action_index=4, mmr="7000"),
+    ]
+
+
+def test_parse_bc_class_weights():
+    assert parse_bc_class_weights("") == {}
+    assert parse_bc_class_weights("  ") == {}
+    got = parse_bc_class_weights("upgrade=4,hero_power=2")
+    assert got == {"upgrade": 4.0, "hero_power": 2.0}
+    with pytest.raises(ValueError):
+        parse_bc_class_weights("move=4")            # 不在 9 类白名单
+    with pytest.raises(ValueError):
+        parse_bc_class_weights("upgrade")           # 缺 =
+    with pytest.raises(ValueError):
+        parse_bc_class_weights("upgrade=0")         # 非正
+    with pytest.raises(ValueError):
+        parse_bc_class_weights("upgrade=nan")
+
+
+def test_class_weight_overrides_multiply_on_top_of_class_balance(bc_data):
+    path, cards = bc_data
+    p = _write_jsonl(path.parent / "class_weight.jsonl.gz", _class_weight_rows())
+    base = load_bc_samples(p, mmr_min=6000, cards_path=cards)
+    over = load_bc_samples(
+        p, mmr_min=6000, cards_path=cards,
+        class_weight_overrides={"upgrade": 4.0, "hero_power": 2.0})
+    assert np.allclose(base.class_weight, 1.0)
+    assert over.class_weight.tolist() == [4.0, 1.0, 2.0]
+    assert over.meta["class_weight_overrides"] == {
+        "upgrade": 4.0, "hero_power": 2.0}
+
+    mb = bc_obs_batch(base)
+    mo = bc_obs_batch(over)
+    assert mb.class_weight.tolist() == [1.0, 1.0, 1.0]
+    assert mo.class_weight.tolist() == [4.0, 1.0, 2.0]
+    # 有效权重 = MMR * class-balanced * override；upgrade 恰为默认的 4 倍
+    cb = bc_class_balance_weights(mb.class_ids, mb.class_counts)
+    co = bc_class_balance_weights(mo.class_ids, mo.class_counts)
+    assert np.allclose(cb, co)
+    eff_b = mb.weights * cb
+    eff_o = mo.weights * co * mo.class_weight
+    assert eff_o[0] / eff_b[0] == pytest.approx(4.0, rel=1e-6)
+    assert eff_o[2] / eff_b[2] == pytest.approx(2.0, rel=1e-6)
+    assert eff_o[1] == pytest.approx(eff_b[1], rel=1e-6)
+
+
+def test_class_weight_applied_in_ce_loss():
+    torch = pytest.importorskip("torch")
+    import torch.nn.functional as F
+
+    logits = torch.tensor([[4.0, 0.0], [0.0, 3.0], [1.0, 1.0]])
+    target = torch.tensor([0, 1, 0])
+    class_ids = torch.tensor([0, 1, 0])
+    class_counts = torch.tensor([2, 1])
+    cw = torch.tensor([4.0, 1.0, 4.0])
+    got = bc_ce_loss(logits, target, class_ids=class_ids,
+                     class_counts=class_counts, class_weight=cw)
+    per = F.cross_entropy(logits, target, reduction="none")
+    cb = torch.as_tensor(bc_class_balance_weights(
+        class_ids.numpy(), class_counts.numpy()), dtype=per.dtype)
+    ref = (per * cb * cw).sum() / (cb * cw).sum()
+    assert float(got) == pytest.approx(float(ref), abs=1e-6)
+
+
+def test_empty_class_weight_overrides_bitwise_equivalent(bc_data):
+    torch = pytest.importorskip("torch")
+    path, cards = bc_data
+    rows = _class_weight_rows()
+    p = _write_jsonl(path.parent / "class_weight_empty.jsonl.gz", rows)
+    base = load_bc_samples(p, mmr_min=6000, cards_path=cards)
+    empty = load_bc_samples(p, mmr_min=6000, cards_path=cards,
+                            class_weight_overrides={})
+    assert np.array_equal(base.class_weight, empty.class_weight)
+    assert np.array_equal(base.weight, empty.weight)
+    assert base.meta["class_weight_overrides"] == {}
+    b0, b1 = bc_obs_batch(base), bc_obs_batch(empty)
+    for attr in ("features", "cards", "weights", "class_weight",
+                 "class_ids", "type_ids"):
+        assert np.array_equal(getattr(b0, attr), getattr(b1, attr)), attr
+
+    logits = torch.tensor([[2.0, 0.0, -1.0], [0.0, 1.0, 0.0]])
+    target = torch.tensor([0, 1])
+    cls = torch.tensor([0, 1])
+    counts = torch.tensor([1, 1])
+    l_none = bc_ce_loss(logits, target, class_ids=cls, class_counts=counts)
+    l_ones = bc_ce_loss(logits, target, class_ids=cls, class_counts=counts,
+                        class_weight=torch.ones(2))
+    assert torch.equal(l_none, l_ones)

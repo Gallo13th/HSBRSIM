@@ -159,7 +159,9 @@ class PPOTrainer:
         try:
             pool = load_bc_samples(
                 path, mmr_min=int(getattr(self.config, "bc_mmr_min", 6000)),
-                mmr_boost=float(getattr(self.config, "bc_mmr_boost", 1.0)))
+                mmr_boost=float(getattr(self.config, "bc_mmr_boost", 1.0)),
+                class_weight_overrides=getattr(
+                    self.config, "bc_class_weights", None))
             if len(pool) == 0:
                 raise ValueError("BC 样本池为空（白名单/MMR 过滤后 0 条）")
             self.bc_pool = pool

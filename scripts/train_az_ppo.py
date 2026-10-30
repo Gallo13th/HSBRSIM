@@ -102,6 +102,12 @@ def _parse_args() -> argparse.Namespace:
     ap.add_argument("--max-actions-per-turn", type=int, default=40,
                     help="单座位单回合动作上限（超过且 EndTurn 合法则强制结束回合；"
                          "0=关闭。未训练网络防 Play/Cancel 死循环）")
+    ap.add_argument("--move-guard", type=int, default=0, choices=[0, 1],
+                    help="1=换位去抖守卫（默认 0=关闭，逐位等价；见 docs/MOVE_GUARD.md）")
+    ap.add_argument("--move-cap", type=int, default=3,
+                    help="每回合换位次数上限（默认 3；0=本回合禁止换位）")
+    ap.add_argument("--move-repeat-limit", type=int, default=2,
+                    help="同一 (from,to) 本回合出现 >=N 次后屏蔽（默认 2）")
     # PPO 超参
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--clip", type=float, default=0.2, help="PPO clip ε")
@@ -176,6 +182,12 @@ def main() -> int:
         return 2
     if int(args.epochs) < 1 and not args.collect_only:
         print("[error] --epochs 必须 >= 1（--collect-only 时忽略）", file=sys.stderr)
+        return 2
+    if int(args.move_cap) < 0:
+        print("[error] --move-cap 必须 >= 0", file=sys.stderr)
+        return 2
+    if int(args.move_repeat_limit) < 1:
+        print("[error] --move-repeat-limit 必须 >= 1", file=sys.stderr)
         return 2
 
     try:
@@ -254,6 +266,9 @@ def main() -> int:
         temperature=float(args.temperature), pi_epsilon=float(args.pi_epsilon),
         step_penalty=float(args.step_penalty),
         max_actions_per_turn=int(args.max_actions_per_turn),
+        move_guard=bool(int(args.move_guard)),
+        move_cap=int(args.move_cap),
+        move_repeat_limit=int(args.move_repeat_limit),
         seq_aux=bool(seq_enabled))
     evaluator = PPOEvaluator(model, device=args.device,
                              norm_mean=norm_mean, norm_std=norm_std)

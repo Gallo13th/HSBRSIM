@@ -48,6 +48,7 @@ from hsbg.az.train.reward_shaping import parse_tier_bonus  # noqa: E402
 from hsbg.az.train.tier_target import parse_tier_target_table  # noqa: E402
 from hsbg.az.train.model import (  # noqa: E402
     attach_bc_card_head,
+    attach_move_head_split,
     bc_card_head_dim,
     build_net,
     load_checkpoint,
@@ -73,6 +74,7 @@ from hsbg.az.train.seq_aux import SeqCoefSchedule  # noqa: E402
 from hsbg.az.train.bc_aux import (  # noqa: E402
     bc_pool_summary,
     load_bc_samples,
+    parse_bc_class_weights,
 )
 from scripts.async_eval import (AsyncEvalRunner, build_c0_cmd,  # noqa: E402
                                 build_human_cmd, panels_from_spec,
@@ -116,6 +118,18 @@ def main() -> int:
     ap.add_argument("--iterations", type=int, default=0)
     ap.add_argument("--games", type=int, default=4)
     ap.add_argument("--arch", default="entity", choices=["tiny", "entity", "entity18m"])
+    ap.add_argument("--move-head-split", type=int, default=0, choices=[0, 1],
+                    help="1=Move 段（196..244）用有向双投影（move_from/move_to），"
+                         "方向差不再只由 move_bias 决定；旧 checkpoint 自动只初始化新投影。"
+                         "默认 0=保持对称实现（逐位兼容旧 ckpt）")
+    ap.add_argument("--move-guard", type=int, default=0, choices=[0, 1],
+                    help="1=换位去抖守卫：采样前屏蔽「逆换位 / 同动作超限 / 本回合换位"
+                         "超 cap」的 Move 动作位（见 docs/MOVE_GUARD.md）。"
+                         "默认 0=关闭（与旧路径逐位等价）")
+    ap.add_argument("--move-cap", type=int, default=3,
+                    help="每回合换位次数上限：>=cap 后屏蔽全部 Move（默认 3；0=本回合禁止换位）")
+    ap.add_argument("--move-repeat-limit", type=int, default=2,
+                    help="同一 (from,to) 本回合出现 >=N 次后屏蔽（默认 2；1=不允许重复）")
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--sims", type=int, default=4)
     ap.add_argument("--determinizations", type=int, default=1)
@@ -237,6 +251,9 @@ def main() -> int:
                     help="BC 样本 MMR 下限（低于该值丢弃；默认 6000）")
     ap.add_argument("--bc-mmr-boost", type=float, default=1.0,
                     help="MMR 线性增强：1=不加权（默认）；1.5=在 6000..8000 上从 1.0 线性升到 1.5")
+    ap.add_argument("--bc-class-weight", default="",
+                    help='稀有动作类别权重覆盖，如 "upgrade=4,hero_power=2"；'
+                         "在 class-balanced 权重之上再乘。空=现状（默认）")
     ap.add_argument("--bc-samples", default="data/firestone_bc/bc_samples.jsonl.gz",
                     help="BC 样本 JSONL(.gz) 路径（默认仓库 data/firestone_bc/bc_samples.jsonl.gz）")
     ap.add_argument("--bc-batch", type=int, default=128,
@@ -386,6 +403,26 @@ def main() -> int:
             print("[info] 非 lockstep 路径：塑形在逐局采集（collect_ppo_records_parallel）"
                   "内生效", flush=True)
 
+    # ---- 换位去抖守卫（默认关闭；--move-guard 0 时零影响）----
+    if int(args.move_cap) < 0:
+        print("[error] --move-cap 必须 >= 0", file=sys.stderr)
+        return 2
+    if int(args.move_repeat_limit) < 1:
+        print("[error] --move-repeat-limit 必须 >= 1", file=sys.stderr)
+        return 2
+    if int(args.move_guard):
+        if int(args.rust_collector):
+            print("[error] Rust 采集器不支持换位守卫（它不经 PPOSelfPlayPolicy 采样）；"
+                  "请设 --move-guard 0 或 --rust-collector 0", file=sys.stderr)
+            return 2
+        print(f"[move-guard] 换位去抖守卫开启: cap={int(args.move_cap)} "
+              f"repeat_limit={int(args.move_repeat_limit)} "
+              f"（逆换位 + 同动作超限 + 每回合 cap，见 docs/MOVE_GUARD.md）",
+              flush=True)
+        if not int(args.lockstep):
+            print("[info] 非 lockstep 路径：守卫在逐局采集（collect_ppo_records_parallel）"
+                  "内同样生效", flush=True)
+
     # ---- 等级进度奖励（tier-target，默认关闭；coef=0 时零影响）----
     if float(args.tier_target_coef) < 0.0:
         print("[error] --tier-target-coef 必须 >= 0", file=sys.stderr)
@@ -475,6 +512,11 @@ def main() -> int:
         print("[error] --bc-type-weight/--bc-card-weight 必须 >= 0", file=sys.stderr)
         return 2
     try:
+        bc_class_weights = parse_bc_class_weights(str(args.bc_class_weight))
+    except ValueError as exc:
+        print(f"[error] --bc-class-weight 非法: {exc}", file=sys.stderr)
+        return 2
+    try:
         bc_schedule = SeqCoefSchedule.from_spec(
             base_coef=float(args.bc_coef), spec=str(args.bc_coef_ramp),
             total_decisions=(float(args.stop_at_decisions) if
@@ -497,7 +539,8 @@ def main() -> int:
             _t_bc = time.time()
             bc_pool = load_bc_samples(
                 str(args.bc_samples), mmr_min=int(args.bc_mmr_min),
-                mmr_boost=float(args.bc_mmr_boost))
+                mmr_boost=float(args.bc_mmr_boost),
+                class_weight_overrides=(bc_class_weights or None))
             if len(bc_pool) == 0:
                 raise ValueError("过滤后样本数为 0（动作白名单/MMR 下限）")
             _sum = bc_pool_summary(bc_pool)
@@ -512,6 +555,7 @@ def main() -> int:
             print(f"[bc] 分层目标: type_weight={float(args.bc_type_weight):g} "
                   f"card_weight={float(args.bc_card_weight):g} "
                   f"card_head={'on' if bc_card_head else 'off'} "
+                  f"class_weights={json.dumps(bc_class_weights, ensure_ascii=False)} "
                   f"coef(dec=0)={bc_schedule.coef(0):.4g} "
                   f"ramp={json.dumps(bc_schedule.describe(), ensure_ascii=False)}",
                   flush=True)
@@ -552,6 +596,21 @@ def main() -> int:
         arch = str(meta.get("arch", args.arch))
         norm_mean, norm_std = meta.get("norm_mean"), meta.get("norm_std")
         print(f"[net] checkpoint={args.checkpoint} arch={arch}", flush=True)
+        # 有向 Move 头：旧 ckpt 没有 move_from/move_to 时，只追加两个投影并继承其余权重
+        _move_split_loaded = bool(getattr(model, "move_head_split", False))
+        if int(args.move_head_split) and not _move_split_loaded:
+            _p0 = sum(p.numel() for p in model.parameters())
+            try:
+                attach_move_head_split(model)
+            except ValueError as exc:
+                print(f"[error] --move-head-split 1 不可用: {exc}", file=sys.stderr)
+                return 2
+            _p1 = sum(p.numel() for p in model.parameters())
+            print(f"[net] move_head_split=on（旧 checkpoint 无有向 Move 投影）："
+                  f"已追加 move_from/move_to，参数 +{_p1 - _p0:,}"
+                  f"（{_p0:,} -> {_p1:,}），其余权重继承", flush=True)
+        elif _move_split_loaded:
+            print("[net] move_head_split=on（checkpoint meta 已声明）", flush=True)
         if seq_enabled and getattr(model, "seq_head", None) is None:
             print("[warn] checkpoint 没有动作序列辅助头（旧 checkpoint）：本次关闭 seq 辅助任务",
                   flush=True)
@@ -573,12 +632,16 @@ def main() -> int:
         # 在加载前追加（会 unexpected key），因此 trainer-state 路径要求 state 已含该头。
         model = build_net(arch=args.arch, seq_head=seq_enabled,
                           bc_card_head=False)
+        if int(args.move_head_split):
+            print("[warn] --trainer-state 路径按 state 的架构加载；--move-head-split 1 "
+                  "只对 --checkpoint（model.pt）生效，本次忽略", flush=True)
         meta = {"arch": args.arch}
         arch = args.arch
         print(f"[net] empty model for trainer-state={args.trainer_state}", flush=True)
     else:
         model = build_net(arch=args.arch, seq_head=seq_enabled,
-                          bc_card_head=bc_card_head)
+                          bc_card_head=bc_card_head,
+                          move_head_split=bool(int(args.move_head_split)))
         meta = {"arch": args.arch}
         arch = args.arch
     if bc_enabled and bc_card_head and getattr(model, "card_head", None) is None:
@@ -609,6 +672,7 @@ def main() -> int:
         bc_coef_ramp=(str(args.bc_coef_ramp) if bc_enabled else ""),
         bc_mmr_min=int(args.bc_mmr_min),
         bc_mmr_boost=float(args.bc_mmr_boost),
+        bc_class_weights=dict(bc_class_weights),
         bc_samples_path=str(args.bc_samples),
         bc_batch=int(args.bc_batch),
         bc_every=int(args.bc_every),
@@ -976,6 +1040,9 @@ def main() -> int:
             max_actions_per_turn=int(args.max_actions_per_turn),
             max_steps=int(args.max_steps), fast_act=bool(int(args.fast_act)),
             lockstep=bool(int(args.lockstep)),
+            move_guard=bool(int(args.move_guard)),
+            move_cap=int(args.move_cap),
+            move_repeat_limit=int(args.move_repeat_limit),
             library_pool=str(args.library_pool), library_p=float(args.library_p),
             trajectory_pool=str(args.trajectory_pool), trajectory_p=float(args.trajectory_p),
             mirror_snaps=str(args.mirror_snaps), mirror_seats=int(args.mirror_seats),
@@ -1306,6 +1373,7 @@ def main() -> int:
             "compile": bool(int(args.bc_compile)),
             "type_weight": float(args.bc_type_weight),
             "card_weight": float(args.bc_card_weight),
+            "class_weights": dict(bc_class_weights),
             "card_head": bool(bc_card_head),
             "pool": (bc_pool_summary(bc_pool) if bc_pool is not None else None),
         }
