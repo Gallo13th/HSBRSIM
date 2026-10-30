@@ -44,7 +44,8 @@ sys.path.insert(0, ROOT)
 
 from hsbg.az.train.common import engine_available, engine_info, to_jsonable  # noqa: E402
 from hsbg.az.train.mirror_snapshots import ramp_p  # noqa: E402
-from hsbg.az.train.reward_shaping import parse_tier_bonus  # noqa: E402
+from hsbg.az.train.reward_shaping import (parse_tier_bonus,  # noqa: E402
+                                          shaping_gamma_warning)
 from hsbg.az.train.tier_target import parse_tier_target_table  # noqa: E402
 from hsbg.az.train.model import (  # noqa: E402
     attach_bc_card_head,
@@ -76,9 +77,69 @@ from hsbg.az.train.bc_aux import (  # noqa: E402
     load_bc_samples,
     parse_bc_class_weights,
 )
+from hsbg.az.train.dpo_upgrade import (  # noqa: E402
+    UpgradeSamples,
+    dpo_pair_loss,
+    load_upgrade_samples,
+)
 from scripts.async_eval import (AsyncEvalRunner, build_c0_cmd,  # noqa: E402
                                 build_human_cmd, panels_from_spec,
                                 parse_panel_result, write_json_atomic)
+
+
+#: 期望梯度占比的参考量级：PPO total loss（value 项主导）。本 run 无历史时用 s9d 实测均值。
+DPO_REF_TOTAL_LOSS = 0.77
+
+
+def _ppo_total_ref(out_dir: str) -> tuple:
+    """本 run 最近一次 PPO ``total`` loss（无历史时退回 s9d 量级常数）；返回 (值, 来源)。"""
+    path = os.path.join(str(out_dir), "history.jsonl")
+    try:
+        last = None
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    last = line
+        if last:
+            rec = json.loads(last)
+            for e in reversed((rec.get("ppo") or {}).get("epochs") or []):
+                if "total" in e:
+                    return float(e["total"]), "本 run history"
+    except Exception:  # noqa: BLE001 - 只是启动打印的参考值
+        pass
+    return float(DPO_REF_TOTAL_LOSS), "s9d 量级常数"
+
+
+def _dpo_startup_probe(model, pool: "UpgradeSamples", *, beta: float,
+                       device: str, n: int = 512) -> Dict[str, float]:
+    """启动诊断：当前策略在 upgrade 池上的 DPO 初值/接受率（no_grad，不改权重）。"""
+    import torch
+
+    sel = np.arange(min(int(n), len(pool)), dtype=np.int64)
+    sub = pool.take(sel)
+    was_training = bool(model.training)
+    model.eval()
+    try:
+        with torch.no_grad():
+            loss, rate = dpo_pair_loss(model, sub, float(beta), device=str(device))
+        return {"n": float(len(sub)), "loss": float(loss),
+                "accept_rate": float(rate)}
+    finally:
+        model.train(was_training)
+
+
+def _dpo_grad_ref(path: str = "runs/dpo_grad_probe.json"):
+    """读离线梯度占比探针结果（``scripts/dpo_grad_probe.py``）；没有则 None。"""
+    try:
+        with open(str(path), encoding="utf-8") as f:
+            data = json.load(f)
+        share = float(data["share_per_coef"])       # coef=1 时 ‖g_dpo‖/‖g_ppo‖
+        if not np.isfinite(share) or share <= 0.0:
+            return None
+        return {"path": str(path), "share_per_coef": share,
+                "checkpoint": data.get("checkpoint")}
+    except Exception:  # noqa: BLE001 - 诊断文件缺失/损坏不影响训练
+        return None
 
 
 def _gpu_used_mib() -> Dict[int, int]:
@@ -142,7 +203,10 @@ def main() -> int:
     ap.add_argument("--max-updates", type=int, default=100000)
     ap.add_argument("--clip", type=float, default=0.2)
     ap.add_argument("--target-kl", type=float, default=0.05)
-    ap.add_argument("--lam", type=float, default=0.95, help="GAE λ（论文 0.995）")
+    ap.add_argument("--lam", type=float, default=0.95,
+                    help="GAE λ（与折扣 γ 无关；论文 0.995）")
+    ap.add_argument("--gamma", type=float, default=1.0,
+                    help="训练折扣 γ（默认 1.0：8 座单局终局效用；不是 GAE 的 λ）")
     ap.add_argument("--max-grad-norm", type=float, default=0.5,
                     help="梯度裁剪范数（论文 1.0）")
     ap.add_argument("--grad-accum", type=int, default=1,
@@ -199,6 +263,9 @@ def main() -> int:
     # ---- 势函数奖励塑形（默认关闭，见 docs/REWARD_SHAPING.md）----
     ap.add_argument("--shaping-coef", type=float, default=0.0,
                     help="势函数奖励塑形系数 λ；0=关闭（默认，records/GAE 与旧路径逐位等价）")
+    ap.add_argument("--shaping-gamma", type=float, default=None,
+                    help="塑形折扣 γ_s（默认空=跟随训练 --gamma；只有与训练 γ 严格相等才满足"
+                         "策略不变性；显式不一致会启动期警告并记录累计偏差）")
     ap.add_argument("--shaping-w-str", type=float, default=1.0,
                     help="Φ 的 Σ(atk+hp) 权重（默认 1.0）")
     ap.add_argument("--shaping-w-tier", type=float, default=0.5,
@@ -269,6 +336,20 @@ def main() -> int:
     ap.add_argument("--bc-card-weight", type=float, default=0.5,
                     help="分层 BC 的卡牌身份 CE 权重（3983 类 card_head，仅 buy/play；"
                          "默认 0.5；0=不建/不用 card_head）")
+    ap.add_argument("--dpo-coef", type=float, default=0.0,
+                    help="upgrade 子集 one-sided DPO 系数（0=关闭，默认）；每 "
+                         "--dpo-every 个 iteration 把 coef*L_dpo 加进同一次 backward，"
+                         "见 docs/DPO_UPGRADE.md")
+    ap.add_argument("--dpo-beta", type=float, default=0.1,
+                    help="DPO 温度 β（-logsigmoid(β·Δlogp)；默认 0.1）")
+    ap.add_argument("--dpo-batch", type=int, default=128,
+                    help="每个 DPO 步从 upgrade 池无放回抽样的样本数（默认 128）")
+    ap.add_argument("--dpo-every", type=int, default=4,
+                    help="DPO 周期，按 **iteration** 计（默认 4=每 4 个 iteration 一次）；"
+                         "系数不做周期折算，平均梯度占比 ≈ coef/every")
+    ap.add_argument("--dpo-samples", default="data/firestone_bc/bc_samples.jsonl.gz",
+                    help="upgrade 样本来源 JSONL(.gz)（只读 action_type==upgrade 的行）；"
+                         "默认 data/firestone_bc/bc_samples.jsonl.gz")
     ap.add_argument("--entropy-coef", type=float, default=0.005)
     ap.add_argument("--max-actions-per-turn", type=int, default=40)
     ap.add_argument("--max-steps", type=int, default=20000)
@@ -386,6 +467,16 @@ def main() -> int:
     except ValueError as exc:
         print(f"[error] --shaping-tier-bonus 非法: {exc}", file=sys.stderr)
         return 2
+    # 折扣范围与一致性：γ_s 缺省 = 跟随训练 γ；显式不一致必须警告（不静默）
+    if not (0.0 <= float(args.gamma) <= 1.0):
+        print("[error] --gamma 必须在 [0, 1] 内", file=sys.stderr)
+        return 2
+    if args.shaping_gamma is not None and not (0.0 <= float(args.shaping_gamma) <= 1.0):
+        print("[error] --shaping-gamma 必须在 [0, 1] 内", file=sys.stderr)
+        return 2
+    shape_gamma = (float(args.gamma) if args.shaping_gamma is None
+                   else float(args.shaping_gamma))
+    shape_aligned = (shape_gamma == float(args.gamma))
     if float(args.shaping_coef) > 0.0:
         if str(args.opponent) == "self":
             print("[error] 奖励塑形只支持 --opponent bot|weak（单 learner seat）",
@@ -396,9 +487,15 @@ def main() -> int:
                   "或 --rust-collector 0", file=sys.stderr)
             return 2
         print(f"[shaping] 势函数奖励塑形开启: coef={float(args.shaping_coef):g} "
+              f"γ_s={shape_gamma:g}（训练 γ={float(args.gamma):g}，"
+              f"{'对齐' if shape_aligned else '不一致'}） "
               f"Φ={float(args.shaping_w_str):g}*Σ(atk+hp)+"
               f"{float(args.shaping_w_tier):g}*tier_bonus "
               f"tier_bonus={args.shaping_tier_bonus}", flush=True)
+        if not shape_aligned:
+            print("[shaping][warn] " + shaping_gamma_warning(
+                float(args.shaping_coef), shape_gamma, float(args.gamma)),
+                file=sys.stderr, flush=True)
         if not int(args.lockstep):
             print("[info] 非 lockstep 路径：塑形在逐局采集（collect_ppo_records_parallel）"
                   "内生效", flush=True)
@@ -510,6 +607,16 @@ def main() -> int:
         return 2
     if float(args.bc_type_weight) < 0.0 or float(args.bc_card_weight) < 0.0:
         print("[error] --bc-type-weight/--bc-card-weight 必须 >= 0", file=sys.stderr)
+        return 2
+    # ---- upgrade 子集 DPO（默认关闭 = 零影响）：系数/β/批量/周期校验 ----
+    if not np.isfinite(float(args.dpo_coef)) or float(args.dpo_coef) < 0.0:
+        print("[error] --dpo-coef 必须 >= 0", file=sys.stderr)
+        return 2
+    if not np.isfinite(float(args.dpo_beta)) or float(args.dpo_beta) <= 0.0:
+        print("[error] --dpo-beta 必须是有限正数", file=sys.stderr)
+        return 2
+    if int(args.dpo_batch) <= 0 or int(args.dpo_every) <= 0:
+        print("[error] --dpo-batch 必须 > 0 且 --dpo-every 必须 >= 1", file=sys.stderr)
         return 2
     try:
         bc_class_weights = parse_bc_class_weights(str(args.bc_class_weight))
@@ -653,9 +760,56 @@ def main() -> int:
     print(f"[net] arch={arch} params={sum(p.numel() for p in model.parameters()):,}",
           flush=True)
 
+    # ---- upgrade 子集 DPO：预加载池 + 启动诊断（默认关闭 = 零影响）------------
+    # 池 ~3050 条 / ~7s；只在 --dpo-coef>0 时加载。失败自动关闭（不中断训练）。
+    dpo_pool: Optional[UpgradeSamples] = None
+    if float(args.dpo_coef) > 0.0:
+        try:
+            _t_dpo = time.time()
+            dpo_pool = load_upgrade_samples(str(args.dpo_samples))
+            if len(dpo_pool) == 0:
+                raise ValueError("过滤后样本数为 0（动作白名单/MMR 下限）")
+            print(f"[dpo] upgrade 池: samples={len(dpo_pool)} "
+                  f"mmr>={int(dpo_pool.mmr_min)} "
+                  f"load={time.time() - _t_dpo:.1f}s path={dpo_pool.path}",
+                  flush=True)
+        except Exception as exc:  # noqa: BLE001 - DPO 可选，失败自动关闭
+            print(f"[warn] upgrade DPO 样本加载失败，自动关闭 dpo_coef=0"
+                  f"（不中断训练）：{type(exc).__name__}: {exc}", flush=True)
+            args.dpo_coef = 0.0
+            dpo_pool = None
+    if dpo_pool is not None and len(dpo_pool) > 0:
+        # 启动诊断：当前策略在池上的 DPO 初值 / 接受率（no_grad，不改权重）
+        _p = _dpo_startup_probe(model, dpo_pool, beta=float(args.dpo_beta),
+                                device=str(args.device))
+        _term = float(args.dpo_coef) * float(_p["loss"])
+        _avg = _term / float(max(1, int(args.dpo_every)))
+        _ref, _ref_src = _ppo_total_ref(str(args.out))
+        print(f"[dpo] beta={float(args.dpo_beta):g} coef={float(args.dpo_coef):g} "
+              f"batch={int(args.dpo_batch)} every={int(args.dpo_every)} "
+              f"（每 {int(args.dpo_every)} 个 iteration 加一次 coef*L_dpo）", flush=True)
+        print(f"[dpo] 当前策略 on 池: dpo_loss={_p['loss']:.4f} "
+              f"accept_rate={_p['accept_rate']:.3f}（n={int(_p['n'])}）"
+              f" -> 单步项={_term:.5f}，平均/iteration={_avg:.5f}", flush=True)
+        print(f"[dpo] 期望梯度占比（loss 标度参考）: 单步 DPO 项 / |PPO total| ≈ "
+              f"{_term / max(abs(_ref), 1e-9) * 100:.2f}%（参考 total={_ref:.4f}，"
+              f"来自{_ref_src}）", flush=True)
+        _gref = _dpo_grad_ref()
+        if _gref is not None:
+            _gc = float(args.dpo_coef) * float(_gref["share_per_coef"])
+            print(f"[dpo] 期望梯度占比（实测 ‖g_dpo‖/‖g_ppo‖，"
+                  f"来自 {_gref['path']}）: 单步≈{_gc * 100:.2f}%，"
+                  f"平均/iteration≈{_gc / max(1, int(args.dpo_every)) * 100:.2f}%",
+                  flush=True)
+        else:
+            print("[dpo] 期望梯度占比：暂无实测梯度范数比（可跑 "
+                  "scripts/dpo_grad_probe.py 生成 runs/dpo_grad_probe.json）",
+                  flush=True)
+
     p_cfg = PPOConfig(
         epochs=int(args.epochs), minibatch=int(args.minibatch), lr=float(args.lr),
-        clip=float(args.clip), target_kl=float(args.target_kl),
+        clip=float(args.clip), gamma=float(args.gamma),
+        target_kl=float(args.target_kl),
         entropy_coef=float(args.entropy_coef), pi_coef=float(args.pi_coef),
         max_grad_norm=float(args.max_grad_norm),
         grad_accum=int(args.grad_accum), amp=str(args.amp),
@@ -678,16 +832,24 @@ def main() -> int:
         bc_every=int(args.bc_every),
         bc_compile=int(args.bc_compile),
         bc_type_weight=float(args.bc_type_weight),
-        bc_card_weight=float(args.bc_card_weight))
+        bc_card_weight=float(args.bc_card_weight),
+        # upgrade 子集 one-sided DPO：系数固定（无 ramp）；池在下方注入 trainer
+        dpo_coef=float(args.dpo_coef),
+        dpo_beta=float(args.dpo_beta),
+        dpo_batch=int(args.dpo_batch),
+        dpo_every=int(args.dpo_every),
+        dpo_samples=str(args.dpo_samples))
     trainer: Optional[PPOTrainer] = None
     if args.trainer_state and os.path.isfile(args.trainer_state):
         trainer = PPOTrainer.load(model, args.trainer_state, config=p_cfg,
-                                  device=args.device, bc_pool=bc_pool)
+                                  device=args.device, bc_pool=bc_pool,
+                                  dpo_pool=dpo_pool)
         print(f"[trainer] loaded updates={trainer.updates} "
               f"lr={trainer.optimizer.param_groups[0]['lr']:.3g}", flush=True)
     else:
         trainer = PPOTrainer(model, p_cfg, lr_min_ratio=float(args.lr_min_ratio),
-                             max_updates=int(args.max_updates), bc_pool=bc_pool)
+                             max_updates=int(args.max_updates), bc_pool=bc_pool,
+                             dpo_pool=dpo_pool)
 
     # BC 池注入（CLI 已预加载/打印；trainer 若自己加载过则复用）
     if bc_enabled:
@@ -700,6 +862,20 @@ def main() -> int:
             bc_enabled = False
             trainer.config.bc_coef = 0.0
             trainer.config.bc_coef_ramp = ""
+
+    # upgrade DPO 池注入（CLI 已预加载/打印；trainer 若自己加载过则复用）
+    dpo_enabled = bool(float(args.dpo_coef) > 0.0)
+    if dpo_enabled:
+        if dpo_pool is not None:
+            trainer.set_dpo_pool(dpo_pool)
+        elif getattr(trainer, "dpo_pool", None) is not None:
+            dpo_pool = trainer.dpo_pool
+            print(f"[dpo] 复用 trainer 已加载的 upgrade 池: samples={len(dpo_pool)}",
+                  flush=True)
+        if getattr(trainer, "dpo_pool", None) is None:
+            print("[warn] upgrade DPO 池不可用，自动关闭 dpo_coef=0", flush=True)
+            dpo_enabled = False
+            trainer.config.dpo_coef = 0.0
 
     # ---- 日志：history.jsonl 追加（兼容旧 history.json）----
     history: List[Dict[str, Any]] = []
@@ -1064,6 +1240,7 @@ def main() -> int:
             seq_aux=bool(seq_enabled),
             # 势函数奖励塑形（默认 coef=0 -> 零影响）
             shaping_coef=float(args.shaping_coef),
+            shaping_gamma=args.shaping_gamma,
             shaping_w_str=float(args.shaping_w_str),
             shaping_w_tier=float(args.shaping_w_tier),
             shaping_tier_bonus=str(args.shaping_tier_bonus),
@@ -1076,7 +1253,7 @@ def main() -> int:
         if pool is not None:
             batch, collect_meta = pool.collect(
                 c_cfg, int(args.games), return_records=True, progress=not pipeline_on,
-                seed=int(c_cfg.seed), gamma=1.0, lam=float(args.lam),
+                seed=int(c_cfg.seed), gamma=float(p_cfg.gamma), lam=float(args.lam),
                 weights_version=(published["version"] if wv is None else wv),
                 weights_path=(published["path"] if wp is None else wp))
         elif args.workers > 1:
@@ -1084,13 +1261,15 @@ def main() -> int:
                 model, c_cfg, workers=int(args.workers),
                 search_fn=search_fn, search_config=search_cfg,
                 eval_fn=evaluator, device=str(args.device),
-                seed=int(args.seed) + idx * 1000, gamma=1.0, lam=float(args.lam),
+                seed=int(args.seed) + idx * 1000, gamma=float(p_cfg.gamma),
+                lam=float(args.lam),
                 norm_mean=norm_mean, norm_std=norm_std, progress=True)
         else:
             batch, collect_meta = collect_ppo_batch(
                 model, c_cfg, search_fn=search_fn, search_config=search_cfg,
                 eval_fn=evaluator, device=str(args.device),
-                seed=int(args.seed) + idx * 1000, gamma=1.0, lam=float(args.lam),
+                seed=int(args.seed) + idx * 1000, gamma=float(p_cfg.gamma),
+                lam=float(args.lam),
                 norm_mean=norm_mean, norm_std=norm_std, progress=True)
         return batch, collect_meta, c_cfg, time.time() - t_c
 
@@ -1209,8 +1388,14 @@ def main() -> int:
             if not isinstance(_cmeta, dict):
                 _cmeta = collect_meta if isinstance(collect_meta, dict) else {}
             stats["shaping_coef"] = float(args.shaping_coef)
+            stats["shaping_gamma"] = float(shape_gamma)
+            stats["shaping_gamma_aligned"] = bool(shape_aligned)
             stats["reward_shaping_mean"] = float(
                 _cmeta.get("reward_shaping_mean", 0.0) or 0.0)
+            stats["reward_shaping_bias_sum"] = float(
+                _cmeta.get("reward_shaping_bias_sum", 0.0) or 0.0)
+            # 优势标准差（PPOBatch 已算 advantage_std；history 里此前只有 adv_mean）
+            stats["adv_std"] = float(np.std(batch.advantages))
             # 等级进度奖励可观测性（默认关闭时全为 0；history 字段名固定）
             stats["tier_target_coef"] = float(args.tier_target_coef)
             stats["tier_hits"] = int(_cmeta.get("tier_hits", 0) or 0)
@@ -1250,7 +1435,12 @@ def main() -> int:
                      f" bc_card={stats.get('bc_card_loss', 0.0):.4f}"
                      f" bc_coef={stats.get('bc_coef', 0.0):.4g}"
                      f" bc_samples={stats.get('bc_samples', 0.0):.0f}"
-                     if bc_enabled else ""),
+                     if bc_enabled else "")
+                  + (f" dpo={stats['dpo_loss']:.4f}"
+                     f" dpo_acc={stats['dpo_accept_rate']:.3f}"
+                     f" dpo_coef={stats['dpo_coef']:.4g}"
+                     f" dpo_n={stats['dpo_samples']:.0f}"
+                     if dpo_enabled and "dpo_loss" in stats else ""),
                   flush=True)
 
             # 版本化快照：trainer 为权威，model 为导出；manifest 最后原子发布
@@ -1376,6 +1566,14 @@ def main() -> int:
             "class_weights": dict(bc_class_weights),
             "card_head": bool(bc_card_head),
             "pool": (bc_pool_summary(bc_pool) if bc_pool is not None else None),
+        }
+    if dpo_enabled:
+        # upgrade 子集 DPO：池规模/系数/周期，以及最终 DPO 接受率（=1-选 upgrade 比例）
+        summary["dpo"] = {
+            "coef": float(args.dpo_coef), "beta": float(args.dpo_beta),
+            "batch": int(args.dpo_batch), "every": int(args.dpo_every),
+            "samples_path": str(args.dpo_samples),
+            "pool_samples": (int(len(dpo_pool)) if dpo_pool is not None else 0),
         }
     write_summary(os.path.join(args.out, "summary.json"), to_jsonable(summary))
     print(f"[done] iters={i} updates={trainer.updates} "

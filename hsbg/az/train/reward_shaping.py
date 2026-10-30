@@ -7,8 +7,12 @@
 公式（learner seat 专用）::
 
     Φ(s) = w_str * Σ(atk + hp) + w_tier * TIER_BONUS[tier]
-    F_t  = λ * (γ * Φ(s_{t+1}) - Φ(s_t))
+    F_t  = λ * (γ_s * Φ(s_{t+1}) - Φ(s_t))
     reward_t = F_t + (旧奖励：-step_penalty，末步再加 u(rank))
+
+**γ_s 必须与训练 γ（``PPOConfig.gamma``，当前 1.0）一致**才满足势函数塑形的
+策略不变性；默认 ``shaping_gamma=None`` = 跟随训练 γ。历史实现硬编码 0.995 与
+训练 γ=1.0 不一致，会引入与策略相关的累积惩罚，见 docs/REWARD_SHAPING.md §3。
 
 几个实现约定：
 
@@ -34,6 +38,7 @@ from __future__ import annotations
 
 import json
 import time
+import warnings
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -52,9 +57,11 @@ from hsbg.env.obs_std import (
 
 from .mirror_snapshots import board_strength
 
-#: 塑形折扣（任务约定 0.995）。注意：严格不改变最优策略要求它与 PPO/GAE 的 γ 一致；
-#: 当前训练入口 GAE γ=1.0，因此 0.995 只是「轻微前视」，见 docs/REWARD_SHAPING.md。
-SHAPING_GAMMA = 0.995
+#: 与训练默认 γ=1.0 对齐的塑形折扣（``shaping_reward`` 的兼容默认值）。
+#: **不要**把它当成「任务约定的 0.995」：历史实现的 0.995 与训练 γ=1.0 不一致，
+#: 会破坏望远镜求和（见 docs/REWARD_SHAPING.md §3）。:class:`RewardShaper` 的
+#: 默认值是 ``shaping_gamma=None`` = 跟随 ``cfg.gamma``，本常量只用于纯函数默认。
+SHAPING_GAMMA = 1.0
 
 #: 默认 tier 奖励表：**按 tier 直接索引**，索引 0 是占位（tier=1 → 0，tier=6 → 900）。
 DEFAULT_TIER_BONUS: Tuple[float, ...] = (0.0, 0.0, 20.0, 60.0, 150.0, 400.0, 900.0)
@@ -193,8 +200,58 @@ def potential(game: Any, seat: int, *, w_str: float = 1.0, w_tier: float = 0.5,
 
 def shaping_reward(phi_before: float, phi_after: float, coef: float,
                    gamma: float = SHAPING_GAMMA) -> float:
-    """``F = λ * (γΦ(s') - Φ(s))``。"""
+    """``F = λ * (γΦ(s') - Φ(s))``（γ 需与训练折扣一致）。"""
     return float(coef) * (float(gamma) * float(phi_after) - float(phi_before))
+
+
+#: 启动期偏差估算的参考轨迹（只用于把解析式变成可读数字；真实值见
+#: collect meta 的 ``reward_shaping_bias_sum``）：一局 learner 决策数 / 平均 Φ。
+BIAS_REF_DECISIONS = 45
+BIAS_REF_MEAN_PHI = 5000.0
+
+
+def shaping_bias_per_episode(coef: float, gamma_shaping: float,
+                             gamma_train: float, *,
+                             decisions: int = BIAS_REF_DECISIONS,
+                             mean_phi: float = BIAS_REF_MEAN_PHI) -> float:
+    """γ_s ≠ γ_t 时，一局回报里多出的**与策略相关**的塑形项（解析式）。
+
+    令 ``F_t = c(γ_s Φ(s_{t+1}) − Φ(s_t))``、``Φ(s_T)=0``，按训练折扣 γ_t 求和：
+
+    ``Σ_t γ_t^t F_t = −c Φ(s_0) + c(γ_s−γ_t) Σ_{t=0}^{T−1} γ_t^t Φ(s_{t+1})``
+
+    γ_s == γ_t 时第二项严格为 0（望远镜求和，与策略无关）。本函数用
+    ``mean_phi`` 近似 ``Φ(s_{t+1})``、``decisions`` 近似 T，返回**第二项**。
+    """
+    c = float(coef)
+    gs = float(gamma_shaping)
+    gt = float(gamma_train)
+    if c == 0.0 or gs == gt:
+        return 0.0
+    t = max(0, int(decisions))
+    if abs(gt - 1.0) < 1e-12:
+        weight = float(t)
+    else:
+        weight = (1.0 - gt ** t) / (1.0 - gt)
+    return c * (gs - gt) * float(mean_phi) * weight
+
+
+def shaping_gamma_warning(coef: float, gamma_shaping: float, gamma_train: float, *,
+                          decisions: int = BIAS_REF_DECISIONS,
+                          mean_phi: float = BIAS_REF_MEAN_PHI) -> str:
+    """不一致折扣的人类可读警告（启动期打印；含参考量级的偏差估算）。"""
+    bias = shaping_bias_per_episode(
+        coef, gamma_shaping, gamma_train,
+        decisions=decisions, mean_phi=mean_phi)
+    frac = abs(bias) / 2.0            # 名次效用全距 = 2（+1 … −1）
+    return (
+        f"塑形折扣 shaping_gamma={float(gamma_shaping):g} 与训练 γ="
+        f"{float(gamma_train):g} 不一致：F 不再逐决策望远镜，整局回报会多出 "
+        f"c·(γ_s−γ)·Σγ^tΦ 的与策略相关项，破坏策略不变性。"
+        f"参考估算（T={int(decisions)} 决策/局、Φ̄={float(mean_phi):g}）："
+        f"每局额外 ≈ {bias:+.3f}（名次效用全距 2 的 {frac:.0%}）；"
+        f"实际累计值见 collect meta 的 reward_shaping_bias_sum。"
+        f"建议 shaping_gamma=None（跟随训练 γ）。")
 
 
 class RewardShaper:
@@ -204,7 +261,12 @@ class RewardShaper:
     都是空操作，:meth:`stats` 返回空 dict（不污染采集 meta）。
     """
 
-    def __init__(self, cfg: Any, *, gamma: float = SHAPING_GAMMA) -> None:
+    def __init__(self, cfg: Any, *, gamma: Optional[float] = None) -> None:
+        """``gamma`` = **训练折扣**（PPOConfig.gamma）；None 时读 ``cfg.gamma``。
+
+        ``cfg.shaping_gamma``：None（默认）= 跟随训练 γ；显式值原样使用。
+        两者不一致时 enabled 状态下发 UserWarning（启动期不静默）。
+        """
         self.coef = float(getattr(cfg, "shaping_coef", 0.0) or 0.0)
         self.enabled = self.coef != 0.0
         self.w_str = float(getattr(cfg, "shaping_w_str", 1.0))
@@ -217,7 +279,27 @@ class RewardShaper:
             table = DEFAULT_TIER_BONUS
         self.tier_bonus: Tuple[float, ...] = table
         self.tier_bonus_spec = format_tier_bonus(table)
-        self.gamma = float(gamma)
+        self.gamma_train = float(
+            gamma if gamma is not None else getattr(cfg, "gamma", 1.0))
+        spec = getattr(cfg, "shaping_gamma", None)
+        self.gamma_explicit = spec is not None
+        if self.enabled:
+            self.gamma = self.gamma_train if spec is None else float(spec)
+            for name, value in (("shaping_gamma", self.gamma),
+                                ("训练 gamma", self.gamma_train)):
+                if not np.isfinite(value) or not (0.0 <= value <= 1.0):
+                    raise ValueError(f"{name} 必须在 [0, 1] 内，得到 {value!r}")
+        else:
+            # coef=0：不解析显式 shaping_gamma（typo 不得改变关闭路径的行为）
+            self.gamma = self.gamma_train
+        self.gamma_aligned = (self.gamma == self.gamma_train)
+        # 与训练折扣不一致时的「额外项」累计（诊断用；对齐时恒为 0）
+        self.bias_sum = 0.0
+        self._bias_steps: Dict[int, int] = {}
+        if self.enabled and not self.gamma_aligned:
+            warnings.warn(
+                shaping_gamma_warning(self.coef, self.gamma, self.gamma_train),
+                UserWarning, stacklevel=2)
         # 统计（只在 enabled 时累加）
         self.calls = 0
         self.seconds = 0.0
@@ -258,8 +340,22 @@ class RewardShaper:
         rec = records[idx]
         if int(rec.get("game_id", -1)) != int(game_id):
             return False
+        self._track_bias(int(game_id), phi_after)
         rec["reward"] = self.shaping(phi_before, phi_after)
         return True
+
+    def _track_bias(self, game_id: int, phi_after: float) -> None:
+        """累计 γ_s≠γ_t 时的额外项（仅诊断；对齐时零开销）。
+
+        第 t 个决策的额外项 = ``c(γ_s−γ_t) γ_t^t Φ(s_{t+1})``；按 game_id 维护
+        决策序号，因此 lockstep 多局交错也正确。
+        """
+        if self.gamma_aligned or self.coef == 0.0:
+            return
+        t = int(self._bias_steps.get(int(game_id), 0))
+        self._bias_steps[int(game_id)] = t + 1
+        self.bias_sum += (self.coef * (self.gamma - self.gamma_train)
+                          * (self.gamma_train ** t) * float(phi_after))
 
     def stats(self, *, elapsed_s: Optional[float] = None) -> Dict[str, Any]:
         """采集 meta 里的塑形字段；禁用时返回 ``{}``（旧路径零键增量）。"""
@@ -269,6 +365,8 @@ class RewardShaper:
         out: Dict[str, Any] = {
             "shaping_coef": float(self.coef),
             "shaping_gamma": float(self.gamma),
+            "shaping_gamma_train": float(self.gamma_train),
+            "shaping_gamma_aligned": bool(self.gamma_aligned),
             "shaping_w_str": float(self.w_str),
             "shaping_w_tier": float(self.w_tier),
             "shaping_tier_bonus": self.tier_bonus_spec,
@@ -280,6 +378,8 @@ class RewardShaper:
             "reward_shaping_abs_mean": (float(self.abs_total) / n) if n else 0.0,
             "reward_shaping_abs_sum": float(self.abs_total),
             "reward_shaping_abs_max": float(self.abs_max),
+            # γ_s≠γ_t 时与策略相关的额外回报项（对齐时恒 0）；跨局累计
+            "reward_shaping_bias_sum": float(self.bias_sum),
         }
         if elapsed_s is not None and float(elapsed_s) > 0.0:
             out["shaping_overhead_pct"] = 100.0 * float(self.seconds) / float(elapsed_s)
@@ -303,9 +403,13 @@ def aggregate_shaping(metas: Iterable[Any], *,
     total = sum(float(m.get("reward_shaping_sum", 0.0)) for m in rows)
     abs_total = sum(float(m.get("reward_shaping_abs_sum", 0.0)) for m in rows)
     abs_max = max(float(m.get("reward_shaping_abs_max", 0.0)) for m in rows)
+    bias_total = sum(float(m.get("reward_shaping_bias_sum", 0.0)) for m in rows)
     out: Dict[str, Any] = {
         "shaping_coef": float(first.get("shaping_coef", 0.0)),
         "shaping_gamma": float(first.get("shaping_gamma", SHAPING_GAMMA)),
+        "shaping_gamma_train": float(first.get(
+            "shaping_gamma_train", first.get("shaping_gamma", SHAPING_GAMMA))),
+        "shaping_gamma_aligned": bool(first.get("shaping_gamma_aligned", True)),
         "shaping_w_str": float(first.get("shaping_w_str", 1.0)),
         "shaping_w_tier": float(first.get("shaping_w_tier", 0.5)),
         "shaping_tier_bonus": str(first.get("shaping_tier_bonus", "")),
@@ -317,6 +421,7 @@ def aggregate_shaping(metas: Iterable[Any], *,
         "reward_shaping_abs_mean": (float(abs_total) / decisions) if decisions else 0.0,
         "reward_shaping_abs_sum": float(abs_total),
         "reward_shaping_abs_max": float(abs_max),
+        "reward_shaping_bias_sum": float(bias_total),
     }
     if elapsed_s is not None and float(elapsed_s) > 0.0:
         out["shaping_overhead_pct"] = 100.0 * float(seconds) / float(elapsed_s)
@@ -326,6 +431,8 @@ def aggregate_shaping(metas: Iterable[Any], *,
 __all__ = [
     "SHAPING_GAMMA",
     "DEFAULT_TIER_BONUS",
+    "BIAS_REF_DECISIONS",
+    "BIAS_REF_MEAN_PHI",
     "parse_tier_bonus",
     "format_tier_bonus",
     "tier_bonus_value",
@@ -334,6 +441,8 @@ __all__ = [
     "potential_from_obs",
     "potential",
     "shaping_reward",
+    "shaping_bias_per_episode",
+    "shaping_gamma_warning",
     "RewardShaper",
     "aggregate_shaping",
 ]

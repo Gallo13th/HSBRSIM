@@ -197,6 +197,7 @@ def main() -> int:
     summary = []
     for t in sorted(by_turn):
         v = np.asarray(by_turn[t])
+        tv = np.asarray(tiers[t], dtype=np.int64)
         real = (calib.get(str(t)) or {}).get("real") or {}
         summary.append({
             "turn": t, "n": int(v.size),
@@ -205,6 +206,9 @@ def main() -> int:
             "real_p50": real.get("p50"), "real_p75": real.get("p75"), "real_p90": real.get("p90"),
             "ratio_p50": (float(np.percentile(v, 50)) / real["p50"]) if real.get("p50") else None,
             "tier_p50": float(np.percentile(tiers[t], 50)),
+            # tier≥5 / ≥6 比例（本 turn 全部局）：DPO A/B 的主判据之一
+            "tier_ge5_ratio": float(np.mean(tv >= 5)),
+            "tier_ge6_ratio": float(np.mean(tv >= 6)),
             "gold_p50": float(np.percentile(golds[t], 50)),
             "moves_mean": float(np.mean(turn_moves[t])),
             "moves_max": int(np.max(turn_moves[t])),
@@ -260,6 +264,22 @@ def main() -> int:
                                  if row["turn"] == 9), None)),
            "tier_p50_t12": (next((row["tier_p50"] for row in summary
                                   if row["turn"] == 12), None)),
+           "tier_p50_t15": (next((row["tier_p50"] for row in summary
+                                  if row["turn"] == 15), None)),
+           # tier≥5 比例（turn 9/12/15）：upgrade DPO 的主判据（docs/DPO_UPGRADE.md）
+           "tier_ge5_t9": (next((row["tier_ge5_ratio"] for row in summary
+                                 if row["turn"] == 9), None)),
+           "tier_ge5_t12": (next((row["tier_ge5_ratio"] for row in summary
+                                  if row["turn"] == 12), None)),
+           "tier_ge5_t15": (next((row["tier_ge5_ratio"] for row in summary
+                                  if row["turn"] == 15), None)),
+           # 战团强度比（ours_p50 / real_p50，turn 9/12/15）
+           "strength_ratio_t9": (next((row["ratio_p50"] for row in summary
+                                       if row["turn"] == 9), None)),
+           "strength_ratio_t12": (next((row["ratio_p50"] for row in summary
+                                        if row["turn"] == 12), None)),
+           "strength_ratio_t15": (next((row["ratio_p50"] for row in summary
+                                        if row["turn"] == 15), None)),
            "move_guard_meta": policy.move_guard_meta()}
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     json.dump(out, open(args.out, "w"), ensure_ascii=False, indent=2)
@@ -269,7 +289,10 @@ def main() -> int:
         "moves_per_move_legal_turn_mean", "moves_per_move_turn_mean",
         "net_board_unchanged_turns", "net_board_unchanged_ratio",
         "net_board_unchanged_move_turns", "net_board_unchanged_move_ratio",
-        "tier_p50_t9", "tier_p50_t12")}, ensure_ascii=False))
+        "tier_p50_t9", "tier_p50_t12", "tier_p50_t15",
+        "tier_ge5_t9", "tier_ge5_t12", "tier_ge5_t15",
+        "strength_ratio_t9", "strength_ratio_t12", "strength_ratio_t15")},
+        ensure_ascii=False))
     return 0
 
 

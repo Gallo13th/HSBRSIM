@@ -384,6 +384,6 @@ def test_train_entry_exposes_shaping_flags():
                            "--help"], cwd=ROOT, capture_output=True, text=True,
                           timeout=300)
     assert proc.returncode == 0, proc.stderr
-    for flag in ("--shaping-coef", "--shaping-w-str", "--shaping-w-tier",
-                 "--shaping-tier-bonus"):
+    for flag in ("--shaping-coef", "--shaping-gamma", "--shaping-w-str",
+                 "--shaping-w-tier", "--shaping-tier-bonus", "--gamma"):
         assert flag in proc.stdout, flag

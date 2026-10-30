@@ -42,7 +42,8 @@ from .tier_target import TierTargetTracker, aggregate_tier_target
 
 def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
               search_config: Any, eval_fn: Any, engine_backend: str, device: str,
-              seed: int, gamemode: str, norm_mean: Any = None,
+              seed: int, gamemode: str, gamma: float = 1.0,
+              norm_mean: Any = None,
               norm_std: Any = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     policy = PPOSelfPlayPolicy(
         model, device=device, config=cfg, search_fn=search_fn,
@@ -51,7 +52,7 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
         norm_mean=norm_mean, norm_std=norm_std, move_model=False)
     policy.game_id = int(cfg.game_id_offset) + gi
     records: List[Dict[str, Any]] = []
-    shaper = RewardShaper(cfg)
+    shaper = RewardShaper(cfg, gamma=gamma)
     tracker = TierTargetTracker(cfg)
     illegal = 0
     truncated = 0
@@ -168,6 +169,7 @@ def collect_ppo_records_parallel(
         eval_fn: Optional[Callable[..., Any]] = None,
         engine_backend: str = "auto", device: str = "cpu",
         seed: int = 0,
+        gamma: float = 1.0,
         norm_mean: Optional[np.ndarray] = None,
         norm_std: Optional[np.ndarray] = None,
         progress: bool = False) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
@@ -183,7 +185,7 @@ def collect_ppo_records_parallel(
         futs = {ex.submit(_one_game, model, cfg, gi, search_fn=search_fn,
                           search_config=search_config, eval_fn=eval_fn,
                           engine_backend=engine_backend, device=device,
-                          seed=int(seed), gamemode=mode,
+                          seed=int(seed), gamemode=mode, gamma=float(gamma),
                           norm_mean=norm_mean, norm_std=norm_std): gi
                 for gi in range(int(cfg.games))}
         for f in as_completed(futs):
@@ -257,7 +259,7 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
     records, meta_out = collect_ppo_records_parallel(
         model, config, workers=workers, search_fn=search_fn,
         search_config=search_config, eval_fn=eval_fn,
-        engine_backend=engine_backend, device=device, seed=seed,
+        engine_backend=engine_backend, device=device, seed=seed, gamma=gamma,
         norm_mean=norm_mean, norm_std=norm_std, progress=progress)
     batch = build_batch_from_records(records, gamma=gamma, lam=lam,
                                      step_penalty=step_penalty, meta=meta_out,
@@ -288,6 +290,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                          human_board_seats: int = 2,
                          human_board_sample: str = "auto",
                          human_board_set_tier: bool = True,
+                         gamma: float = 1.0,
                          ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """lock-step 采集：N 局同步推进，每轮把所有待决策局拼成一个 batch 前向一次。
 
@@ -328,7 +331,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         raise ValueError(f"lockstep 只支持 bot/weak，收到 {gamemode!r}")
     E = load_engine()
     t_start = time.time()
-    shaper = RewardShaper(cfg)
+    shaper = RewardShaper(cfg, gamma=gamma)
     n = int(games if games is not None else cfg.games)
     policy = PPOSelfPlayPolicy(
         model, device=device, config=cfg, search_fn=None, search_config=None,

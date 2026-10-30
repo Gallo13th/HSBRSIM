@@ -79,6 +79,7 @@ from .seq_aux import (
     seq_bce_loss,
     seq_targets_from_records,
 )
+from .dpo_upgrade import UpgradeSamples, dpo_pair_loss
 from .move_guard import (MoveGuard, DEFAULT_MOVE_CAP,
                          DEFAULT_MOVE_REPEAT_LIMIT, aggregate_move_guard)
 from .reward_shaping import RewardShaper
@@ -348,6 +349,10 @@ class CollectConfig:
     #: ── 势函数奖励塑形（默认关闭；见 docs/REWARD_SHAPING.md）──
     #: λ：塑形系数。**0 = 关闭**：不读状态、不写 record，采集/打包/GAE 与旧路径逐位一致。
     shaping_coef: float = 0.0
+    #: 塑形折扣 γ_s；**None（默认）= 跟随训练 γ**（``PPOConfig.gamma``，当前 1.0）。
+    #: 只有 γ_s 与训练 γ 严格相等时 F 才逐决策望远镜（整局和 = −c·Φ0，与策略无关）；
+    #: 显式设成不一致的值会在启动期警告并记录 ``reward_shaping_bias_sum``。
+    shaping_gamma: Optional[float] = None
     #: Φ(s) = shaping_w_str * Σ(atk+hp) + shaping_w_tier * TIER_BONUS[tier]
     shaping_w_str: float = 1.0
     shaping_w_tier: float = 0.5
@@ -439,6 +444,25 @@ class PPOConfig:
     #: ``compile_train>0`` 时是否也把 BC 批次（固定 ``bc_batch`` 形状）单独编译。
     #: 1=编（默认，见 docs/TRAINING_COMPILE.md）；0=BC 保持 eager（A/B 基线）。
     bc_compile: int = 1
+    #: upgrade 子集 one-sided DPO 正则（自我对比：chosen=人类 upgrade 动作，
+    #: rejected=当前策略 masked argmax；见 docs/DPO_UPGRADE.md）。
+    #: **0 = 关闭（默认）**：不加载 upgrade 池、不采样、不算 loss，stats 里不出现
+    #: ``dpo_*`` 字段（与未接 DPO 的旧版本逐位等价）。>0 时每 ``dpo_every`` 个
+    #: iteration 抽 ``dpo_batch`` 条 upgrade 样本，把 ``dpo_coef * dpo_pair_loss``
+    #: 加进与 PPO 同一次 backward（``total += dpo_coef * dpo_loss``）。
+    dpo_coef: float = 0.0
+    #: one-sided DPO 的温度 β：``-logsigmoid(β·(logp_chosen − logp_rejected))``。
+    #: 必须有限且 > 0（``dpo_pair_loss`` 的约束）。
+    dpo_beta: float = 0.1
+    #: 每个 DPO 步抽样的 upgrade 样本数（无放回）。
+    dpo_batch: int = 128
+    #: DPO 周期（按 **iteration** 计，不是按 PPO 微批）：每 N 个 iteration 做一次，
+    #: 其余 iteration 完全不算 DPO（系数不做周期折算：开启步就是 ``dpo_coef``，
+    #: 因此平均梯度占比 ≈ ``dpo_coef / dpo_every``；与 ``bc_every`` 的折算语义不同）。
+    dpo_every: int = 4
+    #: upgrade 样本池路径（默认仓库 ``data/firestone_bc/bc_samples.jsonl.gz``）：
+    #: 只读 ``action_type=="upgrade"`` 的行（见 :mod:`hsbg.az.train.dpo_upgrade`）。
+    dpo_samples: str = "data/firestone_bc/bc_samples.jsonl.gz"
     #: KL anchor 到 stage 起点的系数 β（论文 Table 7：0.1，前 100 个 iteration 后放开）。
     #: >0 时必须由 trainer 提供 anchor 分布（见 PPOTrainer.set_anchor）。
     anchor_coef: float = 0.0
@@ -518,6 +542,15 @@ class PPOConfig:
         if float(self.bc_card_weight) < 0.0:
             raise ValueError(
                 f"bc_card_weight 必须 >= 0，得到 {self.bc_card_weight!r}")
+        # upgrade DPO（默认关闭）：构造期校验系数/β/批量/周期
+        if not math.isfinite(float(self.dpo_coef)) or float(self.dpo_coef) < 0.0:
+            raise ValueError(f"dpo_coef 必须 >= 0，得到 {self.dpo_coef!r}")
+        if not math.isfinite(float(self.dpo_beta)) or float(self.dpo_beta) <= 0.0:
+            raise ValueError(f"dpo_beta 必须是有限正数，得到 {self.dpo_beta!r}")
+        if int(self.dpo_batch) <= 0:
+            raise ValueError(f"dpo_batch 必须 > 0，得到 {self.dpo_batch!r}")
+        if int(self.dpo_every) <= 0:
+            raise ValueError(f"dpo_every 必须 >= 1，得到 {self.dpo_every!r}")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1406,7 +1439,9 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
                anchor_logp: Any = None,
                train_forward: Optional[TrainForward] = None,
                bc_batch: Optional[BCObsBatch] = None,
-               bc_coef_override: Optional[float] = None) -> Dict[str, Any]:
+               bc_coef_override: Optional[float] = None,
+               dpo_batch: Optional[UpgradeSamples] = None,
+               dpo_coef_override: Optional[float] = None) -> Dict[str, Any]:
     """计算一个 minibatch 的 PPO 损失（返回 torch 张量字典）。
 
     - policy: ``-min(r*A, clip(r,1±ε)*A).mean()``；
@@ -1417,6 +1452,8 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     - entropy: masked 策略熵（鼓励探索）；
     - anchor: ``anchor_coef * KL(π_θ ‖ π_anchor)``（``anchor_logp`` 为 stage 起点在整批
       样本上的 masked log-prob，形状 ``[len(batch), 245]``）；
+    - upgrade DPO（默认关闭）: ``dpo_coef * dpo_pair_loss(model, dpo_batch, beta)``，
+      ``dpo_batch`` 由 ``train_ppo`` 只在本次 update 的第一个微批组传入一次；
     - 非法动作：logits 在 loss 内重新 masked，概率严格 0（``illegal_prob_max`` 可验证）；
     - ``train_forward``：``TrainForward``（``compile_train>0`` 时传入）；前向走编译图，
       否则与旧版本一致走 ``forward_model`` / ``forward_model_aux``。
@@ -1573,6 +1610,24 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         bc_type_ce = hier["type_loss"]
         bc_card_ce = hier["card_loss"]
         total = total + bc_coef * bc_loss
+    # ── upgrade 子集 one-sided DPO（默认 dpo_coef=0 时整段不执行）─────────────────
+    # chosen=人类 upgrade 动作，rejected=当前策略 masked argmax（自对比，无参考模型）。
+    # ``dpo_batch`` 由 ``train_ppo`` 只在「本次 update 的第一个微批组」传入一次，
+    # 因此一次 iteration 只算一次 DPO（iteration 级 ``dpo_every`` 在 trainer 里判定）。
+    dpo_coef = (float(getattr(config, "dpo_coef", 0.0) or 0.0)
+                if dpo_coef_override is None else float(dpo_coef_override))
+    dpo_loss = None
+    dpo_accept: Optional[float] = None
+    dpo_n = 0
+    if dpo_coef > 0.0 and dpo_batch is not None and len(dpo_batch) > 0:
+        dpo_n = int(len(dpo_batch))
+        dpo_loss, dpo_accept = dpo_pair_loss(
+            model, dpo_batch,
+            float(getattr(config, "dpo_beta", 0.1) or 0.1), device=str(dev))
+        dpo_term = dpo_coef * dpo_loss
+        total = total + dpo_term
+    else:
+        dpo_term = None
     anchor_kl = torch.zeros((), device=dev)
     beta = float(config.anchor_coef)
     if beta > 0.0 and anchor_logp is not None:
@@ -1610,6 +1665,15 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
             result["bc_card_loss"] = bc_card_ce.detach()
         result["bc_coef"] = torch.as_tensor(bc_coef, device=dev)
         result["bc_samples"] = torch.as_tensor(float(bc_n), device=dev)
+    # upgrade DPO：只有 dpo_coef>0 且真的抽到样本才出现（默认关闭 -> 结构不变）
+    if dpo_loss is not None:
+        result["dpo_loss"] = dpo_loss.detach()
+        # 记**配置系数**（而非含 grad_accum 补偿的有效系数），与 iteration 日志口径一致
+        result["dpo_coef"] = torch.as_tensor(
+            float(getattr(config, "dpo_coef", 0.0) or 0.0), device=dev)
+        result["dpo_accept_rate"] = torch.as_tensor(
+            float(dpo_accept or 0.0), device=dev)
+        result["dpo_samples"] = torch.as_tensor(float(dpo_n), device=dev)
     return result
 
 
@@ -1619,7 +1683,8 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
               anchor_logp: Any = None,
               train_forward: Optional[TrainForward] = None,
               bc_pool: Any = None,
-              bc_rng: Optional[np.random.Generator] = None) -> Dict[str, Any]:
+              bc_rng: Optional[np.random.Generator] = None,
+              dpo_batch: Optional[UpgradeSamples] = None) -> Dict[str, Any]:
     """执行 PPO 更新（minibatch × epochs，clip、entropy、KL 早停）。
 
     ``train_forward``：复用外部构建的 ``TrainForward``（``PPOTrainer`` 在启动时构建并
@@ -1627,6 +1692,9 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     ``config.compile_train>0`` 时在此处构建 + warmup。
     ``bc_rng``：BC 采样专用 Generator（``PPOTrainer`` 跨 iteration 持有）；
     None 时按 ``cfg.seed`` 新建（独立于 ``rng``，不影响 PPO 采样序列）。
+    ``dpo_batch``：upgrade 池里抽好的一批样本（``PPOTrainer`` 按 iteration 周期决定
+    是否传入）；非空且 ``dpo_coef>0`` 时在本次 update 的**第一个微批组**把
+    ``dpo_coef * dpo_pair_loss`` 加进 total，与 PPO 同一次 backward。
 
     返回可 JSON 序列化的统计字典。
     """
@@ -1679,6 +1747,10 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     bc_done = 0
     if bc_rng is None:
         bc_rng = np.random.default_rng([int(getattr(cfg, "seed", 0) or 0), 0xBC])
+    # upgrade DPO（默认关闭）：dpo_batch 由 PPOTrainer 按 iteration 周期传入；
+    # 这里只负责「一次 update 只加一次」与抵消梯度累积的平均（见下方 total/len(slices)）。
+    dpo_on = bool(dpo_batch is not None and len(dpo_batch) > 0
+                  and float(getattr(cfg, "dpo_coef", 0.0) or 0.0) > 0.0)
     device = torch.device(cfg.device)
     model.to(device)
     # 保持 eval（关闭 dropout）：old_logprob 是采集时 eval 前向算出的，若 PPO 前向
@@ -1730,7 +1802,7 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
             step_metrics: Dict[str, float] = {}
             step_counts: Dict[str, int] = {}
             served = 0
-            for a, b in slices:
+            for j, (a, b) in enumerate(slices):
                 sel = base_idx[order[a:b]]
                 bc_batch = None
                 do_bc = False
@@ -1743,19 +1815,31 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                         bc_sel = bc_rng.choice(len(bc_pool), size=k, replace=False)
                         bc_batch = bc_obs_batch(bc_pool, BC_OBS_LAYOUT,
                                                 indices=bc_sel)
+                # upgrade DPO：只在本次 update 的第一个微批组、第 0 个微批加一次；
+                # 系数乘 len(slices) 抵消下面的 total/len(slices) 平均，使等效梯度
+                # 恰好是 dpo_coef * L_dpo（与 PPO 共享同一次 backward）。
+                dpo_this = None
+                dpo_coef_this = None
+                if dpo_on and updates == 0 and start == 0 and j == 0:
+                    dpo_this = dpo_batch
+                    dpo_coef_this = float(cfg.dpo_coef) * float(len(slices))
                 if use_amp:
                     with torch.autocast("cuda", dtype=torch.bfloat16):
                         out = ppo_losses(model, batch, cfg, indices=sel,
                                          anchor_logp=anchor_logp,
                                          train_forward=train_forward,
                                          bc_batch=bc_batch,
-                                         bc_coef_override=bc_coef_eff)
+                                         bc_coef_override=bc_coef_eff,
+                                         dpo_batch=dpo_this,
+                                         dpo_coef_override=dpo_coef_this)
                 else:
                     out = ppo_losses(model, batch, cfg, indices=sel,
                                      anchor_logp=anchor_logp,
                                      train_forward=train_forward,
                                      bc_batch=bc_batch,
-                                     bc_coef_override=bc_coef_eff)
+                                     bc_coef_override=bc_coef_eff,
+                                     dpo_batch=dpo_this,
+                                     dpo_coef_override=dpo_coef_this)
                 (out["total"] / float(len(slices))).backward()
                 served += int(sel.size)
                 for k, v in out.items():
@@ -1803,10 +1887,16 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                    f" bc_coef={rec['bc_coef']:.4g}"
                    f" bc_samples={rec['bc_samples']:.0f}"
                    if "bc_loss" in rec else "")
+        dpo_note = (f" dpo={rec['dpo_loss']:.4f}"
+                    f" dpo_acc={rec['dpo_accept_rate']:.3f}"
+                    f" dpo_coef={rec['dpo_coef']:.4g}"
+                    f" dpo_n={rec['dpo_samples']:.0f}"
+                    if "dpo_loss" in rec else "")
         print(f"[ppo] epoch {epoch + 1}/{epochs} total={rec['total']:.4f} "
               f"(policy={rec['policy_loss']:.4f} value={rec['value_loss']:.4f} "
               f"aux_pi={rec['aux_pi_loss']:.4f} ent={rec['entropy']:.4f} "
-              f"kl={rec['approx_kl']:.5f} clip={rec['clip_frac']:.3f}){seq_note}{bc_note}",
+              f"kl={rec['approx_kl']:.5f} clip={rec['clip_frac']:.3f}){seq_note}"
+              f"{bc_note}{dpo_note}",
               flush=True)
         if epoch_stopped:
             print(f"[ppo] KL 早停：minibatch approx_kl 超过 "
@@ -1881,6 +1971,27 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
             for key in ("bc_coef", "bc_coef_ramp", "bc_mmr_min", "bc_mmr_boost",
                         "bc_samples_path", "bc_batch", "bc_every", "bc_compile",
                         "bc_type_weight", "bc_card_weight", "bc_class_weights"):
+                cfg_echo.pop(key, None)
+    # upgrade DPO：只有真的算出 dpo_loss 才写 stats；dpo_coef=0（默认）时连 config
+    # 回显里的 dpo_* 键也去掉，保证与未接 DPO 的旧版本结构逐字节一致。
+    _dpo_recs = [r for r in logs if "dpo_loss" in r]
+    if _dpo_recs:
+        stats["dpo_loss"] = float(np.mean([r["dpo_loss"] for r in _dpo_recs]))
+        stats["dpo_coef"] = float(getattr(cfg, "dpo_coef", 0.0) or 0.0)
+        stats["dpo_accept_rate"] = float(np.mean(
+            [r.get("dpo_accept_rate", 0.0) for r in _dpo_recs]))
+        stats["dpo_samples"] = float(np.mean(
+            [r.get("dpo_samples", 0.0) for r in _dpo_recs]))
+        stats["dpo_beta"] = float(getattr(cfg, "dpo_beta", 0.1) or 0.1)
+        stats["dpo_every"] = int(getattr(cfg, "dpo_every", 1) or 1)
+        stats["dpo_steps"] = int(len(_dpo_recs))
+        if dpo_batch is not None:
+            stats["dpo_batch_size"] = int(len(dpo_batch))
+    else:
+        cfg_echo = stats.get("config")
+        if isinstance(cfg_echo, dict):
+            for key in ("dpo_coef", "dpo_beta", "dpo_batch", "dpo_every",
+                        "dpo_samples"):
                 cfg_echo.pop(key, None)
     return stats
 
@@ -2386,7 +2497,7 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
     decisions = 0
     truncated = 0
     t0 = time.time()
-    shaper = RewardShaper(cfg)
+    shaper = RewardShaper(cfg, gamma=gamma)
     tier_tracker = TierTargetTracker(cfg)
 
     if mode == "self":

@@ -32,6 +32,7 @@ from .ppo import (PPOConfig, PPOBatch, _torch, build_train_forward,
                   split_model_outputs, train_ppo)
 from .bc_aux import (DEFAULT_BC_SAMPLES_PATH, bc_pool_summary, load_bc_samples,
                      parse_bc_coef_ramp)
+from .dpo_upgrade import UpgradeSamples, load_upgrade_samples
 
 #: anchor 参考前向的分块大小（= 编译图的固定 batch；尾块走 eager）。
 ANCHOR_CHUNK = 4096
@@ -43,7 +44,8 @@ class PPOTrainer:
     def __init__(self, model: Any, config: Optional[PPOConfig] = None, *,
                  lr_min_ratio: float = 0.1, max_updates: int = 100000,
                  state: Optional[Dict[str, Any]] = None,
-                 bc_pool: Optional[Any] = None):
+                 bc_pool: Optional[Any] = None,
+                 dpo_pool: Optional[UpgradeSamples] = None):
         torch = _torch()
         self.model = model
         self.config = config or PPOConfig()
@@ -63,11 +65,16 @@ class PPOTrainer:
         self.rng = np.random.default_rng(int(self.config.seed))
         #: BC 采样专用 RNG（与 PPO permutation/采样解耦；跨 iteration 持久）
         self.bc_rng = np.random.default_rng([int(self.config.seed), 0xBC])
+        #: upgrade DPO 采样专用 RNG（同样解耦：coef=0 与 >0 的 PPO 序列逐位一致）
+        self.dpo_rng = np.random.default_rng([int(self.config.seed), 0x0D0])
         self.updates = 0
         self.extra: Dict[str, Any] = {}
         #: 真实人类 BC 样本池（``bc_coef=0`` 时 None；加载失败自动关闭）
         self.bc_pool: Any = bc_pool
         self._bc_warned = False
+        #: upgrade 子集 DPO 样本池（``dpo_coef=0`` 时 None；惰性加载 ~7s）
+        self.dpo_pool: Optional[UpgradeSamples] = dpo_pool
+        self._dpo_warned = False
         #: KL anchor（stage 起点策略的冻结副本）；由 ``set_anchor()`` 建立
         self.anchor_model: Optional[Any] = None
         #: 训练侧编译包装（compile_train=0 时 None）；失败自动回退 eager
@@ -78,6 +85,8 @@ class PPOTrainer:
             self.load_state_dict(state)
         # BC 池：bc_coef=0（默认）时完全不加载；失败只 warn 一次并自动关闭
         self._ensure_bc_pool()
+        # upgrade DPO 池：dpo_coef=0（默认）时同样完全不加载（~7s 惰性）
+        self._ensure_dpo_pool()
         # 编译放在最后：权重/优化器状态就绪后再固定形状 warmup（计时之外）
         if compile_train_mode(getattr(self.config, "compile_train", 0)) > 0:
             self.train_forward = build_train_forward(self.model, self.config)
@@ -179,17 +188,76 @@ class PPOTrainer:
         """BC 池摘要（启动打印/summary 用；未启用返回 None）。"""
         return bc_pool_summary(self.bc_pool) if self.bc_pool is not None else None
 
+    # -- upgrade DPO -------------------------------------------------------
+    def dpo_enabled(self) -> bool:
+        """配置是否要求 DPO（``dpo_coef>0``）。"""
+        return float(getattr(self.config, "dpo_coef", 0.0) or 0.0) > 0.0
+
+    def set_dpo_pool(self, pool: Optional[UpgradeSamples]) -> None:
+        """外部（如 CLI）预加载好 upgrade 池后注入，避免重复读 12 MB JSONL。"""
+        self.dpo_pool = pool
+
+    def _ensure_dpo_pool(self) -> Optional[UpgradeSamples]:
+        """惰性加载 upgrade 池（~3050 条 / ~7s）；失败只 warn 一次并自动关闭。"""
+        if self.dpo_pool is not None or not self.dpo_enabled():
+            return self.dpo_pool
+        path = str(getattr(self.config, "dpo_samples", "") or DEFAULT_BC_SAMPLES_PATH)
+        try:
+            pool = load_upgrade_samples(path)
+            if len(pool) == 0:
+                raise ValueError("upgrade 样本池为空（白名单/MMR 过滤后 0 条）")
+            self.dpo_pool = pool
+        except Exception as exc:  # noqa: BLE001 - DPO 可选，失败不中断训练
+            if not self._dpo_warned:
+                print(f"[ppo][warn] upgrade DPO 样本加载失败，自动关闭 dpo_coef=0："
+                      f"{type(exc).__name__}: {exc}", flush=True)
+                self._dpo_warned = True
+            self.config.dpo_coef = 0.0
+            self.dpo_pool = None
+        return self.dpo_pool
+
+    def dpo_summary(self) -> Optional[Dict[str, Any]]:
+        """upgrade 池摘要（启动打印用；未启用/未加载返回 None）。"""
+        pool = self.dpo_pool
+        if pool is None:
+            return None
+        return {"samples": int(len(pool)), "path": str(pool.path),
+                "mmr_min": int(pool.mmr_min),
+                "action_index": int(pool.action_index[0]) if len(pool) else None}
+
+    def _dpo_batch(self) -> Optional[UpgradeSamples]:
+        """按 iteration 周期抽一批 upgrade 样本；不满足条件返回 None。
+
+        周期口径：``dpo_every`` 按 **iteration**（= 本类 ``update()`` 调用次数）计，
+        ``updates % dpo_every == 0`` 的 iteration 才做（第 0 个 iteration 必做）。
+        采样用独立 ``dpo_rng``：不影响 PPO 的 permutation/采样序列。
+        """
+        if not self.dpo_enabled():
+            return None
+        pool = self._ensure_dpo_pool()
+        if pool is None or len(pool) <= 0:
+            return None
+        every = max(1, int(getattr(self.config, "dpo_every", 1) or 1))
+        if every > 1 and (int(self.updates) % every) != 0:
+            return None
+        k = min(int(getattr(self.config, "dpo_batch", 128) or 128), len(pool))
+        sel = self.dpo_rng.choice(len(pool), size=int(k), replace=False)
+        return pool.take(sel)
+
     # -- update ------------------------------------------------------------
     def update(self, batch: PPOBatch) -> Dict[str, Any]:
         anchor_logp = None
         if float(self.config.anchor_coef) > 0.0:
             anchor_logp = self._anchor_logp(batch)
+        # upgrade DPO：按 iteration 周期抽一批（coef=0/池空/未到周期 -> None）
+        dpo_batch = self._dpo_batch()
         stats = train_ppo(self.model, batch, self.config,
                           optimizer=self.optimizer, rng=self.rng,
                           anchor_logp=anchor_logp,
                           train_forward=self.train_forward,
                           bc_pool=self.bc_pool,
-                          bc_rng=self.bc_rng)
+                          bc_rng=self.bc_rng,
+                          dpo_batch=dpo_batch)
         self.scheduler.step()
         self.updates += 1
         stats["trainer_updates"] = int(self.updates)
@@ -206,6 +274,7 @@ class PPOTrainer:
             "scheduler": self.scheduler.state_dict(),
             "rng": self.rng.bit_generator.state,
             "bc_rng": self.bc_rng.bit_generator.state,
+            "dpo_rng": self.dpo_rng.bit_generator.state,
             "updates": int(self.updates),
             "lr_min_ratio": float(self.lr_min_ratio),
             "max_updates": int(self.max_updates),
@@ -233,6 +302,8 @@ class PPOTrainer:
         self.rng.bit_generator.state = state["rng"]
         if "bc_rng" in state:  # 旧 trainer.pt 没有该键：保留构造期的新 RNG
             self.bc_rng.bit_generator.state = state["bc_rng"]
+        if "dpo_rng" in state:  # 旧 trainer.pt 没有该键：保留构造期的新 RNG
+            self.dpo_rng.bit_generator.state = state["dpo_rng"]
         self.updates = int(state.get("updates", 0))
         self.extra = dict(state.get("extra") or {})
 
@@ -247,7 +318,8 @@ class PPOTrainer:
 
     @classmethod
     def load(cls, model: Any, path: str, config: Optional[PPOConfig] = None, *,
-             device: str = "cpu", bc_pool: Optional[Any] = None) -> "PPOTrainer":
+             device: str = "cpu", bc_pool: Optional[Any] = None,
+             dpo_pool: Optional[UpgradeSamples] = None) -> "PPOTrainer":
         torch = _torch()
         try:
             state = torch.load(path, map_location=device, weights_only=False)
@@ -257,7 +329,7 @@ class PPOTrainer:
         cfg.device = str(device)
         return cls(model, cfg, lr_min_ratio=float(state.get("lr_min_ratio", 0.1)),
                    max_updates=int(state.get("max_updates", 100000)), state=state,
-                   bc_pool=bc_pool)
+                   bc_pool=bc_pool, dpo_pool=dpo_pool)
 
 
 __all__ = ["PPOTrainer", "ANCHOR_CHUNK"]

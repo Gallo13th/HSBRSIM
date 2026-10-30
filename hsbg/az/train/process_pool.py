@@ -351,6 +351,7 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     human_board_seats=int(getattr(cfg, "human_board_seats", 2)),
                     human_board_sample=str(getattr(cfg, "human_board_sample", "auto")),
                     human_board_set_tier=bool(getattr(cfg, "human_board_set_tier", True)),
+                    gamma=float(task.get("gamma", 1.0)),
                     opponent_policy=opp_pol)
             else:
                 if str(getattr(cfg, "library_pool", "")) and \
@@ -371,6 +372,7 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     search_fn=search_fn,
                     search_config=(_search_config(int(task["seed"])) if search_fn else None),
                     eval_fn=evaluator, device=device, seed=int(task["seed"]),
+                    gamma=float(task.get("gamma", 1.0)),
                     norm_mean=norm_mean, norm_std=norm_std, progress=False)
             _collect_s = time.time() - t0
             records_file = None
