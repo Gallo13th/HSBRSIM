@@ -7,10 +7,11 @@
    卡牌身份标签）；
 2. :func:`bc_obs_batch`：把样本编码成我们固定 ``3227 floats + 124 cards`` 观测的
    **部分观测**（只填回放可见的槽位：商店 8 槽、手牌 10 槽、棋盘 7 槽、gold/tier/
-   health/turn/hero；未知槽位补 0 并写 mask），同时产出 245 动作 -> 9 类的
+   health/turn/hero；未知槽位补 0 并写 mask），同时产出 245 动作 -> 9/10 类的
    ``type_ids`` 与卡牌身份标签；
 3. :func:`bc_type_logits` / :func:`bc_hier_loss`：**分层目标**——245 动作 logits 按动作
-   类型做 log-sum-exp 聚合的 9 类 CE（对槽位错位不敏感）+ buy/play 样本上的
+   类型做 log-sum-exp 聚合的 9 类 CE（对槽位错位不敏感；启用 ``--bc-include-reposition``
+   时追加第 10 类 ``reposition`` = Move 196..244）+ buy/play 样本上的
    3983 类卡牌身份 CE；两层按 ``bc_type_weight`` / ``bc_card_weight`` 加权；
 4. :func:`bc_ce_loss`：旧的 245 维 class-balanced（动作类别频率倒数归一）+ MMR 加权
    CE，保留给对照/兼容测试；新训练路径使用分层目标。
@@ -59,6 +60,11 @@ __all__ = [
     "BC_ACTION_CLASSES",
     "BC_TYPE_CLASSES",
     "N_BC_TYPES",
+    "BC_REPOSITION_TYPE",
+    "BC_ACTION_TYPES_WITH_REPOSITION",
+    "N_BC_TYPES_WITH_REPOSITION",
+    "BC_MOVE_SLICE",
+    "bc_action_types",
     "BC_CARD_TYPE_NAMES",
     "BC_CARD_CLASS_IDS",
     "BC_STATIC_TYPE_IDS",
@@ -107,11 +113,36 @@ BC_ACTION_CLASSES: Dict[str, int] = {
     name: i for i, name in enumerate(BC_ACTION_TYPES)
 }
 
+#: 可选第 10 类：棋盘换位（Move 196..244）。默认**不启用**（9 类 = 历史行为）。
+#:
+#: 动机：9 类白名单完全不监督 Move 族，而 entity 的 Move logits 是棋盘 token 的
+#: 双线性项，容易随 trunk 漂移后在推理时抢占 argmax（见 ``docs/BC_PRETRAIN.md``
+#: §5.1）。把 ``reposition`` 追加成第 10 类后，196..244 作为**一个类型**参与
+#: log-sum-exp 聚合 CE：模型既学会“什么时候该换位”，也被约束“非换位样本上
+#: 换位族的总概率不能过大”。
+BC_REPOSITION_TYPE: str = "reposition"
+BC_ACTION_TYPES_WITH_REPOSITION: Tuple[str, ...] = (
+    tuple(DEFAULT_BC_ACTION_TYPES) + (BC_REPOSITION_TYPE,))
+N_BC_TYPES_WITH_REPOSITION: int = len(BC_ACTION_TYPES_WITH_REPOSITION)
+
 #: 分层 BC 的「动作类型」类别 = BC 白名单顺序（9 类；与 ``action_class`` 对齐）。
 BC_TYPE_CLASSES: Tuple[str, ...] = tuple(BC_ACTION_TYPES)
 N_BC_TYPES: int = len(BC_TYPE_CLASSES)
 if N_BC_TYPES != 9:  # pragma: no cover - 常量漂移防御
     raise AssertionError(f"分层 BC 类型数应为 9，得到 {N_BC_TYPES}")
+if N_BC_TYPES_WITH_REPOSITION != 10:  # pragma: no cover - 常量漂移防御
+    raise AssertionError(
+        f"含 reposition 的分层 BC 类型数应为 10，得到 {N_BC_TYPES_WITH_REPOSITION}")
+
+#: Move 段下标区间（196..244，`from*7 + to`）。
+BC_MOVE_SLICE: slice = slice(
+    int(ACT.A_MOVE), int(ACT.A_MOVE) + int(ACT.N_BOARD) * int(ACT.N_BOARD))
+
+
+def bc_action_types(include_reposition: bool = False) -> Tuple[str, ...]:
+    """返回 BC 动作类型表：默认 9 类（历史行为），``True`` = 追加 ``reposition``。"""
+    return (BC_ACTION_TYPES_WITH_REPOSITION if bool(include_reposition)
+            else tuple(DEFAULT_BC_ACTION_TYPES))
 
 #: 需要「卡牌身份」监督的 BC 类型（buy/play 四类；其余类型的 card CE 不参与）。
 BC_CARD_TYPE_NAMES: Tuple[str, ...] = (
@@ -492,7 +523,9 @@ def parse_bc_class_weights(spec: str,
     """解析稀有动作类别权重覆盖串：``"upgrade=4,hero_power=2"``。
 
     空串 -> ``{}``（现状，零影响）。名称必须属于 ``action_types``（默认 9 类
-    白名单），值必须是有限正数；格式错误立刻 ``ValueError``（CLI 启动期 fail-fast）。
+    白名单；启用 reposition 监督时传入含 ``"reposition"`` 的 10 类表，即可写
+    ``"reposition=2"``），值必须是有限正数；格式错误立刻 ``ValueError``
+    （CLI 启动期 fail-fast）。
     """
     text = str(spec or "").strip()
     if not text:
@@ -534,7 +567,8 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
 
     过滤规则（缺一即跳过）：
 
-    1. ``action_type`` 在白名单（默认 :data:`DEFAULT_BC_ACTION_TYPES`，9 类）；
+    1. ``action_type`` 在白名单（默认 :data:`DEFAULT_BC_ACTION_TYPES`，9 类；
+       传 :data:`BC_ACTION_TYPES_WITH_REPOSITION` = 追加 ``reposition``，10 类）；
     2. ``action_index`` 是合法整数（``0 <= a < 245``），且在 ``actions`` 允许集合内；
     3. ``mmr`` 可解析且 ``>= mmr_min``（缺失 MMR 视为不可用）。
 
@@ -827,7 +861,8 @@ class BCObsBatch:
     class_weight: np.ndarray    # float32[n]
     class_ids: np.ndarray       # int16[n]
     class_counts: np.ndarray    # int64[C]（全池类别计数）
-    #: 每个动作位归属的 9 类类型 id（``-1`` = 不参与类型聚合；play_* 按手牌卡种细分）。
+    #: 每个动作位归属的类型 id（``-1`` = 不参与类型聚合；play_* 按手牌卡种细分；
+    #: 启用 reposition 监督时 Move 段 = 第 10 类）。
     type_ids: np.ndarray        # int8/int16[n, 245]
     #: 卡牌身份标签（0-based；-1 = 不可用/不适用）。
     card_target: np.ndarray     # int32[n]
@@ -922,7 +957,11 @@ def _place_slots(features: np.ndarray, fbase: int, fstride: int,
 
 def bc_type_ids(samples: BCSamples,
                 indices: Optional[Any] = None) -> np.ndarray:
-    """样本 + 观测手牌 -> ``int16[n, 245]`` 的 9 类归属（``-1`` = 不参与聚合）。
+    """样本 + 观测手牌 -> ``int16[n, 245]`` 的类型归属（``-1`` = 不参与聚合）。
+
+    类型数由 ``samples.action_types`` 决定：默认 9 类；当它含 ``"reposition"``
+    （第 10 类，``--bc-include-reposition 1``）时，Move 段 196..244 整体归属
+    ``reposition``（与 ``action_mask`` 里的合法换位候选取交集后做 log-sum-exp）。
 
     ``play_spell`` / ``play_minion`` 无法只靠动作下标区分，因此按**该样本观测到的
     手牌卡种**细分：手牌槽是法术 -> 只有 ``pos=0`` 的那个 play 动作属于
@@ -939,10 +978,17 @@ def bc_type_ids(samples: BCSamples,
     else:
         idx = np.asarray(indices, dtype=np.int64).reshape(-1)
     n = int(idx.size)
+    types = tuple(getattr(samples, "action_types", DEFAULT_BC_ACTION_TYPES))
+    class_map = {name: i for i, name in enumerate(types)}
     out = np.tile(BC_STATIC_TYPE_IDS.astype(np.int16), (n, 1))
+    # 可选第 10 类：Move 段整体归属 reposition（关闭时 types 不含它 -> 不写，逐位不变）
+    if BC_REPOSITION_TYPE in class_map:
+        out[:, BC_MOVE_SLICE] = int(class_map[BC_REPOSITION_TYPE])
     table = samples.card_table
-    play_spell_id = int(BC_ACTION_CLASSES["play_spell"])
-    play_minion_id = int(BC_ACTION_CLASSES["play_minion"])
+    play_spell_id = int(class_map.get("play_spell",
+                                      BC_ACTION_CLASSES["play_spell"]))
+    play_minion_id = int(class_map.get("play_minion",
+                                       BC_ACTION_CLASSES["play_minion"]))
     for row, si in enumerate(idx):
         si = int(si)
         for slot in range(ACT.N_HAND):
@@ -971,9 +1017,13 @@ def bc_obs_batch(samples: BCSamples, layout: Optional[BCObsLayout] = None, *,
       手牌 10、商店 8（含法术槽）、hero；
     - 未知槽位：float/card 全 0，``feature_mask`` / ``card_mask`` 对应位 False；
     - ``action_mask``：由部分观测可推断的候选动作（白名单动作族）+ 真实动作（保证合法），
-      用于 BC 的 masked CE；**不是**引擎 legal_mask 的精确重建。
+      用于 BC 的 masked CE；**不是**引擎 legal_mask 的精确重建。启用 reposition
+      监督（``samples.action_types`` 含 ``"reposition"``）时额外填入 196..244 的近似
+      合法换位（棋盘长度内 ``from != to``），否则 Move 位保持历史行为。
     """
     lay = layout or BC_OBS_LAYOUT
+    type_map = {name: i for i, name in enumerate(
+        tuple(getattr(samples, "action_types", DEFAULT_BC_ACTION_TYPES)))}
     n_total = len(samples)
     if indices is None:
         idx = np.arange(n_total, dtype=np.int64)
@@ -1062,6 +1112,16 @@ def bc_obs_batch(samples: BCSamples, layout: Optional[BCObsLayout] = None, *,
         for slot in range(O.N_BOARD):
             if bool(samples.board_present[si, slot]):
                 am[O.A_SELL + slot] = True
+        # 可选：Move 段（196..244）候选 = 引擎 ``legal_mask`` 的近似重建
+        # （from/to 都在棋盘长度内且 from != to）。关闭 reposition 监督时不写，
+        # 保证 action_mask 与历史行为逐位一致（Move 位全 False，除真实动作）。
+        if BC_REPOSITION_TYPE in type_map:
+            n_occupied = int(np.count_nonzero(samples.board_present[si]))
+            n_move = min(n_occupied, int(ACT.N_BOARD))
+            for src in range(n_move):
+                for dst in range(n_move):
+                    if src != dst:
+                        am[ACT.A_MOVE + src * ACT.N_BOARD + dst] = True
         play_positions = max(1, min(O.N_POS, board_len + 1))
         for slot in range(O.N_HAND):
             if not bool(samples.hand_present[si, slot]):
@@ -1195,7 +1255,7 @@ BC_EMPTY_TYPE_LOGIT = -1e30
 
 def bc_type_logits(policy_logits: Any, type_ids: Any, action_mask: Any = None,
                    n_types: int = N_BC_TYPES):
-    """245 维动作 logits -> 9 类**聚合** logits（log-sum-exp，数值稳定）。
+    """245 维动作 logits -> ``n_types`` 类**聚合** logits（log-sum-exp，数值稳定）。
 
     对每个类型 ``c``：
 
@@ -1205,6 +1265,9 @@ def bc_type_logits(policy_logits: Any, type_ids: Any, action_mask: Any = None,
     对应的 log 概率。空类型（无候选）填 :data:`BC_EMPTY_TYPE_LOGIT`，不会产生
     ``-inf``/NaN；调用方应保证 target 类型至少有一个候选（``bc_type_ids`` 会把
     真实动作强制归入其 ``action_type``）。
+
+    ``n_types`` 默认 9（历史行为）；启用 reposition 监督时传 10
+    （:data:`N_BC_TYPES_WITH_REPOSITION`），Move 段 196..244 就是第 10 类。
 
     ``policy_logits`` ``[B,245]``；``type_ids`` ``[B,245]``（``-1`` 忽略）；
     ``action_mask`` ``[B,245]`` bool（None = 全部参与）。
@@ -1281,29 +1344,33 @@ def bc_hier_loss(policy_logits: Any, type_ids: Any, target_class: Any, *,
                  weights: Any = None, class_counts: Any = None,
                  class_weight: Any = None,
                  type_weight: float = DEFAULT_BC_TYPE_WEIGHT,
-                 card_weight: float = DEFAULT_BC_CARD_WEIGHT) -> Dict[str, Any]:
+                 card_weight: float = DEFAULT_BC_CARD_WEIGHT,
+                 n_types: Optional[int] = None) -> Dict[str, Any]:
     """分层 BC 损失：``w_type*CE_type + w_card*CE_card``（torch 标量字典）。
 
     参数
     ----
     policy_logits : ``[B,245]`` 主策略头 logits（同一 forward 的输出）
-    type_ids : ``[B,245]`` 动作 -> 9 类归属（-1 忽略）
-    target_class : ``[B]`` 真实 ``action_type`` 的类别 id（0..8）
+    type_ids : ``[B,245]`` 动作 -> 类型归属（-1 忽略；9 或 10 类）
+    target_class : ``[B]`` 真实 ``action_type`` 的类别 id（0..8；启用 reposition 时 0..9）
     action_mask : ``[B,245]`` 合法/候选动作（类型聚合只在这些动作上取 log-sum-exp）
     card_logits : ``[B,3983]`` 卡牌身份头输出（None 或 ``card_weight<=0`` 时不算）
     card_target : ``[B]`` 卡牌标签（0..3982；-1 = 无标签）
     card_valid : ``[B]`` bool（buy/play 且映射成功）
     weights : ``[B]`` 样本权重（MMR；类型层还叠加 class-balanced）
-    class_counts : ``[9]`` 全池类型计数（class-balanced）
+    class_counts : ``[C]`` 全池类型计数（class-balanced；C = 9 或 10）
     class_weight : ``[B]`` 稀有动作类别权重覆盖（类型层在 class-balanced 之上再乘）
+    n_types : 类型数；None = :data:`N_BC_TYPES`（9，历史行为）。
+        ``type_ids`` / ``target_class`` / ``class_counts`` 用 10 类时传 10。
 
     返回 ``{"loss", "type_loss", "card_loss", "type_logits"}``；所有项都保留
     计算图。全空/全 0 时返回 0（不 NaN）。
     """
     tw = max(0.0, float(type_weight))
     cw = max(0.0, float(card_weight))
+    n_cls = int(N_BC_TYPES if n_types is None else n_types)
     type_logits = bc_type_logits(policy_logits, type_ids,
-                                 action_mask=action_mask)
+                                 action_mask=action_mask, n_types=n_cls)
     type_loss = bc_ce_loss(type_logits, target_class, weights=weights, mask=None,
                            class_ids=target_class, class_counts=class_counts,
                            class_weight=class_weight)
