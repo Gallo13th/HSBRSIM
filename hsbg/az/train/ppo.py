@@ -79,6 +79,7 @@ from .seq_aux import (
     seq_targets_from_records,
 )
 from .reward_shaping import RewardShaper
+from .tier_target import TierTargetTracker, aggregate_tier_target
 
 # ── 数值边界 ──────────────────────────────────────────────────────────────
 #: torch 侧非法 logits 的填充值（float32 下 ``exp(-1e30)=0``，避免 -inf 制造 NaN 梯度）。
@@ -340,6 +341,17 @@ class CollectConfig:
     shaping_w_tier: float = 0.5
     #: 逗号分隔的 tier 奖励表，**按 tier 直接索引**（索引 0 为占位；越界按 0）。
     shaping_tier_bonus: str = "0,0,20,60,150,400,900"
+    #: ── 等级进度奖励（tier-target，默认关闭；见 docs/TIER_TARGET.md）──
+    #: 系数：**0 = 关闭**（不读状态、不写 record、不新增 meta 键，旧路径逐位一致）。
+    #: 非 0 时在 learner 每个新回合起点按 ``tier_target_table`` 检查 tier：
+    #: 未达标扣 ``coef*tier_penalty``，首次达标一次性加 ``coef*tier_bonus``。
+    tier_target_coef: float = 0.0
+    #: 未达标惩罚（乘 coef；默认 0.02 ≈ 名次效用全距 2.0 的 1%）。
+    tier_penalty: float = 0.02
+    #: 达标一次性奖励（乘 coef；默认 0.15 ≈ 名次效用全距的 7.5%）。
+    tier_bonus: float = 0.15
+    #: 目标曲线 ``turn:tier``（逗号分隔），默认 ``7:4,9:5,12:6``。
+    tier_target_table: str = "7:4,9:5,12:6"
 
 
 #: ``compile_train`` 取值 -> ``torch.compile`` 模式（0=关闭，不在表内）。
@@ -2300,12 +2312,17 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
     truncated = 0
     t0 = time.time()
     shaper = RewardShaper(cfg)
+    tier_tracker = TierTargetTracker(cfg)
 
     if mode == "self":
         if shaper.enabled:
             raise ValueError(
                 "奖励塑形只支持 opponent=bot|weak（单 learner seat）；"
                 "self 模式（8 座都是 learner）请设 shaping_coef=0")
+        if tier_tracker.enabled:
+            raise ValueError(
+                "等级进度奖励只支持 opponent=bot|weak（单 learner seat）；"
+                "self 模式（8 座都是 learner）请设 tier_target_coef=0")
         from .selfplay import play_selfplay_game  # 惰性：无引擎机器也可 import 本模块
 
         for gi in range(int(cfg.games)):
@@ -2342,6 +2359,7 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
             policy.reseed(int(cfg.seed) + gi)
             policy.reset()
             game = E.Game(seed=int(cfg.seed) + gi)
+            tracker = TierTargetTracker(cfg)      # 每局独立状态（claimed/evaluated 隔离）
             steps = 0
             game_decisions = 0
             game_truncated = False
@@ -2353,6 +2371,8 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                     if not game.needs_action(p):
                         continue
                     if int(p) == int(cfg.learner_seat):
+                        # 等级进度奖励：本回合第一条 decision 前检查一次 tier
+                        tier_delta = tracker.observe(game, int(p))
                         phi_now = 0.0
                         if shaper.enabled:
                             phi_now = shaper.potential(game, int(p))
@@ -2369,6 +2389,8 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                         if shaper.enabled:
                             rec_prev = len(policy.records) - 1
                             phi_prev = phi_now
+                        if tier_delta:
+                            tracker.queue(len(policy.records) - 1, gid, tier_delta)
                         game_decisions += 1
                     elif mode == "weak":
                         game.step(int(p), _weak_bot_action(game, int(p), weak_rng))
@@ -2383,6 +2405,8 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
             if shaper.enabled and rec_prev is not None:
                 # 局末/截断：Φ(terminal)=0。
                 shaper.attach(policy.records, rec_prev, gid, phi_prev, 0.0)
+            # tier-target 增量统一在势函数回填之后叠加（避免覆盖写互相踩）
+            tracker.flush(policy.records)
             over = bool(game.is_over())
             if over:
                 rank = int(list(game.placements())[int(cfg.learner_seat)])
@@ -2399,6 +2423,7 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                 "rank": (None if game_truncated
                          else int(list(game.placements())[int(cfg.learner_seat)])),
             })
+            games_meta[-1].update(tracker.stats())
             if progress:
                 print(f"[collect] vs-bot game {gi + 1}/{cfg.games} "
                       f"decisions={game_decisions} truncated={game_truncated}",
@@ -2428,6 +2453,8 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
     }
     # 势函数塑形统计（默认关闭 -> 空 dict，不新增键）。
     collect_meta.update(shaper.stats(elapsed_s=float(time.time() - t0)))
+    # 等级进度奖励统计（默认关闭 -> 空 dict，不新增键）。
+    collect_meta.update(aggregate_tier_target(games_meta))
     if not records:
         raise RuntimeError(
             f"采集失败：{truncated}/{len(games_meta)} 局在 max_steps={int(cfg.max_steps)} "

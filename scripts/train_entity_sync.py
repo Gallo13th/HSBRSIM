@@ -45,6 +45,7 @@ sys.path.insert(0, ROOT)
 from hsbg.az.train.common import engine_available, engine_info, to_jsonable  # noqa: E402
 from hsbg.az.train.mirror_snapshots import ramp_p  # noqa: E402
 from hsbg.az.train.reward_shaping import parse_tier_bonus  # noqa: E402
+from hsbg.az.train.tier_target import parse_tier_target_table  # noqa: E402
 from hsbg.az.train.model import (  # noqa: E402
     attach_bc_card_head,
     bc_card_head_dim,
@@ -190,6 +191,15 @@ def main() -> int:
                     help="Φ 的 TIER_BONUS 权重（默认 0.5）")
     ap.add_argument("--shaping-tier-bonus", default="0,0,20,60,150,400,900",
                     help="按 tier 直接索引的奖励表（逗号分隔；索引 0=占位，越界按 0）")
+    # ---- 等级进度奖励（tier-target，默认关闭，见 docs/TIER_TARGET.md）----
+    ap.add_argument("--tier-target-coef", type=float, default=0.0,
+                    help="等级进度奖励系数；0=关闭（默认，records/GAE 与旧路径逐位等价）")
+    ap.add_argument("--tier-penalty", type=float, default=0.02,
+                    help="某回合 tier 未达目标时该回合第一条 decision 的惩罚（乘 coef；默认 0.02）")
+    ap.add_argument("--tier-bonus", type=float, default=0.15,
+                    help="首次达标某回合目标时的一次性奖励（乘 coef；默认 0.15）")
+    ap.add_argument("--tier-target-table", default="7:4,9:5,12:6",
+                    help="目标曲线 turn:tier，逗号分隔（默认 7:4,9:5,12:6）")
     ap.add_argument("--library-p", type=float, default=0.0,
                     help="每回合每个 bot 座位的注入概率（建议 0.3 起）")
     ap.add_argument("--lockstep", type=int, default=0,
@@ -375,6 +385,34 @@ def main() -> int:
         if not int(args.lockstep):
             print("[info] 非 lockstep 路径：塑形在逐局采集（collect_ppo_records_parallel）"
                   "内生效", flush=True)
+
+    # ---- 等级进度奖励（tier-target，默认关闭；coef=0 时零影响）----
+    if float(args.tier_target_coef) < 0.0:
+        print("[error] --tier-target-coef 必须 >= 0", file=sys.stderr)
+        return 2
+    if float(args.tier_penalty) < 0.0 or float(args.tier_bonus) < 0.0:
+        print("[error] --tier-penalty / --tier-bonus 必须 >= 0", file=sys.stderr)
+        return 2
+    try:
+        parse_tier_target_table(str(args.tier_target_table))
+    except ValueError as exc:
+        print(f"[error] --tier-target-table 非法: {exc}", file=sys.stderr)
+        return 2
+    if float(args.tier_target_coef) > 0.0:
+        if str(args.opponent) == "self":
+            print("[error] 等级进度奖励只支持 --opponent bot|weak（单 learner seat）",
+                  file=sys.stderr)
+            return 2
+        if int(args.rust_collector):
+            print("[error] Rust 采集器暂不支持等级进度奖励；请设 --tier-target-coef 0 "
+                  "或 --rust-collector 0", file=sys.stderr)
+            return 2
+        print(f"[tier-target] 等级进度奖励开启: coef={float(args.tier_target_coef):g} "
+              f"penalty={float(args.tier_penalty):g} bonus={float(args.tier_bonus):g} "
+              f"table={args.tier_target_table}", flush=True)
+        if not int(args.lockstep):
+            print("[info] 非 lockstep 路径：等级进度奖励在逐局采集"
+                  "（collect_ppo_records_parallel / collect_ppo_batch）内生效", flush=True)
 
     # ---- 动作序列辅助任务：系数 ramp（默认关闭 = 零影响）----
     try:
@@ -961,7 +999,12 @@ def main() -> int:
             shaping_coef=float(args.shaping_coef),
             shaping_w_str=float(args.shaping_w_str),
             shaping_w_tier=float(args.shaping_w_tier),
-            shaping_tier_bonus=str(args.shaping_tier_bonus))
+            shaping_tier_bonus=str(args.shaping_tier_bonus),
+            # 等级进度奖励（默认 coef=0 -> 零影响）
+            tier_target_coef=float(args.tier_target_coef),
+            tier_penalty=float(args.tier_penalty),
+            tier_bonus=float(args.tier_bonus),
+            tier_target_table=str(args.tier_target_table))
         t_c = time.time()
         if pool is not None:
             batch, collect_meta = pool.collect(
@@ -1101,6 +1144,11 @@ def main() -> int:
             stats["shaping_coef"] = float(args.shaping_coef)
             stats["reward_shaping_mean"] = float(
                 _cmeta.get("reward_shaping_mean", 0.0) or 0.0)
+            # 等级进度奖励可观测性（默认关闭时全为 0；history 字段名固定）
+            stats["tier_target_coef"] = float(args.tier_target_coef)
+            stats["tier_hits"] = int(_cmeta.get("tier_hits", 0) or 0)
+            stats["tier_misses"] = int(_cmeta.get("tier_misses", 0) or 0)
+            stats["tier_bonus_sum"] = float(_cmeta.get("tier_bonus_sum", 0.0) or 0.0)
             _ppo_s = time.time() - _t_ppo
             _tl["t_ppo_done"] = time.monotonic()
 

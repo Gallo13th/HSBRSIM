@@ -36,6 +36,7 @@ from .human_board_pool import inject_turn as inject_human_boards
 from .mirror_snapshots import (MirrorStats, inject_turn, mirror_seats,
                                mirror_seats_random)
 from .reward_shaping import RewardShaper, aggregate_shaping
+from .tier_target import TierTargetTracker, aggregate_tier_target
 
 
 def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
@@ -50,6 +51,7 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
     policy.game_id = int(cfg.game_id_offset) + gi
     records: List[Dict[str, Any]] = []
     shaper = RewardShaper(cfg)
+    tracker = TierTargetTracker(cfg)
     illegal = 0
     truncated = 0
     decisions = 0
@@ -58,6 +60,10 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
             raise ValueError(
                 "奖励塑形只支持 opponent=bot|weak（单 learner seat）；"
                 "self 模式（8 座都是 learner）请设 shaping_coef=0")
+        if tracker.enabled:
+            raise ValueError(
+                "等级进度奖励只支持 opponent=bot|weak（单 learner seat）；"
+                "self 模式（8 座都是 learner）请设 tier_target_coef=0")
         from .selfplay import play_selfplay_game
         _samples, meta = play_selfplay_game(
             policy, seed=int(cfg.seed) + gi, game_id=policy.game_id,
@@ -90,6 +96,8 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
                 if not game.needs_action(p):
                     continue
                 if int(p) == int(cfg.learner_seat):
+                    # 等级进度奖励：本回合第一条 decision 前检查一次 tier
+                    tier_delta = tracker.observe(game, int(p))
                     phi_now = 0.0
                     if shaper.enabled:
                         phi_now = shaper.potential(game, int(p))
@@ -106,6 +114,8 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
                     if shaper.enabled:
                         rec_prev = len(policy.records) - 1
                         phi_prev = phi_now
+                    if tier_delta:
+                        tracker.queue(len(policy.records) - 1, policy.game_id, tier_delta)
                     decisions += 1
                 elif gamemode == "weak":
                     game.step(int(p), _weak_bot_action(game, int(p), weak_rng))
@@ -120,6 +130,8 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
         if shaper.enabled and rec_prev is not None:
             # 局末/截断：Φ(terminal)=0（有限时域目标；保证 F 望远镜求和）。
             shaper.attach(policy.records, rec_prev, policy.game_id, phi_prev, 0.0)
+        # tier-target 增量统一在势函数回填之后叠加（避免覆盖写互相踩）
+        tracker.flush(policy.records)
         if game.is_over():
             rank = int(list(game.placements())[int(cfg.learner_seat)])
             _attach_rank(policy.records, rank)
@@ -142,6 +154,7 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
     meta["search_failures"] = int(policy.search_failures)
     meta["forced_end_turns"] = int(policy.forced_actions)
     meta.update(shaper.stats())
+    meta.update(tracker.stats())
     return records, meta
 
 
@@ -220,6 +233,8 @@ def collect_ppo_records_parallel(
     }
     # 势函数塑形统计（默认关闭 -> 空 dict，不新增键）
     meta_out.update(aggregate_shaping(games_meta, elapsed_s=elapsed_s))
+    # 等级进度奖励统计（默认关闭 -> 空 dict，不新增键）
+    meta_out.update(aggregate_tier_target(games_meta))
     return records, meta_out
 
 
@@ -298,6 +313,12 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     前读一次 Φ(s)（``observe`` 快路径，约 1.5–2 µs），它同时是上一决策的 Φ(s')；把
     ``F = λ(γΦ(s') - Φ(s))`` 写到该决策 record 的 ``reward`` 字段（局末 Φ=0）。
     见 ``docs/REWARD_SHAPING.md``。
+
+    **等级进度奖励**（``cfg.tier_target_coef != 0``；默认 0 = 零影响）：每局一个
+    :class:`~hsbg.az.train.tier_target.TierTargetTracker`；learner 每个新回合起点读一次
+    ``tier``，未达 ``tier_target_table[turn]`` 时给该回合第一条 decision 扣
+    ``coef*tier_penalty``，首次达标一次性加 ``coef*tier_bonus``（每档一次）。增量在
+    势函数终局回填之后统一叠加到 ``record["reward"]``。见 ``docs/TIER_TARGET.md``。
     """
     if str(gamemode) not in ("bot", "weak"):
         raise ValueError(f"lockstep 只支持 bot/weak，收到 {gamemode!r}")
@@ -332,8 +353,11 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             "human_rng": __import__("random").Random(
                 int(cfg.seed) + int(seed) + gi * 53 + 11),
             "human_stats": HumanBoardStats(),
+            # 等级进度奖励状态机（每局独立；coef=0 时 disabled = 零开销）
+            "tier_target": TierTargetTracker(cfg),
         })
     rounds = 0
+    tier_on = any(bool(st["tier_target"].enabled) for st in states)
     trajectory_p = max(0.0, min(1.0, float(trajectory_p)))
     lib_traj_used = 0
     if trajectory_pool is not None and trajectory_p > 0.0:
@@ -556,6 +580,9 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         # 本决策动作 + 对手回应到下一次 learner 决策）。每决策只读一次状态。
         phi_now = ([shaper.potential(st["game"], seat) for st in pending]
                    if shaper.enabled else [])
+        # 等级进度奖励：本回合第一条 learner decision 前检查一次 tier（同 turn 幂等）
+        tier_deltas = ([st["tier_target"].observe(st["game"], seat) for st in pending]
+                       if tier_on else [])
         decisions = policy.decide_batch([(st["game"], seat, st["gid"]) for st in pending])
         for k, (st, dec) in enumerate(zip(pending, decisions)):
             g = st["game"]
@@ -566,6 +593,9 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                                   float(st.get("shape_phi", 0.0)), phi_now[k])
                 st["shape_phi"] = phi_now[k]
                 st["shape_rec"] = int(st["rec_start"])
+            if tier_on and tier_deltas[k]:
+                st["tier_target"].queue(int(st["rec_start"]), int(st["gid"]),
+                                        tier_deltas[k])
             mask = mask_from_bytes(g.legal_mask(seat))
             a = int(dec.action)
             if not (0 <= a < N_ACTIONS and bool(mask[a])):
@@ -585,6 +615,10 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             if prev is not None:
                 shaper.attach(policy.records, prev, st["gid"],
                               float(st.get("shape_phi", 0.0)), 0.0)
+    # tier-target 增量统一在势函数回填之后叠加（避免覆盖写互相踩）。
+    if tier_on:
+        for st in states:
+            st["tier_target"].flush(policy.records)
 
     records: List[Dict[str, Any]] = []
     metas = []
@@ -607,6 +641,8 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                       "steps": int(st["steps"]), "decisions": int(st["decisions"]),
                       "truncated": int(st["truncated"]), "records": int(n_rec),
                       "rank": rank, "illegal_actions": int(st["illegal"])})
+        if tier_on:
+            metas[-1].update(st["tier_target"].stats())
     meta = {"mode": "lockstep", "games": n, "pool_games": n,
             "rounds": int(rounds), "decisions": int(decisions_total),
             "library_attempt": int(sum(st.get("lib_attempt", 0) for st in states)),
@@ -656,4 +692,6 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     meta.update(hmeta)
     # 势函数塑形统计（默认关闭 -> 空 dict，不新增键）。
     meta.update(shaper.stats(elapsed_s=time.time() - t_start))
+    # 等级进度奖励统计（默认关闭 -> 空 dict，不新增键）。
+    meta.update(aggregate_tier_target(metas))
     return records, meta
