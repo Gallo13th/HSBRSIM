@@ -426,6 +426,10 @@ def main() -> int:
                     help="π 构造的优势裁剪（nats）")
     ap.add_argument("--infer-search-max-ms", type=float, default=0.0,
                     help="单次搜索墙钟上限（ms；0=不限）：超时退回 π_base 动作")
+    ap.add_argument("--infer-search-tier-bonus", type=float, default=0.0,
+                    help="叶值 tier 项权重：+w·(tier/6)（默认 0 = 纯 log1p(Σ)）")
+    ap.add_argument("--infer-search-health-bonus", type=float, default=0.0,
+                    help="叶值血量项权重：+w·(health/30)（默认 0）")
     args = ap.parse_args()
     if not engine_available():
         print("[error] hsbg_engine 不可用", file=sys.stderr)
@@ -474,6 +478,8 @@ def main() -> int:
         search_when=str(args.infer_search_when),
         action=str(args.infer_search_action), topk=int(args.infer_search_topk),
         adv_clip=float(args.infer_search_adv_clip),
+        tier_bonus=float(args.infer_search_tier_bonus),
+        health_bonus=float(args.infer_search_health_bonus),
         max_ms_per_search=float(args.infer_search_max_ms),
         seed=int(args.seed_base),
         # PPOSelfPlayPolicy 的 pi 不是 π_base（可能是均匀/one-hot）⇒ 自己重算先验

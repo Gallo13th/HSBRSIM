@@ -67,10 +67,31 @@ ACTION_MODES = ("pi_argmax", "argmax_q", "sample")
 #: 叶值曲线（与沙盒 ``_L`` 同一公式；这里显式写出来避免依赖私有名）
 _LOG_REF = math.log1p(STRENGTH_REF)
 
+#: 血量项归一化参考（英雄满血 30；``health_bonus`` 的权重是对「满血」而言）
+HEALTH_REF = 30.0
+
 
 def leaf_value(sigma: float) -> float:
     """``L(Σ) = log1p(Σ)/log1p(30000)``（与沙盒叶值同一曲线）。"""
     return math.log1p(max(0.0, float(sigma))) / _LOG_REF
+
+
+def leaf_score(sigma: float, *, tier: int = 0, health: Optional[int] = None,
+               tier_bonus: float = 0.0, health_bonus: float = 0.0,
+               health_ref: float = HEALTH_REF) -> float:
+    """叶值 = ``L(Σ) + w_t·(tier/6) + w_h·(health/30)``。
+
+    - ``tier_bonus`` / ``health_bonus`` 默认 0 ⇒ 逐位等于 :func:`leaf_value`（旧口径）；
+    - tier 项与沙盒 ``RolloutConfig.tier_bonus`` 同一归一（``tier/6``）；
+    - health 项用**决策时刻的血量**（不是战团血量），归一 ``health/30``：
+      惩罚「高身材但快死」的选择，权重必须远小于 ``L`` 的候选间差（≈0.01–0.05）。
+    """
+    s = leaf_value(sigma)
+    if float(tier_bonus) != 0.0:
+        s += float(tier_bonus) * (max(0, int(tier)) / 6.0)
+    if float(health_bonus) != 0.0 and health is not None:
+        s += float(health_bonus) * (max(0, int(health)) / max(1e-9, float(health_ref)))
+    return float(s)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -99,9 +120,13 @@ class InferSearchConfig:
     q_temp: float = 0.0
     q_temp_scale: float = 1.0
     adv_clip: float = 30.0
-    #: 叶值附加项（默认 0 = 纯 log1p(Σ)）
+    #: 叶值附加项（默认 0 = 纯 log1p(Σ)）：``tier_bonus`` / ``health_bonus`` 已接线
+    #: （见 :func:`leaf_score`）；``carrier_bonus`` 只为沙盒口径保留，推理期**未接线**
     tier_bonus: float = 0.0
     carrier_bonus: float = 0.0
+    #: 叶值血量项：``+ health_bonus·(health/health_ref)``（抑制「高身材但快死」）
+    health_bonus: float = 0.0
+    health_ref: float = HEALTH_REF
     #: 候选剔除 Move 段（换位不改变盘面 Σ）
     skip_move: bool = True
     #: rollout 内 learner 每回合动作上限（与评测 ``max_actions_per_turn`` 同口径；
@@ -133,6 +158,12 @@ class InferSearchConfig:
             raise ValueError(f"action 只能是 {ACTION_MODES}")
         if str(self.rollout_mode) not in ("greedy", "sample"):
             raise ValueError("rollout_mode 只能是 greedy|sample")
+        for name in ("tier_bonus", "carrier_bonus", "health_bonus", "health_ref"):
+            v = float(getattr(self, name))
+            if not math.isfinite(v):
+                raise ValueError(f"{name} 必须是有限数")
+        if float(self.health_ref) <= 0.0:
+            raise ValueError("health_ref 必须 > 0")
         search_when_names(str(self.search_when))    # 触发校验
         return self
 
@@ -161,8 +192,10 @@ class SearchOutcome:
 
     pi: np.ndarray              # f32[245]，支撑 = cands
     cands: np.ndarray           # i64[n]，π_base 先验降序
-    q: np.ndarray               # f64[n]，叶分 = L(Σ_end)
+    q: np.ndarray               # f64[n]，叶分 = L(Σ_end) [+ w·tier + w·health]
     sigma_end: np.ndarray       # i64[n]，回合末战团 Σ（真值）
+    tier_end: np.ndarray        # i64[n]，叶位置酒馆等级（0..6）
+    health_end: np.ndarray      # i64[n]，叶位置英雄血量（-1 = 引擎不可用）
     base: int                   # π_base top-1
     best: int                   # argmax Q
     best_q: float
@@ -186,6 +219,8 @@ class SearchOutcome:
                 "top1": int(self.action), "cands": [int(a) for a in self.cands],
                 "q": [round(float(v), 6) for v in self.q],
                 "sigma_end": [int(v) for v in self.sigma_end],
+                "tier_end": [int(v) for v in self.tier_end],
+                "health_end": [int(v) for v in self.health_end],
                 "base": int(self.base), "best": int(self.best),
                 "best_q": round(float(self.best_q), 6),
                 "sigma_root": int(self.sigma_root),
@@ -212,6 +247,9 @@ class _Roll:
     root_turn: int
     target_turn: int
     sigma: int = 0
+    #: 叶位置的酒馆等级 / 英雄血量（叶值附加项用；health = -1 表示引擎不可用）
+    tier: int = 0
+    health: int = -1
     turn_actions: int = 0
     steps: int = 0
     done: bool = False
@@ -302,6 +340,22 @@ class InferSearcher:
         return int(round(float(sigmas_from_features(
             np.asarray(feats, dtype=np.float32)[None, :])[0])))
 
+    def health(self, game: Any, seat: int) -> int:
+        """英雄血量（引擎不可用/旧构建返回 -1 ⇒ 叶值不加血量项）。"""
+        try:
+            return int(game.health()[int(seat)])
+        except Exception:      # noqa: BLE001 - 无 health() 时退化为「无血量项」
+            return -1
+
+    def leaf_q(self, r: "_Roll") -> float:
+        """叶分：``L(Σ) [+ w_t·tier/6] [+ w_h·health/30]``（权重 0 ⇒ 旧口径）。"""
+        return leaf_score(
+            r.sigma, tier=int(r.tier),
+            health=(int(r.health) if int(r.health) >= 0 else None),
+            tier_bonus=float(self.cfg.tier_bonus),
+            health_bonus=float(self.cfg.health_bonus),
+            health_ref=float(self.cfg.health_ref))
+
     # ── 网络 ────────────────────────────────────────────────────────────
     def prior_batch(self, feats: np.ndarray, cards: np.ndarray,
                     masks: np.ndarray) -> np.ndarray:
@@ -351,13 +405,16 @@ class InferSearcher:
             if cands.size < 2:
                 return None
             sigma_root = self.sigma(f)
+            root_tier = max(0, int(round(float(f[FEAT_TIER]) * FEAT_TIER_SCALE)))
+            root_health = self.health(game, seat)
             root_turn = int(getattr(game, "turn", 0))
             target = root_turn + max(0, int(self.cfg.turns) - 1)
             rolls: List[_Roll] = []
             for a in cands.tolist():
                 g = game.copy()
                 r = _Roll(cand=int(a), game=g, root_turn=root_turn,
-                          target_turn=int(target), sigma=int(sigma_root))
+                          target_turn=int(target), sigma=int(sigma_root),
+                          tier=int(root_tier), health=int(root_health))
                 r.turn_actions = 1
                 try:
                     g.step(seat, int(a))
@@ -414,8 +471,12 @@ class InferSearcher:
                 mmat = np.stack([b[3] for b in batch])
                 pri = self.prior_batch(fmat, cmat, mmat)
                 sig = sigmas_from_features(fmat)
+                tiers = np.rint(np.asarray(fmat, dtype=np.float64)[:, FEAT_TIER]
+                                * FEAT_TIER_SCALE).astype(np.int64)
                 for k, (r, _gf, _gc, gm) in enumerate(batch):
                     r.sigma = int(round(float(sig[k])))
+                    r.tier = max(0, int(tiers[k]))
+                    r.health = self.health(r.game, seat)
                     r.steps += 1
                     steps_total += 1
                     a = int(np.argmax(pri[k]))
@@ -436,8 +497,10 @@ class InferSearcher:
                 if not r.done:
                     r.truncated = True
                     r.done = True
-            q = np.asarray([leaf_value(r.sigma) for r in rolls], dtype=np.float64)
+            q = np.asarray([self.leaf_q(r) for r in rolls], dtype=np.float64)
             sg = np.asarray([int(r.sigma) for r in rolls], dtype=np.int64)
+            tg = np.asarray([int(r.tier) for r in rolls], dtype=np.int64)
+            hg = np.asarray([int(r.health) for r in rolls], dtype=np.int64)
             pi, tau, V = pi_from_q(p, cands, q, self._rc)
             order = np.argsort(-np.asarray(p, dtype=np.float64)[cands], kind="stable")
             base_idx = int(order[0]) if cands.size else 0
@@ -450,7 +513,7 @@ class InferSearcher:
             self.truncated += n_trunc
             return SearchOutcome(
                 pi=pi, cands=np.asarray(cands, dtype=np.int64), q=q,
-                sigma_end=sg, base=int(cands[base_idx]),
+                sigma_end=sg, tier_end=tg, health_end=hg, base=int(cands[base_idx]),
                 best=int(cands[best_idx]), best_q=float(q[best_idx]),
                 sigma_root=int(sigma_root),
                 sigma_base=int(sg[base_idx]), sigma_best=int(sg[best_idx]),
@@ -708,8 +771,9 @@ class InferSearchPolicy(Policy):
                         out.pi, info)
 
 
-__all__ = ["ACTION_MODES", "InferSearchConfig", "InferSearchPolicy",
-           "InferSearcher", "SearchOutcome", "leaf_value", "trace_summary"]
+__all__ = ["ACTION_MODES", "HEALTH_REF", "InferSearchConfig", "InferSearchPolicy",
+           "InferSearcher", "SearchOutcome", "leaf_score", "leaf_value",
+           "trace_summary"]
 
 
 def trace_summary(rows: List[Dict[str, Any]], turns=(12, 15)) -> Dict[str, Any]:

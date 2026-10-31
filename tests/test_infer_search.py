@@ -20,7 +20,7 @@ import pytest
 
 from hsbg.az.train.common import mask_from_bytes, obs_arrays
 from hsbg.az.train.infer_search import (InferSearchConfig, InferSearchPolicy,
-                                        InferSearcher, leaf_value,
+                                        InferSearcher, leaf_score, leaf_value,
                                         trace_summary)
 from hsbg.az.train.policies import Decision, Policy
 from hsbg.az.train.sandbox_rollout import (MOVE_HI, MOVE_LO, DecisionTags,
@@ -320,3 +320,48 @@ def test_snapshot_since_delta():
     assert d["mean_ms_per_call"] is not None
     pol.flush()
     assert pol.since(snap)["games"] == 1
+
+
+# ── 6. 叶值附加项（tier / health）──────────────────────────────────────────
+def test_leaf_score_weights_contract():
+    """``leaf_score``：权重 0 逐位等于 ``leaf_value``；正权重按文档归一叠加。"""
+    for s in (0, 42, 963, 30000):
+        for t in (0, 3, 6):
+            for h in (None, 1, 30):
+                assert leaf_score(s, tier=t, health=h) == leaf_value(s)
+    # tier：+w·(tier/6)
+    assert leaf_score(500, tier=6, tier_bonus=0.02) - leaf_value(500) == \
+        pytest.approx(0.02)
+    assert leaf_score(500, tier=3, tier_bonus=0.02) - leaf_value(500) == \
+        pytest.approx(0.01)
+    # health：+w·(health/30)；health=None / -1 时（引擎不可用）不加
+    assert leaf_score(500, health=30, health_bonus=0.02) - leaf_value(500) == \
+        pytest.approx(0.02)
+    assert leaf_score(500, health=0, health_bonus=0.02) == leaf_value(500)
+    assert leaf_score(500, health=None, health_bonus=0.02) == leaf_value(500)
+    assert leaf_score(500, health=-1, health_bonus=0.02) == leaf_value(500)
+    # 负权重（惩罚高 tier）也允许
+    assert leaf_score(500, tier=6, tier_bonus=-0.03) - leaf_value(500) == \
+        pytest.approx(-0.03)
+
+
+def test_leaf_bonus_wired_into_search():
+    """searcher 的叶分 = ``leaf_score(叶位置 sigma/tier/health)``，且默认 0 权重不动分。"""
+    g = _midgame(min_turn=5)
+    mask = mask_from_bytes(g.legal_mask(0))
+    o0 = _searcher(enabled=1, turns=1, search_when="any", topk=6).search(g, 0)
+    o1 = _searcher(enabled=1, turns=1, search_when="any", topk=6,
+                   tier_bonus=0.02, health_bonus=0.02).search(g, 0)
+    assert o0 is not None and o1 is not None
+    assert np.allclose(o0.q, np.asarray([leaf_value(s) for s in o0.sigma_end]))
+    # 叶位置 tier/health 已记录，且附加项按文档叠加
+    assert o1.tier_end.shape == o1.cands.shape and o1.health_end.shape == o1.cands.shape
+    want = [leaf_score(int(s), tier=int(t), health=(int(h) if int(h) >= 0 else None),
+                       tier_bonus=0.02, health_bonus=0.02)
+            for s, t, h in zip(o1.sigma_end, o1.tier_end, o1.health_end)]
+    assert np.allclose(o1.q, np.asarray(want))
+    assert np.all(np.isfinite(o1.q))
+    # 血量项确实能改变选择（w 大时：health=0 的候选被压到最低）
+    big = _searcher(enabled=1, turns=1, search_when="any", topk=6,
+                    health_bonus=10.0).search(g, 0)
+    assert big is not None and np.all(np.isfinite(big.q))

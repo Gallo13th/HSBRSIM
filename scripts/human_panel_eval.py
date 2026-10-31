@@ -234,6 +234,8 @@ def _panel(seed_base: int, games: int, seats: int, per_seat: int, *,
         "when": str(s_cfg.search_when), "action": str(s_cfg.action),
         "topk": int(s_cfg.topk), "max_per_turn": int(s_cfg.max_searches_per_turn),
         "adv_clip": float(s_cfg.adv_clip),
+        "tier_bonus": float(s_cfg.tier_bonus),
+        "health_bonus": float(s_cfg.health_bonus),
         "max_ms_per_search": float(s_cfg.max_ms_per_search),
     }
     _calls = sum(int(s.get("search_calls") or 0) for s in all_search)
@@ -367,6 +369,10 @@ def main() -> int:
                          "argmax_q（叶值最优）/ sample（按 π_search 采样）")
     ap.add_argument("--infer-search-topk", type=int, default=8,
                     help="根候选数 = π_base top-k 非 Move 合法动作（默认 8）")
+    ap.add_argument("--infer-search-tier-bonus", type=float, default=0.0,
+                    help="叶值 tier 项权重：+w·(tier/6)（默认 0 = 纯 log1p(Σ)）")
+    ap.add_argument("--infer-search-health-bonus", type=float, default=0.0,
+                    help="叶值血量项权重：+w·(health/30)（抑制「高身材但快死」；默认 0）")
     ap.add_argument("--infer-search-adv-clip", type=float, default=30.0,
                     help="π 构造的优势裁剪（nats）；30=沙盒原始口径")
     ap.add_argument("--infer-search-max-ms", type=float, default=0.0,
@@ -407,6 +413,8 @@ def main() -> int:
         action=str(args.infer_search_action),
         topk=int(args.infer_search_topk),
         adv_clip=float(args.infer_search_adv_clip),
+        tier_bonus=float(args.infer_search_tier_bonus),
+        health_bonus=float(args.infer_search_health_bonus),
         max_ms_per_search=float(args.infer_search_max_ms),
         seed=int(args.infer_search_seed if int(args.infer_search_seed) >= 0
                  else args.seed_base),
