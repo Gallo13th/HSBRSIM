@@ -53,9 +53,11 @@ from .sandbox_rollout import pi_from_q, search_when_names, tag_matches
 from .sandbox_search import action_kind
 
 #: 策略头参数名（``train_scope=policy`` 只训这些；trunk/辅助头全部冻结）
+#: 前 13 项是 entity 的 pointer 头；``policy_head`` 是 tiny 架构的策略输出层。
 POLICY_PARAM_PREFIXES = ("scalar_head", "q_buy", "q_board", "buy_bias", "sell_bias",
                          "activate_bias", "choose_bias", "play_bias", "magnetize_bias",
-                         "move_bias", "pos_play", "move_from", "move_to")
+                         "move_bias", "pos_play", "move_from", "move_to",
+                         "policy_head")
 
 #: 动作类型门限里关心的段（docs §5.2.6：sell/refresh 相对 base 单轮增幅 ≤1.5×）
 GATED_KINDS = ("sell", "refresh")
@@ -157,6 +159,10 @@ class ExitConfig:
     probe_n: int = 1024
     halt_on_gate: int = 1           # 1 = 门禁触发即停止后续蒸馏
     stall_epochs: int = 4           # 损失连续不改善的 epoch 数（收敛提前停）
+    #: 1 = 逐 minibatch 快照可训练参数，KL 超预算就回退**该步**（last-in-budget）。
+    #: 默认 0 = 只做 epoch 级回退（``runs/search_exit`` 的 A/B 臂就是 0 跑的：
+    #: 单个 Adam 步能跨 0.01–0.12 的 KL，故 δ_total=0.05 在 2 轮内就被花完）。
+    budget_rollback: int = 0
     seed: int = 0
     device: str = "cuda:7"
 
@@ -496,6 +502,10 @@ class ExitTrainer:
         self.device = torch.device(device)
         self.model.eval()
         self.ref.eval()
+        #: tiny 架构的 ``forward(features, cards)`` 没有 mask 形参（entity 有）；
+        #: 掩码在 :meth:`_logp` 里统一再打一次（幂等），两种架构行为一致。
+        import inspect
+        self._takes_mask = "mask" in inspect.signature(model.forward).parameters
         for p in self.ref.parameters():
             p.requires_grad_(False)
         names = (policy_param_names(model) if str(cfg.train_scope) == "policy"
@@ -579,7 +589,9 @@ class ExitTrainer:
     def _logp(self, model: Any, t: Dict[str, Any], *, grad: bool = True) -> Any:
         torch = self.torch
         with torch.set_grad_enabled(bool(grad)):
-            logits = model(t["f"], t["c"], t["mask"])[0]
+            logits = (model(t["f"], t["c"], t["mask"]) if self._takes_mask
+                      else model(t["f"], t["c"]))[0]
+            logits = logits.masked_fill(~t["mask"].bool(), -1e9)
             return torch.log_softmax(logits, dim=-1)
 
     def _loss(self, t: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]]:
@@ -661,6 +673,17 @@ class ExitTrainer:
                                               tgt.argmax(-1)]).float().mean()),
         }
 
+    # ── 可训练参数快照（last-in-budget 回退用；只 1 MB 级）────────────────
+    def _snap(self) -> Dict[str, Any]:
+        keep = set(self.trainable)
+        return {n: p.detach().clone() for n, p in self.model.named_parameters()
+                if n in keep}
+
+    def _restore(self, snap: Dict[str, Any]) -> None:
+        for n, p in self.model.named_parameters():
+            if n in snap:
+                p.data.copy_(snap[n])
+
     # ── 训练 ────────────────────────────────────────────────────────────
     def fit(self, samples: Sequence[SearchSample], *, round_id: int = 0,
             probe_samples: Optional[Sequence[SearchSample]] = None
@@ -685,10 +708,12 @@ class ExitTrainer:
         prev_loss = float("inf")
         stall = 0
         for ep in range(int(cfg.epochs)):
+            # 硬锚回退用的快照（按 epoch；逐 minibatch 只做预算检查）
             snap = {k: v.detach().clone() for k, v in self.model.state_dict().items()}
             order = rng.permutation(len(trainable))
             ep_stats: List[Dict[str, float]] = []
             t0 = time.time()
+            budget_hit = False
             for start in range(0, len(order), int(cfg.batch)):
                 idx = order[start:start + int(cfg.batch)]
                 batch = [trainable[int(i)] for i in idx]
@@ -698,8 +723,41 @@ class ExitTrainer:
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(
                     [p for p in self.model.parameters() if p.requires_grad], 5.0)
+                # last-in-budget：step 前快照可训练参数（只在 rollback 模式下）
+                prev_step = self._snap() if int(cfg.budget_rollback) else None
                 self.opt.step()
                 ep_stats.append(st)
+                # ── 逐 minibatch 检查 KL 预算/硬锚（细粒度，避免 1 个 epoch 冲过锚）──
+                # **必须与报告用同一个 probe 集合**：早期版本这里传 n=512、报告传
+                # n=probe_n(1024)，两个子集不嵌套 ⇒ 检查低估 KL（第 2 轮 0.01→0.027 的
+                # 一半原因是这个测量错配）。现在统一用 cfg.probe_n。
+                lp = self.probe(probe, seed=int(cfg.seed) + int(round_id))
+                _over_anchor = float(lp["kl_to_ref_mean"]) > float(cfg.kl_anchor)
+                _over_budget = float(lp["kl_to_prev_mean"]) >= float(cfg.kl_target)
+                if int(cfg.budget_rollback) and (_over_anchor or _over_budget):
+                    # 这一步越界 ⇒ 回退到**上一步**（in-budget 权重）后停
+                    self._restore(prev_step)
+                    stop_reason = "gate_rollback" if _over_anchor else "kl_target"
+                    budget_hit = True
+                    break
+                if _over_anchor:
+                    self.model.load_state_dict(snap)
+                    gate = {"epoch": int(ep), "batch": int(len(ep_stats)),
+                            "reasons": [f"kl_to_ref={lp['kl_to_ref_mean']:.4f}"
+                                        f">{cfg.kl_anchor}"],
+                            "reverted": True,
+                            "probe_after_revert": self.probe(
+                                probe, seed=int(cfg.seed) + int(round_id))}
+                    hist.append({"gate": gate})
+                    stop_reason = "gate"
+                    budget_hit = True
+                    break
+                if float(lp["kl_to_prev_mean"]) >= float(cfg.kl_target):
+                    stop_reason = "kl_target"
+                    budget_hit = True
+                    break
+            if budget_hit:
+                break
             ep_probe = self.probe(probe, seed=int(cfg.seed) + int(round_id))
             mean_ce = _mean([s["ce"] for s in ep_stats])
             row = {"epoch": int(ep), "n_batches": len(ep_stats),

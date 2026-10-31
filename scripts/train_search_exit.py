@@ -203,6 +203,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--rounds", type=int, default=6)
     ap.add_argument("--rounds-done", type=int, default=0,
                     help=">0 时从第 N 轮继续（已存在的 samples/ckpt 会被复用）")
+    ap.add_argument("--resume-from", default="",
+                    help="继续实验时的起始权重（默认 = --checkpoint）；KL 锚仍以 --checkpoint 为 ref")
+    ap.add_argument("--tag", default="", help="写进 summary 的实验标签（臂名）")
     # 采集
     ap.add_argument("--games", type=int, default=128)
     ap.add_argument("--seed-base", type=int, default=600000)
@@ -252,6 +255,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--before-search-json", default=DEFAULT_BEFORE_SEARCH_JSON,
                     help="起点 checkpoint 的 256 局 search 面板（capture 分母）")
     ap.add_argument("--skip-final", type=int, default=0)
+    ap.add_argument("--skip-final-search", type=int, default=0,
+                    help="1 = 不跑 after 的开启搜索臂（capture 分母仍用 AB 面板）")
     ap.add_argument("--skip-quality", type=int, default=0)
     ap.add_argument("--quality-games", type=int, default=256)
     ap.add_argument("--skip-before-eval", type=int, default=0)
@@ -291,7 +296,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
           f"out={out}", flush=True)
 
     # ── 起点 / 参考权重 ──────────────────────────────────────────────────
-    model, meta = load_checkpoint(ckpt_before, device=str(args.device))
+    start_ckpt = str(args.resume_from) if str(args.resume_from) else ckpt_before
+    if str(args.resume_from):
+        if not os.path.isfile(str(args.resume_from)):
+            raise SystemExit(f"--resume-from 不存在: {args.resume_from}")
+        print(f"[exit] resume from {args.resume_from}", flush=True)
+    model, meta = load_checkpoint(start_ckpt, device=str(args.device))
     meta_clean = {k: v for k, v in meta.items() if not isinstance(v, np.ndarray)}
     norm_kw: Dict[str, Any] = {}
     if isinstance(meta.get("norm_mean"), np.ndarray):
@@ -358,7 +368,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     summary: Dict[str, Any] = {
         "protocol": "search_exit_v1",
+        "tag": str(args.tag),
         "checkpoint_start": ckpt_before, "checkpoint_sha256": sha_before,
+        "resume_from": (str(args.resume_from) or None),
         "config": cfg.as_dict(), "before_sub_mean_rank": before_sub_mean,
         "before_sub_n": len(before_sub),
         "before_256_mean_rank": _mean_or_none(before_ranks_256) if before_ranks_256 else None,
@@ -461,18 +473,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         after_ranks = r0["ranks"]
         st = paired_stats(after_ranks, before_ranks_256 or after_ranks,
                           n_boot=int(args.bootstrap), seed=999)
-        p1 = os.path.join(out, "final_search.json")
-        r1 = run_panel(checkpoint=final_ckpt, games=int(args.final_games),
-                       seats=int(args.final_seats),
-                       seed_base=int(args.eval_seed_base),
-                       device=str(args.device), out=p1, infer_search=1,
-                       turns=int(args.turns), topk=int(args.topk),
-                       max_per_turn=int(args.max_per_turn),
-                       when=str(args.search_when), action="pi_argmax",
-                       log=os.path.join(out, "log_final_search.log"))
-        after_search_ranks = r1["ranks"]
-        st_s = paired_stats(after_ranks, after_search_ranks,
+        if int(args.skip_final_search):
+            r1 = {"ranks": [], "seconds": 0.0}
+            after_search_ranks: List[int] = []
+        else:
+            p1 = os.path.join(out, "final_search.json")
+            r1 = run_panel(checkpoint=final_ckpt, games=int(args.final_games),
+                           seats=int(args.final_seats),
+                           seed_base=int(args.eval_seed_base),
+                           device=str(args.device), out=p1, infer_search=1,
+                           turns=int(args.turns), topk=int(args.topk),
+                           max_per_turn=int(args.max_per_turn),
+                           when=str(args.search_when), action="pi_argmax",
+                           log=os.path.join(out, "log_final_search.log"))
+            after_search_ranks = r1["ranks"]
+        st_s = (paired_stats(after_ranks, after_search_ranks,
                             n_boot=int(args.bootstrap), seed=998)
+                if after_search_ranks else {})
         # capture ratio（配对 bootstrap）
         cap = None
         cap_ci = None
@@ -484,11 +501,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 cap = float(num.mean() / den.mean())
                 rng = np.random.default_rng(4242)
                 idx = rng.integers(0, num.size, size=(int(args.bootstrap), num.size))
-                boots = num[idx].mean(axis=1) / max(
-                    float(den.mean()), 1e-9) if float(den.mean()) != 0 else None
-                if boots is not None:
-                    cap_ci = [float(np.percentile(boots, 2.5)),
-                              float(np.percentile(boots, 97.5))]
+                # 分母是**负数**（rank 越小越好），必须直接除 den.mean()：
+                # 早期版本写成 max(den.mean(), 1e-9) 会把分母变成 1e-9（CI 被放大成 1e8）
+                boots = num[idx].mean(axis=1) / float(den.mean())
+                cap_ci = [float(np.percentile(boots, 2.5)),
+                          float(np.percentile(boots, 97.5))]
         final.update({
             "nosearch": {**st, "seconds": r0["seconds"], "panel": p0},
             "search": {"mean_rank": _mean_or_none(after_search_ranks),
