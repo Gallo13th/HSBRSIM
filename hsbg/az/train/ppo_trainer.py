@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 
@@ -33,6 +33,9 @@ from .ppo import (PPOConfig, PPOBatch, _torch, build_train_forward,
 from .bc_aux import (DEFAULT_BC_SAMPLES_PATH, bc_pool_summary, load_bc_samples,
                      parse_bc_coef_ramp)
 from .dpo_upgrade import UpgradeSamples, load_upgrade_samples
+from .board_problems import (DEFAULT_PROBLEM_PATH, BoardProblemBatch,
+                             BoardProblemPool, load_problem_pool,
+                             problem_obs_batch)
 
 #: anchor 参考前向的分块大小（= 编译图的固定 batch；尾块走 eager）。
 ANCHOR_CHUNK = 4096
@@ -67,6 +70,8 @@ class PPOTrainer:
         self.bc_rng = np.random.default_rng([int(self.config.seed), 0xBC])
         #: upgrade DPO 采样专用 RNG（同样解耦：coef=0 与 >0 的 PPO 序列逐位一致）
         self.dpo_rng = np.random.default_rng([int(self.config.seed), 0x0D0])
+        #: 场面题采样专用 RNG（同样解耦：coef=0 与 >0 的 PPO 序列逐位一致）
+        self.problem_rng = np.random.default_rng([int(self.config.seed), 0x9B0])
         self.updates = 0
         self.extra: Dict[str, Any] = {}
         #: 真实人类 BC 样本池（``bc_coef=0`` 时 None；加载失败自动关闭）
@@ -75,6 +80,9 @@ class PPOTrainer:
         #: upgrade 子集 DPO 样本池（``dpo_coef=0`` 时 None；惰性加载 ~7s）
         self.dpo_pool: Optional[UpgradeSamples] = dpo_pool
         self._dpo_warned = False
+        #: 场面题池（``problem_bc_coef=strength_aux_coef=0`` 时 None；惰性加载）
+        self.problem_pool: Optional[BoardProblemPool] = None
+        self._problem_warned = False
         #: KL anchor（stage 起点策略的冻结副本）；由 ``set_anchor()`` 建立
         self.anchor_model: Optional[Any] = None
         #: 训练侧编译包装（compile_train=0 时 None）；失败自动回退 eager
@@ -87,6 +95,8 @@ class PPOTrainer:
         self._ensure_bc_pool()
         # upgrade DPO 池：dpo_coef=0（默认）时同样完全不加载（~7s 惰性）
         self._ensure_dpo_pool()
+        # 场面题池：两个 coef 都是 0（默认）时完全不加载、不读 problems.jsonl
+        self._ensure_problem_pool()
         # 编译放在最后：权重/优化器状态就绪后再固定形状 warmup（计时之外）
         if compile_train_mode(getattr(self.config, "compile_train", 0)) > 0:
             self.train_forward = build_train_forward(self.model, self.config)
@@ -244,6 +254,78 @@ class PPOTrainer:
         sel = self.dpo_rng.choice(len(pool), size=int(k), replace=False)
         return pool.take(sel)
 
+    # -- 场面题（soft-label CE + 强度辅助头，默认关闭）--------------------
+    def problem_enabled(self) -> bool:
+        """配置是否要求场地题（任一系数 > 0）。"""
+        return (float(getattr(self.config, "problem_bc_coef", 0.0) or 0.0) > 0.0
+                or float(getattr(self.config, "strength_aux_coef", 0.0) or 0.0) > 0.0)
+
+    def set_problem_pool(self, pool: Optional[BoardProblemPool]) -> None:
+        """外部（CLI）预加载好题目池后注入，避免重复读 JSONL。"""
+        if pool is not None:
+            self.problem_pool = pool
+
+    def _ensure_problem_pool(self) -> Optional[BoardProblemPool]:
+        """惰性加载题目池；失败只 warn 一次并自动关闭两个系数（不中断训练）。"""
+        if not self.problem_enabled():
+            return self.problem_pool
+        if self.problem_pool is not None:
+            return self.problem_pool
+        path = str(getattr(self.config, "problem_pool_path", "") or
+                   DEFAULT_PROBLEM_PATH)
+        try:
+            pool = load_problem_pool(path)
+            if len(pool) == 0:
+                raise ValueError(f"题目池为空/不存在: {path}")
+            self.problem_pool = pool
+        except Exception as exc:  # noqa: BLE001 - 可选辅助，失败不中断训练
+            if not self._problem_warned:
+                print(f"[ppo][warn] 场面题池加载失败，自动关闭 problem_bc_coef/"
+                      f"strength_aux_coef：{type(exc).__name__}: {exc}", flush=True)
+                self._problem_warned = True
+            self.config.problem_bc_coef = 0.0
+            self.config.strength_aux_coef = 0.0
+            self.problem_pool = None
+        return self.problem_pool
+
+    def problem_summary(self) -> Optional[Dict[str, Any]]:
+        pool = self.problem_pool
+        return pool.summary() if pool is not None else None
+
+    def _problem_batch(self) -> Tuple[Optional[BoardProblemBatch], float, float]:
+        """按 iteration 周期抽一批题目 -> ``(batch|None, bc_coef, aux_coef)``。
+
+        两个系数各自按 ``problem_bc_every`` / ``strength_aux_every`` 周期门控（都默认 1
+        = 每 iteration）；周期不匹配的损失**完全不计算**（系数传 0），因此 B/C/D 三臂
+        只在「该开的那一项」上加梯度。采样用独立 ``problem_rng``，不影响 PPO 序列。
+        """
+        if not self.problem_enabled():
+            return None, 0.0, 0.0
+        pool = self._ensure_problem_pool()
+        if pool is None or len(pool) <= 0:
+            return None, 0.0, 0.0
+        bc_coef = float(getattr(self.config, "problem_bc_coef", 0.0) or 0.0)
+        aux_coef = float(getattr(self.config, "strength_aux_coef", 0.0) or 0.0)
+        every_bc = max(1, int(getattr(self.config, "problem_bc_every", 1) or 1))
+        every_aux = max(1, int(getattr(self.config, "strength_aux_every", 1) or 1))
+        upt = int(self.updates)
+        if (bc_coef > 0.0 and (upt % every_bc) == 0):
+            bc_coef = bc_coef
+        else:
+            bc_coef = 0.0
+        if (aux_coef > 0.0 and (upt % every_aux) == 0):
+            aux_coef = aux_coef
+        else:
+            aux_coef = 0.0
+        if bc_coef <= 0.0 and aux_coef <= 0.0:
+            return None, 0.0, 0.0
+        k = min(int(getattr(self.config, "problem_batch", 128) or 128), len(pool))
+        sel = self.problem_rng.choice(len(pool), size=int(k), replace=False)
+        batch = problem_obs_batch(pool, sel,
+                                  only_bc=bool(bc_coef > 0.0 and aux_coef <= 0.0),
+                                  only_aux=bool(aux_coef > 0.0 and bc_coef <= 0.0))
+        return batch, float(bc_coef), float(aux_coef)
+
     # -- update ------------------------------------------------------------
     def update(self, batch: PPOBatch) -> Dict[str, Any]:
         anchor_logp = None
@@ -251,13 +333,17 @@ class PPOTrainer:
             anchor_logp = self._anchor_logp(batch)
         # upgrade DPO：按 iteration 周期抽一批（coef=0/池空/未到周期 -> None）
         dpo_batch = self._dpo_batch()
+        problem_batch, pbc_coef, saux_coef = self._problem_batch()
         stats = train_ppo(self.model, batch, self.config,
                           optimizer=self.optimizer, rng=self.rng,
                           anchor_logp=anchor_logp,
                           train_forward=self.train_forward,
                           bc_pool=self.bc_pool,
                           bc_rng=self.bc_rng,
-                          dpo_batch=dpo_batch)
+                          dpo_batch=dpo_batch,
+                          problem_batch=problem_batch,
+                          problem_bc_coef=pbc_coef,
+                          strength_aux_coef=saux_coef)
         self.scheduler.step()
         self.updates += 1
         stats["trainer_updates"] = int(self.updates)
@@ -275,6 +361,7 @@ class PPOTrainer:
             "rng": self.rng.bit_generator.state,
             "bc_rng": self.bc_rng.bit_generator.state,
             "dpo_rng": self.dpo_rng.bit_generator.state,
+            "problem_rng": self.problem_rng.bit_generator.state,
             "updates": int(self.updates),
             "lr_min_ratio": float(self.lr_min_ratio),
             "max_updates": int(self.max_updates),
@@ -304,6 +391,8 @@ class PPOTrainer:
             self.bc_rng.bit_generator.state = state["bc_rng"]
         if "dpo_rng" in state:  # 旧 trainer.pt 没有该键：保留构造期的新 RNG
             self.dpo_rng.bit_generator.state = state["dpo_rng"]
+        if "problem_rng" in state:  # 旧 trainer.pt 没有该键：保留构造期的新 RNG
+            self.problem_rng.bit_generator.state = state["problem_rng"]
         self.updates = int(state.get("updates", 0))
         self.extra = dict(state.get("extra") or {})
 

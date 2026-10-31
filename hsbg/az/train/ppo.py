@@ -489,6 +489,29 @@ class PPOConfig:
     #: upgrade 样本池路径（默认仓库 ``data/firestone_bc/bc_samples.jsonl.gz``）：
     #: 只读 ``action_type=="upgrade"`` 的行（见 :mod:`hsbg.az.train.dpo_upgrade`）。
     dpo_samples: str = "data/firestone_bc/bc_samples.jsonl.gz"
+    #: **场面题**监督（``docs/RESEARCH_PLAN_V2.md`` §4.1 / ``docs/BOARD_PROBLEMS.md``）：
+    #: 在自对弈关键局面（每回合起点 + 决策分叉点）上用人类参考动作分布做 soft-label CE。
+    #: **0 = 关闭（默认）**：不加载题目池、不采样、不前向新头、stats 里不出现
+    #: ``problem_*`` 字段（与旧版逐位等价）。>0 时每个 iteration 抽 ``problem_batch``
+    #: 道题，把 ``problem_bc_coef * CE_soft`` 加进同一次 backward。
+    problem_bc_coef: float = 0.0
+    #: 每 ``problem_every`` 个 iteration 抽一批题目（与 ``dpo_every`` 同语义：不做周期
+    #: 折算，开步系数就是配置值，因此平均梯度占比 ≈ ``coef / every``）。
+    problem_bc_every: int = 1
+    #: 一批题目的行数（``problem_bc_coef`` 与 ``strength_aux_coef`` 共用同一批 + 同一次
+    #: 前向，所以 B/C/D 三臂的题目状态完全一致）。
+    problem_batch: int = 128
+    #: 题目池路径（``scripts/build_board_problems.py`` 产出的 problems.jsonl）。
+    problem_pool_path: str = ""
+    #: **强度辅助头**（entity 的 ``strength_head``）：从状态预测 t+3 **战团强度增量**
+    #: ``log1p(after)-log1p(before)``（z-score 回归）+ tier+1 是否达成（二分类）。
+    #: **0 = 关闭（默认）**：不建头、
+    #: 不前向、不算 loss、不改 checkpoint（旧 ckpt 自动无头）。
+    strength_aux_coef: float = 0.0
+    #: 强度辅助头的采样周期（按 iteration；与 ``problem_bc_every`` 独立）。
+    strength_aux_every: int = 1
+    #: tier+1 BCE 的正样本权重（默认 1.0；up 率偏低时可调大）。
+    strength_tier_pos_weight: float = 1.0
     #: KL anchor 到 stage 起点的系数 β（论文 Table 7：0.1，前 100 个 iteration 后放开）。
     #: >0 时必须由 trainer 提供 anchor 分布（见 PPOTrainer.set_anchor）。
     anchor_coef: float = 0.0
@@ -577,6 +600,18 @@ class PPOConfig:
             raise ValueError(f"dpo_batch 必须 > 0，得到 {self.dpo_batch!r}")
         if int(self.dpo_every) <= 0:
             raise ValueError(f"dpo_every 必须 >= 1，得到 {self.dpo_every!r}")
+        # 场面题监督 / 强度辅助头（默认关闭）：构造期校验系数/批量/周期
+        for _name in ("problem_bc_coef", "strength_aux_coef"):
+            _v = float(getattr(self, _name) or 0.0)
+            if not math.isfinite(_v) or _v < 0.0:
+                raise ValueError(f"{_name} 必须 >= 0，得到 {_v!r}")
+        for _name in ("problem_bc_every", "strength_aux_every", "problem_batch"):
+            if int(getattr(self, _name) or 0) <= 0:
+                raise ValueError(f"{_name} 必须 >= 1，得到 {getattr(self, _name)!r}")
+        if not math.isfinite(float(self.strength_tier_pos_weight)) or \
+                float(self.strength_tier_pos_weight) <= 0.0:
+            raise ValueError("strength_tier_pos_weight 必须是有限正数，得到 "
+                             f"{self.strength_tier_pos_weight!r}")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -952,6 +987,26 @@ def forward_bc_model(model: Any, features: Any, cards: Any, mask: Any = None):
             else fn(features, cards)
         if not isinstance(out, (tuple, list)) or len(out) != 2:
             raise ValueError("forward_bc 必须返回 (policy_logits, card_logits|None)")
+        return out[0], out[1]
+    logits, _rank_logits, _scalar = split_model_outputs(
+        forward_model(model, features, cards, mask))
+    return logits, None
+
+
+def forward_problem_model(model: Any, features: Any, cards: Any, mask: Any = None):
+    """场面题的一次前向：``(policy_logits, strength_pred|None)``。
+
+    优先走模型的 ``forward_problem``（entity 带 ``strength_head`` 时提供；一次 forward
+    同时出策略头与强度头）。老模型/测试替身没有该方法时退回 ``forward_model``
+    （``strength_pred=None``，只有 ``problem_bc_coef>0`` 时仍可用）。
+    只有 ``problem_bc_coef>0`` 或 ``strength_aux_coef>0`` 的分支调用它。
+    """
+    fn = getattr(model, "forward_problem", None)
+    if fn is not None:
+        out = fn(features, cards, mask) if _accepts_mask_aux(model, "forward_problem") \
+            else fn(features, cards)
+        if not isinstance(out, (tuple, list)) or len(out) != 2:
+            raise ValueError("forward_problem 必须返回 (policy_logits, strength_pred|None)")
         return out[0], out[1]
     logits, _rank_logits, _scalar = split_model_outputs(
         forward_model(model, features, cards, mask))
@@ -1467,7 +1522,11 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
                bc_batch: Optional[BCObsBatch] = None,
                bc_coef_override: Optional[float] = None,
                dpo_batch: Optional[UpgradeSamples] = None,
-               dpo_coef_override: Optional[float] = None) -> Dict[str, Any]:
+               dpo_coef_override: Optional[float] = None,
+               problem_batch: Optional[Any] = None,
+               problem_bc_coef_override: Optional[float] = None,
+               strength_aux_coef_override: Optional[float] = None
+               ) -> Dict[str, Any]:
     """计算一个 minibatch 的 PPO 损失（返回 torch 张量字典）。
 
     - policy: ``-min(r*A, clip(r,1±ε)*A).mean()``；
@@ -1478,6 +1537,10 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     - entropy: masked 策略熵（鼓励探索）；
     - anchor: ``anchor_coef * KL(π_θ ‖ π_anchor)``（``anchor_logp`` 为 stage 起点在整批
       样本上的 masked log-prob，形状 ``[len(batch), 245]``）；
+    - 场面题 soft-label CE（默认关闭）: ``problem_bc_coef * CE_soft``，只在题目状态上算；
+    - 强度辅助头（默认关闭）: ``strength_aux_coef * (MSE_z + BCE_tier)``；
+      两项共用 ``problem_batch`` 的同一次 ``forward_problem``；由 ``train_ppo`` 只在本次
+      update 的第一个微批组传入一次（与 DPO 同模式，系数乘 len(slices) 抵消平均）；
     - upgrade DPO（默认关闭）: ``dpo_coef * dpo_pair_loss(model, dpo_batch, beta)``，
       ``dpo_batch`` 由 ``train_ppo`` 只在本次 update 的第一个微批组传入一次；
     - 非法动作：logits 在 loss 内重新 masked，概率严格 0（``illegal_prob_max`` 可验证）；
@@ -1654,6 +1717,56 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         total = total + dpo_term
     else:
         dpo_term = None
+    # ── 场面题：soft-label CE + 强度辅助头（默认关闭时整段不执行）────────────
+    # 一次 forward_problem 同时出策略 logits 与强度头预测；两个系数各自独立，
+    # 所以 B（只强度头）/C（只题目 CE）/D（都开）三臂共用同一批题目状态。
+    problem_bc_coef = (float(getattr(config, "problem_bc_coef", 0.0) or 0.0)
+                       if problem_bc_coef_override is None
+                       else float(problem_bc_coef_override))
+    strength_coef = (float(getattr(config, "strength_aux_coef", 0.0) or 0.0)
+                     if strength_aux_coef_override is None
+                     else float(strength_aux_coef_override))
+    problem_term = None
+    problem_stats: Dict[str, Any] = {}
+    if ((problem_bc_coef > 0.0 or strength_coef > 0.0)
+            and problem_batch is not None and len(problem_batch) > 0):
+        from .board_problems import problem_bc_soft_ce, strength_aux_loss  # noqa: PLC0415
+        px = torch.from_numpy(np.ascontiguousarray(
+            problem_batch.features.astype(np.float32))).to(dev)
+        pc = torch.from_numpy(np.ascontiguousarray(
+            problem_batch.cards.astype(np.int64))).to(dev)
+        pm = torch.from_numpy(np.ascontiguousarray(
+            problem_batch.mask.astype(bool))).to(dev)
+        p_logits, p_pred = forward_problem_model(model, px, pc, pm)
+        problem_term = torch.zeros((), device=dev)
+        if problem_bc_coef > 0.0:
+            pbc = problem_bc_soft_ce(p_logits, problem_batch)
+            problem_term = problem_term + problem_bc_coef * pbc["loss"]
+            problem_stats["problem_bc_loss"] = pbc["loss"].detach()
+            problem_stats["problem_bc_top1_acc"] = pbc["top1_acc"]
+            problem_stats["problem_policy_in_ref"] = pbc["policy_in_ref"]
+            problem_stats["problem_n"] = torch.as_tensor(float(pbc["n"]), device=dev)
+            problem_stats["problem_coef"] = torch.as_tensor(
+                float(problem_bc_coef), device=dev)
+        if strength_coef > 0.0:
+            if p_pred is None:
+                raise RuntimeError(
+                    "strength_aux_coef>0 但模型没有 strength_head："
+                    "请用 attach_strength_head() 或 build_net(..., strength_head=True)")
+            paux = strength_aux_loss(
+                p_pred, problem_batch,
+                pos_weight=float(getattr(config, "strength_tier_pos_weight", 1.0)
+                                 or 1.0))
+            problem_term = problem_term + strength_coef * paux["loss"]
+            problem_stats["strength_aux_loss"] = paux["loss"].detach()
+            problem_stats["strength_mse"] = paux["mse"]
+            problem_stats["strength_bce"] = paux["bce"]
+            problem_stats["strength_tier_acc"] = paux["tier_up_acc"]
+            problem_stats["strength_n"] = torch.as_tensor(
+                float(paux["n"]), device=dev)
+            problem_stats["strength_coef"] = torch.as_tensor(
+                float(strength_coef), device=dev)
+        total = total + problem_term
     anchor_kl = torch.zeros((), device=dev)
     beta = float(config.anchor_coef)
     if beta > 0.0 and anchor_logp is not None:
@@ -1700,6 +1813,9 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         result["dpo_accept_rate"] = torch.as_tensor(
             float(dpo_accept or 0.0), device=dev)
         result["dpo_samples"] = torch.as_tensor(float(dpo_n), device=dev)
+    # 场面题 / 强度辅助头：只有真的算出损失才出现（默认关闭 -> 结构不变）
+    if problem_term is not None:
+        result.update(problem_stats)
     return result
 
 
@@ -1710,7 +1826,10 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
               train_forward: Optional[TrainForward] = None,
               bc_pool: Any = None,
               bc_rng: Optional[np.random.Generator] = None,
-              dpo_batch: Optional[UpgradeSamples] = None) -> Dict[str, Any]:
+              dpo_batch: Optional[UpgradeSamples] = None,
+              problem_batch: Optional[Any] = None,
+              problem_bc_coef: Optional[float] = None,
+              strength_aux_coef: Optional[float] = None) -> Dict[str, Any]:
     """执行 PPO 更新（minibatch × epochs，clip、entropy、KL 早停）。
 
     ``train_forward``：复用外部构建的 ``TrainForward``（``PPOTrainer`` 在启动时构建并
@@ -1777,6 +1896,15 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     # 这里只负责「一次 update 只加一次」与抵消梯度累积的平均（见下方 total/len(slices)）。
     dpo_on = bool(dpo_batch is not None and len(dpo_batch) > 0
                   and float(getattr(cfg, "dpo_coef", 0.0) or 0.0) > 0.0)
+    # 场面题 / 强度辅助头（默认关闭）：由 PPOTrainer 按周期传入一批题目 + **本次该生效**
+    # 的两个系数（周期门控在 trainer 里做：跳过步传 0）；None = 用 config 里的值。
+    # 两个系数分开传，因此 B（只强度头）/C（只题目 CE）/D（都开）共用同一批题目状态。
+    pbc_cfg = (float(getattr(cfg, "problem_bc_coef", 0.0) or 0.0)
+               if problem_bc_coef is None else float(problem_bc_coef))
+    saux_cfg = (float(getattr(cfg, "strength_aux_coef", 0.0) or 0.0)
+                if strength_aux_coef is None else float(strength_aux_coef))
+    problem_on = bool(problem_batch is not None and len(problem_batch) > 0
+                      and (pbc_cfg > 0.0 or saux_cfg > 0.0))
     device = torch.device(cfg.device)
     model.to(device)
     # 保持 eval（关闭 dropout）：old_logprob 是采集时 eval 前向算出的，若 PPO 前向
@@ -1849,6 +1977,15 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                 if dpo_on and updates == 0 and start == 0 and j == 0:
                     dpo_this = dpo_batch
                     dpo_coef_this = float(cfg.dpo_coef) * float(len(slices))
+                # 场面题：同样只在第一个微批组的第 0 个微批加一次；系数乘 len(slices)
+                # 抵消下面的 total/len(slices) 平均（等效梯度 = coef * L_problem）。
+                problem_this = None
+                pbc_coef_this = None
+                saux_coef_this = None
+                if problem_on and updates == 0 and start == 0 and j == 0:
+                    problem_this = problem_batch
+                    pbc_coef_this = float(pbc_cfg) * float(len(slices))
+                    saux_coef_this = float(saux_cfg) * float(len(slices))
                 if use_amp:
                     with torch.autocast("cuda", dtype=torch.bfloat16):
                         out = ppo_losses(model, batch, cfg, indices=sel,
@@ -1857,7 +1994,10 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                                          bc_batch=bc_batch,
                                          bc_coef_override=bc_coef_eff,
                                          dpo_batch=dpo_this,
-                                         dpo_coef_override=dpo_coef_this)
+                                         dpo_coef_override=dpo_coef_this,
+                                         problem_batch=problem_this,
+                                         problem_bc_coef_override=pbc_coef_this,
+                                         strength_aux_coef_override=saux_coef_this)
                 else:
                     out = ppo_losses(model, batch, cfg, indices=sel,
                                      anchor_logp=anchor_logp,
@@ -1865,7 +2005,10 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                                      bc_batch=bc_batch,
                                      bc_coef_override=bc_coef_eff,
                                      dpo_batch=dpo_this,
-                                     dpo_coef_override=dpo_coef_this)
+                                     dpo_coef_override=dpo_coef_this,
+                                     problem_batch=problem_this,
+                                     problem_bc_coef_override=pbc_coef_this,
+                                     strength_aux_coef_override=saux_coef_this)
                 (out["total"] / float(len(slices))).backward()
                 served += int(sel.size)
                 for k, v in out.items():
@@ -1918,6 +2061,14 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                     f" dpo_coef={rec['dpo_coef']:.4g}"
                     f" dpo_n={rec['dpo_samples']:.0f}"
                     if "dpo_loss" in rec else "")
+        prob_note = ""
+        if "problem_bc_loss" in rec:
+            prob_note += (f" pbc={rec['problem_bc_loss']:.4f}"
+                          f" pbc_top1={rec.get('problem_bc_top1_acc', 0.0):.3f}")
+        if "strength_aux_loss" in rec:
+            prob_note += (f" saux={rec['strength_aux_loss']:.4f}"
+                          f" s_mse={rec.get('strength_mse', 0.0):.4f}"
+                          f" s_bce={rec.get('strength_bce', 0.0):.4f}")
         print(f"[ppo] epoch {epoch + 1}/{epochs} total={rec['total']:.4f} "
               f"(policy={rec['policy_loss']:.4f} value={rec['value_loss']:.4f} "
               f"aux_pi={rec['aux_pi_loss']:.4f} ent={rec['entropy']:.4f} "
@@ -2018,6 +2169,45 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         if isinstance(cfg_echo, dict):
             for key in ("dpo_coef", "dpo_beta", "dpo_batch", "dpo_every",
                         "dpo_samples"):
+                cfg_echo.pop(key, None)
+    # 场面题 / 强度辅助头：只有真的算出损失才写 stats；默认关闭时连 config 回显里的
+    # 新键也去掉，保证与未接本功能的旧版本结构逐字节一致。
+    _pbc_recs = [r for r in logs if "problem_bc_loss" in r]
+    _saux_recs = [r for r in logs if "strength_aux_loss" in r]
+    if _pbc_recs:
+        stats["problem_bc_loss"] = float(np.mean(
+            [r["problem_bc_loss"] for r in _pbc_recs]))
+        stats["problem_bc_top1_acc"] = float(np.mean(
+            [r.get("problem_bc_top1_acc", 0.0) for r in _pbc_recs]))
+        stats["problem_policy_in_ref"] = float(np.mean(
+            [r.get("problem_policy_in_ref", 0.0) for r in _pbc_recs]))
+        stats["problem_bc_coef"] = float(getattr(cfg, "problem_bc_coef", 0.0) or 0.0)
+        stats["problem_bc_every"] = int(getattr(cfg, "problem_bc_every", 1) or 1)
+        stats["problem_bc_steps"] = int(len(_pbc_recs))
+        stats["problem_batch"] = float(np.mean(
+            [r.get("problem_n", 0.0) for r in _pbc_recs]))
+    if _saux_recs:
+        stats["strength_aux_loss"] = float(np.mean(
+            [r["strength_aux_loss"] for r in _saux_recs]))
+        stats["strength_mse"] = float(np.mean(
+            [r.get("strength_mse", 0.0) for r in _saux_recs]))
+        stats["strength_bce"] = float(np.mean(
+            [r.get("strength_bce", 0.0) for r in _saux_recs]))
+        stats["strength_tier_acc"] = float(np.mean(
+            [r.get("strength_tier_acc", 0.0) for r in _saux_recs]))
+        stats["strength_aux_coef"] = float(
+            getattr(cfg, "strength_aux_coef", 0.0) or 0.0)
+        stats["strength_aux_every"] = int(
+            getattr(cfg, "strength_aux_every", 1) or 1)
+        stats["strength_aux_steps"] = int(len(_saux_recs))
+        stats["strength_batch"] = float(np.mean(
+            [r.get("strength_n", 0.0) for r in _saux_recs]))
+    if not (_pbc_recs or _saux_recs):
+        cfg_echo = stats.get("config")
+        if isinstance(cfg_echo, dict):
+            for key in ("problem_bc_coef", "problem_bc_every", "problem_batch",
+                        "problem_pool_path", "strength_aux_coef",
+                        "strength_aux_every", "strength_tier_pos_weight"):
                 cfg_echo.pop(key, None)
     return stats
 

@@ -1,0 +1,435 @@
+{
+  "by_tag": {
+    "core_card": 220,
+    "triple_ready": 15,
+    "turn_start": 146,
+    "upgrade_ready": 276
+  },
+  "by_turn": {
+    "1": 16,
+    "10": 28,
+    "11": 24,
+    "12": 16,
+    "13": 6,
+    "2": 18,
+    "3": 21,
+    "4": 32,
+    "5": 32,
+    "6": 32,
+    "7": 32,
+    "8": 32,
+    "9": 32
+  },
+  "checkpoint": "runs/ab_board/start_model.pt",
+  "checkpoint_arch": "entity",
+  "config": {
+    "core_min_tier": 3,
+    "games": 16,
+    "horizon": 3,
+    "human_board_fast_inject": true,
+    "human_board_fidelity": "full",
+    "human_board_p": 0.9,
+    "human_board_seats": 5,
+    "human_boards": "data/real_library/library_real_quasi_full.jsonl",
+    "keep_turn_start": true,
+    "learner_seat": 0,
+    "max_fork_per_turn": 2,
+    "max_steps": 20000,
+    "min_turn": 1,
+    "mirror_p": 0.2,
+    "mirror_sample": "p75",
+    "mirror_seats": 2,
+    "mirror_snaps": "runs/library/snaps_champ",
+    "move_cap": 3,
+    "move_guard": true,
+    "move_repeat_limit": 2,
+    "obs_dtype": "f32",
+    "seed": 20200,
+    "temperature": 1.0
+  },
+  "decisions": 2563,
+  "generated_at": "2026-10-31T13:13:20+0800",
+  "human_board": {
+    "human_board_applied": 625,
+    "human_board_attempt": 1082,
+    "human_board_counters_applied": 625,
+    "human_board_counters_unavailable": 0,
+    "human_board_errors": 0,
+    "human_board_fidelity": "full",
+    "human_board_full_applied": 625,
+    "human_board_hand_applied": 625,
+    "human_board_hand_unavailable": 0,
+    "human_board_last_rejected": [
+      [
+        1,
+        "not_recruit"
+      ],
+      [
+        3,
+        "not_recruit"
+      ],
+      [
+        4,
+        "not_recruit"
+      ],
+      [
+        5,
+        "not_recruit"
+      ],
+      [
+        6,
+        "not_recruit"
+      ],
+      [
+        6,
+        "pending_choice(1)"
+      ],
+      [
+        6,
+        "pending_choice(1)"
+      ],
+      [
+        1,
+        "pending_choice(1)"
+      ],
+      [
+        3,
+        "pending_choice(1)"
+      ],
+      [
+        4,
+        "pending_choice(1)"
+      ],
+      [
+        6,
+        "pending_choice(2)"
+      ],
+      [
+        7,
+        "pending_choice(1)"
+      ],
+      [
+        6,
+        "pending_choice(1)"
+      ],
+      [
+        1,
+        "pending_choice(1)"
+      ],
+      [
+        2,
+        "pending_choice(1)"
+      ],
+      [
+        4,
+        "pending_choice(1)"
+      ]
+    ],
+    "human_board_missing": 0,
+    "human_board_nearest_bucket": 73,
+    "human_board_payload_missing": 0,
+    "human_board_pool_unbalanced": 0,
+    "human_board_rejected": 457,
+    "human_board_rejected_by_reason": {
+      "not_alive": 213,
+      "not_recruit": 73,
+      "pending_choice": 171
+    },
+    "human_board_skipped_by_mirror": 39,
+    "human_board_source": "human_board_approx",
+    "human_board_tier_set": 625,
+    "human_board_unavailable_fields": {
+      "attachments": 625,
+      "counter": 625,
+      "deathrattle_scripts": 625,
+      "gems": 625,
+      "gold": 625,
+      "hero_power_uses": 625,
+      "player_counters": 625,
+      "pool_delta": 625,
+      "shop": 625
+    }
+  },
+  "label_available": 321,
+  "label_missing": 0,
+  "label_survived": 305,
+  "label_survived_rate": 0.9501557632398754,
+  "label_terminal": 16,
+  "mirror": {
+    "mirror_applied": 49,
+    "mirror_applied_with_hand_queue": 0,
+    "mirror_attempt": 94,
+    "mirror_errors": 0,
+    "mirror_fallback": 45,
+    "mirror_last_rejected": [
+      [
+        2,
+        "not_alive"
+      ],
+      [
+        2,
+        "not_alive"
+      ],
+      [
+        1,
+        "not_alive"
+      ],
+      [
+        1,
+        "pending_choice(1)"
+      ],
+      [
+        2,
+        "not_alive"
+      ],
+      [
+        1,
+        "not_alive"
+      ],
+      [
+        1,
+        "pending_choice(1)"
+      ],
+      [
+        2,
+        "not_alive"
+      ],
+      [
+        2,
+        "not_alive"
+      ],
+      [
+        1,
+        "pending_choice(1)"
+      ],
+      [
+        2,
+        "pending_choice(1)"
+      ],
+      [
+        1,
+        "not_alive"
+      ],
+      [
+        2,
+        "pending_choice(1)"
+      ],
+      [
+        1,
+        "pending_choice(1)"
+      ],
+      [
+        2,
+        "not_alive"
+      ],
+      [
+        2,
+        "not_alive"
+      ]
+    ],
+    "mirror_missing": 12,
+    "mirror_pool_species_unbalanced": 0,
+    "mirror_pool_unbalanced": 0,
+    "mirror_rejected": 33,
+    "mirror_rejected_by_reason": {
+      "not_alive": 21,
+      "pending_choice": 12
+    }
+  },
+  "move_n_max": 1,
+  "move_n_p50": 0.0,
+  "norm_applied": false,
+  "per_game": [
+    {
+      "decisions": 287,
+      "game_seed": 20200,
+      "placement": 4,
+      "problems": 23,
+      "terminal_no_label": 0,
+      "turns": 16
+    },
+    {
+      "decisions": 212,
+      "game_seed": 20201,
+      "placement": 7,
+      "problems": 18,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 272,
+      "game_seed": 20202,
+      "placement": 4,
+      "problems": 23,
+      "terminal_no_label": 4,
+      "turns": 14
+    },
+    {
+      "decisions": 232,
+      "game_seed": 20203,
+      "placement": 6,
+      "problems": 19,
+      "terminal_no_label": 2,
+      "turns": 13
+    },
+    {
+      "decisions": 249,
+      "game_seed": 20204,
+      "placement": 6,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 206,
+      "game_seed": 20205,
+      "placement": 6,
+      "problems": 15,
+      "terminal_no_label": 0,
+      "turns": 16
+    },
+    {
+      "decisions": 228,
+      "game_seed": 20206,
+      "placement": 4,
+      "problems": 21,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 216,
+      "game_seed": 20207,
+      "placement": 4,
+      "problems": 20,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 232,
+      "game_seed": 20208,
+      "placement": 4,
+      "problems": 21,
+      "terminal_no_label": 2,
+      "turns": 14
+    },
+    {
+      "decisions": 259,
+      "game_seed": 20209,
+      "placement": 5,
+      "problems": 21,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 245,
+      "game_seed": 20210,
+      "placement": 3,
+      "problems": 21,
+      "terminal_no_label": 2,
+      "turns": 14
+    },
+    {
+      "decisions": 297,
+      "game_seed": 20211,
+      "placement": 4,
+      "problems": 23,
+      "terminal_no_label": 4,
+      "turns": 14
+    },
+    {
+      "decisions": 187,
+      "game_seed": 20212,
+      "placement": 7,
+      "problems": 15,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 290,
+      "game_seed": 20213,
+      "placement": 3,
+      "problems": 20,
+      "terminal_no_label": 2,
+      "turns": 13
+    },
+    {
+      "decisions": 298,
+      "game_seed": 20214,
+      "placement": 6,
+      "problems": 21,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 252,
+      "game_seed": 20215,
+      "placement": 6,
+      "problems": 21,
+      "terminal_no_label": 0,
+      "turns": 15
+    }
+  ],
+  "policy_top1_in_ref": 62,
+  "policy_top1_in_ref_rate": 0.19314641744548286,
+  "problems": 321,
+  "problems_path": "data/board_problems/problems.jsonl",
+  "problems_sha256": "ebe71b24d4455658d57eef0d5b3ba672f5ad2ac6c6fb8dede12b45a35a469b34",
+  "ref_floor": {
+    "10000": 151,
+    "6000": 131,
+    "8000": 39
+  },
+  "ref_level": {
+    "tier": 135,
+    "turn_tier": 68,
+    "turn_tier_gold": 118
+  },
+  "ref_mass_legal_mean": 0.6006519602159898,
+  "ref_mass_legal_p50": 0.6108786610878663,
+  "ref_match_rate": 1.0,
+  "ref_matched": 321,
+  "ref_missing": 0,
+  "ref_missing_rate": 0.0,
+  "reference": {
+    "floors": [
+      10000,
+      8000,
+      6000
+    ],
+    "levels": [
+      "by_turn_tier_gold",
+      "by_turn_tier",
+      "by_tier",
+      "by_turn",
+      "all"
+    ],
+    "path": "/home/data/users/gaoletian/projects/HSBRSIM/data/firestone_bc/bc_samples.jsonl.gz",
+    "rows": {
+      "10000": 7048,
+      "6000": 192022,
+      "8000": 21357
+    }
+  },
+  "schema": "board_problem_v1",
+  "seconds": 16.0,
+  "skipped": {
+    "fork_cap": 1581,
+    "min_turn": 16,
+    "no_label": 16,
+    "no_ref": 0,
+    "no_supervisable": 455
+  },
+  "strength_after_p50": 267.0,
+  "strength_before_p50": 97.0,
+  "strength_delta_log1p_p50": 1.196804314847323,
+  "strength_norm": {
+    "mean": 1.230856626760928,
+    "source": "problems_survived",
+    "std": 0.7341830421211712,
+    "target": "delta_log1p"
+  },
+  "tier_up_rate": 0.5264797507788161,
+  "total_seconds": 22.6,
+  "turn_max": 13,
+  "turn_min": 1
+}

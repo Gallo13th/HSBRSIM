@@ -125,7 +125,8 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
                      arch: str = "entity", seq_head: bool = False,
                      bc_card_head: bool = False,
                      bc_card_dim: Optional[int] = None,
-                     move_head_split: bool = False):
+                     move_head_split: bool = False,
+                     strength_head: bool = False):
     """构造 EntityAZNet（torch 模块）。
 
     ``seq_head=True`` 时在 global token 上加一个 245 维的「动作序列辅助头」
@@ -134,6 +135,11 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
 
     ``bc_card_head=True`` 时在 global token 上加「卡牌身份头」（3983 类，分层 BC）；
     默认 False：不构建（``bc_coef=0`` 逐位等价）。
+
+    ``strength_head=True`` 时在 global token 上加「场面强度辅助头」
+    （``Linear(d, 2)``：t+3 战团 log1p 强度回归 + tier+1 二分类；见
+    ``docs/BOARD_PROBLEMS.md``）。**默认 False**：不创建参数，前向/state_dict 与旧版
+    逐位一致（``strength_aux_coef=0`` 逐位等价）。
 
     ``move_head_split=True`` 时把 Move 段（196..244）的对称点积
     ``hb_i · hb_j`` 换成两个独立投影 ``move_from(hb_i) · move_to(hb_j)``，
@@ -235,6 +241,15 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
                 nn.init.zeros_(self.card_head.weight)
                 nn.init.zeros_(self.card_head.bias)
             self.bc_card_dim = int(card_head_dim) if bc_card_head else 0
+            # 场面强度辅助头（可选）：[log1p(t+3 战团总身材) z-score, tier+1 logit]。
+            # 默认 None = 不构建、前向/checkpoint 与旧版逐位一致。
+            self.strength_head = nn.Linear(d, 2) if strength_head else None
+            if self.strength_head is not None:
+                # **不用**零初始化：零权重会让辅助损失对 trunk 的梯度恒为 0
+                # （dL/dg = Wᵀ·dL/dpred = 0），40–60 iter 的小系数实验里等于没接。
+                # 用 nn.Linear 默认初始化（预测尺度 O(1)，tier 先验 ≈0.5），
+                # 梯度乘 strength_aux_coef 后进入 trunk。
+                self.strength_norm = {"mean": 0.0, "std": 1.0}
 
         def _card_repr(self, idx):
             # idx [B, ...] long; 返回 [B, ..., d]
@@ -264,6 +279,21 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             logits, _rank, _value, g = self._forward_impl(features, cards, mask)
             card = None if self.card_head is None else self.card_head(g)
             return logits, card
+
+        def forward_global(self, features, cards, mask=None):
+            """trunk 的 global token ``g``（``[B, d]``）；只给「离线拟合辅助头」用。"""
+            _l, _r, _v, g = self._forward_impl(features, cards, mask)
+            return g
+
+        def forward_problem(self, features, cards, mask=None):
+            """场面题一次前向：``(policy_logits, strength_pred[N,2])``。
+
+            只在 ``problem_bc_coef>0`` 或 ``strength_aux_coef>0`` 时调用；
+            ``strength_head`` 未构建时第二项为 ``None``（默认路径不调用本方法）。
+            """
+            logits, _rank, _value, g = self._forward_impl(features, cards, mask)
+            pred = None if self.strength_head is None else self.strength_head(g)
+            return logits, pred
 
         def _forward_impl(self, features, cards, mask=None):
             B = features.shape[0]
@@ -380,6 +410,44 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             return logits, rank, value, g
 
     return EntityAZNet()
+
+
+#: 强度辅助头的初始化缩放（1.0 = ``nn.Linear`` 默认初始化；见 attach 的说明）。
+STRENGTH_HEAD_INIT_GAIN = 1.0
+
+
+def attach_strength_head(model: Any, *, norm: Optional[Dict[str, float]] = None
+                         ) -> Any:
+    """给**已加载的旧 checkpoint** 追加场面强度辅助头（``Linear(d, 2)``）。
+
+    旧 checkpoint 没有 ``strength_head.*``：``load_checkpoint`` 不会构建它，因此在
+    ``--strength-aux-coef>0`` 时在这里新建（``nn.Linear`` 默认初始化：零初始化会让辅助
+    损失对 trunk 的梯度恒为 0），再把 ``norm``（log1p 强度的 z-score 参数）挂到
+    ``model.strength_norm`` 上，
+    随后 ``save_checkpoint`` 会把它写进 meta，checkpoint 自带归一化口径。
+    幂等：已有时直接返回。
+    """
+    if getattr(model, "strength_head", None) is not None:
+        if norm is not None:
+            try:
+                model.strength_norm = dict(norm)
+            except Exception:  # noqa: BLE001 - 非 nn.Module 的测试替身忽略
+                pass
+        return model
+    d = int(getattr(model, "d_model", 0) or 0)
+    if d <= 0:
+        raise ValueError(
+            f"模型不是 entity（d_model={d}）：strength_head 只支持 entity/entity18m")
+    torch = _torch()
+    nn = torch.nn
+    head = nn.Linear(d, 2)
+    if float(STRENGTH_HEAD_INIT_GAIN) != 1.0:
+        with torch.no_grad():
+            head.weight.mul_(float(STRENGTH_HEAD_INIT_GAIN))
+            head.bias.mul_(float(STRENGTH_HEAD_INIT_GAIN))
+    model.strength_head = head
+    model.strength_norm = dict(norm or {"mean": 0.0, "std": 1.0})
+    return model
 
 
 def attach_move_head_split(model: Any) -> Any:

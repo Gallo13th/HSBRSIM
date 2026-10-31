@@ -50,6 +50,7 @@ from hsbg.az.train.tier_target import parse_tier_target_table  # noqa: E402
 from hsbg.az.train.model import (  # noqa: E402
     attach_bc_card_head,
     attach_move_head_split,
+    attach_strength_head,
     bc_card_head_dim,
     build_net,
     load_checkpoint,
@@ -376,6 +377,32 @@ def main() -> int:
     ap.add_argument("--dpo-samples", default="data/firestone_bc/bc_samples.jsonl.gz",
                     help="upgrade 样本来源 JSONL(.gz)（只读 action_type==upgrade 的行）；"
                          "默认 data/firestone_bc/bc_samples.jsonl.gz")
+    # ---- 场面题（自对弈关键局面 + 人类参考解）与强度辅助头（默认关闭）----
+    # 见 docs/RESEARCH_PLAN_V2.md §4.1 与 docs/BOARD_PROBLEMS.md。
+    ap.add_argument("--problem-pool", default="data/board_problems/problems.jsonl",
+                    help="场面题池（scripts/build_board_problems.py 产出）；"
+                         "两个系数都为 0 时不读该文件")
+    ap.add_argument("--problem-bc-coef", type=float, default=0.0,
+                    help="场面题 soft-label CE 系数（0=关闭，默认）；只在题目状态上算，"
+                         "与 BC/DPO 正交。>0 需要 --problem-pool 存在且模型支持 "
+                         "forward_problem")
+    ap.add_argument("--problem-bc-every", type=int, default=1,
+                    help="场面题 CE 周期（按 iteration；默认 1=每次）")
+    ap.add_argument("--problem-batch", type=int, default=128,
+                    help="每批题目行数（题目 CE 与强度辅助头共用同一批 + 同一次前向）")
+    ap.add_argument("--strength-aux-coef", type=float, default=0.0,
+                    help="强度辅助头系数（0=关闭，默认）：t+3 战团强度增量的 log1p "
+                         "回归 + tier+1 二分类，只在有标注（t+3 时存活）的题目上算")
+    ap.add_argument("--strength-aux-every", type=int, default=1,
+                    help="强度辅助头周期（按 iteration；默认 1=每次）")
+    ap.add_argument("--strength-tier-pos-weight", type=float, default=1.0,
+                    help="强度辅助头 tier+1 BCE 的正样本权重（默认 1.0）")
+    ap.add_argument("--strength-head-init", default="fit", choices=["fit", "random"],
+                    help="强度辅助头初始化：fit=在题目池上离线拟合线性头（CV 选 lambda "
+                         "的 ridge + logistic，并冻结；推荐，40-60 iter 的小 lr 下随机头"
+                         "无法校准）、random=保持 nn.Linear 随机初始化（纯消融）")
+    ap.add_argument("--strength-head-ridge", type=float, default=1.0,
+                    help="离线拟合的 ridge 强度（乘以样本数；默认 1.0）")
     ap.add_argument("--entropy-coef", type=float, default=0.005)
     ap.add_argument("--max-actions-per-turn", type=int, default=40)
     ap.add_argument("--max-steps", type=int, default=20000)
@@ -661,6 +688,19 @@ def main() -> int:
     if int(args.dpo_batch) <= 0 or int(args.dpo_every) <= 0:
         print("[error] --dpo-batch 必须 > 0 且 --dpo-every 必须 >= 1", file=sys.stderr)
         return 2
+    # 场面题 / 强度辅助头（默认关闭）：系数非负、批量/周期合法
+    for _nm in ("problem_bc_coef", "strength_aux_coef"):
+        _v = float(getattr(args, _nm))
+        if not np.isfinite(_v) or _v < 0.0:
+            print(f"[error] --{_nm.replace('_', '-')} 必须 >= 0", file=sys.stderr)
+            return 2
+    for _nm in ("problem_batch", "problem_bc_every", "strength_aux_every"):
+        if int(getattr(args, _nm)) <= 0:
+            print(f"[error] --{_nm.replace('_', '-')} 必须 >= 1", file=sys.stderr)
+            return 2
+    _strength_enabled = bool(float(args.strength_aux_coef) > 0.0)
+    _problem_enabled = bool(float(args.problem_bc_coef) > 0.0)
+    _board_enabled = bool(_strength_enabled or _problem_enabled)
     try:
         bc_class_weights = parse_bc_class_weights(str(args.bc_class_weight))
     except ValueError as exc:
@@ -803,6 +843,86 @@ def main() -> int:
     print(f"[net] arch={arch} params={sum(p.numel() for p in model.parameters()):,}",
           flush=True)
 
+    # ---- 场面题池 + 强度辅助头（默认关闭 = 不读文件、不建头、零影响）----------
+    # 题目池里同时有「人类参考动作 top-k 软标签」与「t+3 战团强度/tier+1 标签」：
+    # 题目 CE 与强度辅助头共用同一批题目 + 同一次 forward_problem（B/C/D 三臂可比）。
+    problem_pool = None
+    if _board_enabled:
+        try:
+            from hsbg.az.train.board_problems import load_problem_pool
+            _t_prob = time.time()
+            problem_pool = load_problem_pool(str(args.problem_pool))
+            if len(problem_pool) == 0:
+                raise ValueError(f"题目池为空/不存在: {args.problem_pool}")
+            _ps = problem_pool.summary()
+            print(f"[problems] pool={problem_pool.path} n={_ps['problems']} "
+                  f"bc_valid={_ps['bc_valid']}({_ps['bc_valid_rate']:.1%}) "
+                  f"aux_valid={_ps['aux_valid']}({_ps['aux_valid_rate']:.1%}) "
+                  f"turns={_ps['by_turn']} "
+                  f"load={time.time() - _t_prob:.1f}s", flush=True)
+            print(f"[problems] by_tag={json.dumps(_ps['by_tag'], ensure_ascii=False)} "
+                  f"tier_up_rate={_ps['tier_up_rate']:.3f} "
+                  f"strength_p50 before={_ps['strength_before_p50']:.0f} "
+                  f"after={_ps['strength_after_p50']:.0f} "
+                  f"norm={json.dumps(_ps['norm'], ensure_ascii=False)}", flush=True)
+            if _problem_enabled and int(_ps["bc_valid"]) == 0:
+                print("[warn] 题目池没有任何合法参考解（bc_valid=0）："
+                      "自动关闭 problem_bc_coef=0", flush=True)
+                args.problem_bc_coef = 0.0
+                _problem_enabled = False
+            if _strength_enabled and int(_ps["aux_valid"]) == 0:
+                print("[warn] 题目池没有任何 t+3 强度标注（aux_valid=0）："
+                      "自动关闭 strength_aux_coef=0", flush=True)
+                args.strength_aux_coef = 0.0
+                _strength_enabled = False
+        except Exception as exc:  # noqa: BLE001 - 可选辅助，失败不中断训练
+            print(f"[warn] 场面题池加载失败，自动关闭 problem_bc_coef/"
+                  f"strength_aux_coef（不中断训练）：{type(exc).__name__}: {exc}",
+                  flush=True)
+            args.problem_bc_coef = 0.0
+            args.strength_aux_coef = 0.0
+            _problem_enabled = _strength_enabled = False
+            problem_pool = None
+    if _strength_enabled and problem_pool is not None:
+        _snorm = dict(problem_pool.norm or {"mean": 0.0, "std": 1.0})
+        if getattr(model, "strength_head", None) is None:
+            try:
+                attach_strength_head(model, norm=_snorm)
+                print(f"[strength] checkpoint 无 strength_head：已追加 "
+                      f"Linear({bc_card_head_dim(model)}, 2)（t+3 log1p 强度 + tier+1），"
+                      f"norm={json.dumps(_snorm, ensure_ascii=False)}", flush=True)
+            except Exception as exc:  # noqa: BLE001 - 非 entity/测试替身
+                print(f"[warn] 追加 strength_head 失败（本次关闭 strength_aux_coef=0）："
+                      f"{exc!r}", flush=True)
+                args.strength_aux_coef = 0.0
+                _strength_enabled = False
+        else:
+            model.strength_norm = _snorm
+            print(f"[strength] checkpoint 已带 strength_head（沿用权重）；"
+                  f"norm={json.dumps(_snorm, ensure_ascii=False)}", flush=True)
+        if str(args.strength_head_init) == "fit":
+            from hsbg.az.train.board_problems import fit_strength_head
+            try:
+                _rep = fit_strength_head(
+                    model, problem_pool, ridge=float(args.strength_head_ridge),
+                    device=str(args.device))
+                print(f"[strength] 离线拟合线性头（题目池 aux_valid="
+                      f"{_rep['n']}）：mse={_rep['mse']:.4f} bce={_rep['bce']:.4f} "
+                      f"tier_acc={_rep['tier_acc']:.3f} "
+                      f"cv_mse={_rep.get('cv_mse', float('nan')):.4f} "
+                      f"pearson(增量)={_rep['pearson_delta']:.3f} "
+                      f"ridge={_rep['ridge']:g} frozen={_rep['frozen']}", flush=True)
+            except Exception as exc:  # noqa: BLE001 - 拟合失败保留随机头
+                print(f"[warn] 强度头离线拟合失败（保留随机初始化）："
+                      f"{type(exc).__name__}: {exc}", flush=True)
+    if (_problem_enabled or _strength_enabled):
+        print(f"[problems] problem_bc_coef={float(args.problem_bc_coef):g} "
+              f"every={int(args.problem_bc_every)} "
+              f"strength_aux_coef={float(args.strength_aux_coef):g} "
+              f"every={int(args.strength_aux_every)} "
+              f"batch={int(args.problem_batch)} "
+              f"tier_pos_weight={float(args.strength_tier_pos_weight):g}", flush=True)
+
     # ---- upgrade 子集 DPO：预加载池 + 启动诊断（默认关闭 = 零影响）------------
     # 池 ~3050 条 / ~7s；只在 --dpo-coef>0 时加载。失败自动关闭（不中断训练）。
     dpo_pool: Optional[UpgradeSamples] = None
@@ -881,7 +1001,15 @@ def main() -> int:
         dpo_beta=float(args.dpo_beta),
         dpo_batch=int(args.dpo_batch),
         dpo_every=int(args.dpo_every),
-        dpo_samples=str(args.dpo_samples))
+        dpo_samples=str(args.dpo_samples),
+        # 场面题 soft-label CE + 强度辅助头（默认关闭；池在下方注入 trainer）
+        problem_bc_coef=float(args.problem_bc_coef),
+        problem_bc_every=int(args.problem_bc_every),
+        problem_batch=int(args.problem_batch),
+        problem_pool_path=str(args.problem_pool),
+        strength_aux_coef=float(args.strength_aux_coef),
+        strength_aux_every=int(args.strength_aux_every),
+        strength_tier_pos_weight=float(args.strength_tier_pos_weight))
     trainer: Optional[PPOTrainer] = None
     if args.trainer_state and os.path.isfile(args.trainer_state):
         trainer = PPOTrainer.load(model, args.trainer_state, config=p_cfg,
@@ -919,6 +1047,10 @@ def main() -> int:
             print("[warn] upgrade DPO 池不可用，自动关闭 dpo_coef=0", flush=True)
             dpo_enabled = False
             trainer.config.dpo_coef = 0.0
+
+    # 场面题池注入（CLI 已预加载/打印；未启用时为 None，trainer 不会自己加载）
+    if _board_enabled and problem_pool is not None and not args.trainer_state:
+        trainer.set_problem_pool(problem_pool)
 
     # ---- 日志：history.jsonl 追加（兼容旧 history.json）----
     history: List[Dict[str, Any]] = []
@@ -1490,7 +1622,14 @@ def main() -> int:
                      f" dpo_acc={stats['dpo_accept_rate']:.3f}"
                      f" dpo_coef={stats['dpo_coef']:.4g}"
                      f" dpo_n={stats['dpo_samples']:.0f}"
-                     if dpo_enabled and "dpo_loss" in stats else ""),
+                     if dpo_enabled and "dpo_loss" in stats else "")
+                  + (f" pbc={stats['problem_bc_loss']:.4f}"
+                     f" pbc_top1={stats.get('problem_bc_top1_acc', 0.0):.3f}"
+                     if _problem_enabled and "problem_bc_loss" in stats else "")
+                  + (f" saux={stats['strength_aux_loss']:.4f}"
+                     f" s_mse={stats.get('strength_mse', 0.0):.4f}"
+                     f" s_bce={stats.get('strength_bce', 0.0):.4f}"
+                     if _strength_enabled and "strength_aux_loss" in stats else ""),
                   flush=True)
 
             # 版本化快照：trainer 为权威，model 为导出；manifest 最后原子发布
