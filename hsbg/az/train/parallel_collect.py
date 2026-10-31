@@ -716,8 +716,18 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                     _tier = int(_pj.get("tier") or 0)
                 ta = -1
                 if int(g.turn) >= 6 and in_scaling_window(_gold, _tier):
-                    v = json.loads(g.view(seat))
-                    ta = int(_teacher.act_view(v))
+                    # 教师只读 me/mask/phase。非 pending 决策用 player_json 构造
+                    # 最小 view（避免 Game.view() 的全量 opponents，人类战团注入后
+                    # 可达 MB 级）；pending（target/discover/...）直接用完整 view，
+                    # 因为 player_json 的 pending 是原始 list，未归一化。
+                    _pjv = json.loads(g.player_json(seat))
+                    if _pjv.get("pending"):
+                        ta = int(_teacher.act_view(json.loads(g.view(seat))))
+                    else:
+                        _mask = np.frombuffer(g.legal_mask(seat),
+                                              dtype=np.uint8).astype(bool)
+                        ta = int(_teacher.act_view(
+                            {"me": _pjv, "phase": "recruit", "mask": _mask.tolist()}))
                     st["teacher_labels"] = int(st.get("teacher_labels", 0)) + 1
                 _rec["teacher_action"] = int(ta)
             if _process_on:

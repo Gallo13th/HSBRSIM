@@ -1,0 +1,80 @@
+{
+ "version": "v2",
+ "games_target": 24,
+ "golds": [
+  10
+ ],
+ "leaf_mode": "rollout",
+ "rollout": {
+  "topk": 8,
+  "turns": 1,
+  "mode": "sample",
+  "samples": 2,
+  "pi_mode": "advantage",
+  "q_temp": 0.0,
+  "q_temp_scale": 1.0,
+  "tier_bonus": 0.0,
+  "carrier_bonus": 0.0
+ },
+ "search_when": "carrier_or_spell",
+ "search_max_per_turn": 3,
+ "behavior": "pi_search",
+ "games": 24,
+ "steps": 6489,
+ "searched_steps": 723,
+ "search_ratio": 0.11141932501155802,
+ "seconds_per_game": 2.917,
+ "elapsed_s": 70.0,
+ "amortized_search_ms_p50": 69.5,
+ "amortized_search_ms_p95": 233.0,
+ "serial_single_search": {
+  "n": 5,
+  "p50_ms": 46.1,
+  "p95_ms": 47.0,
+  "max_ms": 47.2
+ },
+ "kl_pi_base_mean": 3.3129802789136993,
+ "kl_pi_base_p50": 0.7008754657439983,
+ "top1_agree_with_base": 0.45643153526970953,
+ "pi_top1_mass_mean": 0.8072242422511139,
+ "q_std_mean": 0.006064442636913989,
+ "leaf_steps_mean": 201.76763485477179,
+ "truncated_rollouts_mean": 0.0,
+ "best_eq_base_rate": 0.31673582295988933,
+ "pi_top1_eq_base_rate": 0.45643153526970953,
+ "base_top1_is_endturn_rate": 0.004149377593360996,
+ "sigma_delta_best_minus_base": {
+  "mean": 17.58782849239281,
+  "p50": 7.0,
+  "p90": 44.0,
+  "p10": 0.0,
+  "frac_pos": 0.6749654218533887,
+  "frac_neg": 0.0,
+  "n": 723
+ },
+ "sigma_delta_pi_minus_base": {
+  "mean": 14.550484094052559,
+  "p50": 2.0,
+  "p90": 41.80000000000007,
+  "p10": 0.0,
+  "frac_pos": 0.5089903181189488,
+  "frac_neg": 0.0,
+  "n": 723
+ },
+ "L_delta_best_minus_base_mean": 0.005354805535517336,
+ "tag_presence_rate": {
+  "carrier_in_shop": 0.12097395592541224,
+  "carrier_in_hand": 0.11650485436893204,
+  "spell_in_hand": 0.20681152719987672,
+  "tier4plus": 0.7346278317152104
+ },
+ "behavior_trajectory": {
+  "t12_p50": 574.5,
+  "t12_p90": 1061.6,
+  "t15_p50": 985.0,
+  "t15_p90": 2719.8999999999996,
+  "tier_p50": 5.0,
+  "searches_per_game_mean": 30.125
+ },
+ "out": "data/search_labels_v2/pil_s2_24.jsonl.gz"
+}

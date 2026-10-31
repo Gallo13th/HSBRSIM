@@ -1,0 +1,81 @@
+{
+ "version": "v2",
+ "games_target": 48,
+ "golds": [
+  10
+ ],
+ "leaf_mode": "rollout",
+ "rollout": {
+  "topk": 8,
+  "turns": 3,
+  "mode": "greedy",
+  "samples": 1,
+  "pi_mode": "advantage",
+  "q_temp": 0.0,
+  "q_temp_scale": 1.0,
+  "adv_clip": 30.0,
+  "tier_bonus": 0.0,
+  "carrier_bonus": 0.0
+ },
+ "search_when": "carrier_or_spell",
+ "search_max_per_turn": 3,
+ "behavior": "pi_search",
+ "games": 48,
+ "steps": 13524,
+ "searched_steps": 1564,
+ "search_ratio": 0.11564625850340136,
+ "seconds_per_game": 7.522,
+ "elapsed_s": 361.0,
+ "amortized_search_ms_p50": 192.1,
+ "amortized_search_ms_p95": 461.5,
+ "serial_single_search": {
+  "n": 3,
+  "p50_ms": 166.6,
+  "p95_ms": 192.3,
+  "max_ms": 195.1
+ },
+ "kl_pi_base_mean": 2.8890245272640156,
+ "kl_pi_base_p50": 0.22911737921560266,
+ "top1_agree_with_base": 0.5824808184143222,
+ "pi_top1_mass_mean": 0.814157601217251,
+ "q_std_mean": 0.011265128012471365,
+ "leaf_steps_mean": 405.26150895140665,
+ "truncated_rollouts_mean": 0.0,
+ "best_eq_base_rate": 0.4156010230179028,
+ "pi_top1_eq_base_rate": 0.5824808184143222,
+ "base_top1_is_endturn_rate": 0.00319693094629156,
+ "sigma_delta_best_minus_base": {
+  "mean": 49.059462915601024,
+  "p50": 8.0,
+  "p90": 151.0,
+  "p10": 0.0,
+  "frac_pos": 0.5843989769820972,
+  "frac_neg": 0.0,
+  "n": 1564
+ },
+ "sigma_delta_pi_minus_base": {
+  "mean": 40.5613810741688,
+  "p50": 0.0,
+  "p90": 132.70000000000005,
+  "p10": 0.0,
+  "frac_pos": 0.40664961636828645,
+  "frac_neg": 0.0,
+  "n": 1564
+ },
+ "L_delta_best_minus_base_mean": 0.009436172339782039,
+ "tag_presence_rate": {
+  "carrier_in_shop": 0.1199349304939367,
+  "carrier_in_hand": 0.11756876663708962,
+  "spell_in_hand": 0.22752144335995267,
+  "tier4plus": 0.7386128364389234
+ },
+ "behavior_trajectory": {
+  "t12_p50": 719.5,
+  "t12_p90": 1313.6000000000004,
+  "t15_p50": 1139.0,
+  "t15_p90": 2003.7000000000014,
+  "tier_p50": 5.0,
+  "searches_per_game_mean": 32.583333333333336
+ },
+ "out": "data/search_labels_v2/online_pisearch_t3_g10.jsonl.gz"
+}

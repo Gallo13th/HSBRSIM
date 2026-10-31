@@ -1,0 +1,20 @@
+{
+ "adv_clip": 6.0,
+ "q_temp": 0.0,
+ "q_temp_scale": 1.0,
+ "pi_mode": "advantage",
+ "steps": 81039,
+ "searched": 8989,
+ "missing_prior": 0,
+ "kl_pi_base_mean": 1.6695174264508092,
+ "kl_pi_base_p50": 0.2609719882125802,
+ "kl_pi_base_p90": 3.2452265704820933,
+ "top1_agree_with_base": 0.6619201245967293,
+ "pi_top1_mass_mean": 0.7635411565651126,
+ "sigma_delta_pi_minus_base": {
+  "mean": 16.822894649015463,
+  "p50": 0.0,
+  "frac_pos": 0.302703304038269
+ },
+ "out": "/home/data/users/gaoletian/projects/HSBRSIM/data/search_labels_v2/sandbox_v2_g10_clip6.jsonl.gz"
+}

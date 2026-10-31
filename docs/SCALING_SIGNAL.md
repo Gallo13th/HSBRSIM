@@ -170,6 +170,21 @@
 即 **>90% 的局从头到尾没有拿到载体**，施法只能换来一次性加身材（"+2/+2 你的随从" 之类），
 没有永久复利。这解释了表 B 里 `casts→Σ` 的斜率为什么 ≤0。
 
+> **更正（2026-11-01）：`quality_monitor` 的「对载体施法」旧值 0 是 bug 失真**
+>
+> 任何引用 `scripts/quality_monitor.py --carrier-audit 1` 的 `casts_on_carrier_mean`
+> **不能**用来支持「不打载体」——旧版读 `pending["options"]`，而引擎 `Pending::Target`
+> 的序列化键是 **`targets`**（`rust/crates/hsbg-engine/src/debug.rs`）⇒ 目标候选恒为空、
+> **该指标恒为 0**。修复后（先 `targets` 回退 `options`，单测 `tests/test_quality_monitor.py`）
+> 的实测：**s16 最终权重 band0（1 席 p=0.30 / p50 / full，48 局）
+> `casts_on_carrier_mean = 1.52/局`（有载体局 2.92/局）、`carrier_turns_mean = 2.90`、
+> `r(载体回合数, Σ₁₂) = +0.021 [−0.323, +0.157]`（n₁₂=48）**。
+> （训练中途快照 step ~1101 为 0.92 / 2.15 / +0.096，两个快照方向一致。）
+> 产物：`runs/az_entity_s16/eval/quality_band0_carrier_fix_final.json`。
+>
+> 本报告其余数字（载体率 6–9%、`r(施法₉, ·)`、`r(载体在场回合数, Σ₁₂) = −0.14` 等）
+> 来自 `scripts/scaling_signal_probe.py` 的**引擎日志/面板**，**不受该 bug 影响**。
+
 ---
 
 ## 3. 相关性诊断（核心）

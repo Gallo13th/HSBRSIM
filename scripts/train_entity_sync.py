@@ -63,12 +63,16 @@ from hsbg.az.train.curriculum import (  # noqa: E402
     gold_mult_at,
 )
 from hsbg.az.train.ppo import (  # noqa: E402
+    BoardRampController,
     CollectConfig,
     PPOConfig,
     PPOEvaluator,
+    board_ramp_history,
     collect_ppo_batch,
     forward_model,
     masked_log_softmax_torch,
+    parse_decisions,
+    ramp_progress_metrics,
     split_model_outputs,
     torch_available,
 )
@@ -168,6 +172,23 @@ def _gpu_used_mib() -> Dict[int, int]:
         except ValueError:
             continue
     return used
+
+
+def _read_quality_json(path: str) -> Dict[str, Any]:
+    """读离线质量统计 JSON（空路径/读失败 -> ``{}``，绝不打断训练）。
+
+    只用于 ``--ramp-adaptive 1`` 的门控指标：给了 ``--ramp-quality-json`` 就优先用它
+    的 ``survive_t12_ratio`` / ``tier_ge4_ratio``（真实 tier 观测），否则退回采集轨迹代理。
+    每个 iteration 现读（文件可被外部脚本更新），失败静默退化。
+    """
+    if not str(path or "").strip():
+        return {}
+    try:
+        with open(str(path), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except BaseException:  # noqa: BLE001 - 门控指标退化为轨迹代理
+        return {}
 
 
 def _atomic_torch_save(obj: Any, path: str) -> None:
@@ -313,6 +334,43 @@ def main() -> int:
                     help="1=人类战团注入走快速路径（payload 注入视图缓存 + orjson + "
                          "ended 位字符串替换）；**与默认路径逐位等价**（同 seed 动作序列/"
                          "状态 JSON 完全相同），实测采集侧 Python 成本降约四成。默认 0=旧路径")
+    # ---- 对手强度课程：human-board 席数/概率/分位按累计 decisions 爬坡 ----
+    #     默认（空 spec + adaptive=0）完全恒等：CollectConfig 里仍是 --human-board-* 的值。
+    #     见 docs/BOARD_RAMP.md。
+    ap.add_argument("--human-board-ramp", default="",
+                    help="对手强度课程（席数/概率）：decisions:seats:p,...，例 "
+                         "\"0:1:0.30,10M:2:0.50,20M:3:0.70,30M:5:0.90\"。按**累计 learner "
+                         "decisions** 求值，decisions 支持 K/M/B 后缀；空=用固定 "
+                         "--human-board-seats/--human-board-p（默认，逐位等价）")
+    ap.add_argument("--human-board-quantile-ramp", default="",
+                    help="分位课程（与席数/p 独立）：decisions:quantile,...，例 "
+                         "\"0:p75,20M:p90\"；取值 auto/p50/p75/p90/max；空=用固定 "
+                         "--human-board-sample（默认不爬坡）")
+    ap.add_argument("--ramp-mode", default="step", choices=["step", "linear"],
+                    help="档位插值方式：step=分段常数（默认，边界突变）；linear=段内线性"
+                         "（seats 四舍五入、p 连续），用于平滑过渡实验")
+    ap.add_argument("--ramp-adaptive", type=int, default=0, choices=[0, 1],
+                    help="1=自适应门控：用最近 --ramp-window 个 iter 的「存活到 t12」与"
+                         "「tier>=4」比例决定提前升档（连续达标）/推迟下一档（不达标）；"
+                         "默认 0=严格按 decisions 走课程")
+    ap.add_argument("--ramp-window", type=int, default=5,
+                    help="自适应门控的滑动窗口 iteration 数（默认 5）")
+    ap.add_argument("--ramp-survive-threshold", type=float, default=0.25,
+                    help="升档门槛：窗口内存活到 t12 比例 >= 该值（默认 0.25）")
+    ap.add_argument("--ramp-tier4-threshold", type=float, default=0.30,
+                    help="升档门槛：窗口内 tier>=4 比例 >= 该值（默认 0.30）")
+    ap.add_argument("--ramp-delay-decisions", default="2M",
+                    help="不达标时把后续档位整体推迟多少 decisions（默认 2M；每档最多一次）")
+    ap.add_argument("--ramp-max-forced-per-game", type=float, default=12.0,
+                    help="门控保护：每局「强制结束回合」均值超过该值说明存活是动作上限"
+                         "刷出来的假象，不允许提前升档（默认 12；s15 真实值 ≈0.16）")
+    ap.add_argument("--ramp-start-decisions", default="0",
+                    help="ramp 的起始累计 decisions 偏移（续训时要传上一次的累计值，"
+                         "否则课程会从 band0 重新开始；默认 0）")
+    ap.add_argument("--ramp-quality-json", default="",
+                    help="可选：离线质量统计 JSON（scripts/quality_monitor.py 输出）。给了就"
+                         "优先用它的 survive_t12_ratio / tier_ge4_ratio 做门控指标；"
+                         "空=用采集轨迹代理（max_turn>=12 / max_turn>=8）")
     # ---- 势函数奖励塑形（默认关闭，见 docs/REWARD_SHAPING.md）----
     ap.add_argument("--shaping-coef", type=float, default=0.0,
                     help="势函数奖励塑形系数 λ；0=关闭（默认，records/GAE 与旧路径逐位等价）")
@@ -565,9 +623,59 @@ def main() -> int:
         print("[warn] 回合末快照镜像只在 --lockstep 1 路径生效", flush=True)
     if str(args.mirror_snaps) and not os.path.isdir(str(args.mirror_snaps)):
         print(f"[warn] --mirror-snaps 目录不存在: {args.mirror_snaps}", flush=True)
-    # 人类战团（board-only）注入（默认关闭；--human-board-p 0 时完全零影响）
-    if float(args.human_board_p) > 0.0:
-        if int(args.human_board_seats) <= 0:
+    # ---- 对手强度课程（human-board 席数/概率/分位按累计 decisions 爬坡）----
+    # 默认（spec 全空 + adaptive=0）是恒等映射：下面所有分支都走旧路径。
+    try:
+        board_ramp = BoardRampController(
+            str(args.human_board_ramp), mode=str(args.ramp_mode),
+            quantile_spec=str(args.human_board_quantile_ramp),
+            adaptive=bool(int(args.ramp_adaptive)),
+            base_seats=int(args.human_board_seats),
+            base_p=float(args.human_board_p),
+            base_sample=str(args.human_board_sample),
+            window=int(args.ramp_window),
+            survive_threshold=float(args.ramp_survive_threshold),
+            tier4_threshold=float(args.ramp_tier4_threshold),
+            max_forced_per_game=float(args.ramp_max_forced_per_game),
+            delay_decisions=args.ramp_delay_decisions,
+            start_decisions=args.ramp_start_decisions)
+    except ValueError as exc:
+        print(f"[error] 对手强度课程参数非法: {exc}", file=sys.stderr)
+        return 2
+    if board_ramp.enabled:
+        _desc = board_ramp.describe()
+        print(f"[ramp] 对手强度课程开启: mode={_desc['mode']} "
+              f"bands={_desc['bands']} spec={_desc['spec']!r} "
+              f"quantile={_desc['quantile_spec']!r} "
+              f"adaptive={int(_desc['adaptive'])} window={_desc['window']} "
+              f"start_decisions={_desc['start_decisions']}", flush=True)
+        if int(args.ramp_adaptive):
+            print(f"[ramp] 门控: survive_t12>={float(args.ramp_survive_threshold):g} 且 "
+                  f"tier4>={float(args.ramp_tier4_threshold):g} 且 "
+                  f"forced/game<={float(args.ramp_max_forced_per_game):g} 才升档；"
+                  f"否则推迟 {int(_desc['delay_decisions'])} decisions", flush=True)
+        for _i, (_d, _s, _p) in enumerate(_desc["points"]):
+            print(f"[ramp] band {_i}: decisions>={_d} seats={_s} p={_p:g}",
+                  flush=True)
+        for _i, (_d, _q) in enumerate(_desc["quantile_points"]):
+            print(f"[ramp] quantile band {_i}: decisions>={_d} sample={_q}",
+                  flush=True)
+        if not int(args.lockstep):
+            print("[warn] 对手强度课程依赖人类战团注入，只在 --lockstep 1 路径生效",
+                  flush=True)
+        if int(args.ramp_adaptive) and str(args.ramp_quality_json):
+            print(f"[ramp] 自适应门控指标优先读质量统计: {args.ramp_quality_json}",
+                  flush=True)
+        elif int(args.ramp_adaptive):
+            print("[ramp] 自适应门控指标：采集轨迹代理（max_turn>=12 / max_turn>=8）；"
+                  "没有真实 tier 观测，建议用 --ramp-quality-json 接 quality_monitor",
+                  flush=True)
+        if float(_desc["start_decisions"]) > 0.0:
+            print(f"[ramp] 起始 decisions 偏移 = {_desc['start_decisions']}"
+                  "（续训请传上一次的累计值）", flush=True)
+    # 人类战团（board-only）注入（默认关闭；p 全 0 时完全零影响）
+    if board_ramp.max_p() > 0.0:
+        if int(args.human_board_seats) <= 0 and not board_ramp.enabled:
             print("[error] --human-board-p>0 需要 --human-board-seats>0", file=sys.stderr)
             return 2
         if not str(args.human_boards):
@@ -594,6 +702,9 @@ def main() -> int:
                   "注入走 apply_turn_snapshots + ended_turn 复位）", flush=True)
         if not int(args.lockstep):
             print("[warn] 人类战团注入只在 --lockstep 1 路径生效", flush=True)
+        if int(args.processes) <= 1:
+            print("[warn] 人类战团注入只在 --processes>1 的进程池 worker 内生效；"
+                  "--processes 1 的逐局采集不会注入（对手强度课程因此无效）", flush=True)
         elif (float(args.mirror_p) > 0.0 or _mirror_ramp):
             print("[info] 人类战团 + 回合末快照镜像同时开启："
                   "同座位同回合镜像快照优先（记 human_board_skipped_by_mirror）", flush=True)
@@ -1548,7 +1659,8 @@ def main() -> int:
                   f"建议 --gpus {suggest} 或 --device cuda:<空闲卡>。", flush=True)
 
     def _collect_for(idx: int, wv: Optional[int] = None,
-                     wp: Optional[str] = None) -> Tuple[Any, Dict[str, Any], CollectConfig, float]:
+                     wp: Optional[str] = None
+                     ) -> Tuple[Any, Dict[str, Any], CollectConfig, float, Any]:
         # p ramp：按 iteration 下标求值（空 schedule = 固定 --mirror-p）。
         _mp = float(args.mirror_p)
         if str(args.mirror_p_ramp).strip():
@@ -1558,6 +1670,9 @@ def main() -> int:
             cum_decisions, stage=_curr_cfg["curriculum_stage"],
             mult=_curr_cfg["curriculum_gold_mult"],
             anneal_decisions=_curr_cfg["curriculum_anneal_decisions"])
+        # 对手强度课程：按**已累计 learner decisions** 求本 iteration 生效的
+        # seats/p/sample（空 spec -> 原样返回 CLI 值，逐位等价）。
+        _hb_state = board_ramp.state(cum_decisions)
         c_cfg = CollectConfig(
             games=int(args.games), seed=int(args.seed) + idx * 1000,
             opponent=str(args.opponent), behavior=str(args.behavior),
@@ -1579,9 +1694,9 @@ def main() -> int:
             mirror_p_ramp=str(args.mirror_p_ramp),
             mirror_seat_random=bool(int(args.mirror_seat_random)),
             human_boards=str(args.human_boards),
-            human_board_p=float(args.human_board_p),
-            human_board_seats=int(args.human_board_seats),
-            human_board_sample=str(args.human_board_sample),
+            human_board_p=float(_hb_state.p),
+            human_board_seats=int(_hb_state.seats),
+            human_board_sample=str(_hb_state.sample),
             human_board_set_tier=bool(int(args.human_board_set_tier)),
             human_board_fidelity=str(args.human_board_fidelity),
             human_board_fast_inject=bool(int(args.human_board_fast_inject)),
@@ -1650,7 +1765,7 @@ def main() -> int:
                 power_normalize=bool(int(args.power_normalize)),
                 power_cutoff=int(args.power_cutoff),
                 credit_timebase=str(args.credit_timebase))
-        return batch, collect_meta, c_cfg, time.time() - t_c
+        return batch, collect_meta, c_cfg, time.time() - t_c, _hb_state
 
     def _pre_ratio(batch: Any, n: int = 2048) -> float:
         """用当前参数对 batch 抽样算 mean ratio（流水线的越策略守卫）。"""
@@ -1711,10 +1826,10 @@ def main() -> int:
             _reload_s = 0.0
 
             if pending is not None:
-                batch, collect_meta, c_cfg, _collect_s = pending.result()
+                batch, collect_meta, c_cfg, _collect_s, _hb_state = pending.result()
                 pending = None
             else:
-                batch, collect_meta, c_cfg, _collect_s = _collect_for(i)
+                batch, collect_meta, c_cfg, _collect_s, _hb_state = _collect_for(i)
             _tl["t_collect_done"] = time.monotonic()
 
             errs = batch.validate()
@@ -1788,6 +1903,21 @@ def main() -> int:
                 _publish_weights(int(trainer.updates))
 
             slim = slim_collect(collect_meta)
+            # ── 对手强度课程：本 iter 实际生效值 + 自适应门控 ──────────────────
+            # 注意：``_hb_state`` 由 ``_collect_for`` 在提交采集时求值，pipeline 模式下
+            # 最多滞后 1 个 iteration（与 batch 版本滞后同源）；history 记录的就是它。
+            _decisions_i = int(slim.get("decisions", 0) or 0)
+            _cum_after = int(cum_decisions) + _decisions_i
+            _ramp_events: List[Dict[str, Any]] = []
+            _ramp_gate: Optional[Dict[str, Any]] = None
+            if board_ramp.enabled and int(args.ramp_adaptive):
+                _quality = _read_quality_json(str(args.ramp_quality_json))
+                _ramp_gate = ramp_progress_metrics(
+                    getattr(batch, "turns", None), getattr(batch, "game_ids", None),
+                    collect_meta=collect_meta, quality=_quality)
+                _ramp_events = board_ramp.observe(i, _cum_after, _ramp_gate)
+                for _ev in _ramp_events:
+                    print(f"[ramp] iter {i} gate event: {_ev}", flush=True)
             rec = {"iter": i, "collect": slim, "ppo": stats,
                    "pipeline": {"enabled": pipeline_on, "lag": int(lag),
                                 "batch_version": int(batch_version),
@@ -1802,6 +1932,19 @@ def main() -> int:
                                "history_prev_s": round(float(_history_s_prev), 3)},
                    "batch_server": (dict(batch_server.stats) if batch_server is not None else None),
                    "seconds": time.time() - t0}
+            rec["human_board"] = board_ramp_history(
+                _hb_state, spec=str(args.human_board_ramp),
+                quantile_spec=str(args.human_board_quantile_ramp),
+                mode=str(args.ramp_mode), adaptive=bool(int(args.ramp_adaptive)),
+                events=_ramp_events)
+            # 平铺三键：history.jsonl 里一眼能查「本 iter 实际生效值」
+            rec["human_board_seats"] = int(_hb_state.seats)
+            rec["human_board_p"] = round(float(_hb_state.p), 6)
+            rec["human_board_sample"] = str(_hb_state.sample)
+            if _ramp_gate is not None:
+                rec["ramp_gate"] = dict(
+                    _ramp_gate, events=list(_ramp_events),
+                    window=board_ramp.window_summary())
             if problem_pool is not None:
                 # 题池过滤口径（默认 0/空 -> dropped 全 0）：池大小 / 按 delta 丢 /
                 # 按 turn 丢，与 ppo 段的 problem_pool_* 同源
@@ -1844,6 +1987,9 @@ def main() -> int:
                      f" s_mse={stats.get('strength_mse', 0.0):.4f}"
                      f" s_bce={stats.get('strength_bce', 0.0):.4f}"
                      if _strength_enabled and "strength_aux_loss" in stats else "")
+                  + (f" hb={int(_hb_state.seats)}s/p{float(_hb_state.p):.2f}"
+                     f"/{_hb_state.sample}/b{int(_hb_state.band)}"
+                     if board_ramp.enabled else "")
                   + (f" goldx={c_cfg.curriculum_gold_mult:g}"
                      if str(_curr_cfg["curriculum_stage"]) != "none" else "")
                   + (f" teach={stats['teacher_bc_loss']:.4f}"
@@ -1959,6 +2105,14 @@ def main() -> int:
         summary["evals_skipped"] = list(eval_runner.skipped)
     if eval_state["stop_reason"]:
         summary["eval_stop_reason"] = eval_state["stop_reason"]
+    if board_ramp.enabled:
+        # 对手强度课程：配置 + 收尾实际生效值 + 自适应事件（默认关闭时 summary 不变）
+        summary["board_ramp"] = {
+            **board_ramp.describe(),
+            "final": board_ramp.state(cum_decisions).as_dict(),
+            "events": list(board_ramp.events),
+            "cum_decisions": int(cum_decisions),
+        }
     if seq_enabled:
         # 动作序列辅助任务：ramp 终点与累计 decisions（默认关闭时 summary 不变）
         summary["seq"] = {**seq_schedule.describe(),

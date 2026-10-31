@@ -106,11 +106,13 @@ class ScriptPolicy:
     """
 
     def __init__(self, mode: str = "greedy", curve: str = "mid",
-                 lobby: str | None = None, cheat: str | None = None):
+                 lobby: str | None = None, cheat: str | None = None,
+                 cheat_gold: int = 99):
         self.mode = mode
         self.curve = curve
         self.lobby = lobby
         self.cheat = cheat
+        self.cheat_gold = int(cheat_gold)
         self.gold_given = 0
         self.actions = 0
         self.refreshes = 0
@@ -307,7 +309,7 @@ def drive(seed: int, policy: ScriptPolicy, max_turn: int = 20,
         policy.refreshes = 0
         policy.casts = 0
         if policy.cheat and t >= 1:
-            cmd = {"cmd": "set_player", "p": 0, "gold": 99}
+            cmd = {"cmd": "set_player", "p": 0, "gold": int(policy.cheat_gold)}
             if policy.cheat == "tier6":
                 cmd.update({"tier": 6, "upgrade_cost": 0})
             elif policy.cheat == "tier5":
@@ -347,7 +349,7 @@ def drive_bot(seed: int, cheat: str | None, lobby: str | None = None,
     while not g.is_over() and g.turn <= max_turn:
         t = g.turn
         if cheat and t >= 1:
-            cmd = {"cmd": "set_player", "p": 0, "gold": 99}
+            cmd = {"cmd": "set_player", "p": 0, "gold": int(policy.cheat_gold)}
             if cheat == "tier6":
                 cmd.update({"tier": 6, "upgrade_cost": 0})
             g.debug(json.dumps(cmd))
@@ -517,16 +519,19 @@ def summarize(rows: dict[int, list[int]], label: str) -> dict:
 
 def _job(args):
     seed, cfg = args
-    mode, curve, lobby, cheat = cfg
+    mode, curve, lobby, cheat, cheat_gold = cfg
     if mode == "bot":
         return drive_bot(seed, cheat, lobby)
-    pol = ScriptPolicy(mode=mode, curve=curve, lobby=lobby, cheat=cheat)
+    pol = ScriptPolicy(mode=mode, curve=curve, lobby=lobby, cheat=cheat,
+                       cheat_gold=cheat_gold)
     return drive(seed, pol)
 
 
 def run_parallel(mode: str, games: int, workers: int, curve: str,
-                 lobby: str | None, cheat: str | None, seed0: int) -> dict[int, list[int]]:
-    jobs = [(seed0 + i, (mode, curve, lobby, cheat)) for i in range(games)]
+                 lobby: str | None, cheat: str | None, seed0: int,
+                 cheat_gold: int = 99) -> dict[int, list[int]]:
+    jobs = [(seed0 + i, (mode, curve, lobby, cheat, int(cheat_gold)))
+            for i in range(games)]
     rows: dict[int, list[int]] = defaultdict(list)
     if workers <= 1:
         for j in jobs:
@@ -551,6 +556,8 @@ def main() -> int:
     ap.add_argument("--curve", choices=["aggr", "mid", "late"], default="mid")
     ap.add_argument("--lobby", default=None, help="强制类型（逗号分隔，如 DEMON,BEAST）")
     ap.add_argument("--cheat", choices=["gold", "tier5", "tier6"], default=None)
+    ap.add_argument("--cheat-gold", type=int, default=99,
+                    help="cheat 模式每回合设置的金币（默认 99=∞；用于测不同金币课程上限）")
     ap.add_argument("--seed0", type=int, default=90000)
     ap.add_argument("--turns", default="9,11", help="beam 的 turn 列表")
     ap.add_argument("--width", type=int, default=12)
@@ -570,11 +577,13 @@ def main() -> int:
         if args.lobby:
             label += f"/lobby={args.lobby}"
         rows = run_parallel(args.mode, args.games, args.workers, args.curve,
-                            args.lobby, args.cheat, args.seed0)
+                            args.lobby, args.cheat, args.seed0,
+                            cheat_gold=int(args.cheat_gold))
         summary = summarize(rows, label)
         summary["games"] = args.games
         summary["config"] = {"mode": args.mode, "curve": args.curve, "lobby": args.lobby,
-                             "cheat": args.cheat, "seed0": args.seed0,
+                             "cheat": args.cheat, "cheat_gold": int(args.cheat_gold),
+                             "seed0": args.seed0,
                              "build": E.build_info().get("source_hash"),
                              "version": E.game_version()}
     else:

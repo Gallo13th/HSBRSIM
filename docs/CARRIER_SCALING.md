@@ -291,6 +291,32 @@ Mindslasher，80/10 局）做“买法术→施放”的循环——原因是它
 注意：`quality_monitor` 为了不解析引擎日志，`casts_on_carrier_mean` 用**目标选择**
 口径（严格下界）；完整口径用 `carrier_audit.py` / `carrier_metrics.py`。
 
+> **更正（2026-11-01）：`quality_monitor` 的「对载体施法」曾是 bug 值 0.0**
+>
+> 引擎 `Pending::Target` 的序列化键是 **`targets`**（`rust/crates/hsbg-engine/src/debug.rs`），
+> 而 `scripts/quality_monitor.py` 旧版读 `pending["options"]` ⇒ 目标候选恒为空
+> ⇒ 该脚本产出的 `casts_on_carrier_mean` **恒为 0.0**（`docs/ECONOMY_SANDBOX.md` §9.7）。
+> 本报告 §2.3 / §3 的 strict 口径（0.54/局）来自**引擎日志解析**，不受该 bug 影响；
+> 受影响的是所有引用 `quality_monitor` 面板「对载体施法 = 0」的读数。
+>
+> 修复后（先读 `targets`、回退 `options`；单测 `tests/test_quality_monitor.py`），
+> s16 当前权重在 **band0（1 席人类战团 p=0.30 / p50 / full fidelity）+ `--games 48`**：
+>
+> | 指标（同一次运行） | 旧脚本值 | 修复后 |
+> |---|---:|---:|
+> | `casts_on_carrier_mean` | **0.0（恒为 0，bug）** | **1.52**（有载体局 2.92） |
+> | `carrier_turns_mean` | 不受影响 | 2.90 |
+> | `r_carrier_turns_str12` | 不受影响 | +0.021 [−0.323, +0.157]，Spearman −0.093，n₁₂=48 |
+> | `carrier_encounter_rate` / `carrier_t12_rate` | 不受影响 | 52.1% / 45.8% |
+> | t12 Σ p50（`str12_p50`） | 不受影响 | 542 |
+>
+> 产物：`runs/az_entity_s16/eval/quality_band0_carrier_fix_final.json`（最终 step 1401）；
+> 训练中途快照（step ~1101，`..._fix.json`）为 0.92 / 2.15 / +0.096 —— 两个快照方向一致，
+> bug 的 0.0 被证伪。
+> 结论修正：s16 在 band0 下**确实会对载体施法**（最终权重每局 1.52 次、有载体局 2.92 次），
+> 不是「几乎不打在载体上」；但 `r(载体回合数, Σ₁₂)` 仍不显著（CI 含 0），
+> 载体的「回合数」与 t12 强度还没有形成正相关。
+
 ### 4.3 离线门（每 N 个 iteration）
 
 ```bash

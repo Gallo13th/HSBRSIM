@@ -1,0 +1,37 @@
+{
+ "games_target": 125,
+ "golds": [
+  10,
+  30
+ ],
+ "search": {
+  "sims": 64,
+  "topk": 8,
+  "depth": 1,
+  "max_per_turn": 6,
+  "value_mode": "total"
+ },
+ "value_fit": {
+  "samples": 53292,
+  "d": 384,
+  "train_mse": 0.0014805239625275135,
+  "val_mse": 0.001420121523551643,
+  "corr": 0.9531812788219755,
+  "val_corr": 0.9557523282429,
+  "y_mean": 0.10453478991985321,
+  "pred_mean": 0.1042737141251564,
+  "mse": 0.0014714632416144013
+ },
+ "games": 125,
+ "steps": 50717,
+ "searched_steps": 9026,
+ "search_ratio": 0.17796793974407005,
+ "elapsed_s": 883.0,
+ "seconds_per_game": 7.064,
+ "kl_pi_base_mean": 0.4212802278279114,
+ "kl_pi_base_p50": 0.16709327103379978,
+ "top1_agree_with_base": 0.9516951030356747,
+ "search_seconds_per_decision_p50": 0.07573471750531878,
+ "search_sims_mean": 64.0,
+ "out": "data/search_labels/shards/shard1.jsonl.gz"
+}

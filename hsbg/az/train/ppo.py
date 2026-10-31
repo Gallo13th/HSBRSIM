@@ -41,7 +41,7 @@ import math
 import os
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -414,6 +414,549 @@ class CollectConfig:
     #: 过程价值辅助标签：True 时每决策写 ``process_target``（酒馆永久 buff /
     #: 施法数 / consume 数，log1p）；默认 False = 不读日志、不新增字段。
     process_value: bool = False
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 4b. 对手强度课程（human-board 席数/概率/分位按累计 learner decisions 爬坡）
+#
+# 动机（docs/BOARD_RAMP.md）：s15 的训练分布是「5 席 × p0.9（fidelity=full）」，
+# 200 局 tier 分布 t1..t6 = 822/706/483/96/3/3 回合 —— 模型整局停在 tier1–3；
+# 规则教师（scripts/carrier_teacher.py）在同分布下 0/200 局活到 t12，在 7-bot
+# 宽松分布下能活到 t12。载体（11 张施法成长随从）多在 tier4–6，所以「对手太强
+# → 活不到后期 → 学不到缩放」。对策：先降对手强度（少座位 / 低注入概率 / 低分位），
+# 按**累计 learner decisions** 逐步加回。
+#
+# **默认（空 spec + adaptive=0）是恒等映射**：``state()`` 原样返回 CLI 的
+# seats/p/sample，训练入口写回 CollectConfig 的也是同一组值 -> 与旧路径逐位等价。
+# ══════════════════════════════════════════════════════════════════════════
+
+#: 席数/p 的插值方式：``step``=分段常数（默认，档位边界突变）；
+#: ``linear``=段内线性插值（seats 四舍五入、p 连续），用于平滑过渡实验。
+BOARD_RAMP_MODES: Tuple[str, ...] = ("step", "linear")
+#: 分位课程允许的取值（与 ``CollectConfig.human_board_sample`` 同口径）。
+BOARD_RAMP_QUANTILES: Tuple[str, ...] = ("auto", "p50", "p75", "p90", "max")
+#: 「存活到 t12」的回合阈值（回合号，与 ``records["turn"]`` 同口径）。
+BOARD_RAMP_SURVIVE_TURN = 12
+#: ``tier>=4`` 的**代理**回合阈值：tier_target 曲线是 ``7:4,9:5,12:6``，
+#: 第 7 回合该到 tier4，这里保守取 8（没有直接 tier 观测时的替代口径）。
+BOARD_RAMP_TIER4_PROXY_TURN = 8
+#: 自适应门控默认阈值：存活到 t12 >= 0.25 **且** tier>=4 >= 0.30 才提前升档。
+BOARD_RAMP_SURVIVE_THRESHOLD = 0.25
+BOARD_RAMP_TIER4_THRESHOLD = 0.30
+#: 不达标时把下一档推迟的 decisions（默认 2M）。
+BOARD_RAMP_DELAY_DECISIONS = 2_000_000.0
+#: 门控的「强制结束回合」上限（每局均值）：超过它说明「活到 t12」很可能是**动作上限
+#: 强制结束回合**刷出来的假存活（模型在 Play/Cancel 循环里），此时不允许提前升档。
+#: 参考值：s15 真实采集 ≈ 0.16 次/局；短跑 band0 ≈ 7 次/局仍属正常。
+BOARD_RAMP_MAX_FORCED_PER_GAME = 12.0
+#: decisions 字面量后缀（``"10M"`` / ``"500K"`` / ``"1B"``）。
+_DECISIONS_UNITS = {"": 1.0, "k": 1e3, "m": 1e6, "b": 1e9}
+
+
+def parse_decisions(value: Any) -> float:
+    """解析 decisions 字面量：``"2000000"`` / ``"2M"`` / ``"500K"`` / ``"1.5B"``。
+
+    纯函数；非法输入抛 ``ValueError``（训练入口启动期 fail-fast）。负数 / NaN / inf
+    一律拒绝。``bool`` 也拒绝（避免 ``True`` 被当成 1.0 的静默 bug）。
+    """
+    if isinstance(value, bool):
+        raise ValueError(f"decisions 必须是数字，不能是 bool: {value!r}")
+    if isinstance(value, (int, float)):
+        d = float(value)
+    else:
+        text = str(value).strip().replace("_", "")
+        if not text:
+            raise ValueError("decisions 不能为空")
+        suffix = text[-1].lower()
+        if suffix in _DECISIONS_UNITS and suffix:
+            num, unit = text[:-1], suffix
+        else:
+            num, unit = text, ""
+        try:
+            d = float(num)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"非法 decisions 字面量: {value!r}") from exc
+        d *= _DECISIONS_UNITS[unit]
+    if not math.isfinite(d) or d < 0.0:
+        raise ValueError(f"decisions 必须是有限非负数: {value!r}")
+    return float(d)
+
+
+def parse_board_ramp(spec: Any) -> List[Tuple[float, int, float]]:
+    """解析 ``"0:1:0.30,10M:2:0.50"`` -> ``[(decisions, seats, p), ...]``（按 decisions 升序）。
+
+    - 片段格式 ``decisions:seats:p``；decisions 支持 ``K`` / ``M`` / ``B`` 后缀；
+    - seats 必须是 ``1..N_PLAYERS-1`` 的整数；p 必须是 ``[0, 1]`` 的有限小数；
+    - 空字符串 / ``None`` -> ``[]``（课程关闭）；
+    - decisions 重复 -> ``ValueError``（档位边界必须唯一）；
+    - 首个控制点不要求是 0：早于它时取第一档（与 ``ramp_p`` 同语义）。
+    """
+    if spec is None:
+        return []
+    text = str(spec).strip()
+    if not text:
+        return []
+    pts: List[Tuple[float, int, float]] = []
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        fields = part.split(":")
+        if len(fields) != 3:
+            raise ValueError(
+                f"board-ramp 片段应为 decisions:seats:p，得到 {part!r}")
+        d_txt, s_txt, p_txt = (f.strip() for f in fields)
+        d = parse_decisions(d_txt)
+        try:
+            seats = int(s_txt)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"board-ramp seats 必须是整数: {part!r}") from exc
+        try:
+            p = float(p_txt)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"board-ramp p 必须是 0..1 的小数: {part!r}") from exc
+        if not (1 <= seats <= N_PLAYERS - 1):
+            raise ValueError(
+                f"board-ramp seats 必须在 1..{N_PLAYERS - 1}: {part!r}")
+        if not math.isfinite(p) or not (0.0 <= p <= 1.0):
+            raise ValueError(f"board-ramp p 越界 [0,1]: {part!r}")
+        pts.append((d, int(seats), float(p)))
+    pts.sort(key=lambda z: z[0])
+    for (d0, _s0, _p0), (d1, _s1, _p1) in zip(pts, pts[1:]):
+        if d1 == d0:
+            raise ValueError(f"board-ramp 控制点 decisions 必须严格递增: {spec!r}")
+    return pts
+
+
+def parse_quantile_ramp(spec: Any) -> List[Tuple[float, str]]:
+    """解析 ``"0:p75,20M:p90"`` -> ``[(decisions, quantile), ...]``（按 decisions 升序）。
+
+    取值限 :data:`BOARD_RAMP_QUANTILES`（auto/p50/p75/p90/max）；分位是**类别**，
+    只做分段常数，不做线性插值。空字符串 -> ``[]``（分位不变）。
+    """
+    if spec is None:
+        return []
+    text = str(spec).strip()
+    if not text:
+        return []
+    pts: List[Tuple[float, str]] = []
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" not in part:
+            raise ValueError(f"quantile-ramp 片段应为 decisions:quantile，得到 {part!r}")
+        d_txt, q_txt = part.split(":", 1)
+        d = parse_decisions(d_txt.strip())
+        q = str(q_txt).strip().lower()
+        if q not in BOARD_RAMP_QUANTILES:
+            raise ValueError(
+                f"quantile-ramp 取值必须是 {BOARD_RAMP_QUANTILES} 之一: {part!r}")
+        pts.append((d, q))
+    pts.sort(key=lambda z: z[0])
+    for (d0, _q0), (d1, _q1) in zip(pts, pts[1:]):
+        if d1 == d0:
+            raise ValueError(
+                f"quantile-ramp 控制点 decisions 必须严格递增: {spec!r}")
+    return pts
+
+
+def _ramp_index(points: Sequence[Any], x: float) -> int:
+    """分段常数档位下标：最后一个 ``decisions <= x`` 的控制点（早于首个取 0）。"""
+    idx = 0
+    for i, point in enumerate(points):
+        if float(x) >= float(point[0]):
+            idx = i
+    return int(idx)
+
+
+def _round_half_up(value: float) -> int:
+    """四舍五入到整数（不用 Python 的银行家舍入，保证 1.5 -> 2 / 2.5 -> 3）。"""
+    return int(math.floor(float(value) + 0.5))
+
+
+def board_ramp_at(decisions: Any, points: Sequence[Tuple[float, int, float]], *,
+                  mode: str = "step") -> Tuple[int, float]:
+    """求 ``(seats, p)``：``step`` 分段常数 / ``linear`` 段内线性插值。
+
+    - 早于首个控制点 -> 第一档；晚于末个 -> 最后一档（边界外保持）；
+    - ``linear`` 时 seats 线性插值后四舍五入并夹到 ``1..N_PLAYERS-1``，p 连续插值；
+    - 空 points -> ``ValueError``（调用方应先判断是否启用课程）。
+    """
+    if not points:
+        raise ValueError("board-ramp 控制点为空")
+    m = str(mode or "step").strip().lower()
+    if m not in BOARD_RAMP_MODES:
+        raise ValueError(f"ramp mode 必须是 {BOARD_RAMP_MODES} 之一: {mode!r}")
+    x = float(decisions)
+    if x <= float(points[0][0]):
+        return int(points[0][1]), float(points[0][2])
+    if x >= float(points[-1][0]):
+        return int(points[-1][1]), float(points[-1][2])
+    if m == "step":
+        idx = _ramp_index(points, x)
+        return int(points[idx][1]), float(points[idx][2])
+    for (x0, s0, p0), (x1, s1, p1) in zip(points, points[1:]):
+        if float(x0) <= x < float(x1):     # 右端属于下一段（边界不重复计入）
+            t = 0.0 if float(x1) == float(x0) else (x - float(x0)) / (float(x1) - float(x0))
+            seats = _round_half_up(float(s0) + (float(s1) - float(s0)) * t)
+            seats = min(N_PLAYERS - 1, max(1, int(seats)))
+            return int(seats), float(p0 + (p1 - p0) * t)
+    idx = _ramp_index(points, x)
+    return int(points[idx][1]), float(points[idx][2])
+
+
+def quantile_ramp_at(decisions: Any, points: Sequence[Tuple[float, str]]) -> str:
+    """分段常数求分位（类别，不插值）；空 points -> ``ValueError``。"""
+    if not points:
+        raise ValueError("quantile-ramp 控制点为空")
+    return str(points[_ramp_index(points, float(decisions))][1])
+
+
+@dataclass
+class BoardRampState:
+    """某一累计 decisions 下**实际生效**的对手强度（训练入口写进 collect 配置）。"""
+
+    seats: int
+    p: float
+    sample: str
+    #: 求值用的 ramp 输入（= 累计 decisions + start - delay，且单调不减）。
+    decisions: float
+    #: 当前档位下标（无 ramp 时恒 0）与档位总数（无 ramp 时 0）。
+    band: int
+    bands: int
+    mode: str
+    adaptive: bool
+    early_advances: int
+    delay_decisions: float
+    start_decisions: float = 0.0
+
+    def as_dict(self) -> Dict[str, Any]:
+        """history 用的扁平 dict（见 :func:`board_ramp_history`）。"""
+        return {"seats": int(self.seats), "p": round(float(self.p), 6),
+                "sample": str(self.sample), "band": int(self.band),
+                "bands": int(self.bands), "mode": str(self.mode),
+                "adaptive": bool(self.adaptive),
+                "decisions": int(round(float(self.decisions))),
+                "early_advances": int(self.early_advances),
+                "delay_decisions": int(round(float(self.delay_decisions))),
+                "start_decisions": int(round(float(self.start_decisions)))}
+
+
+class BoardRampController:
+    """对手强度课程控制器：``state()`` 求值 + ``observe()`` 自适应门控。
+
+    - ``state(decisions)`` 是**唯一**的生效值来源（训练入口每 iteration 调用一次，
+      把返回的 ``seats/p/sample`` 写进 CollectConfig）；
+    - 没有 spec 时恒等映射（返回构造时的 ``base_*``，不新增任何行为）；
+    - ``adaptive=1`` 时 ``observe()`` 用最近 ``window`` 个 iteration 的门控指标
+      （``survive_t12`` / ``tier_ge4`` 均值）决定：**提前升档**（连续达标 -> 档位 +1）
+      或**推迟**（不达标 -> 后续控制点整体后移 ``delay_decisions``，每档最多一次）；
+    - 单调性：内部 x 只增不减，推迟也不会让档位回落；早期升档记在 ``band_floor``，
+      因此 schedule 追上后不会重复跳档。
+    """
+
+    def __init__(self, spec: Any = "", *, mode: str = "step",
+                 quantile_spec: Any = "", adaptive: bool = False,
+                 base_seats: int = 2, base_p: float = 0.0,
+                 base_sample: str = "auto", window: int = 5,
+                 survive_threshold: float = BOARD_RAMP_SURVIVE_THRESHOLD,
+                 tier4_threshold: float = BOARD_RAMP_TIER4_THRESHOLD,
+                 max_forced_per_game: float = BOARD_RAMP_MAX_FORCED_PER_GAME,
+                 delay_decisions: Any = BOARD_RAMP_DELAY_DECISIONS,
+                 start_decisions: Any = 0.0) -> None:
+        self.spec = "" if spec is None else str(spec).strip()
+        self.quantile_spec = ("" if quantile_spec is None
+                              else str(quantile_spec).strip())
+        self.mode = str(mode or "step").strip().lower()
+        if self.mode not in BOARD_RAMP_MODES:
+            raise ValueError(f"ramp mode 必须是 {BOARD_RAMP_MODES} 之一: {mode!r}")
+        self.board_points = parse_board_ramp(self.spec)
+        self.quantile_points = parse_quantile_ramp(self.quantile_spec)
+        self.adaptive = bool(adaptive)
+        self.base_seats = int(base_seats)
+        self.base_p = float(base_p)
+        self.base_sample = str(base_sample or "auto")
+        self.window = max(1, int(window))
+        self.survive_threshold = float(survive_threshold)
+        self.tier4_threshold = float(tier4_threshold)
+        self.max_forced_per_game = float(max_forced_per_game)
+        self._delay_step = float(parse_decisions(delay_decisions))
+        self.start_decisions = float(parse_decisions(start_decisions))
+        if not (0.0 <= self.survive_threshold <= 1.0):
+            raise ValueError("ramp survive threshold 必须在 [0,1] 内")
+        if not (0.0 <= self.tier4_threshold <= 1.0):
+            raise ValueError("ramp tier4 threshold 必须在 [0,1] 内")
+        if not (self.max_forced_per_game >= 0.0):
+            raise ValueError("ramp max_forced_per_game 必须 >= 0")
+        if self.base_sample not in BOARD_RAMP_QUANTILES:
+            raise ValueError(
+                f"base sample 必须是 {BOARD_RAMP_QUANTILES} 之一: {base_sample!r}")
+        self._x_max = 0.0
+        self._band_floor = 0
+        self._delay = 0.0
+        self._early = 0
+        self._iters_since_change = 0
+        self._delayed_bands: set = set()
+        self._window: List[Dict[str, Any]] = []
+        self.events: List[Dict[str, Any]] = []
+
+    # ---- 只读属性 ----
+    @property
+    def enabled(self) -> bool:
+        """是否配置了任何 ramp（False = 完全恒等映射）。"""
+        return bool(self.board_points or self.quantile_points)
+
+    @property
+    def bands(self) -> int:
+        return int(len(self.board_points) or len(self.quantile_points))
+
+    @property
+    def delay_decisions(self) -> float:
+        return float(self._delay)
+
+    @property
+    def early_advances(self) -> int:
+        return int(self._early)
+
+    def max_p(self) -> float:
+        """课程里出现过的最大注入概率（启动期据此判断「是否需要人类战团库」）。"""
+        if self.board_points:
+            return float(max(p for _d, _s, p in self.board_points))
+        return float(self.base_p)
+
+    # ---- 求值 ----
+    def _advance(self, decisions: Any) -> float:
+        x = float(decisions) + float(self.start_decisions) - float(self._delay)
+        if not math.isfinite(x):
+            x = 0.0
+        x = max(x, float(self._x_max), 0.0)
+        self._x_max = float(x)
+        return float(x)
+
+    def _band_of(self, points: Sequence[Any], x: float) -> int:
+        n = len(points)
+        if n <= 0:
+            return 0
+        sched = _ramp_index(points, x)
+        if not self.adaptive:
+            return int(min(max(sched, 0), n - 1))
+        return int(min(max(sched, self._band_floor, 0), n - 1))
+
+    def state(self, decisions: Any) -> BoardRampState:
+        """求本 iteration 生效的 ``(seats, p, sample)``（纯查表 + 单调 x 记忆）。"""
+        x = self._advance(decisions)
+        pts = self.board_points if self.board_points else self.quantile_points
+        band = self._band_of(pts, x) if pts else 0
+        if self.board_points:
+            if band > _ramp_index(self.board_points, x):
+                seats, p = (int(self.board_points[band][1]),
+                            float(self.board_points[band][2]))
+            else:
+                seats, p = board_ramp_at(x, self.board_points, mode=self.mode)
+        else:
+            seats, p = int(self.base_seats), float(self.base_p)
+        if self.quantile_points:
+            qband = self._band_of(self.quantile_points, x)
+            sample = str(self.quantile_points[qband][1])
+        else:
+            sample = str(self.base_sample)
+        return BoardRampState(
+            seats=int(seats), p=float(p), sample=str(sample), decisions=float(x),
+            band=int(band), bands=int(self.bands), mode=str(self.mode),
+            adaptive=bool(self.adaptive), early_advances=int(self._early),
+            delay_decisions=float(self._delay),
+            start_decisions=float(self.start_decisions))
+
+    # ---- 自适应门控 ----
+    def observe(self, iter_index: Any, decisions: Any,
+                metrics: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """记录一个 iteration 的门控指标并决定提前/推迟；返回本次事件列表。
+
+        ``adaptive=0`` 或没有 ramp 时恒返回 ``[]``（不做任何状态变更）。
+        """
+        if not (self.adaptive and self.enabled):
+            return []
+        m = metrics if isinstance(metrics, dict) else {}
+        surv = _ramp_number(m.get("survive_t12"))
+        tier4 = _ramp_number(m.get("tier_ge4"))
+        forced = _ramp_number(m.get("forced_per_game"))
+        self._window.append({"iter": int(iter_index),
+                             "survive_t12": float(0.0 if surv is None else surv),
+                             "tier_ge4": float(0.0 if tier4 is None else tier4),
+                             "forced_per_game": float(0.0 if forced is None else forced)})
+        if len(self._window) > self.window:
+            self._window = self._window[-int(self.window):]
+        self._iters_since_change += 1
+        st = self.state(decisions)
+        n = int(st.bands)
+        if n <= 1 or int(st.band) >= n - 1:
+            return []
+        if len(self._window) < self.window or self._iters_since_change < self.window:
+            return []
+        w = self._window
+        s_mean = sum(float(r["survive_t12"]) for r in w) / len(w)
+        t_mean = sum(float(r["tier_ge4"]) for r in w) / len(w)
+        f_mean = sum(float(r["forced_per_game"]) for r in w) / len(w)
+        # 强制结束回合过多 = 存活是「动作上限」刷出来的假象 -> 不算达标（宁可推迟）
+        inflated = f_mean > float(self.max_forced_per_game)
+        good = (s_mean >= float(self.survive_threshold)
+                and t_mean >= float(self.tier4_threshold) and not inflated)
+        events: List[Dict[str, Any]] = []
+        if good:
+            self._band_floor = int(st.band) + 1
+            self._early += 1
+            self._iters_since_change = 0
+            events.append({
+                "iter": int(iter_index), "event": "early",
+                "from_band": int(st.band), "to_band": int(self._band_floor),
+                "decisions": int(round(float(st.decisions))),
+                "survive_t12": round(s_mean, 4), "tier_ge4": round(t_mean, 4),
+                "forced_per_game": round(f_mean, 3)})
+        elif int(st.band) not in self._delayed_bands:
+            self._delayed_bands.add(int(st.band))
+            self._delay += float(self._delay_step)
+            self._iters_since_change = 0
+            events.append({
+                "iter": int(iter_index), "event": "delay",
+                "band": int(st.band),
+                "decisions": int(round(float(st.decisions))),
+                "delay_decisions": int(round(float(self._delay))),
+                "survive_t12": round(s_mean, 4), "tier_ge4": round(t_mean, 4),
+                "forced_per_game": round(f_mean, 3)})
+        for ev in events:
+            self.events.append(dict(ev))
+        return events
+
+    def window_summary(self) -> Dict[str, Any]:
+        """最近 ``window`` 个 iteration 的门控均值（history 可观测性用）。"""
+        w = self._window
+        if not w:
+            return {"iters": 0, "window": int(self.window),
+                    "survive_t12_mean": None, "tier_ge4_mean": None,
+                    "forced_per_game_mean": None}
+        return {"iters": len(w), "window": int(self.window),
+                "survive_t12_mean": round(
+                    sum(float(r["survive_t12"]) for r in w) / len(w), 4),
+                "tier_ge4_mean": round(
+                    sum(float(r["tier_ge4"]) for r in w) / len(w), 4),
+                "forced_per_game_mean": round(
+                    sum(float(r["forced_per_game"]) for r in w) / len(w), 3)}
+
+    def describe(self) -> Dict[str, Any]:
+        """课程配置摘要（启动打印 / summary.json 用）。"""
+        return {
+            "spec": self.spec, "quantile_spec": self.quantile_spec,
+            "mode": self.mode, "bands": int(self.bands),
+            "adaptive": bool(self.adaptive), "window": int(self.window),
+            "survive_threshold": float(self.survive_threshold),
+            "tier4_threshold": float(self.tier4_threshold),
+            "max_forced_per_game": float(self.max_forced_per_game),
+            "delay_decisions": int(round(float(self._delay_step))),
+            "start_decisions": int(round(float(self.start_decisions))),
+            "base_seats": int(self.base_seats), "base_p": float(self.base_p),
+            "base_sample": str(self.base_sample),
+            "points": [[int(round(d)), int(s), float(p)]
+                       for d, s, p in self.board_points],
+            "quantile_points": [[int(round(d)), str(q)]
+                                for d, q in self.quantile_points],
+        }
+
+
+def _ramp_number(value: Any) -> Optional[float]:
+    """可当 0..1 比例的数值（bool/str/numpy 标量都试一下），其它返回 None。"""
+    if isinstance(value, bool):
+        return float(value)
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(out):
+        return None
+    return float(out)
+
+
+def ramp_progress_metrics(
+        turns: Any, game_ids: Any = None, *,
+        collect_meta: Optional[Dict[str, Any]] = None,
+        quality: Optional[Dict[str, Any]] = None,
+        survive_turn: int = BOARD_RAMP_SURVIVE_TURN,
+        tier4_proxy_turn: int = BOARD_RAMP_TIER4_PROXY_TURN) -> Dict[str, Any]:
+    """本 iteration 的自适应门控指标：``survive_t12`` / ``tier_ge4``（均在 0..1）。
+
+    口径优先级（高 -> 低）：
+
+    1. ``quality``：离线质量统计（``scripts/quality_monitor.py`` 的
+       ``survive_t12_ratio`` / ``tier_ge4_ratio``），**真实 tier 观测**；
+    2. ``collect_meta``：采集 meta 里的同名键（顶层或嵌套 ``collect``）；
+    3. **轨迹代理**：``turns`` 只记录 learner 决策回合，按 ``game_ids`` 取每局最大
+       turn。``survive_t12 = mean(max_turn >= 12)``；``tier>=4`` 没有直接观测，按
+       tier_target 曲线（7:4 / 9:5 / 12:6）用 ``max_turn >= 8`` 代理（保守一回合）。
+
+    代理不读引擎、不加采集开销；``source`` 记录实际口径，历史里可直接核对。
+    """
+    turns_arr = np.asarray([] if turns is None else turns).reshape(-1)
+    gids = None if game_ids is None else np.asarray(game_ids).reshape(-1)
+    max_turn: List[float] = []
+    if int(turns_arr.size) and gids is not None and int(gids.size) == int(turns_arr.size):
+        t_f = turns_arr.astype(np.float64, copy=False)
+        for g in np.unique(gids):
+            max_turn.append(float(t_f[gids == g].max()))
+    elif int(turns_arr.size):
+        max_turn = [float(turns_arr.astype(np.float64, copy=False).max())]
+    out: Dict[str, Any] = {"games": int(len(max_turn)),
+                           "records": int(turns_arr.size),
+                           "survive_turn": int(survive_turn),
+                           "tier4_proxy_turn": int(tier4_proxy_turn),
+                           "source": "batch"}
+    if max_turn:
+        mt = np.asarray(max_turn, dtype=np.float64)
+        out["max_turn_p50"] = float(np.percentile(mt, 50))
+        out["max_turn_mean"] = float(mt.mean())
+        out["survive_t12"] = float(np.mean(mt >= float(survive_turn)))
+        out["tier_ge4"] = float(np.mean(mt >= float(tier4_proxy_turn)))
+    else:
+        out.update({"max_turn_p50": 0.0, "max_turn_mean": 0.0,
+                    "survive_t12": 0.0, "tier_ge4": 0.0})
+    meta_src: Dict[str, Any] = {}
+    if isinstance(collect_meta, dict):
+        inner = collect_meta.get("collect")
+        meta_src = inner if isinstance(inner, dict) else collect_meta
+    for src, name in ((meta_src, "collect_meta"), (quality, "quality")):
+        if not isinstance(src, dict):
+            continue
+        s_val = _ramp_number(src.get("survive_t12_ratio",
+                                     src.get("survive_t12")))
+        t_val = _ramp_number(src.get("tier_ge4_ratio", src.get("tier_ge4")))
+        if s_val is not None:
+            out["survive_t12"] = float(min(1.0, max(0.0, s_val)))
+            out["source"] = name
+        if t_val is not None:
+            out["tier_ge4"] = float(min(1.0, max(0.0, t_val)))
+            out["source"] = name
+    forced = _ramp_number(meta_src.get("forced_end_turns")) if isinstance(
+        meta_src, dict) else None
+    out["forced_end_turns"] = int(forced or 0)
+    out["forced_per_game"] = (float(out["forced_end_turns"]) / out["games"]
+                              if out.get("games") else 0.0)
+    return out
+
+
+def board_ramp_history(state: BoardRampState, *,
+                       spec: Any = "", quantile_spec: Any = "",
+                       mode: str = "step", adaptive: bool = False,
+                       events: Optional[Sequence[Dict[str, Any]]] = None
+                       ) -> Dict[str, Any]:
+    """history.jsonl 每行的 ``human_board`` 段：**实际生效**的 seats/p/sample + 档位。"""
+    rec = dict(state.as_dict())
+    rec.update({
+        "mode": str(mode or state.mode),
+        "adaptive": bool(adaptive),
+        "ramp": "" if spec is None else str(spec).strip(),
+        "quantile_ramp": "" if quantile_spec is None else str(quantile_spec).strip(),
+        "events": [dict(e) for e in (events or [])],
+    })
+    return rec
 
 
 #: ``compile_train`` 取值 -> ``torch.compile`` 模式（0=关闭，不在表内）。
@@ -3352,4 +3895,22 @@ __all__ = [
     "PPOSelfPlayPolicy",
     "collect_ppo_batch",
     "aggregate_archetype_bias",
+    # ── 对手强度课程（docs/BOARD_RAMP.md）──
+    "BOARD_RAMP_MODES",
+    "BOARD_RAMP_QUANTILES",
+    "BOARD_RAMP_SURVIVE_TURN",
+    "BOARD_RAMP_TIER4_PROXY_TURN",
+    "BOARD_RAMP_SURVIVE_THRESHOLD",
+    "BOARD_RAMP_TIER4_THRESHOLD",
+    "BOARD_RAMP_DELAY_DECISIONS",
+    "BOARD_RAMP_MAX_FORCED_PER_GAME",
+    "parse_decisions",
+    "parse_board_ramp",
+    "parse_quantile_ramp",
+    "board_ramp_at",
+    "quantile_ramp_at",
+    "BoardRampState",
+    "BoardRampController",
+    "ramp_progress_metrics",
+    "board_ramp_history",
 ]

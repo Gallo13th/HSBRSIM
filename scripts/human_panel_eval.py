@@ -45,6 +45,12 @@ from hsbg.az.train.human_board_pool import (  # noqa: E402
     HumanBoardPool,
     load_pool,
 )
+from hsbg.az.train.infer_search import (  # noqa: E402
+    ACTION_MODES,
+    InferSearchConfig,
+    InferSearchPolicy,
+    trace_summary,
+)
 from hsbg.az.train.model import load_checkpoint  # noqa: E402
 from hsbg.az.train.policies import make_policy  # noqa: E402
 from hsbg.az.train.ppo import PPOEvaluator, PPOGreedyPolicy  # noqa: E402
@@ -142,13 +148,22 @@ def _panel(seed_base: int, games: int, seats: int, per_seat: int, *,
            max_steps: int, max_actions_per_turn: int,
            pool: Optional[HumanBoardPool], quantile: str,
            baseline_bot: bool, require_protocol: bool,
+           search_cfg: Optional[InferSearchConfig] = None,
            tag: str) -> Dict[str, Any]:
-    """跑一个 seed 面板：learner（seat 逐座位轮换）+ 可选 bot 基线，同人类战团注入。"""
+    """跑一个 seed 面板：learner（seat 逐座位轮换）+ 可选 bot 基线，同人类战团注入。
+
+    ``search_cfg.enabled=1`` 时把 learner 策略包一层推理期搜索
+    （``hsbg.az.train.infer_search``）；``enabled=0`` 时是纯 pass-through，
+    但同样记录 Σ(turn) 轨迹，两条臂的强度口径因此完全一致。
+    """
     model, meta = load_checkpoint(model_path, device=device)
     evaluator = PPOEvaluator(model, device=device,
                              norm_mean=meta.get("norm_mean"),
                              norm_std=meta.get("norm_std"))
     net = PPOGreedyPolicy(evaluator, max_actions_per_turn=max_actions_per_turn)
+    s_cfg = search_cfg or InferSearchConfig(enabled=0)
+    policy = InferSearchPolicy(net, evaluator=evaluator, config=s_cfg,
+                               device=device)
     bot = make_policy("bot") if baseline_bot else None
     model_ranks: List[int] = []
     bot_ranks: List[int] = []
@@ -159,13 +174,21 @@ def _panel(seed_base: int, games: int, seats: int, per_seat: int, *,
     model_decisions = 0
     model_seconds = 0.0
     per_seat_rows: Dict[str, Any] = {}
+    all_search: List[Dict[str, Any]] = []
+    all_games: List[Dict[str, Any]] = []
     t0 = time.time()
     for seat in range(seats):
         seed = int(seed_base) + seat * per_seat
         cfg = EvalConfig(games=per_seat, seed=seed, policy_seat=seat,
                          max_steps=max_steps, human_board_pool=pool)
-        net.forced_actions = 0
-        rm = evaluate_policy(net, cfg)
+        policy.forced_actions = 0
+        snap = policy.snapshot()
+        rm = evaluate_policy(policy, cfg)
+        policy.flush()
+        seat_search = policy.since(snap)
+        seat_games = policy.game_rows()[int(snap["games"]):]
+        all_search.append(seat_search)
+        all_games.extend(dict(g, seat=int(seat), seed=int(seed)) for g in seat_games)
         rms = rm.get("rank_sequence")
         if rms is None or len(rms) != per_seat:
             raise RuntimeError(f"{tag} seat {seat}: rank_sequence 缺失/长度错误")
@@ -195,13 +218,54 @@ def _panel(seed_base: int, games: int, seats: int, per_seat: int, *,
             injections.append(rb.get("human_board") or {})
             row["bot"] = _metrics(rb)
         row["forced_actions"] = int(getattr(net, "forced_actions", 0))
+        row["search"] = seat_search
         per_seat_rows[f"seat_{seat}"] = row
         print(f"[human:{tag}] seat {seat}: net={rm.get('mean_rank')} "
               f"bot={(row.get('bot') or {}).get('mean_rank')} "
               f"inj={int((rm.get('human_board') or {}).get('human_board_applied', 0))}/"
-              f"{int((rm.get('human_board') or {}).get('human_board_attempt', 0))}",
+              f"{int((rm.get('human_board') or {}).get('human_board_attempt', 0))} "
+              f"search={seat_search.get('search_calls')}"
+              f"x{seat_search.get('mean_ms_per_call')}ms",
               flush=True)
     injection = _merge_injection(injections)
+    # ── 推理期搜索统计 / Σ(turn) 强度轨迹（search 开关两条臂口径一致）─────────
+    search_meta: Dict[str, Any] = {
+        "enabled": int(s_cfg.enabled), "turns": int(s_cfg.turns),
+        "when": str(s_cfg.search_when), "action": str(s_cfg.action),
+        "topk": int(s_cfg.topk), "max_per_turn": int(s_cfg.max_searches_per_turn),
+        "adv_clip": float(s_cfg.adv_clip),
+        "max_ms_per_search": float(s_cfg.max_ms_per_search),
+    }
+    _calls = sum(int(s.get("search_calls") or 0) for s in all_search)
+    _ms = sum(float(s.get("search_ms_total") or 0.0) for s in all_search)
+    _sw = sum(int(s.get("switched") or 0) for s in all_search)
+    _ls = sum(int(s.get("leaf_steps") or 0) for s in all_search)
+    search_meta.update({
+        "search_calls": int(_calls),
+        "search_ms_total": round(float(_ms), 1),
+        "mean_ms_per_call": round(float(_ms) / _calls, 2) if _calls else None,
+        "search_switch": int(_sw),
+        "switch_rate": round(float(_sw) / _calls, 4) if _calls else None,
+        "search_errors": sum(int(s.get("search_errors") or 0) for s in all_search),
+        "search_timeouts": sum(int(s.get("search_timeouts") or 0) for s in all_search),
+        "rollout_truncated": sum(int(s.get("rollout_truncated") or 0) for s in all_search),
+        "leaf_steps": int(_ls),
+        "leaf_steps_per_call": round(float(_ls) / _calls, 1) if _calls else None,
+        "search_calls_per_game": round(float(_calls) / max(int(games), 1), 2),
+        "search_ms_per_game": round(float(_ms) / max(int(games), 1), 1),
+        "per_seat": all_search,
+    })
+    strength = trace_summary(all_games, turns=(12, 15))
+    # 逐局 Σ(turn) 轨迹（配对强度分析用；两臂结构一致）
+    strength["rows"] = [{"seat": int(g.get("seat", -1)), "seed": int(g.get("seed", -1)),
+                         "max_turn": int(g.get("max_turn", 0)),
+                         "decisions": int(g.get("decisions", 0)),
+                         "search_calls": int(g.get("search_calls", 0)),
+                         "sigma_start_by_turn": {str(k): int(v) for k, v in
+                                                 (g.get("sigma_by_turn") or {}).items()},
+                         "sigma_end_by_turn": {str(k): int(v) for k, v in
+                                               (g.get("sigma_end_by_turn") or {}).items()}}
+                        for g in all_games]
     extra = {"tag": tag, "seed_base": int(seed_base),
              "checkpoint": model_path, "arch": meta.get("arch", arch),
              "per_seat": per_seat_rows, "injection": injection,
@@ -254,6 +318,9 @@ def _panel(seed_base: int, games: int, seats: int, per_seat: int, *,
         "opponent": "human_board_approx",
         "human_board_pool_stats": (pool.stats() if pool is not None else None),
         "injection": injection,
+        # 推理期搜索（--infer-search）+ Σ(turn) 强度轨迹（t12/t15 强度比）
+        "search": search_meta,
+        "strength": strength,
     })
     return panel
 
@@ -284,6 +351,29 @@ def main() -> int:
                     help="1=注入时同时写入按 turn 派生的 tier（人类数据无 tier）")
     ap.add_argument("--smoke", action="store_true",
                     help="开发自检：小样本、单面板，不产生晋级结论")
+    # ── 推理期搜索（rollout 叶值 + π_search；默认关，只影响评测路径）────────
+    ap.add_argument("--infer-search", type=int, default=0, choices=[0, 1],
+                    help="1=关键决策上用推理期搜索覆盖动作（默认 0 = 纯 π_base）")
+    ap.add_argument("--infer-search-turns", type=int, default=1, choices=[1, 3],
+                    help="叶值 horizon：1=到本回合末，3=到第 3 个回合末")
+    ap.add_argument("--infer-search-max-per-turn", type=int, default=3,
+                    help="每回合最多搜索几次（默认 3，与沙盒证据同口径）")
+    ap.add_argument("--infer-search-when", default="carrier_or_spell",
+                    help="关键决策口径：carrier_or_spell（沙盒实测口径，默认）/"
+                         "carrier_or_spell,tier4plus / any / ...")
+    ap.add_argument("--infer-search-action", default="pi_argmax",
+                    choices=list(ACTION_MODES),
+                    help="搜索覆盖动作的规则：pi_argmax（π_search argmax，默认）/"
+                         "argmax_q（叶值最优）/ sample（按 π_search 采样）")
+    ap.add_argument("--infer-search-topk", type=int, default=8,
+                    help="根候选数 = π_base top-k 非 Move 合法动作（默认 8）")
+    ap.add_argument("--infer-search-adv-clip", type=float, default=30.0,
+                    help="π 构造的优势裁剪（nats）；30=沙盒原始口径")
+    ap.add_argument("--infer-search-max-ms", type=float, default=0.0,
+                    help="单次搜索墙钟上限（ms；0=不限）：超时退回 π_base 动作，"
+                         "部署时用来兜住尾延迟")
+    ap.add_argument("--infer-search-seed", type=int, default=-1,
+                    help="--infer-search-action sample 的 RNG 基准（默认 = seed-base）")
     ap.add_argument("--out", default="")
     args = ap.parse_args()
     if args.out and os.path.isfile(args.out):
@@ -306,6 +396,21 @@ def main() -> int:
         return _error(args.out, f"未知 --quantile {args.quantile}")
     if args.seats > 8:
         return _error(args.out, "--seats 最多 8")
+    # ── 推理期搜索（默认关；只影响评测策略，不碰训练）──────────────────────
+    if int(args.infer_search) and int(args.infer_search_max_per_turn) < 0:
+        return _error(args.out, "--infer-search-max-per-turn 必须 >= 0")
+    search_cfg = InferSearchConfig(
+        enabled=int(args.infer_search),
+        turns=int(args.infer_search_turns),
+        max_searches_per_turn=int(args.infer_search_max_per_turn),
+        search_when=str(args.infer_search_when),
+        action=str(args.infer_search_action),
+        topk=int(args.infer_search_topk),
+        adv_clip=float(args.infer_search_adv_clip),
+        max_ms_per_search=float(args.infer_search_max_ms),
+        seed=int(args.infer_search_seed if int(args.infer_search_seed) >= 0
+                 else args.seed_base),
+    ).validate()
     human_boards = str(args.human_boards or
                        os.path.join(ROOT, "data", "real_library",
                                     "library_real_degraded.jsonl"))
@@ -335,7 +440,8 @@ def main() -> int:
                 max_actions_per_turn=args.max_actions_per_turn,
                 pool=pool, quantile=str(args.quantile),
                 baseline_bot=bool(int(args.baseline_bot)),
-                require_protocol=require_protocol, tag=f"panel{k}"))
+                require_protocol=require_protocol, search_cfg=search_cfg,
+                tag=f"panel{k}"))
     except Exception as exc:  # noqa: BLE001
         import traceback
         return _error(args.out, f"evaluation failed: {exc!r}\n{traceback.format_exc()}",
@@ -364,7 +470,7 @@ def main() -> int:
         "panel0": ({k: panels[0].get(k) for k in
                     ("passed", "model_mean_rank", "bot_mean_rank", "model_top4",
                      "model_win", "mean_diff", "ci_low", "ci_high",
-                     "illegal", "truncated", "injection")}
+                     "illegal", "truncated", "injection", "search", "strength")}
                    if panels else None),
     }, ensure_ascii=False, indent=2))
     return 0 if passed else 1

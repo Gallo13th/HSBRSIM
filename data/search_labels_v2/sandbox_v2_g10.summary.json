@@ -1,0 +1,81 @@
+{
+ "version": "v2",
+ "games_target": 300,
+ "golds": [
+  10
+ ],
+ "leaf_mode": "rollout",
+ "rollout": {
+  "topk": 8,
+  "turns": 1,
+  "mode": "greedy",
+  "samples": 1,
+  "pi_mode": "advantage",
+  "q_temp": 0.0,
+  "q_temp_scale": 1.0,
+  "adv_clip": 30.0,
+  "tier_bonus": 0.0,
+  "carrier_bonus": 0.0
+ },
+ "search_when": "carrier_or_spell",
+ "search_max_per_turn": 3,
+ "behavior": "pi_base",
+ "games": 300,
+ "steps": 81039,
+ "searched_steps": 8989,
+ "search_ratio": 0.11092190180036772,
+ "seconds_per_game": 2.465,
+ "elapsed_s": 739.4,
+ "amortized_search_ms_p50": 62.4,
+ "amortized_search_ms_p95": 181.7,
+ "serial_single_search": {
+  "n": 8,
+  "p50_ms": 30.1,
+  "p95_ms": 52.8,
+  "max_ms": 53.2
+ },
+ "kl_pi_base_mean": 3.593822928275026,
+ "kl_pi_base_p50": 1.0663173073063583,
+ "top1_agree_with_base": 0.4527756146401157,
+ "pi_top1_mass_mean": 0.8264397302884283,
+ "q_std_mean": 0.006821701282898676,
+ "leaf_steps_mean": 113.36277672711091,
+ "truncated_rollouts_mean": 0.0,
+ "best_eq_base_rate": 0.3563243964845923,
+ "pi_top1_eq_base_rate": 0.4527756146401157,
+ "base_top1_is_endturn_rate": 0.004227389031037935,
+ "sigma_delta_best_minus_base": {
+  "mean": 28.829124485482257,
+  "p50": 7.0,
+  "p90": 79.0,
+  "p10": 0.0,
+  "frac_pos": 0.6436756035154078,
+  "frac_neg": 0.0,
+  "n": 8989
+ },
+ "sigma_delta_pi_minus_base": {
+  "mean": 25.549449326955166,
+  "p50": 2.0,
+  "p90": 70.0,
+  "p10": 0.0,
+  "frac_pos": 0.514962732228279,
+  "frac_neg": 0.0,
+  "n": 8989
+ },
+ "L_delta_best_minus_base_mean": 0.008059124834815542,
+ "tag_presence_rate": {
+  "carrier_in_shop": 0.10987302409950764,
+  "carrier_in_hand": 0.15783758437295622,
+  "spell_in_hand": 0.19410407334740062,
+  "tier4plus": 0.7486518836609534
+ },
+ "behavior_trajectory": {
+  "t12_p50": 619.0,
+  "t12_p90": 1061.7000000000003,
+  "t15_p50": 859.5,
+  "t15_p90": 1574.900000000001,
+  "tier_p50": 6.0,
+  "searches_per_game_mean": 29.963333333333335
+ },
+ "out": "data/search_labels_v2/sandbox_v2_g10.jsonl.gz"
+}
