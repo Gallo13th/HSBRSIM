@@ -70,6 +70,12 @@ def _save_built_batch(batch: Any, path: str) -> None:
     if getattr(batch, "seq_target", None) is not None:
         # 动作序列辅助标签（默认关闭时不写，保持 npz 字段与旧版本一致）
         extra["seq_target"] = batch.seq_target
+    if getattr(batch, "teacher_action", None) is not None:
+        # 在线缩放教师标签（默认关闭时不写）
+        extra["teacher_action"] = batch.teacher_action
+    if getattr(batch, "process_target", None) is not None:
+        # 过程价值目标（默认关闭时不写）
+        extra["process_target"] = batch.process_target
     np.savez(path, features=batch.features, cards=batch.cards, masks=batch.masks,
              actions=batch.actions, old_logprobs=batch.old_logprobs,
              values=batch.values, rewards=batch.rewards, dones=batch.dones,
@@ -863,6 +869,24 @@ class ProcessActorPool:
         # 换位去抖守卫：逐 shard 汇总（默认关闭 -> 空 dict，不新增键）。
         meta.update(aggregate_move_guard(metas))
         meta.update(aggregate_archetype_bias(metas))
+        # 缩放课程 / 教师 / 过程价值（默认关闭 -> 不新增键）
+        if any(str(m.get("curriculum_stage", "none")) != "none" for m in metas):
+            meta["curriculum_stage"] = str(
+                (metas[0] or {}).get("curriculum_stage", "none"))
+            meta["curriculum_gold_mult"] = float(
+                (metas[0] or {}).get("curriculum_gold_mult", 1.0))
+            meta["curriculum_gold_turns"] = int(sum(
+                int(m.get("curriculum_gold_turns", 0) or 0) for m in metas))
+            meta["curriculum_gold_extra"] = int(sum(
+                int(m.get("curriculum_gold_extra", 0) or 0) for m in metas))
+        if any(bool(m.get("teacher_bc", False)) for m in metas):
+            meta["teacher_bc"] = True
+            meta["teacher_labels"] = int(sum(
+                int(m.get("teacher_labels", 0) or 0) for m in metas))
+        if any(bool(m.get("process_value", False)) for m in metas):
+            meta["process_value"] = True
+            meta["process_labels"] = int(sum(
+                int(m.get("process_labels", 0) or 0) for m in metas))
         if not records and not packed_all:
             # 采集侧没有有效记录（全部截断/非法），保持与单进程一致的报错语义
             raise RuntimeError(
@@ -894,13 +918,18 @@ class ProcessActorPool:
                 }
                 if getattr(lb, "seq_target", None) is not None:
                     packed_all[i]["seq_target"] = lb.seq_target
+                if getattr(lb, "teacher_action", None) is not None:
+                    packed_all[i]["teacher_action"] = lb.teacher_action
+                if getattr(lb, "process_target", None) is not None:
+                    packed_all[i]["process_target"] = lb.process_target
         if packed_all and all("advantages" in p for p in packed_all):
             # L4：worker 已构建好 batch（episode_id 全局唯一）→ 父进程只拼接
             keys = ["features", "cards", "masks", "actions", "old_logprobs", "values",
                     "rewards", "dones", "advantages", "returns", "seats", "game_ids",
                     "ranks", "turns", "forced", "has_pi", "episode_ids", "target_pi"]
-            # 可选字段：所有 shard 都带才拼接（动作序列辅助标签；默认关闭时全都没有）
-            keys += [k for k in ("seq_target",) if all(k in p for p in packed_all)]
+            # 可选字段：所有 shard 都带才拼接（动作序列 / 教师 / 过程价值；默认关闭时全都没有）
+            keys += [k for k in ("seq_target", "teacher_action", "process_target")
+                     if all(k in p for p in packed_all)]
             merged = {k: np.concatenate([p[k] for p in packed_all], axis=0) for k in keys}
             meta["episodes"] = int(len(np.unique(merged["episode_ids"])))
             meta["built_in"] = "worker"

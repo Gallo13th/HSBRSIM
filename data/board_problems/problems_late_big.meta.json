@@ -1,0 +1,530 @@
+{
+  "duplicate_conflicts": 0,
+  "duplicates_dropped": 1,
+  "inputs": [
+    "runs/ab_late_big/parts/problems_late_big_s20201.jsonl",
+    "runs/ab_late_big/parts/problems_late_big_s20301.jsonl",
+    "runs/ab_late_big/parts/problems_late_big_s20401.jsonl",
+    "runs/ab_late_big/parts/problems_late_big_s20501.jsonl",
+    "runs/ab_late_big/parts/problems_late_big_s20601.jsonl",
+    "runs/ab_late_big/parts/problems_late_big_s20701.jsonl",
+    "runs/ab_late_big/parts/problems_late_big_s20801.jsonl"
+  ],
+  "merged": {
+    "by_tag": {
+      "core_card": 4835,
+      "triple_ready": 199,
+      "turn_start": 2032,
+      "upgrade_ready": 4753
+    },
+    "by_turn": {
+      "10": 1314,
+      "11": 1241,
+      "12": 1056,
+      "13": 744,
+      "14": 380,
+      "15": 136
+    },
+    "label_survived_rate": 0.5295,
+    "late_turn_by_turn": {
+      "10": 1314,
+      "11": 1241,
+      "12": 1056,
+      "13": 744,
+      "14": 380,
+      "15": 136
+    },
+    "late_turn_min": 10,
+    "late_turn_problems": 4871,
+    "problems": 4871,
+    "source": "merged",
+    "strength_delta_by_turn": {
+      "10": {
+        "mean": 0.725,
+        "n": 1314,
+        "p50": 0.6756
+      },
+      "11": {
+        "mean": 0.5291,
+        "n": 1241,
+        "p50": 0.4774
+      },
+      "12": {
+        "mean": 0.3488,
+        "n": 1056,
+        "p50": 0.2886
+      },
+      "13": {
+        "mean": 0.2216,
+        "n": 744,
+        "p50": 0.1591
+      },
+      "14": {
+        "mean": 0.1331,
+        "n": 380,
+        "p50": 0.0625
+      },
+      "15": {
+        "mean": 0.0995,
+        "n": 136,
+        "p50": 0.0
+      }
+    },
+    "strength_delta_mean": 0.453,
+    "strength_delta_p50": 0.3933,
+    "strength_delta_p90": 0.922
+  },
+  "note": "按 obs.sha256 去重；source_pool 记录首个来源池，dup_sources 记录重复出现池",
+  "problems": 4871,
+  "schema": "board_problems_merge_v1",
+  "sources": [
+    {
+      "by_tag": {
+        "core_card": 682,
+        "triple_ready": 20,
+        "turn_start": 289,
+        "upgrade_ready": 667
+      },
+      "by_turn": {
+        "10": 186,
+        "11": 174,
+        "12": 146,
+        "13": 104,
+        "14": 56,
+        "15": 24
+      },
+      "label_survived_rate": 0.5478,
+      "late_turn_by_turn": {
+        "10": 186,
+        "11": 174,
+        "12": 146,
+        "13": 104,
+        "14": 56,
+        "15": 24
+      },
+      "late_turn_min": 10,
+      "late_turn_problems": 690,
+      "problems": 690,
+      "source": "runs/ab_late_big/parts/problems_late_big_s20201.jsonl",
+      "strength_delta_by_turn": {
+        "10": {
+          "mean": 0.7049,
+          "n": 186,
+          "p50": 0.6807
+        },
+        "11": {
+          "mean": 0.5173,
+          "n": 174,
+          "p50": 0.4668
+        },
+        "12": {
+          "mean": 0.3535,
+          "n": 146,
+          "p50": 0.2724
+        },
+        "13": {
+          "mean": 0.2348,
+          "n": 104,
+          "p50": 0.1807
+        },
+        "14": {
+          "mean": 0.1292,
+          "n": 56,
+          "p50": 0.1128
+        },
+        "15": {
+          "mean": 0.0333,
+          "n": 24,
+          "p50": 0.0
+        }
+      },
+      "strength_delta_mean": 0.4423,
+      "strength_delta_p50": 0.3814,
+      "strength_delta_p90": 0.882
+    },
+    {
+      "by_tag": {
+        "core_card": 740,
+        "triple_ready": 25,
+        "turn_start": 308,
+        "upgrade_ready": 725
+      },
+      "by_turn": {
+        "10": 186,
+        "11": 178,
+        "12": 168,
+        "13": 126,
+        "14": 68,
+        "15": 18
+      },
+      "label_survived_rate": 0.5269,
+      "late_turn_by_turn": {
+        "10": 186,
+        "11": 178,
+        "12": 168,
+        "13": 126,
+        "14": 68,
+        "15": 18
+      },
+      "late_turn_min": 10,
+      "late_turn_problems": 744,
+      "problems": 744,
+      "source": "runs/ab_late_big/parts/problems_late_big_s20301.jsonl",
+      "strength_delta_by_turn": {
+        "10": {
+          "mean": 0.7234,
+          "n": 186,
+          "p50": 0.6504
+        },
+        "11": {
+          "mean": 0.5509,
+          "n": 178,
+          "p50": 0.5188
+        },
+        "12": {
+          "mean": 0.3483,
+          "n": 168,
+          "p50": 0.2935
+        },
+        "13": {
+          "mean": 0.2245,
+          "n": 126,
+          "p50": 0.1481
+        },
+        "14": {
+          "mean": 0.1299,
+          "n": 68,
+          "p50": 0.035
+        },
+        "15": {
+          "mean": 0.1547,
+          "n": 18,
+          "p50": 0.0
+        }
+      },
+      "strength_delta_mean": 0.4449,
+      "strength_delta_p50": 0.3864,
+      "strength_delta_p90": 0.9148
+    },
+    {
+      "by_tag": {
+        "core_card": 712,
+        "triple_ready": 45,
+        "turn_start": 298,
+        "upgrade_ready": 697
+      },
+      "by_turn": {
+        "10": 192,
+        "11": 178,
+        "12": 160,
+        "13": 106,
+        "14": 54,
+        "15": 22
+      },
+      "label_survived_rate": 0.5225,
+      "late_turn_by_turn": {
+        "10": 192,
+        "11": 178,
+        "12": 160,
+        "13": 106,
+        "14": 54,
+        "15": 22
+      },
+      "late_turn_min": 10,
+      "late_turn_problems": 712,
+      "problems": 712,
+      "source": "runs/ab_late_big/parts/problems_late_big_s20401.jsonl",
+      "strength_delta_by_turn": {
+        "10": {
+          "mean": 0.7331,
+          "n": 192,
+          "p50": 0.694
+        },
+        "11": {
+          "mean": 0.5438,
+          "n": 178,
+          "p50": 0.4849
+        },
+        "12": {
+          "mean": 0.342,
+          "n": 160,
+          "p50": 0.2894
+        },
+        "13": {
+          "mean": 0.2193,
+          "n": 106,
+          "p50": 0.16
+        },
+        "14": {
+          "mean": 0.1159,
+          "n": 54,
+          "p50": 0.0
+        },
+        "15": {
+          "mean": 0.0867,
+          "n": 22,
+          "p50": 0.0604
+        }
+      },
+      "strength_delta_mean": 0.4546,
+      "strength_delta_p50": 0.3937,
+      "strength_delta_p90": 0.9304
+    },
+    {
+      "by_tag": {
+        "core_card": 645,
+        "triple_ready": 26,
+        "turn_start": 264,
+        "upgrade_ready": 633
+      },
+      "by_turn": {
+        "10": 188,
+        "11": 180,
+        "12": 138,
+        "13": 92,
+        "14": 42,
+        "15": 12
+      },
+      "label_survived_rate": 0.5399,
+      "late_turn_by_turn": {
+        "10": 188,
+        "11": 180,
+        "12": 138,
+        "13": 92,
+        "14": 42,
+        "15": 12
+      },
+      "late_turn_min": 10,
+      "late_turn_problems": 652,
+      "problems": 652,
+      "source": "runs/ab_late_big/parts/problems_late_big_s20501.jsonl",
+      "strength_delta_by_turn": {
+        "10": {
+          "mean": 0.7043,
+          "n": 188,
+          "p50": 0.6481
+        },
+        "11": {
+          "mean": 0.4987,
+          "n": 180,
+          "p50": 0.4654
+        },
+        "12": {
+          "mean": 0.2982,
+          "n": 138,
+          "p50": 0.2565
+        },
+        "13": {
+          "mean": 0.1885,
+          "n": 92,
+          "p50": 0.1501
+        },
+        "14": {
+          "mean": 0.1079,
+          "n": 42,
+          "p50": 0.0
+        },
+        "15": {
+          "mean": 0.1637,
+          "n": 12,
+          "p50": 0.0441
+        }
+      },
+      "strength_delta_mean": 0.4404,
+      "strength_delta_p50": 0.3769,
+      "strength_delta_p90": 0.93
+    },
+    {
+      "by_tag": {
+        "core_card": 703,
+        "triple_ready": 41,
+        "turn_start": 287,
+        "upgrade_ready": 693
+      },
+      "by_turn": {
+        "10": 188,
+        "11": 180,
+        "12": 152,
+        "13": 106,
+        "14": 62,
+        "15": 20
+      },
+      "label_survived_rate": 0.5141,
+      "late_turn_by_turn": {
+        "10": 188,
+        "11": 180,
+        "12": 152,
+        "13": 106,
+        "14": 62,
+        "15": 20
+      },
+      "late_turn_min": 10,
+      "late_turn_problems": 708,
+      "problems": 708,
+      "source": "runs/ab_late_big/parts/problems_late_big_s20601.jsonl",
+      "strength_delta_by_turn": {
+        "10": {
+          "mean": 0.7576,
+          "n": 188,
+          "p50": 0.7118
+        },
+        "11": {
+          "mean": 0.5446,
+          "n": 180,
+          "p50": 0.5039
+        },
+        "12": {
+          "mean": 0.3743,
+          "n": 152,
+          "p50": 0.3037
+        },
+        "13": {
+          "mean": 0.2647,
+          "n": 106,
+          "p50": 0.1655
+        },
+        "14": {
+          "mean": 0.1269,
+          "n": 62,
+          "p50": 0.0446
+        },
+        "15": {
+          "mean": 0.0887,
+          "n": 20,
+          "p50": 0.0
+        }
+      },
+      "strength_delta_mean": 0.4733,
+      "strength_delta_p50": 0.4086,
+      "strength_delta_p90": 0.9669
+    },
+    {
+      "by_tag": {
+        "core_card": 660,
+        "triple_ready": 26,
+        "turn_start": 280,
+        "upgrade_ready": 649
+      },
+      "by_turn": {
+        "10": 184,
+        "11": 172,
+        "12": 144,
+        "13": 106,
+        "14": 44,
+        "15": 16
+      },
+      "label_survived_rate": 0.5495,
+      "late_turn_by_turn": {
+        "10": 184,
+        "11": 172,
+        "12": 144,
+        "13": 106,
+        "14": 44,
+        "15": 16
+      },
+      "late_turn_min": 10,
+      "late_turn_problems": 666,
+      "problems": 666,
+      "source": "runs/ab_late_big/parts/problems_late_big_s20701.jsonl",
+      "strength_delta_by_turn": {
+        "10": {
+          "mean": 0.737,
+          "n": 184,
+          "p50": 0.6838
+        },
+        "11": {
+          "mean": 0.5511,
+          "n": 172,
+          "p50": 0.4718
+        },
+        "12": {
+          "mean": 0.4029,
+          "n": 144,
+          "p50": 0.3204
+        },
+        "13": {
+          "mean": 0.2574,
+          "n": 106,
+          "p50": 0.1818
+        },
+        "14": {
+          "mean": 0.2403,
+          "n": 44,
+          "p50": 0.1321
+        },
+        "15": {
+          "mean": 0.2149,
+          "n": 16,
+          "p50": 0.0077
+        }
+      },
+      "strength_delta_mean": 0.4951,
+      "strength_delta_p50": 0.4266,
+      "strength_delta_p90": 1.0319
+    },
+    {
+      "by_tag": {
+        "core_card": 694,
+        "triple_ready": 16,
+        "turn_start": 306,
+        "upgrade_ready": 690
+      },
+      "by_turn": {
+        "10": 190,
+        "11": 180,
+        "12": 148,
+        "13": 104,
+        "14": 54,
+        "15": 24
+      },
+      "label_survived_rate": 0.5086,
+      "late_turn_by_turn": {
+        "10": 190,
+        "11": 180,
+        "12": 148,
+        "13": 104,
+        "14": 54,
+        "15": 24
+      },
+      "late_turn_min": 10,
+      "late_turn_problems": 700,
+      "problems": 700,
+      "source": "runs/ab_late_big/parts/problems_late_big_s20801.jsonl",
+      "strength_delta_by_turn": {
+        "10": {
+          "mean": 0.7146,
+          "n": 190,
+          "p50": 0.6635
+        },
+        "11": {
+          "mean": 0.4978,
+          "n": 180,
+          "p50": 0.4406
+        },
+        "12": {
+          "mean": 0.3206,
+          "n": 148,
+          "p50": 0.2655
+        },
+        "13": {
+          "mean": 0.156,
+          "n": 104,
+          "p50": 0.114
+        },
+        "14": {
+          "mean": 0.0978,
+          "n": 54,
+          "p50": 0.0426
+        },
+        "15": {
+          "mean": 0.0359,
+          "n": 24,
+          "p50": 0.0
+        }
+      },
+      "strength_delta_mean": 0.4217,
+      "strength_delta_p50": 0.3564,
+      "strength_delta_p90": 0.8255
+    }
+  ]
+}

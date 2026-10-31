@@ -1,0 +1,110 @@
+{
+  "by_turn": {
+    "1": 60,
+    "10": 1542,
+    "11": 1405,
+    "12": 1174,
+    "13": 812,
+    "14": 402,
+    "15": 148,
+    "2": 72,
+    "3": 77,
+    "4": 128,
+    "5": 128,
+    "6": 128,
+    "7": 128,
+    "8": 128,
+    "9": 120
+  },
+  "generated_at": "2026-10-31T19:08:51+0800",
+  "horizon": 3,
+  "late_ref_fix": {
+    "buy_table": {
+      "min_freq": 0.01,
+      "path": "/home/data/users/gaoletian/projects/HSBRSIM/data/firestone_replays/firestone_recent_actions.jsonl.gz",
+      "rows": 18814,
+      "skipped": {
+        "bad_row": 0,
+        "bad_tier": 0,
+        "no_card": 0,
+        "type": 130352
+      },
+      "tiers": {
+        "1": {
+          "buys": 658,
+          "cards": 32,
+          "high_cards": 27
+        },
+        "2": {
+          "buys": 1052,
+          "cards": 76,
+          "high_cards": 39
+        },
+        "3": {
+          "buys": 1017,
+          "cards": 139,
+          "high_cards": 28
+        },
+        "4": {
+          "buys": 1715,
+          "cards": 223,
+          "high_cards": 21
+        },
+        "5": {
+          "buys": 3179,
+          "cards": 337,
+          "high_cards": 18
+        },
+        "6": {
+          "buys": 11193,
+          "cards": 385,
+          "high_cards": 20
+        }
+      }
+    },
+    "policy": {
+      "buy_boost": 2.0,
+      "buy_min_freq": 0.01,
+      "policy": "fixed",
+      "reroll_cap": 0.25,
+      "strict_levels": [
+        "turn_tier_gold"
+      ],
+      "turn_min": 10
+    },
+    "rewrite": {
+      "applied": 2317,
+      "late_rows": 5483,
+      "late_strict_matched": 2317,
+      "late_strict_unmatched": 3166,
+      "reasons": {
+        "no_support": 3166
+      },
+      "rows": 6452,
+      "schema": "board_late_ref_rewrite_v1",
+      "strict_unmatched_by_turn": {
+        "10": 1130,
+        "11": 882,
+        "12": 627,
+        "13": 356,
+        "14": 132,
+        "15": 39
+      },
+      "unmatched_by_turn": {
+        "10": 1130,
+        "11": 882,
+        "12": 627,
+        "13": 356,
+        "14": 132,
+        "15": 39
+      }
+    }
+  },
+  "note": "参考解按 late_ref_policy 重算（ref_before 保留原解）；其余字段沿用旧 meta",
+  "problems": 6452,
+  "problems_path": "data/board_problems/problems_all_fixed.jsonl",
+  "problems_sha256": "2aec2aaedb5e8628b525ad09158bcb853ba11a53a7f849e365c708b35d909bb4",
+  "schema": "board_problems_merge_v1",
+  "source_pool": "data/board_problems/problems_all.jsonl",
+  "strength_norm": null
+}

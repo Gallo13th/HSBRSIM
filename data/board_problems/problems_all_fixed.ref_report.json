@@ -1,0 +1,1301 @@
+{
+  "after": {
+    "overall": {
+      "mass_share": {
+        "buy_minion": 0.0,
+        "buy_spell": 0.0,
+        "end_turn": 0.063957,
+        "hero_power": 0.045128,
+        "other": 0.0,
+        "play_minion": 0.0,
+        "play_spell": 0.0,
+        "reroll": 0.272992,
+        "sell": 0.216349,
+        "upgrade": 0.401574
+      },
+      "matched": 3286,
+      "n": 6452,
+      "top1_share": {
+        "buy": 0.016738,
+        "end_turn": 0.000304,
+        "hero_power": 0.000609,
+        "play": 0.231284,
+        "reroll": 0.562995,
+        "sell": 0.00213,
+        "upgrade": 0.18594
+      }
+    },
+    "turns": {
+      "1": {
+        "buy_top1_share": 0.9,
+        "level": {
+          "turn_tier_gold": 60
+        },
+        "mass_share": {
+          "buy": 0.906717,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.0,
+          "hero_power": 0.040889,
+          "other": 0.0,
+          "play": 0.052394,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.0,
+          "sell": 0.0,
+          "upgrade": 0.0
+        },
+        "match_rate": 1.0,
+        "matched": 60,
+        "mean_buy_mass": 0.906717,
+        "mean_play_mass": 0.052394,
+        "mean_reroll_mass": 0.0,
+        "n": 60,
+        "reroll_top1_share": 0.0,
+        "top1": {
+          "buy": 54,
+          "play": 6
+        },
+        "top1_share": {
+          "buy": 0.9,
+          "play": 0.1
+        }
+      },
+      "10": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "none": 1130,
+          "turn_tier_gold": 412
+        },
+        "mass_share": {
+          "buy": 0.010659,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.086631,
+          "hero_power": 0.00011,
+          "other": 0.0,
+          "play": 0.241336,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.248879,
+          "sell": 0.234013,
+          "upgrade": 0.178373
+        },
+        "match_rate": 0.26718547341115434,
+        "matched": 412,
+        "mean_buy_mass": 0.010659,
+        "mean_play_mass": 0.241336,
+        "mean_reroll_mass": 0.248879,
+        "n": 1542,
+        "reroll_top1_share": 0.757282,
+        "top1": {
+          "play": 100,
+          "reroll": 312
+        },
+        "top1_share": {
+          "play": 0.242718,
+          "reroll": 0.757282
+        }
+      },
+      "11": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "none": 882,
+          "turn_tier_gold": 523
+        },
+        "mass_share": {
+          "buy": 0.004738,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.092684,
+          "hero_power": 0.028771,
+          "other": 0.0,
+          "play": 0.245904,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.249944,
+          "sell": 0.262793,
+          "upgrade": 0.115167
+        },
+        "match_rate": 0.37224199288256227,
+        "matched": 523,
+        "mean_buy_mass": 0.004738,
+        "mean_play_mass": 0.245904,
+        "mean_reroll_mass": 0.249944,
+        "n": 1405,
+        "reroll_top1_share": 0.759082,
+        "top1": {
+          "play": 126,
+          "reroll": 397
+        },
+        "top1_share": {
+          "play": 0.240918,
+          "reroll": 0.759082
+        }
+      },
+      "12": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "none": 627,
+          "turn_tier_gold": 547
+        },
+        "mass_share": {
+          "buy": 0.0489,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.118269,
+          "hero_power": 0.025017,
+          "other": 0.0,
+          "play": 0.263388,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.249969,
+          "sell": 0.294457,
+          "upgrade": 0.0
+        },
+        "match_rate": 0.46592844974446335,
+        "matched": 547,
+        "mean_buy_mass": 0.0489,
+        "mean_play_mass": 0.263388,
+        "mean_reroll_mass": 0.249969,
+        "n": 1174,
+        "reroll_top1_share": 0.709324,
+        "top1": {
+          "play": 159,
+          "reroll": 388
+        },
+        "top1_share": {
+          "play": 0.290676,
+          "reroll": 0.709324
+        }
+      },
+      "13": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "none": 356,
+          "turn_tier_gold": 456
+        },
+        "mass_share": {
+          "buy": 0.088005,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.059995,
+          "hero_power": 0.031674,
+          "other": 0.0,
+          "play": 0.249297,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.248992,
+          "sell": 0.242737,
+          "upgrade": 0.0793
+        },
+        "match_rate": 0.5615763546798029,
+        "matched": 456,
+        "mean_buy_mass": 0.088005,
+        "mean_play_mass": 0.249297,
+        "mean_reroll_mass": 0.248992,
+        "n": 812,
+        "reroll_top1_share": 0.699561,
+        "top1": {
+          "play": 137,
+          "reroll": 319
+        },
+        "top1_share": {
+          "play": 0.300439,
+          "reroll": 0.699561
+        }
+      },
+      "14": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "none": 132,
+          "turn_tier_gold": 270
+        },
+        "mass_share": {
+          "buy": 0.004565,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.063311,
+          "hero_power": 0.031622,
+          "other": 0.0,
+          "play": 0.244454,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.25,
+          "sell": 0.406047,
+          "upgrade": 0.0
+        },
+        "match_rate": 0.6716417910447762,
+        "matched": 270,
+        "mean_buy_mass": 0.004565,
+        "mean_play_mass": 0.244454,
+        "mean_reroll_mass": 0.25,
+        "n": 402,
+        "reroll_top1_share": 0.707407,
+        "top1": {
+          "play": 79,
+          "reroll": 191
+        },
+        "top1_share": {
+          "play": 0.292593,
+          "reroll": 0.707407
+        }
+      },
+      "15": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "none": 39,
+          "turn_tier_gold": 109
+        },
+        "mass_share": {
+          "buy": 0.108082,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.023557,
+          "hero_power": 0.032896,
+          "other": 0.0,
+          "play": 0.321923,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.25,
+          "sell": 0.263541,
+          "upgrade": 0.0
+        },
+        "match_rate": 0.7364864864864865,
+        "matched": 109,
+        "mean_buy_mass": 0.108082,
+        "mean_play_mass": 0.321923,
+        "mean_reroll_mass": 0.25,
+        "n": 148,
+        "reroll_top1_share": 0.559633,
+        "top1": {
+          "play": 48,
+          "reroll": 61
+        },
+        "top1_share": {
+          "play": 0.440367,
+          "reroll": 0.559633
+        }
+      },
+      "2": {
+        "buy_top1_share": 0.013889,
+        "level": {
+          "turn_tier": 4,
+          "turn_tier_gold": 68
+        },
+        "mass_share": {
+          "buy": 0.101325,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.0,
+          "hero_power": 0.019029,
+          "other": 0.0,
+          "play": 0.032605,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.021333,
+          "sell": 0.0,
+          "upgrade": 0.825708
+        },
+        "match_rate": 1.0,
+        "matched": 72,
+        "mean_buy_mass": 0.101325,
+        "mean_play_mass": 0.032605,
+        "mean_reroll_mass": 0.021333,
+        "n": 72,
+        "reroll_top1_share": 0.0,
+        "top1": {
+          "buy": 1,
+          "play": 1,
+          "upgrade": 70
+        },
+        "top1_share": {
+          "buy": 0.013889,
+          "play": 0.013889,
+          "upgrade": 0.972222
+        }
+      },
+      "3": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "turn_tier": 12,
+          "turn_tier_gold": 65
+        },
+        "mass_share": {
+          "buy": 0.132829,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.0,
+          "hero_power": 0.057505,
+          "other": 0.0,
+          "play": 0.043433,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.028856,
+          "sell": 0.027804,
+          "upgrade": 0.709573
+        },
+        "match_rate": 1.0,
+        "matched": 77,
+        "mean_buy_mass": 0.132829,
+        "mean_play_mass": 0.043433,
+        "mean_reroll_mass": 0.028856,
+        "n": 77,
+        "reroll_top1_share": 0.012987,
+        "top1": {
+          "hero_power": 2,
+          "reroll": 1,
+          "upgrade": 74
+        },
+        "top1_share": {
+          "hero_power": 0.025974,
+          "reroll": 0.012987,
+          "upgrade": 0.961039
+        }
+      },
+      "4": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 126,
+          "turn_tier": 1,
+          "turn_tier_gold": 1
+        },
+        "mass_share": {
+          "buy": 0.394643,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.001563,
+          "hero_power": 0.017446,
+          "other": 0.0,
+          "play": 0.158339,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.001736,
+          "sell": 0.007639,
+          "upgrade": 0.418634
+        },
+        "match_rate": 1.0,
+        "matched": 128,
+        "mean_buy_mass": 0.394643,
+        "mean_play_mass": 0.158339,
+        "mean_reroll_mass": 0.001736,
+        "n": 128,
+        "reroll_top1_share": 0.0,
+        "top1": {
+          "end_turn": 1,
+          "upgrade": 127
+        },
+        "top1_share": {
+          "end_turn": 0.007812,
+          "upgrade": 0.992188
+        }
+      },
+      "5": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 93,
+          "turn_tier": 11,
+          "turn_tier_gold": 24
+        },
+        "mass_share": {
+          "buy": 0.324038,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 4.9e-05,
+          "hero_power": 0.022057,
+          "other": 0.0,
+          "play": 0.122041,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.0055,
+          "sell": 0.049832,
+          "upgrade": 0.476483
+        },
+        "match_rate": 1.0,
+        "matched": 128,
+        "mean_buy_mass": 0.324038,
+        "mean_play_mass": 0.122041,
+        "mean_reroll_mass": 0.0055,
+        "n": 128,
+        "reroll_top1_share": 0.0,
+        "top1": {
+          "play": 3,
+          "sell": 7,
+          "upgrade": 118
+        },
+        "top1_share": {
+          "play": 0.023438,
+          "sell": 0.054688,
+          "upgrade": 0.921875
+        }
+      },
+      "6": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 28,
+          "turn_tier": 68,
+          "turn_tier_gold": 32
+        },
+        "mass_share": {
+          "buy": 0.274072,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.003897,
+          "hero_power": 0.038281,
+          "other": 0.0,
+          "play": 0.136791,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.155734,
+          "sell": 0.087402,
+          "upgrade": 0.303823
+        },
+        "match_rate": 1.0,
+        "matched": 128,
+        "mean_buy_mass": 0.274072,
+        "mean_play_mass": 0.136791,
+        "mean_reroll_mass": 0.155734,
+        "n": 128,
+        "reroll_top1_share": 0.226562,
+        "top1": {
+          "reroll": 29,
+          "upgrade": 99
+        },
+        "top1_share": {
+          "reroll": 0.226562,
+          "upgrade": 0.773438
+        }
+      },
+      "7": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 98,
+          "turn_tier": 7,
+          "turn_tier_gold": 23
+        },
+        "mass_share": {
+          "buy": 0.220094,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.009973,
+          "hero_power": 0.0285,
+          "other": 0.0,
+          "play": 0.243315,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.165127,
+          "sell": 0.028507,
+          "upgrade": 0.304485
+        },
+        "match_rate": 1.0,
+        "matched": 128,
+        "mean_buy_mass": 0.220094,
+        "mean_play_mass": 0.243315,
+        "mean_reroll_mass": 0.165127,
+        "n": 128,
+        "reroll_top1_share": 0.023438,
+        "top1": {
+          "play": 44,
+          "reroll": 3,
+          "upgrade": 81
+        },
+        "top1_share": {
+          "play": 0.34375,
+          "reroll": 0.023438,
+          "upgrade": 0.632812
+        }
+      },
+      "8": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 46,
+          "turn_tier": 8,
+          "turn_tier_gold": 74
+        },
+        "mass_share": {
+          "buy": 0.150649,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.054992,
+          "hero_power": 0.026658,
+          "other": 0.0,
+          "play": 0.241604,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.338865,
+          "sell": 0.01916,
+          "upgrade": 0.168072
+        },
+        "match_rate": 1.0,
+        "matched": 128,
+        "mean_buy_mass": 0.150649,
+        "mean_play_mass": 0.241604,
+        "mean_reroll_mass": 0.338865,
+        "n": 128,
+        "reroll_top1_share": 0.609375,
+        "top1": {
+          "play": 21,
+          "reroll": 78,
+          "upgrade": 29
+        },
+        "top1_share": {
+          "play": 0.164062,
+          "reroll": 0.609375,
+          "upgrade": 0.226562
+        }
+      },
+      "9": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 24,
+          "turn_tier": 63,
+          "turn_tier_gold": 33
+        },
+        "mass_share": {
+          "buy": 0.167329,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.072494,
+          "hero_power": 0.014025,
+          "other": 0.0,
+          "play": 0.282004,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.292367,
+          "sell": 0.063135,
+          "upgrade": 0.108647
+        },
+        "match_rate": 1.0,
+        "matched": 120,
+        "mean_buy_mass": 0.167329,
+        "mean_play_mass": 0.282004,
+        "mean_reroll_mass": 0.292367,
+        "n": 120,
+        "reroll_top1_share": 0.591667,
+        "top1": {
+          "play": 36,
+          "reroll": 71,
+          "upgrade": 13
+        },
+        "top1_share": {
+          "play": 0.3,
+          "reroll": 0.591667,
+          "upgrade": 0.108333
+        }
+      }
+    }
+  },
+  "before": {
+    "overall": {
+      "mass_share": {
+        "buy_minion": 0.0,
+        "buy_spell": 0.0,
+        "end_turn": 0.032259,
+        "hero_power": 0.037537,
+        "other": 0.0,
+        "play_minion": 0.0,
+        "play_spell": 0.0,
+        "reroll": 0.350227,
+        "sell": 0.143344,
+        "upgrade": 0.436633
+      },
+      "matched": 6452,
+      "n": 6452,
+      "top1_share": {
+        "buy": 0.008524,
+        "end_turn": 0.00031,
+        "hero_power": 0.00031,
+        "play": 0.24256,
+        "reroll": 0.386702,
+        "sell": 0.001085,
+        "upgrade": 0.360508
+      }
+    },
+    "turns": {
+      "1": {
+        "buy_top1_share": 0.9,
+        "level": {
+          "turn_tier_gold": 60
+        },
+        "mass_share": {
+          "buy": 0.906717,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.0,
+          "hero_power": 0.040889,
+          "other": 0.0,
+          "play": 0.052394,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.0,
+          "sell": 0.0,
+          "upgrade": 0.0
+        },
+        "match_rate": 1.0,
+        "matched": 60,
+        "mean_buy_mass": 0.906717,
+        "mean_play_mass": 0.052394,
+        "mean_reroll_mass": 0.0,
+        "n": 60,
+        "reroll_top1_share": 0.0,
+        "top1": {
+          "buy": 54,
+          "play": 6
+        },
+        "top1_share": {
+          "buy": 0.9,
+          "play": 0.1
+        }
+      },
+      "10": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 1078,
+          "turn_tier": 52,
+          "turn_tier_gold": 412
+        },
+        "mass_share": {
+          "buy": 0.117334,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.023226,
+          "hero_power": 0.006731,
+          "other": 0.0,
+          "play": 0.265473,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.239606,
+          "sell": 0.152284,
+          "upgrade": 0.195346
+        },
+        "match_rate": 1.0,
+        "matched": 1542,
+        "mean_buy_mass": 0.117334,
+        "mean_play_mass": 0.265473,
+        "mean_reroll_mass": 0.239606,
+        "n": 1542,
+        "reroll_top1_share": 0.237354,
+        "top1": {
+          "play": 510,
+          "reroll": 366,
+          "upgrade": 666
+        },
+        "top1_share": {
+          "play": 0.330739,
+          "reroll": 0.237354,
+          "upgrade": 0.431907
+        }
+      },
+      "11": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 826,
+          "turn_tier": 56,
+          "turn_tier_gold": 523
+        },
+        "mass_share": {
+          "buy": 0.098507,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.029796,
+          "hero_power": 0.013831,
+          "other": 0.0,
+          "play": 0.256695,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.281253,
+          "sell": 0.157535,
+          "upgrade": 0.162384
+        },
+        "match_rate": 1.0,
+        "matched": 1405,
+        "mean_buy_mass": 0.098507,
+        "mean_play_mass": 0.256695,
+        "mean_reroll_mass": 0.281253,
+        "n": 1405,
+        "reroll_top1_share": 0.332384,
+        "top1": {
+          "play": 425,
+          "reroll": 467,
+          "upgrade": 513
+        },
+        "top1_share": {
+          "play": 0.302491,
+          "reroll": 0.332384,
+          "upgrade": 0.365125
+        }
+      },
+      "12": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 594,
+          "turn_tier": 33,
+          "turn_tier_gold": 547
+        },
+        "mass_share": {
+          "buy": 0.101372,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.04004,
+          "hero_power": 0.013019,
+          "other": 0.0,
+          "play": 0.243028,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.330307,
+          "sell": 0.15995,
+          "upgrade": 0.112285
+        },
+        "match_rate": 1.0,
+        "matched": 1174,
+        "mean_buy_mass": 0.101372,
+        "mean_play_mass": 0.243028,
+        "mean_reroll_mass": 0.330307,
+        "n": 1174,
+        "reroll_top1_share": 0.408859,
+        "top1": {
+          "end_turn": 1,
+          "play": 312,
+          "reroll": 480,
+          "upgrade": 381
+        },
+        "top1_share": {
+          "end_turn": 0.000852,
+          "play": 0.265758,
+          "reroll": 0.408859,
+          "upgrade": 0.324532
+        }
+      },
+      "13": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 62,
+          "turn_tier": 294,
+          "turn_tier_gold": 456
+        },
+        "mass_share": {
+          "buy": 0.057201,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.025134,
+          "hero_power": 0.015821,
+          "other": 0.0,
+          "play": 0.230996,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.411827,
+          "sell": 0.207914,
+          "upgrade": 0.051107
+        },
+        "match_rate": 1.0,
+        "matched": 812,
+        "mean_buy_mass": 0.057201,
+        "mean_play_mass": 0.230996,
+        "mean_reroll_mass": 0.411827,
+        "n": 812,
+        "reroll_top1_share": 0.770936,
+        "top1": {
+          "play": 142,
+          "reroll": 626,
+          "upgrade": 44
+        },
+        "top1_share": {
+          "play": 0.174877,
+          "reroll": 0.770936,
+          "upgrade": 0.054187
+        }
+      },
+      "14": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 124,
+          "turn_tier": 8,
+          "turn_tier_gold": 270
+        },
+        "mass_share": {
+          "buy": 0.046181,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.022891,
+          "hero_power": 0.012569,
+          "other": 0.0,
+          "play": 0.204679,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.464116,
+          "sell": 0.182246,
+          "upgrade": 0.067319
+        },
+        "match_rate": 1.0,
+        "matched": 402,
+        "mean_buy_mass": 0.046181,
+        "mean_play_mass": 0.204679,
+        "mean_reroll_mass": 0.464116,
+        "n": 402,
+        "reroll_top1_share": 0.691542,
+        "top1": {
+          "play": 41,
+          "reroll": 278,
+          "upgrade": 83
+        },
+        "top1_share": {
+          "play": 0.10199,
+          "reroll": 0.691542,
+          "upgrade": 0.206468
+        }
+      },
+      "15": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 36,
+          "turn_tier": 3,
+          "turn_tier_gold": 109
+        },
+        "mass_share": {
+          "buy": 0.077287,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.008483,
+          "hero_power": 0.014046,
+          "other": 0.0,
+          "play": 0.248527,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.439404,
+          "sell": 0.156507,
+          "upgrade": 0.055745
+        },
+        "match_rate": 1.0,
+        "matched": 148,
+        "mean_buy_mass": 0.077287,
+        "mean_play_mass": 0.248527,
+        "mean_reroll_mass": 0.439404,
+        "n": 148,
+        "reroll_top1_share": 0.648649,
+        "top1": {
+          "play": 24,
+          "reroll": 96,
+          "upgrade": 28
+        },
+        "top1_share": {
+          "play": 0.162162,
+          "reroll": 0.648649,
+          "upgrade": 0.189189
+        }
+      },
+      "2": {
+        "buy_top1_share": 0.013889,
+        "level": {
+          "turn_tier": 4,
+          "turn_tier_gold": 68
+        },
+        "mass_share": {
+          "buy": 0.101325,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.0,
+          "hero_power": 0.019029,
+          "other": 0.0,
+          "play": 0.032605,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.021333,
+          "sell": 0.0,
+          "upgrade": 0.825708
+        },
+        "match_rate": 1.0,
+        "matched": 72,
+        "mean_buy_mass": 0.101325,
+        "mean_play_mass": 0.032605,
+        "mean_reroll_mass": 0.021333,
+        "n": 72,
+        "reroll_top1_share": 0.0,
+        "top1": {
+          "buy": 1,
+          "play": 1,
+          "upgrade": 70
+        },
+        "top1_share": {
+          "buy": 0.013889,
+          "play": 0.013889,
+          "upgrade": 0.972222
+        }
+      },
+      "3": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "turn_tier": 12,
+          "turn_tier_gold": 65
+        },
+        "mass_share": {
+          "buy": 0.132829,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.0,
+          "hero_power": 0.057505,
+          "other": 0.0,
+          "play": 0.043433,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.028856,
+          "sell": 0.027804,
+          "upgrade": 0.709573
+        },
+        "match_rate": 1.0,
+        "matched": 77,
+        "mean_buy_mass": 0.132829,
+        "mean_play_mass": 0.043433,
+        "mean_reroll_mass": 0.028856,
+        "n": 77,
+        "reroll_top1_share": 0.012987,
+        "top1": {
+          "hero_power": 2,
+          "reroll": 1,
+          "upgrade": 74
+        },
+        "top1_share": {
+          "hero_power": 0.025974,
+          "reroll": 0.012987,
+          "upgrade": 0.961039
+        }
+      },
+      "4": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 126,
+          "turn_tier": 1,
+          "turn_tier_gold": 1
+        },
+        "mass_share": {
+          "buy": 0.394643,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.001563,
+          "hero_power": 0.017446,
+          "other": 0.0,
+          "play": 0.158339,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.001736,
+          "sell": 0.007639,
+          "upgrade": 0.418634
+        },
+        "match_rate": 1.0,
+        "matched": 128,
+        "mean_buy_mass": 0.394643,
+        "mean_play_mass": 0.158339,
+        "mean_reroll_mass": 0.001736,
+        "n": 128,
+        "reroll_top1_share": 0.0,
+        "top1": {
+          "end_turn": 1,
+          "upgrade": 127
+        },
+        "top1_share": {
+          "end_turn": 0.007812,
+          "upgrade": 0.992188
+        }
+      },
+      "5": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 93,
+          "turn_tier": 11,
+          "turn_tier_gold": 24
+        },
+        "mass_share": {
+          "buy": 0.324038,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 4.9e-05,
+          "hero_power": 0.022057,
+          "other": 0.0,
+          "play": 0.122041,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.0055,
+          "sell": 0.049832,
+          "upgrade": 0.476483
+        },
+        "match_rate": 1.0,
+        "matched": 128,
+        "mean_buy_mass": 0.324038,
+        "mean_play_mass": 0.122041,
+        "mean_reroll_mass": 0.0055,
+        "n": 128,
+        "reroll_top1_share": 0.0,
+        "top1": {
+          "play": 3,
+          "sell": 7,
+          "upgrade": 118
+        },
+        "top1_share": {
+          "play": 0.023438,
+          "sell": 0.054688,
+          "upgrade": 0.921875
+        }
+      },
+      "6": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 28,
+          "turn_tier": 68,
+          "turn_tier_gold": 32
+        },
+        "mass_share": {
+          "buy": 0.274072,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.003897,
+          "hero_power": 0.038281,
+          "other": 0.0,
+          "play": 0.136791,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.155734,
+          "sell": 0.087402,
+          "upgrade": 0.303823
+        },
+        "match_rate": 1.0,
+        "matched": 128,
+        "mean_buy_mass": 0.274072,
+        "mean_play_mass": 0.136791,
+        "mean_reroll_mass": 0.155734,
+        "n": 128,
+        "reroll_top1_share": 0.226562,
+        "top1": {
+          "reroll": 29,
+          "upgrade": 99
+        },
+        "top1_share": {
+          "reroll": 0.226562,
+          "upgrade": 0.773438
+        }
+      },
+      "7": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 98,
+          "turn_tier": 7,
+          "turn_tier_gold": 23
+        },
+        "mass_share": {
+          "buy": 0.220094,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.009973,
+          "hero_power": 0.0285,
+          "other": 0.0,
+          "play": 0.243315,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.165127,
+          "sell": 0.028507,
+          "upgrade": 0.304485
+        },
+        "match_rate": 1.0,
+        "matched": 128,
+        "mean_buy_mass": 0.220094,
+        "mean_play_mass": 0.243315,
+        "mean_reroll_mass": 0.165127,
+        "n": 128,
+        "reroll_top1_share": 0.023438,
+        "top1": {
+          "play": 44,
+          "reroll": 3,
+          "upgrade": 81
+        },
+        "top1_share": {
+          "play": 0.34375,
+          "reroll": 0.023438,
+          "upgrade": 0.632812
+        }
+      },
+      "8": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 46,
+          "turn_tier": 8,
+          "turn_tier_gold": 74
+        },
+        "mass_share": {
+          "buy": 0.150649,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.054992,
+          "hero_power": 0.026658,
+          "other": 0.0,
+          "play": 0.241604,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.338865,
+          "sell": 0.01916,
+          "upgrade": 0.168072
+        },
+        "match_rate": 1.0,
+        "matched": 128,
+        "mean_buy_mass": 0.150649,
+        "mean_play_mass": 0.241604,
+        "mean_reroll_mass": 0.338865,
+        "n": 128,
+        "reroll_top1_share": 0.609375,
+        "top1": {
+          "play": 21,
+          "reroll": 78,
+          "upgrade": 29
+        },
+        "top1_share": {
+          "play": 0.164062,
+          "reroll": 0.609375,
+          "upgrade": 0.226562
+        }
+      },
+      "9": {
+        "buy_top1_share": 0.0,
+        "level": {
+          "tier": 24,
+          "turn_tier": 63,
+          "turn_tier_gold": 33
+        },
+        "mass_share": {
+          "buy": 0.167329,
+          "buy_minion": 0.0,
+          "buy_spell": 0.0,
+          "end_turn": 0.072494,
+          "hero_power": 0.014025,
+          "other": 0.0,
+          "play": 0.282004,
+          "play_minion": 0.0,
+          "play_spell": 0.0,
+          "reroll": 0.292367,
+          "sell": 0.063135,
+          "upgrade": 0.108647
+        },
+        "match_rate": 1.0,
+        "matched": 120,
+        "mean_buy_mass": 0.167329,
+        "mean_play_mass": 0.282004,
+        "mean_reroll_mass": 0.292367,
+        "n": 120,
+        "reroll_top1_share": 0.591667,
+        "top1": {
+          "play": 36,
+          "reroll": 71,
+          "upgrade": 13
+        },
+        "top1_share": {
+          "play": 0.3,
+          "reroll": 0.591667,
+          "upgrade": 0.108333
+        }
+      }
+    }
+  },
+  "buy_table": {
+    "min_freq": 0.01,
+    "path": "/home/data/users/gaoletian/projects/HSBRSIM/data/firestone_replays/firestone_recent_actions.jsonl.gz",
+    "rows": 18814,
+    "skipped": {
+      "bad_row": 0,
+      "bad_tier": 0,
+      "no_card": 0,
+      "type": 130352
+    },
+    "tiers": {
+      "1": {
+        "buys": 658,
+        "cards": 32,
+        "high_cards": 27
+      },
+      "2": {
+        "buys": 1052,
+        "cards": 76,
+        "high_cards": 39
+      },
+      "3": {
+        "buys": 1017,
+        "cards": 139,
+        "high_cards": 28
+      },
+      "4": {
+        "buys": 1715,
+        "cards": 223,
+        "high_cards": 21
+      },
+      "5": {
+        "buys": 3179,
+        "cards": 337,
+        "high_cards": 18
+      },
+      "6": {
+        "buys": 11193,
+        "cards": 385,
+        "high_cards": 20
+      }
+    }
+  },
+  "generated_at": "2026-10-31T18:55:57+0800",
+  "late_ref": {
+    "buy_boost": 2.0,
+    "buy_min_freq": 0.01,
+    "policy": "fixed",
+    "reroll_cap": 0.25,
+    "strict_levels": [
+      "turn_tier_gold"
+    ],
+    "turn_min": 10
+  },
+  "pool_in": "data/board_problems/problems_all.jsonl",
+  "pool_out": "data/board_problems/problems_all_fixed.jsonl",
+  "problems": 6452,
+  "problems_sha256": "2dbce08baa5a0841d62f07fa7c5db3885bf1496abb2f28b97c2bcf61e292a27b",
+  "reference": {
+    "floors": [
+      10000,
+      8000,
+      6000
+    ],
+    "levels": [
+      "by_turn_tier_gold",
+      "by_turn_tier",
+      "by_tier",
+      "by_turn",
+      "all"
+    ],
+    "path": "/home/data/users/gaoletian/projects/HSBRSIM/data/firestone_bc/bc_samples.jsonl.gz",
+    "rows": {
+      "10000": 7048,
+      "6000": 192022,
+      "8000": 21357
+    }
+  },
+  "rewrite": {
+    "applied": 2317,
+    "late_rows": 5483,
+    "late_strict_matched": 2317,
+    "late_strict_unmatched": 3166,
+    "reasons": {
+      "no_support": 3166
+    },
+    "rows": 6452,
+    "schema": "board_late_ref_rewrite_v1",
+    "strict_unmatched_by_turn": {
+      "10": 1130,
+      "11": 882,
+      "12": 627,
+      "13": 356,
+      "14": 132,
+      "15": 39
+    },
+    "unmatched_by_turn": {
+      "10": 1130,
+      "11": 882,
+      "12": 627,
+      "13": 356,
+      "14": 132,
+      "15": 39
+    }
+  },
+  "schema": "board_late_ref_fix_v1",
+  "seconds": 7.2
+}

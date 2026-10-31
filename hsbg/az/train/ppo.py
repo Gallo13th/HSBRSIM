@@ -88,6 +88,12 @@ from .archetype_bias import (ArchetypeBias, aggregate_archetype_bias,
 from .reward_shaping import RewardShaper
 from .tier_target import TierTargetTracker, aggregate_tier_target
 from .power_trace import compact_diagnostics, compute_credit
+from .process_value import process_value_loss
+from .process_value import consume_count as _consume_count
+from .process_value import process_target as _process_target
+from .curriculum import apply_turn_gold as _apply_turn_gold
+from .scaling_teacher import ScalingTeacher as _ScalingTeacher
+from .scaling_teacher import in_scaling_window as _in_scaling_window
 
 # ── 数值边界 ──────────────────────────────────────────────────────────────
 #: torch 侧非法 logits 的填充值（float32 下 ``exp(-1e30)=0``，避免 -inf 制造 NaN 梯度）。
@@ -396,6 +402,18 @@ class CollectConfig:
     #: 偏好表 / 分类器模型路径（空 = 默认 ``data/archetype/*``）。
     archetype_table: str = ""
     archetype_model: str = ""
+    #: ── 经济（金币）课程（默认 none + 1.0 = 逐位等价；见 docs/CURRICULUM_SCALING.md）──
+    #: 阶段名（none/warmup/anneal）只用于 meta/history 记录；采集侧真正用的是
+    #: ``curriculum_gold_mult``（训练入口按累计 decisions 求值后的**当前**倍数）。
+    curriculum_stage: str = "none"
+    #: 当前 iteration 生效的金币收入倍数；1.0 = 完全不碰金币（逐位等价）。
+    curriculum_gold_mult: float = 1.0
+    #: 在线缩放教师 DAgger：True 时在「gold>=10 且 tier>=4」的决策上写
+    #: ``teacher_action``（-1 = 本决策无标签）；默认 False = 不查教师、不新增字段。
+    teacher_bc: bool = False
+    #: 过程价值辅助标签：True 时每决策写 ``process_target``（酒馆永久 buff /
+    #: 施法数 / consume 数，log1p）；默认 False = 不读日志、不新增字段。
+    process_value: bool = False
 
 
 #: ``compile_train`` 取值 -> ``torch.compile`` 模式（0=关闭，不在表内）。
@@ -504,6 +522,17 @@ class PPOConfig:
     problem_batch: int = 128
     #: 题目池路径（``scripts/build_board_problems.py`` 产出的 problems.jsonl）。
     problem_pool_path: str = ""
+    #: **题目 turn 加权**（默认空 = 不加权，逐位等价）：``"10:2,12:3,14:4,15:4"``。
+    #: 按题目 ``turn`` 给 soft-CE 加权（未列出的 turn 权重 1；权重 0 = 该 turn 的题从
+    #: 池里剔除）。动机：``runs/plots/strength_stages.md`` 显示 t12 之后强度比几乎不变，
+    #: 而参考解 52% 是 t6–t12 的升本 —— 把有限梯度从「升本」推到「后期做大随从」。
+    #: 非法语法在构造期抛 ``ValueError``（不静默降级）。
+    problem_turn_weight: str = ""
+    #: **题目强度增量过滤**（默认 0 = 不过滤）：只保留
+    #: ``label.strength_delta >= 阈值``（t+3 归一化强度增量 ``log1p(after)-log1p(before)``，
+    #: 存活题 mean 1.231 / std 0.734）的题；过滤计数进 history 的
+    #: ``problem_pool_dropped_by_delta``。必须有限且 >= 0。
+    problem_min_strength_delta: float = 0.0
     #: **强度辅助头**（entity 的 ``strength_head``）：从状态预测 t+3 **战团强度增量**
     #: ``log1p(after)-log1p(before)``（z-score 回归）+ tier+1 是否达成（二分类）。
     #: **0 = 关闭（默认）**：不建头、
@@ -516,6 +545,12 @@ class PPOConfig:
     #: KL anchor 到 stage 起点的系数 β（论文 Table 7：0.1，前 100 个 iteration 后放开）。
     #: >0 时必须由 trainer 提供 anchor 分布（见 PPOTrainer.set_anchor）。
     anchor_coef: float = 0.0
+    #: 在线缩放教师 DAgger 的 CE 系数（0=关闭，默认）。>0 时需要采集侧产出
+    #: ``teacher_action``（``CollectConfig.teacher_bc=True``），CE 只在有标签的样本上算。
+    teacher_bc_coef: float = 0.0
+    #: 过程价值辅助头系数（0=关闭，默认）：预测 log1p(酒馆永久 buff 总和) /
+    #: log1p(施法数) / log1p(consume 数)，只在目标可得的样本上算 MSE。
+    process_value_coef: float = 0.0
     #: 梯度累积：minibatch 是微批大小，grad_accum 个微批 = 一个有效 minibatch。
     #: 论文有效 minibatch = 8192；显存不够时用 e.g. minibatch=2048, grad_accum=4。
     grad_accum: int = 1
@@ -645,6 +680,11 @@ class PPOConfig:
             _v = float(getattr(self, _name) or 0.0)
             if not math.isfinite(_v) or _v < 0.0:
                 raise ValueError(f"{_name} 必须 >= 0，得到 {_v!r}")
+        # 缩放教师 DAgger / 过程价值辅助（默认关闭）：系数必须有限且 >= 0
+        for _name in ("teacher_bc_coef", "process_value_coef"):
+            _v = float(getattr(self, _name) or 0.0)
+            if not math.isfinite(_v) or _v < 0.0:
+                raise ValueError(f"{_name} 必须 >= 0，得到 {_v!r}")
         for _name in ("problem_bc_every", "strength_aux_every", "problem_batch"):
             if int(getattr(self, _name) or 0) <= 0:
                 raise ValueError(f"{_name} 必须 >= 1，得到 {getattr(self, _name)!r}")
@@ -652,6 +692,15 @@ class PPOConfig:
                 float(self.strength_tier_pos_weight) <= 0.0:
             raise ValueError("strength_tier_pos_weight 必须是有限正数，得到 "
                              f"{self.strength_tier_pos_weight!r}")
+        # 题目池开关（默认关闭）：turn 权重语法与强度增量阈值**构造期校验**
+        thr = float(self.problem_min_strength_delta)
+        if not math.isfinite(thr) or thr < 0.0:
+            raise ValueError(
+                f"problem_min_strength_delta 必须有限且 >= 0，得到 "
+                f"{self.problem_min_strength_delta!r}")
+        if str(self.problem_turn_weight or "").strip():
+            from .board_problems import parse_turn_weights  # noqa: PLC0415
+            parse_turn_weights(self.problem_turn_weight)  # 非法语法直接 ValueError
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -667,7 +716,8 @@ BATCH_FIELDS: Tuple[str, ...] = (
 )
 
 #: 可选扩展字段（存在才写/读 npz）：动作序列辅助任务标签。
-BATCH_OPTIONAL_FIELDS: Tuple[str, ...] = (SEQ_TARGET_KEY,)
+BATCH_OPTIONAL_FIELDS: Tuple[str, ...] = (
+    SEQ_TARGET_KEY, "teacher_action", "process_target")
 
 
 @dataclass
@@ -705,6 +755,11 @@ class PPOBatch:
     forced: Optional[np.ndarray] = None
     #: 动作序列辅助标签（multi-hot uint8[n,245]）；None = 未启用（默认）
     seq_target: Optional[np.ndarray] = None
+    #: 在线缩放教师标签 int16[n]（-1 = 无标签）；None = 未启用（默认）
+    teacher_action: Optional[np.ndarray] = None
+    #: 过程价值目标 f32[n,3]（log1p：酒馆永久 buff / 施法数 / consume 数；
+    #: 不可得行为 NaN）；None = 未启用（默认）
+    process_target: Optional[np.ndarray] = None
     meta: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -714,6 +769,10 @@ class PPOBatch:
             self.forced = np.asarray(self.forced, dtype=bool).reshape(-1)
         if self.seq_target is not None:
             self.seq_target = np.asarray(self.seq_target, dtype=np.uint8)
+        if self.teacher_action is not None:
+            self.teacher_action = np.asarray(self.teacher_action, dtype=np.int16).reshape(-1)
+        if self.process_target is not None:
+            self.process_target = np.asarray(self.process_target, dtype=np.float32)
 
     def __len__(self) -> int:
         return int(self.actions.shape[0])
@@ -749,6 +808,23 @@ class PPOBatch:
                     if not bool((got == 1).all()):
                         errs.append(
                             f"{int((got != 1).sum())} 条样本的 seq_target 未标本步动作")
+        if self.teacher_action is not None:
+            ta = np.asarray(self.teacher_action).reshape(-1)
+            if ta.size != n:
+                errs.append(f"teacher_action: len {ta.size} != {n}")
+            elif n:
+                bad = (ta < -1) | (ta >= N_ACTIONS)
+                if bad.any():
+                    errs.append(f"teacher_action 越界: {int(bad.sum())} 条")
+                else:
+                    ok = ta >= 0
+                    legal = self.masks[np.arange(n)[ok], ta[ok].astype(np.int64)]
+                    if not bool(legal.all()):
+                        errs.append("teacher_action 含非法动作")
+        if self.process_target is not None:
+            pt = np.asarray(self.process_target)
+            if tuple(pt.shape) != (n, 3):
+                errs.append(f"process_target: shape {tuple(pt.shape)} != {(n, 3)}")
         if n == 0:
             return errs
         m = self.masks.astype(bool)
@@ -979,12 +1055,30 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
     seq_target = (seq_targets_from_records(recs) if seq_aux else None)
     if seq_target is not None:
         merged_meta["seq_aux"] = True
+    # 在线缩放教师标签 / 过程价值目标（记录里出现才产出；默认关闭 -> None）
+    teacher_action = None
+    if any("teacher_action" in r for r in recs):
+        teacher_action = np.asarray(
+            [int(r.get("teacher_action", -1)) for r in recs], dtype=np.int16)
+        merged_meta["teacher_aux"] = True
+    process_target = None
+    if any("process_target" in r for r in recs):
+        rows = []
+        for r in recs:
+            pt = r.get("process_target")
+            if pt is None:
+                rows.append([np.nan, np.nan, np.nan])
+            else:
+                rows.append([float(x) for x in np.asarray(pt, dtype=np.float32).reshape(3)])
+        process_target = np.asarray(rows, dtype=np.float32)
+        merged_meta["process_aux"] = True
     return PPOBatch(
         features=features, cards=cards, masks=masks, actions=actions,
         old_logprobs=old_logprobs, values=values, rewards=rewards, dones=dones,
         advantages=advantages, returns=returns, seats=seats, game_ids=game_ids,
         ranks=ranks, turns=turns, target_pi=target_pi, has_pi=has_pi,
         episode_ids=episode_ids, forced=forced, seq_target=seq_target,
+        teacher_action=teacher_action, process_target=process_target,
         meta=merged_meta)
 
 
@@ -1070,6 +1164,28 @@ def forward_problem_model(model: Any, features: Any, cards: Any, mask: Any = Non
             else fn(features, cards)
         if not isinstance(out, (tuple, list)) or len(out) != 2:
             raise ValueError("forward_problem 必须返回 (policy_logits, strength_pred|None)")
+        return out[0], out[1]
+    logits, _rank_logits, _scalar = split_model_outputs(
+        forward_model(model, features, cards, mask))
+    return logits, None
+
+
+def forward_process_model(model: Any, features: Any, cards: Any, mask: Any = None):
+    """过程价值头的一次前向：``(policy_logits, process_pred|None)``。
+
+    优先走模型的 ``forward_process``（entity 带 ``process_head`` 时提供；一次 forward
+    同时出策略头与过程头）。老模型/测试替身没有该方法时退回 ``forward_model``
+    （``process_pred=None``）。只有 ``process_value_coef>0`` 的分支调用它。
+
+    **不影响策略前向**：``forward()`` / ``forward_aux()`` / ``forward_bc()`` /
+    ``forward_problem()`` 的返回值与不带该头时完全一致。
+    """
+    fn = getattr(model, "forward_process", None)
+    if fn is not None:
+        out = fn(features, cards, mask) if _accepts_mask_aux(model, "forward_process") \
+            else fn(features, cards)
+        if not isinstance(out, (tuple, list)) or len(out) != 2:
+            raise ValueError("forward_process 必须返回 (policy_logits, process_pred|None)")
         return out[0], out[1]
     logits, _rank_logits, _scalar = split_model_outputs(
         forward_model(model, features, cards, mask))
@@ -1711,6 +1827,51 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
              - float(config.entropy_coef) * entropy)
     if seq_loss is not None:
         total = total + seq_coef * seq_loss
+    # ── 在线缩放教师 DAgger（默认 teacher_bc_coef=0 时整段不执行）────────────
+    # 只在采集侧写了 teacher_action（gold>=10 & tier>=4 窗口）的样本上做 CE；
+    # forced 样本（环境守卫）与无标签样本（-1）一律排除。策略 logits 已 masked。
+    teacher_bc_coef = float(getattr(config, "teacher_bc_coef", 0.0) or 0.0)
+    teacher_loss = None
+    teacher_n = 0
+    if teacher_bc_coef > 0.0:
+        ta_np = getattr(batch, "teacher_action", None)
+        if ta_np is not None:
+            ta = torch.from_numpy(
+                np.ascontiguousarray(np.asarray(ta_np)[idx].astype(np.int64))).to(dev)
+            has_t = (ta >= 0) & (valid > 0)
+            teacher_n = int(has_t.sum().item())
+            if teacher_n > 0:
+                teacher_loss = F.cross_entropy(logits[has_t], ta[has_t])
+                total = total + teacher_bc_coef * teacher_loss
+    # ── 过程价值辅助头（默认 process_value_coef=0 时整段不执行）──────────────
+    # 独立前向（forward_process），不改变策略/价值主干前向的输出；目标 NaN = 不可得，
+    # 只在 (available & valid) 样本上算 MSE。梯度经辅助损失回传 trunk。
+    process_coef = float(getattr(config, "process_value_coef", 0.0) or 0.0)
+    process_stats: Dict[str, Any] = {}
+    if process_coef > 0.0:
+        pt_np = getattr(batch, "process_target", None)
+        if pt_np is not None:
+            pt_rows = np.asarray(pt_np)[idx].astype(np.float32).reshape(len(idx), 3)
+            avail_np = np.isfinite(pt_rows).all(axis=1)
+            if bool(avail_np.any()):
+                _p_logits, pred = forward_process_model(model, x, c, m)
+                if pred is None:
+                    raise RuntimeError(
+                        "process_value_coef>0 但模型没有 process_head："
+                        "请用 attach_process_head() 或 build_net(..., process_head=True)")
+                pt = torch.from_numpy(np.ascontiguousarray(
+                    np.nan_to_num(pt_rows, nan=0.0))).to(dev)
+                avail = torch.from_numpy(avail_np).to(dev) & (valid > 0)
+                pv = process_value_loss(pred, pt, avail)
+                total = total + process_coef * pv["loss"]
+                process_stats = {
+                    "process_value_loss": pv["loss"].detach(),
+                    "process_tavern_mse": torch.as_tensor(pv["mse_tavern"], device=dev),
+                    "process_casts_mse": torch.as_tensor(pv["mse_casts"], device=dev),
+                    "process_consume_mse": torch.as_tensor(pv["mse_consume"], device=dev),
+                    "process_samples": torch.as_tensor(pv["n"], device=dev),
+                    "process_coef": torch.as_tensor(float(process_coef), device=dev),
+                }
     # ── 真实人类 BC 辅助正则（分层目标；默认 bc_coef=0 时整段不执行）─────────
     # 每个 PPO minibatch 用同一个 model、同一张图做一次额外 forward（forward_bc）：
     #   类型级：245 动作 logits -> 9 类 log-sum-exp 聚合 -> CE(action_type)
@@ -1858,6 +2019,14 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     # 默认关闭时不出现该键（保持 stats/日志与旧版本逐字节一致）
     if seq_loss is not None:
         result["seq_loss"] = seq_loss
+    # 在线缩放教师 DAgger：只有真的算了 CE 才出现（默认关闭 -> 结构不变）
+    if teacher_loss is not None:
+        result["teacher_bc_loss"] = teacher_loss.detach()
+        result["teacher_bc_coef"] = torch.as_tensor(float(teacher_bc_coef), device=dev)
+        result["teacher_samples"] = torch.as_tensor(float(teacher_n), device=dev)
+    # 过程价值辅助头：只有真的算了 MSE 才出现（默认关闭 -> 结构不变）
+    if process_stats:
+        result.update(process_stats)
     # BC 辅助正则：只有 bc_coef>0 才出现；bc_coef=0 时 stats 结构与旧版一致
     if bc_loss is not None:
         result["bc_loss"] = bc_loss.detach()
@@ -2132,11 +2301,17 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
             prob_note += (f" saux={rec['strength_aux_loss']:.4f}"
                           f" s_mse={rec.get('strength_mse', 0.0):.4f}"
                           f" s_bce={rec.get('strength_bce', 0.0):.4f}")
+        if "teacher_bc_loss" in rec:
+            prob_note += (f" teach={rec['teacher_bc_loss']:.4f}"
+                          f" teach_n={rec.get('teacher_samples', 0.0):.0f}")
+        if "process_value_loss" in rec:
+            prob_note += (f" proc={rec['process_value_loss']:.4f}"
+                          f" proc_n={rec.get('process_samples', 0.0):.0f}")
         print(f"[ppo] epoch {epoch + 1}/{epochs} total={rec['total']:.4f} "
               f"(policy={rec['policy_loss']:.4f} value={rec['value_loss']:.4f} "
               f"aux_pi={rec['aux_pi_loss']:.4f} ent={rec['entropy']:.4f} "
               f"kl={rec['approx_kl']:.5f} clip={rec['clip_frac']:.3f}){seq_note}"
-              f"{bc_note}{dpo_note}",
+              f"{bc_note}{dpo_note}{prob_note}",
               flush=True)
         if epoch_stopped:
             print(f"[ppo] KL 早停：minibatch approx_kl 超过 "
@@ -2265,12 +2440,54 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         stats["strength_aux_steps"] = int(len(_saux_recs))
         stats["strength_batch"] = float(np.mean(
             [r.get("strength_n", 0.0) for r in _saux_recs]))
+    if _pbc_recs or _saux_recs:
+        stats["problem_min_strength_delta"] = float(
+            getattr(cfg, "problem_min_strength_delta", 0.0) or 0.0)
+        stats["problem_turn_weight"] = str(
+            getattr(cfg, "problem_turn_weight", "") or "")
     if not (_pbc_recs or _saux_recs):
         cfg_echo = stats.get("config")
         if isinstance(cfg_echo, dict):
             for key in ("problem_bc_coef", "problem_bc_every", "problem_batch",
                         "problem_pool_path", "strength_aux_coef",
-                        "strength_aux_every", "strength_tier_pos_weight"):
+                        "strength_aux_every", "strength_tier_pos_weight",
+                        "problem_turn_weight", "problem_min_strength_delta"):
+                cfg_echo.pop(key, None)
+    # 在线缩放教师 / 过程价值：只有真的算出损失才写 stats；默认关闭时连 config
+    # 回显里的新键也去掉，保证与旧版本结构逐字节一致。
+    _teach_recs = [r for r in logs if "teacher_bc_loss" in r]
+    if _teach_recs:
+        stats["teacher_bc_loss"] = float(np.mean(
+            [r["teacher_bc_loss"] for r in _teach_recs]))
+        stats["teacher_bc_coef"] = float(
+            getattr(cfg, "teacher_bc_coef", 0.0) or 0.0)
+        stats["teacher_samples"] = float(np.mean(
+            [r.get("teacher_samples", 0.0) for r in _teach_recs]))
+        stats["teacher_steps"] = int(len(_teach_recs))
+    else:
+        cfg_echo = stats.get("config")
+        if isinstance(cfg_echo, dict):
+            for key in ("teacher_bc_coef",):
+                cfg_echo.pop(key, None)
+    _proc_recs = [r for r in logs if "process_value_loss" in r]
+    if _proc_recs:
+        stats["process_value_loss"] = float(np.mean(
+            [r["process_value_loss"] for r in _proc_recs]))
+        stats["process_tavern_mse"] = float(np.mean(
+            [r.get("process_tavern_mse", 0.0) for r in _proc_recs]))
+        stats["process_casts_mse"] = float(np.mean(
+            [r.get("process_casts_mse", 0.0) for r in _proc_recs]))
+        stats["process_consume_mse"] = float(np.mean(
+            [r.get("process_consume_mse", 0.0) for r in _proc_recs]))
+        stats["process_value_coef"] = float(
+            getattr(cfg, "process_value_coef", 0.0) or 0.0)
+        stats["process_samples"] = float(np.mean(
+            [r.get("process_samples", 0.0) for r in _proc_recs]))
+        stats["process_steps"] = int(len(_proc_recs))
+    else:
+        cfg_echo = stats.get("config")
+        if isinstance(cfg_echo, dict):
+            for key in ("process_value_coef",):
                 cfg_echo.pop(key, None)
     return stats
 
@@ -2708,6 +2925,20 @@ def pack_records_arrays(records: Sequence[Dict[str, Any]],
         # 势函数塑形的逐决策基础奖励（可选字段：默认关闭时输出键集合与旧版一致）
         out["rewards"] = np.asarray([float(r.get("reward", 0.0)) for r in records],
                                     dtype=np.float32)
+    if any("teacher_action" in r for r in records):
+        # 在线缩放教师标签（-1 = 本决策无标签；默认关闭时不产出）
+        out["teacher_action"] = np.asarray(
+            [int(r.get("teacher_action", -1)) for r in records], dtype=np.int16)
+    if any("process_target" in r for r in records):
+        # 过程价值目标 [n,3]（不可得为 NaN；默认关闭时不产出）
+        rows = []
+        for r in records:
+            pt = r.get("process_target")
+            if pt is None:
+                rows.append([np.nan, np.nan, np.nan])
+            else:
+                rows.append([float(x) for x in np.asarray(pt, dtype=np.float32).reshape(3)])
+        out["process_target"] = np.asarray(rows, dtype=np.float32)
     if seq_aux:
         # 动作序列辅助标签：同一 (game_id, seat, turn) 的动作集合（向量化一次算完）
         out[SEQ_TARGET_KEY] = seq_targets_from_records(records)
@@ -2808,6 +3039,21 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
             seq_target = None
         else:
             merged_meta["seq_aux"] = True
+    # 在线缩放教师标签 / 过程价值目标：有则透传（缺字段/形状不符 -> None）
+    teacher_action = t.get("teacher_action")
+    if teacher_action is not None:
+        teacher_action = np.asarray(teacher_action, dtype=np.int16).reshape(-1)
+        if teacher_action.size != n:
+            teacher_action = None
+        else:
+            merged_meta["teacher_aux"] = True
+    process_target = t.get("process_target")
+    if process_target is not None:
+        process_target = np.asarray(process_target, dtype=np.float32)
+        if tuple(process_target.shape) != (n, 3):
+            process_target = None
+        else:
+            merged_meta["process_aux"] = True
     return PPOBatch(
         features=t["features"], cards=t["cards"], masks=t["masks"],
         actions=t["actions"], old_logprobs=t["old_logprobs"], values=values,
@@ -2819,6 +3065,7 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
         has_pi=(lambda hp: hp if (hp is not None and np.asarray(hp).shape == (n,))
                 else np.zeros(n, dtype=bool))(t.get("has_pi")),
         episode_ids=episode_ids, forced=t["forced"], seq_target=seq_target,
+        teacher_action=teacher_action, process_target=process_target,
         meta=merged_meta)
 
 
@@ -2902,24 +3149,52 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
     else:
         E = load_engine()
         weak_rng = np.random.default_rng(int(cfg.seed))
+        _curr_mult = float(getattr(cfg, "curriculum_gold_mult", 1.0) or 1.0)
+        _teacher_on = bool(getattr(cfg, "teacher_bc", False))
+        _process_on = bool(getattr(cfg, "process_value", False))
+        _teacher = _ScalingTeacher() if _teacher_on else None
         for gi in range(int(cfg.games)):
             gid = int(cfg.game_id_offset) + gi
             policy.game_id = gid
             policy.reseed(int(cfg.seed) + gi)
             policy.reset()
             game = E.Game(seed=int(cfg.seed) + gi)
+            if _process_on:
+                # consume 计数来自引擎事件日志；只在过程价值开启时打开（默认关闭零影响）
+                game.set_record_log(True)
             tracker = TierTargetTracker(cfg)      # 每局独立状态（claimed/evaluated 隔离）
             steps = 0
             game_decisions = 0
             game_truncated = False
             rec_prev: Optional[int] = None
             phi_prev = 0.0
+            _cur_turn = -1            # 经济课程：当前已应用金币倍数的回合
+            _carry = 0                # 上一回合结束时 learner 的金币结余
+            _consume_seen = 0         # consume 日志增量缓存
             while not game.is_over() and steps < int(cfg.max_steps):
                 acted = False
                 for p in range(N_PLAYERS):
                     if not game.needs_action(p):
                         continue
                     if int(p) == int(cfg.learner_seat):
+                        # 经济课程：新回合第一次 learner 决策前放大「本回合收入」
+                        if _curr_mult != 1.0 and int(game.turn) != _cur_turn:
+                            _cur_turn = int(game.turn)
+                            _apply_turn_gold(game, int(p), carry=_carry,
+                                             mult=_curr_mult)
+                        teacher_a = -1
+                        process_t = None
+                        if _teacher_on:
+                            _view = json.loads(game.view(int(p)))
+                            _me = _view.get("me") or {}
+                            if _in_scaling_window(_me.get("gold"), _me.get("tier")):
+                                teacher_a = int(_teacher.act_view(_view))
+                        if _process_on:
+                            _pj = json.loads(game.player_json(int(p)))
+                            if isinstance(_pj.get("stats"), dict):
+                                _consume_seen = _consume_count(game.log(), _consume_seen)
+                                process_t = _process_target(
+                                    _pj, consume=_consume_seen)
                         # 等级进度奖励：本回合第一条 decision 前检查一次 tier
                         tier_delta = tracker.observe(game, int(p))
                         phi_now = 0.0
@@ -2929,12 +3204,20 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                                 shaper.attach(policy.records, rec_prev, gid,
                                               phi_prev, phi_now)
                         dec = policy.decide(game, int(p))
+                        _rec = policy.records[-1]
+                        if _teacher_on:
+                            _rec["teacher_action"] = int(teacher_a)
+                        if _process_on:
+                            _rec["process_target"] = process_t
                         mask = mask_from_bytes(game.legal_mask(int(p)))
                         action = int(dec.action)
                         if not (0 <= action < N_ACTIONS and bool(mask[action])):
                             illegal += 1
                             action = int(np.flatnonzero(mask)[0]) if mask.any() else 0
                         game.step(int(p), action)
+                        if _curr_mult != 1.0:
+                            _carry = int(json.loads(game.player_json(int(p))).get(
+                                "gold") or 0)
                         if shaper.enabled:
                             rec_prev = len(policy.records) - 1
                             phi_prev = phi_now
@@ -2988,6 +3271,10 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
         "seed": int(cfg.seed),
         "learner_seat": int(cfg.learner_seat),
         "behavior": str(cfg.behavior),
+        "curriculum_stage": str(getattr(cfg, "curriculum_stage", "none")),
+        "curriculum_gold_mult": float(getattr(cfg, "curriculum_gold_mult", 1.0)),
+        "teacher_bc": bool(getattr(cfg, "teacher_bc", False)),
+        "process_value": bool(getattr(cfg, "process_value", False)),
         "temperature": float(cfg.temperature),
         "pi_epsilon": float(cfg.pi_epsilon),
         "search_calls": int(policy.search_calls),

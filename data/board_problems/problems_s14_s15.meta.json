@@ -1,0 +1,92 @@
+{
+  "by_tag": {
+    "core_card": 1177,
+    "triple_ready": 89,
+    "turn_start": 688,
+    "upgrade_ready": 1436
+  },
+  "by_turn": {
+    "1": 60,
+    "10": 228,
+    "11": 164,
+    "12": 118,
+    "13": 68,
+    "14": 22,
+    "15": 12,
+    "2": 72,
+    "3": 77,
+    "4": 128,
+    "5": 128,
+    "6": 128,
+    "7": 128,
+    "8": 128,
+    "9": 120
+  },
+  "config": {},
+  "decisions": 0,
+  "generated_at": "2026-10-31T16:48:10+0800",
+  "human_board": {},
+  "label_available": 1581,
+  "label_missing": 0,
+  "label_survived": 1345,
+  "label_survived_rate": 0.8507273877292852,
+  "label_terminal": 236,
+  "late_turn_by_turn": {
+    "10": 228,
+    "11": 164,
+    "12": 118,
+    "13": 68,
+    "14": 22,
+    "15": 12
+  },
+  "late_turn_min": 10,
+  "late_turn_problems": 612,
+  "mirror": {},
+  "move_n_max": 1,
+  "move_n_p50": 0.0,
+  "note": "s14 分布 64 局(t1-13) + 弱对手分布 64 局 focus 10-15(t10-15)",
+  "per_game": [],
+  "policy_top1_in_ref": 221,
+  "policy_top1_in_ref_rate": 0.13978494623655913,
+  "problems": 1581,
+  "problems_path": "data/board_problems/problems_s14_s15.jsonl",
+  "problems_sha256": "af36583e6a07994cdf9f9cd3694da1dd712ba6c317ffc762d6d27c0b6d9f47d1",
+  "ref_floor": {
+    "10000": 800,
+    "6000": 669,
+    "8000": 112
+  },
+  "ref_level": {
+    "tier": 716,
+    "turn_tier": 216,
+    "turn_tier_gold": 649
+  },
+  "ref_mass_legal_mean": 0.5938097277845898,
+  "ref_mass_legal_p50": 0.5989583333333331,
+  "ref_match_rate": 1.0,
+  "ref_matched": 1581,
+  "ref_missing": 0,
+  "ref_missing_rate": 0.0,
+  "schema": "board_problem_v1",
+  "seconds": 0.0,
+  "skipped": {},
+  "sources": [
+    "data/board_problems/problems_s14_late.jsonl",
+    "data/board_problems/problems_late_turns.jsonl"
+  ],
+  "strength_after_p50": 376.0,
+  "strength_before_p50": 154.0,
+  "strength_delta_log1p_p50": 1.0505261020004717,
+  "strength_delta_mean": 1.0046922019898727,
+  "strength_delta_p50": 0.9320024312789181,
+  "strength_delta_p90": 1.8382794848629478,
+  "strength_norm": {
+    "mean": 1.1332865452801915,
+    "source": "problems_survived",
+    "std": 0.708339164358238,
+    "target": "delta_log1p"
+  },
+  "tier_up_rate": 0.4478178368121442,
+  "turn_max": 15,
+  "turn_min": 1
+}

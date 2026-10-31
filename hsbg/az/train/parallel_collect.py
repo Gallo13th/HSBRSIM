@@ -39,6 +39,10 @@ from .move_guard import aggregate_move_guard
 from .archetype_bias import aggregate_archetype_bias
 from .reward_shaping import RewardShaper, aggregate_shaping
 from .tier_target import TierTargetTracker, aggregate_tier_target
+from .curriculum import apply_turn_gold
+from .scaling_teacher import ScalingTeacher, in_scaling_window
+from .process_value import consume_count, process_target
+from hsbg.env import obs_std as _OBS
 
 
 def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
@@ -364,6 +368,10 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     policy.reset()
     seat = int(cfg.learner_seat)
     max_steps = int(cfg.max_steps)
+    _curr_mult = float(getattr(cfg, "curriculum_gold_mult", 1.0) or 1.0)
+    _teacher_on = bool(getattr(cfg, "teacher_bc", False))
+    _process_on = bool(getattr(cfg, "process_value", False))
+    _teacher = ScalingTeacher() if _teacher_on else None
     states: List[Dict[str, Any]] = []
     for gi in range(n):
         g0 = E.Game(seed=int(cfg.seed) + gi)
@@ -386,7 +394,27 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             "human_stats": HumanBoardStats(),
             # 等级进度奖励状态机（每局独立；coef=0 时 disabled = 零开销）
             "tier_target": TierTargetTracker(cfg),
+            # 经济课程：当前已应用金币倍数的回合 / 上一回合结束时的金币结余
+            "curr_turn": -1,
+            "curr_carry": 0,
+            "curr_turns": 0,
+            "curr_extra": 0,
+            # 缩放教师 / 过程价值标签计数
+            "teacher_labels": 0,
+            "process_labels": 0,
+            # 过程价值：consume 日志增量缓存 / 每回合首个决策的目标
+            "consume_seen": 0,
+            "consume_turn": -1,
+            "process_turn": -1,
+            "process_turn_target": None,
         })
+    if _process_on:
+        if not hasattr(states[0]["game"], "set_record_log"):
+            raise RuntimeError(
+                "process_value=True 需要 hsbg_engine.Game.set_record_log/log："
+                "当前 import 的引擎太旧")
+        for st in states:
+            st["game"].set_record_log(True)
     rounds = 0
     tier_on = any(bool(st["tier_target"].enabled) for st in states)
     trajectory_p = max(0.0, min(1.0, float(trajectory_p)))
@@ -416,6 +444,8 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             if traj is None or new_game is None:
                 continue
             st["game"] = new_game
+            if _process_on and hasattr(new_game, "set_record_log"):
+                new_game.set_record_log(True)
             st["traj"] = ReplayScript(traj, learner_seat=seat)
             st["traj_turn"] = int(traj.frames[0]["turn"])
             st["steps"] = 0
@@ -621,6 +651,42 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             pending.append(st)
         if not pending:
             break
+        # ── 经济课程 / 在线缩放教师 / 过程价值（默认关闭 -> 全空操作）─────────
+        _process_targets: List[Any] = []
+        for st in pending:
+            g = st["game"]
+            if _curr_mult != 1.0 and int(g.turn) != int(st.get("curr_turn", -1)):
+                st["curr_turn"] = int(g.turn)
+                _gstat = apply_turn_gold(g, seat, carry=int(st.get("curr_carry", 0)),
+                                         mult=_curr_mult)
+                st["curr_turns"] = int(st.get("curr_turns", 0)) + int(
+                    _gstat.get("applied", 0))
+                st["curr_extra"] = int(st.get("curr_extra", 0)) + int(
+                    _gstat.get("extra", 0))
+            pt = None
+            if _process_on:
+                if int(g.turn) != int(st.get("process_turn", -1)):
+                    # 过程目标只在**每回合第一个 learner 决策**上标注（回合起点口径）：
+                    # 目标里的施法数/酒馆永久 buff 在回合内会继续变，逐决策解析
+                    # player_json 成本不可接受（65k 决策/iter）。
+                    st["process_turn"] = int(g.turn)
+                    _pj = json.loads(g.player_json(seat))
+                    if isinstance(_pj.get("stats"), dict):
+                        st["consume_turn"] = int(g.turn)
+                        st["consume_seen"] = consume_count(
+                            g.log(), int(st.get("consume_seen", 0)))
+                        st["process_turn_target"] = process_target(
+                            _pj, consume=int(st["consume_seen"]))
+                    else:
+                        st["process_turn_target"] = None
+                    st["_process_first"] = True
+                else:
+                    st["_process_first"] = False
+                if bool(st.get("_process_first", False)) \
+                        and st.get("process_turn_target") is not None:
+                    pt = st["process_turn_target"]
+                    st["process_labels"] = int(st.get("process_labels", 0)) + 1
+            _process_targets.append(pt)
         _rec_base = len(policy.records)
         for k, st in enumerate(pending):
             st["rec_start"] = _rec_base + k
@@ -634,6 +700,29 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         decisions = policy.decide_batch([(st["game"], seat, st["gid"]) for st in pending])
         for k, (st, dec) in enumerate(zip(pending, decisions)):
             g = st["game"]
+            if _teacher_on:
+                # 决策已生成（状态未变）：用 record 里已有的观测特征判定窗口，
+                # 避免额外 observe；只有进入窗口才解析 view 交给教师。
+                _rec = policy.records[int(st["rec_start"])]
+                if getattr(policy, "norm_mean", None) is None:
+                    _f = np.asarray(_rec["features"], dtype=np.float32).reshape(-1)
+                    _gi = _OBS.SLICE_GLOBAL.start + _OBS.GLOBAL_FIELD_INDEX["gold"]
+                    _ti = _OBS.SLICE_GLOBAL.start + _OBS.GLOBAL_FIELD_INDEX["tier"]
+                    _gold = int(round(float(_f[_gi]) * 10.0))
+                    _tier = int(round(float(_f[_ti]) * 6.0))
+                else:  # CE checkpoint 的归一化特征不能用：退回 player_json
+                    _pj = json.loads(g.player_json(seat))
+                    _gold = int(_pj.get("gold") or 0)
+                    _tier = int(_pj.get("tier") or 0)
+                ta = -1
+                if int(g.turn) >= 6 and in_scaling_window(_gold, _tier):
+                    v = json.loads(g.view(seat))
+                    ta = int(_teacher.act_view(v))
+                    st["teacher_labels"] = int(st.get("teacher_labels", 0)) + 1
+                _rec["teacher_action"] = int(ta)
+            if _process_on:
+                policy.records[int(st["rec_start"])]["process_target"] = \
+                    _process_targets[k]
             if shaper.enabled:
                 prev = st.get("shape_rec")
                 if prev is not None:
@@ -652,6 +741,9 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             g.step(seat, a)
             st["steps"] += 1
             st["decisions"] += 1
+            if _curr_mult != 1.0:
+                st["curr_carry"] = int(json.loads(g.player_json(seat)).get(
+                    "gold") or 0)
         rounds += 1
         if rounds > 10 * max_steps:
             break
@@ -693,6 +785,18 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             metas[-1].update(st["tier_target"].stats())
     meta = {"mode": "lockstep", "games": n, "pool_games": n,
             "rounds": int(rounds), "decisions": int(decisions_total),
+            "curriculum_stage": str(getattr(cfg, "curriculum_stage", "none")),
+            "curriculum_gold_mult": float(getattr(cfg, "curriculum_gold_mult", 1.0)),
+            "curriculum_gold_turns": int(sum(
+                int(st.get("curr_turns", 0) or 0) for st in states)),
+            "curriculum_gold_extra": int(sum(
+                int(st.get("curr_extra", 0) or 0) for st in states)),
+            "teacher_bc": bool(getattr(cfg, "teacher_bc", False)),
+            "teacher_labels": int(sum(
+                int(st.get("teacher_labels", 0) or 0) for st in states)),
+            "process_value": bool(getattr(cfg, "process_value", False)),
+            "process_labels": int(sum(
+                int(st.get("process_labels", 0) or 0) for st in states)),
             "library_attempt": int(sum(st.get("lib_attempt", 0) for st in states)),
             "library_injected": int(sum(st.get("lib_injected", 0) for st in states)),
             "library_mismatch": int(sum(st.get("lib_mismatch", 0) for st in states)),

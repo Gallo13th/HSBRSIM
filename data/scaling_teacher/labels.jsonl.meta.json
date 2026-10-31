@@ -1,0 +1,28 @@
+{
+  "checkpoint": "runs/ab_scaling/start_model.pt",
+  "games": 12,
+  "seed_base": 710000,
+  "labels": 4233,
+  "window_labels": 254,
+  "window_rate": 0.06,
+  "legal_rate": 1.0,
+  "illegal": 0,
+  "truncated_games": 0,
+  "action_types": {
+    "choose": 362,
+    "buy": 2043,
+    "play": 1405,
+    "end_turn": 215,
+    "upgrade": 72,
+    "refresh": 88,
+    "sell": 39,
+    "hero_power0": 9
+  },
+  "window_action_types": {
+    "choose": 3,
+    "play": 212,
+    "buy": 39
+  },
+  "elapsed_s": 58.05,
+  "out": "data/scaling_teacher/labels.jsonl"
+}

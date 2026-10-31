@@ -126,7 +126,8 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
                      bc_card_head: bool = False,
                      bc_card_dim: Optional[int] = None,
                      move_head_split: bool = False,
-                     strength_head: bool = False):
+                     strength_head: bool = False,
+                     process_head: bool = False):
     """构造 EntityAZNet（torch 模块）。
 
     ``seq_head=True`` 时在 global token 上加一个 245 维的「动作序列辅助头」
@@ -250,6 +251,9 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
                 # 用 nn.Linear 默认初始化（预测尺度 O(1)，tier 先验 ≈0.5），
                 # 梯度乘 strength_aux_coef 后进入 trunk。
                 self.strength_norm = {"mean": 0.0, "std": 1.0}
+            # 过程价值辅助头（可选）：3 维 [log1p(酒馆永久 buff), log1p(施法数),
+            # log1p(consume 数)]。默认 None = 不构建、前向/checkpoint 与旧版逐位一致。
+            self.process_head = nn.Linear(d, 3) if process_head else None
 
         def _card_repr(self, idx):
             # idx [B, ...] long; 返回 [B, ..., d]
@@ -293,6 +297,16 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             """
             logits, _rank, _value, g = self._forward_impl(features, cards, mask)
             pred = None if self.strength_head is None else self.strength_head(g)
+            return logits, pred
+
+        def forward_process(self, features, cards, mask=None):
+            """过程价值一次前向：``(policy_logits, process_pred[N,3])``。
+
+            只在 ``process_value_coef>0`` 时调用；``process_head`` 未构建时第二项为
+            ``None``。**不改变** ``forward()`` 的策略/价值输出（同一 trunk，独立头）。
+            """
+            logits, _rank, _value, g = self._forward_impl(features, cards, mask)
+            pred = None if self.process_head is None else self.process_head(g)
             return logits, pred
 
         def _forward_impl(self, features, cards, mask=None):
@@ -472,4 +486,26 @@ def attach_move_head_split(model: Any) -> Any:
     _scale_move_projection(model.move_from)
     _scale_move_projection(model.move_to)
     model.move_head_split = True
+    return model
+
+
+def attach_process_head(model: Any) -> Any:
+    """给**已加载的旧 checkpoint** 追加过程价值辅助头（``Linear(d, 3)``）。
+
+    旧 checkpoint 没有 ``process_head.*``：``load_checkpoint`` 不会构建它，因此在
+    ``--process-value-coef>0`` 时在这里新建（``nn.Linear`` 默认初始化：零初始化会让
+    辅助损失对 trunk 的梯度恒为 0）。幂等：已有时直接返回。
+
+    该头只被 ``forward_process()`` 读取，不进入 ``forward()`` / ``forward_aux()`` /
+    ``forward_bc()`` / ``forward_problem()``，所以**不影响策略前向**。
+    """
+    if getattr(model, "process_head", None) is not None:
+        return model
+    d = int(getattr(model, "d_model", 0) or 0)
+    if d <= 0:
+        raise ValueError(
+            f"模型不是 entity（d_model={d}）：process_head 只支持 entity/entity18m")
+    torch = _torch()
+    nn = torch.nn
+    model.process_head = nn.Linear(d, 3)
     return model

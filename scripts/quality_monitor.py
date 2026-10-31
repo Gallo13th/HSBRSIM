@@ -44,6 +44,70 @@ def _board_sig(game, seat: int = 0) -> list[str]:
     return [str(m.get("card")) for m in (pj.get("board") or [])]
 
 
+def _carrier_panel(rows: list, carrier_ids) -> dict:
+    """质量面板的载体三指标（docs/CARRIER_SCALING.md §4）。
+
+    - ``carrier_encounter_rate``：局级载体率（曾有主集合载体上场）；
+    - ``casts_on_carrier_mean``：每局「目标选择命中载体」的施法次数；
+    - ``r_carrier_turns_str12``：r(载体在场回合数 ≤12, Σ₁₂)（Pearson + bootstrap CI）。
+
+    注：本面板只走「目标选择」口径（不解析引擎日志），所以是**严格下界**；
+    完整的「触发载体施法」口径见 ``scripts/carrier_audit.py`` / ``carrier_metrics.py``。
+    """
+    carrier_ids = set(carrier_ids or [])
+    if not carrier_ids:
+        return {"carrier_audit": False}
+    ok = [r for r in rows if r and r.get("turns")]
+
+    def _ct12(r):
+        return sum(1 for t in r["turns"]
+                   if int(t.get("turn") or 0) <= 12 and t.get("board_carriers"))
+
+    def _s12(r):
+        for t in r["turns"]:
+            if int(t.get("turn") or 0) == 12:
+                return int(t.get("strength") or 0)
+        return None
+
+    ever = [r for r in ok if any(t.get("board_carriers") for t in r["turns"])]
+    t9 = [r for r in ok if any(int(t.get("turn") or 0) == 9 and t.get("board_carriers")
+                               for t in r["turns"])]
+    t12 = [r for r in ok if any(int(t.get("turn") or 0) == 12 and t.get("board_carriers")
+                                for t in r["turns"])]
+    shop = [r for r in ok if r.get("carrier_shop_seen")]
+    casts = [int(r.get("casts_on_carrier") or 0) for r in ok]
+    corr_rows = [r for r in ok if _s12(r) is not None]
+    ct = [_ct12(r) for r in corr_rows]
+    sv = [_s12(r) for r in corr_rows]
+    r_p = r_s = None
+    ci = None
+    try:
+        from scripts.carrier_common import _boot_corr_ci, _pearson, _spearman
+        r_p = _pearson(ct, sv)
+        r_s = _spearman(ct, sv)
+        ci = _boot_corr_ci(ct, sv)
+    except BaseException:  # noqa: BLE001
+        pass
+    return {
+        "carrier_audit": True,
+        "carrier_ids": len(carrier_ids),
+        "carrier_encounter_rate": (len(ever) / len(ok)) if ok else None,
+        "carrier_t9_rate": (len(t9) / len(ok)) if ok else None,
+        "carrier_t12_rate": (len(t12) / len(ok)) if ok else None,
+        "carrier_shop_offer_rate": (len(shop) / len(ok)) if ok else None,
+        "carrier_turns_mean": (sum(ct) / len(ct)) if ct else 0.0,
+        "casts_on_carrier_mean": (sum(casts) / len(casts)) if casts else 0.0,
+        "casts_on_carrier_mean_given_carrier": (
+            sum(int(r.get("casts_on_carrier") or 0) for r in ever) / len(ever)
+            if ever else 0.0),
+        "r_carrier_turns_str12": r_p,
+        "r_carrier_turns_str12_ci95": ci,
+        "r_carrier_turns_str12_spearman": r_s,
+        "n_t12": len(corr_rows),
+        "str12_p50": (float(np.percentile(sv, 50)) if sv else None),
+    }
+
+
 def _play(seed: int, policy, q: dict) -> dict | None:
     """跑一局；返回 {'placement','death_turn','death_strength','turns':[{...}]}。
 
@@ -59,6 +123,12 @@ def _play(seed: int, policy, q: dict) -> dict | None:
     last_turn = -1
     steps = 0
     max_steps = int((q or {}).get("max_steps", 20000) or 20000)
+    # ── 载体审计（docs/CARRIER_SCALING.md）：局级载体率 + 对载体施法 ──
+    carrier_ids = set((q or {}).get("carrier_ids") or [])
+    cid2id = dict((q or {}).get("cid2id") or {})
+    casts_on_carrier = 0
+    carrier_shop_seen = False
+    carrier_turns = 0
     # 与 official eval（hsbg/az/train/evaluate.py）一致：**每个 pass 每个座位只走一步**。
     # 不能用 `while needs_action(p)`：引擎可能在一次 EndTurn 后立刻推进到下一回合，
     # 会把两个回合的 learner 动作记进同一行（历史 quality_monitor 的 turn 行会错位）。
@@ -68,11 +138,29 @@ def _play(seed: int, policy, q: dict) -> dict | None:
             last_turn = t
             pj = json.loads(game.player_json(0))
             bs = _board_stats(pj)
+            board_ids = [cid2id.get(int(m.get("card")), "")
+                         for m in (pj.get("board") or [])]
+            board_carriers = [x for x in board_ids if x in carrier_ids]
+            shop_carriers = []
+            for slot in (pj.get("shop") or []):
+                item = (slot or {}).get("item") if isinstance(slot, dict) else None
+                m = item.get("Minion") if isinstance(item, dict) else None
+                if isinstance(m, dict):
+                    cid = cid2id.get(int(m.get("card")), "")
+                    if cid in carrier_ids:
+                        shop_carriers.append(cid)
+            if shop_carriers:
+                carrier_shop_seen = True
+            if board_carriers:
+                carrier_turns += 1
             turns.append({"turn": t, "strength": bs["strength"], "count": bs["count"],
                           "tier": int(pj.get("tier") or 0), "gold": int(pj.get("gold") or 0),
                           "health": int(pj.get("health") or 0),
                           "alive": bool(pj.get("alive", True)),
                           "moves": 0, "move_legal": False,
+                          "board_carriers": board_carriers,
+                          "shop_carrier_ids": shop_carriers,
+                          "casts_on_carrier_turn": 0,
                           "board_start": [str(m.get("card")) for m in (pj.get("board") or [])],
                           "board_end": None})
         acted = False
@@ -87,12 +175,34 @@ def _play(seed: int, policy, q: dict) -> dict | None:
                 m = mask_from_bytes(game.legal_mask(0))
                 if bool(m[196:245].any()):
                     turns[-1]["move_legal"] = True
+                # 待选目标（施法打谁）：只有出现选择时才多取一次 view（约 0.17ms）
+                pend_opts = None
+                pend_carrier_eids = set()
+                if carrier_ids and bool(m[30:46].any()):
+                    try:
+                        view = json.loads(game.view(0))
+                        me_v = view.get("me") or {}
+                        pend = me_v.get("pending") or {}
+                        if str(pend.get("kind")) == "target":
+                            pend_opts = list(pend.get("options") or [])
+                            pend_carrier_eids = {
+                                int(x.get("eid")) for x in (me_v.get("board") or [])
+                                if str(x.get("id")) in carrier_ids}
+                    except BaseException:  # noqa: BLE001
+                        pend_opts = None
                 a = int(policy.decide(game, 0).action)
                 if not (0 <= a < 245 and bool(m[a])):
                     nz = np.flatnonzero(m)
                     a = int(nz[0]) if nz.size else 0
                 if 196 <= a < 245:      # Move 段：196..244
                     turns[-1]["moves"] = int(turns[-1].get("moves", 0)) + 1
+                if pend_opts is not None and 30 <= a < 46:
+                    idx = a - 30
+                    if (idx < len(pend_opts) and isinstance(pend_opts[idx], int)
+                            and pend_opts[idx] in pend_carrier_eids):
+                        casts_on_carrier += 1
+                        turns[-1]["casts_on_carrier_turn"] = int(
+                            turns[-1].get("casts_on_carrier_turn", 0)) + 1
                 game.step(0, a)
                 # 只取「learner 行动后、战斗前」的盘面，避免战斗死亡污染净盘面判定
                 turns[-1]["board_end"] = _board_sig(game)
@@ -115,7 +225,11 @@ def _play(seed: int, policy, q: dict) -> dict | None:
                 break
         death_turn, death_strength = pick["turn"], pick["strength"]
     return {"placement": int(placements[0]), "death_turn": death_turn,
-            "death_strength": death_strength, "turns": turns}
+            "death_strength": death_strength, "turns": turns,
+            "carrier_turns": int(carrier_turns),
+            "carrier_ever_on_board": bool(carrier_turns > 0),
+            "carrier_shop_seen": bool(carrier_shop_seen),
+            "casts_on_carrier": int(casts_on_carrier)}
 
 
 class _ArenaPolicy:
@@ -191,10 +305,33 @@ def main() -> int:
     ap.add_argument("--move-repeat-limit", type=int, default=2,
                     help="同一 (from,to) 本回合出现 >=N 次后屏蔽（默认 2）")
     ap.add_argument("--out", default="runs/quality/quality.json")
+    ap.add_argument("--carriers", default="data/scaling/carriers.json",
+                    help="载体清单（docs/CARRIER_SCALING.md）；缺失时自动构建")
+    ap.add_argument("--carrier-audit", type=int, default=1, choices=[0, 1],
+                    help="1=面板里带 carrier_encounter_rate / casts_on_carrier_mean / "
+                         "r(载体回合数, Σ12)")
     args = ap.parse_args()
     if not engine_available():
         print("[error] hsbg_engine 不可用", file=sys.stderr)
         return 2
+
+    # ── 载体清单（与 scripts/carrier_audit.py 同源）──────────────────────
+    carrier_ids: list = []
+    cid2id: dict = {}
+    if int(args.carrier_audit):
+        try:
+            from scripts.carrier_common import (CATALOG_OUT,
+                                                ids_from_catalog,
+                                                load_or_build_catalog)
+            import json as _json
+            import hsbg_engine as _E
+            _cat = load_or_build_catalog(args.carriers)
+            carrier_ids = sorted(ids_from_catalog(_cat, "primary"))
+            cid2id = {int(c["cid"]): str(c["id"])
+                      for c in _json.loads(_E.catalog_json())}
+        except BaseException as exc:  # noqa: BLE001
+            print(f"[warn] 载体清单不可用（{exc}）；跳过载体指标", file=sys.stderr)
+            carrier_ids, cid2id = [], {}
 
     if args.policy == "arena":
         # 部署路径：checkpoint/设备/守卫全部由 arena_agent 的环境变量在 act 内消费。
@@ -215,6 +352,10 @@ def main() -> int:
         cfg_dict = cfg.__dict__
 
     rows = []
+    if carrier_ids:
+        cfg_dict = dict(cfg_dict or {})
+        cfg_dict["carrier_ids"] = sorted(carrier_ids)
+        cfg_dict["cid2id"] = dict(cid2id)
     for g in range(int(args.games)):
         r = _play(int(args.seed_base) + g, policy, cfg_dict)
         if r:
@@ -345,9 +486,10 @@ def main() -> int:
            "strength_ratio_t15": (next((row["ratio_p50"] for row in summary
                                         if row["turn"] == 15), None)),
            "move_guard_meta": policy.move_guard_meta()}
+    out.update(_carrier_panel(rows, carrier_ids))
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     json.dump(out, open(args.out, "w"), ensure_ascii=False, indent=2)
-    print(json.dumps({k: out[k] for k in (
+    print(json.dumps({k: out.get(k) for k in (
         "games", "policy", "move_guard", "mean_rank", "top4", "win", "death_turn_p50",
         "death_strength_p50",
         "moves_per_turn_mean", "moves_per_turn_p90", "moves_per_turn_max",
@@ -358,7 +500,9 @@ def main() -> int:
         "net_board_unchanged_move_turns", "net_board_unchanged_move_ratio",
         "tier_p50_t9", "tier_p50_t12", "tier_p50_t15",
         "tier_ge5_t9", "tier_ge5_t12", "tier_ge5_t15",
-        "strength_ratio_t9", "strength_ratio_t12", "strength_ratio_t15")},
+        "strength_ratio_t9", "strength_ratio_t12", "strength_ratio_t15",
+        "carrier_encounter_rate", "carrier_t9_rate", "casts_on_carrier_mean",
+        "r_carrier_turns_str12", "r_carrier_turns_str12_ci95")},
         ensure_ascii=False))
     return 0
 

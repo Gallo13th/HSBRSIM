@@ -1,0 +1,834 @@
+{
+  "by_tag": {
+    "core_card": 759,
+    "triple_ready": 56,
+    "turn_start": 512,
+    "upgrade_ready": 1028
+  },
+  "by_turn": {
+    "1": 60,
+    "10": 102,
+    "11": 58,
+    "12": 26,
+    "13": 8,
+    "2": 72,
+    "3": 77,
+    "4": 128,
+    "5": 128,
+    "6": 128,
+    "7": 128,
+    "8": 128,
+    "9": 120
+  },
+  "checkpoint": "runs/ab_turnweight/start_model.pt",
+  "checkpoint_arch": "entity",
+  "config": {
+    "core_min_tier": 3,
+    "focus_turns": "",
+    "games": 64,
+    "horizon": 3,
+    "human_board_fast_inject": true,
+    "human_board_fidelity": "full",
+    "human_board_p": 0.9,
+    "human_board_seats": 5,
+    "human_boards": "data/real_library/library_real_quasi_full.jsonl",
+    "keep_turn_start": true,
+    "learner_seat": 0,
+    "max_fork_per_turn": 2,
+    "max_steps": 20000,
+    "min_delta": 0.0,
+    "min_turn": 1,
+    "mirror_p": 0.2,
+    "mirror_sample": "p75",
+    "mirror_seats": 2,
+    "mirror_snaps": "runs/library/snaps_champ",
+    "move_cap": 3,
+    "move_guard": true,
+    "move_repeat_limit": 2,
+    "obs_dtype": "f32",
+    "seed": 20200,
+    "temperature": 1.0
+  },
+  "decisions": 9818,
+  "generated_at": "2026-10-31T16:44:45+0800",
+  "human_board": {
+    "human_board_applied": 2495,
+    "human_board_attempt": 4210,
+    "human_board_counters_applied": 2495,
+    "human_board_counters_unavailable": 0,
+    "human_board_errors": 0,
+    "human_board_fidelity": "full",
+    "human_board_full_applied": 2495,
+    "human_board_hand_applied": 2495,
+    "human_board_hand_unavailable": 0,
+    "human_board_last_rejected": [
+      [
+        1,
+        "not_recruit"
+      ],
+      [
+        3,
+        "not_recruit"
+      ],
+      [
+        4,
+        "not_recruit"
+      ],
+      [
+        5,
+        "not_recruit"
+      ],
+      [
+        6,
+        "not_recruit"
+      ],
+      [
+        6,
+        "pending_choice(1)"
+      ],
+      [
+        6,
+        "pending_choice(1)"
+      ],
+      [
+        1,
+        "pending_choice(1)"
+      ],
+      [
+        3,
+        "pending_choice(1)"
+      ],
+      [
+        4,
+        "pending_choice(1)"
+      ],
+      [
+        6,
+        "pending_choice(2)"
+      ],
+      [
+        7,
+        "pending_choice(1)"
+      ],
+      [
+        6,
+        "not_alive"
+      ],
+      [
+        1,
+        "pending_choice(1)"
+      ],
+      [
+        2,
+        "pending_choice(1)"
+      ],
+      [
+        4,
+        "pending_choice(1)"
+      ]
+    ],
+    "human_board_missing": 0,
+    "human_board_nearest_bucket": 292,
+    "human_board_payload_missing": 0,
+    "human_board_pool_unbalanced": 0,
+    "human_board_rejected": 1715,
+    "human_board_rejected_by_reason": {
+      "not_alive": 740,
+      "not_recruit": 288,
+      "pending_choice": 687
+    },
+    "human_board_skipped_by_mirror": 146,
+    "human_board_source": "human_board_approx",
+    "human_board_tier_set": 2495,
+    "human_board_unavailable_fields": {
+      "attachments": 2495,
+      "counter": 2495,
+      "deathrattle_scripts": 2495,
+      "gems": 2495,
+      "gold": 2495,
+      "hero_power_uses": 2495,
+      "player_counters": 2495,
+      "pool_delta": 2495,
+      "shop": 2495
+    }
+  },
+  "label_available": 1163,
+  "label_missing": 0,
+  "label_survived": 1109,
+  "label_survived_rate": 0.9535683576956148,
+  "label_terminal": 54,
+  "late_turn_by_turn": {
+    "10": 102,
+    "11": 58,
+    "12": 26,
+    "13": 8
+  },
+  "late_turn_min": 10,
+  "late_turn_problems": 194,
+  "mirror": {
+    "mirror_applied": 199,
+    "mirror_applied_with_hand_queue": 0,
+    "mirror_attempt": 369,
+    "mirror_errors": 0,
+    "mirror_fallback": 170,
+    "mirror_last_rejected": [
+      [
+        2,
+        "not_alive"
+      ],
+      [
+        2,
+        "not_alive"
+      ],
+      [
+        1,
+        "not_alive"
+      ],
+      [
+        1,
+        "not_alive"
+      ],
+      [
+        1,
+        "pending_choice(1)"
+      ],
+      [
+        2,
+        "not_alive"
+      ],
+      [
+        1,
+        "not_alive"
+      ],
+      [
+        1,
+        "not_alive"
+      ],
+      [
+        1,
+        "pending_choice(1)"
+      ],
+      [
+        2,
+        "not_alive"
+      ],
+      [
+        1,
+        "pending_choice(1)"
+      ],
+      [
+        1,
+        "not_alive"
+      ],
+      [
+        1,
+        "not_alive"
+      ],
+      [
+        2,
+        "pending_choice(1)"
+      ],
+      [
+        2,
+        "pending_choice(1)"
+      ],
+      [
+        1,
+        "pending_choice(1)"
+      ]
+    ],
+    "mirror_missing": 62,
+    "mirror_pool_species_unbalanced": 0,
+    "mirror_pool_unbalanced": 0,
+    "mirror_rejected": 108,
+    "mirror_rejected_by_reason": {
+      "not_alive": 63,
+      "pending_choice": 45
+    }
+  },
+  "move_n_max": 1,
+  "move_n_p50": 0.0,
+  "norm_applied": false,
+  "per_game": [
+    {
+      "decisions": 326,
+      "game_seed": 20200,
+      "placement": 5,
+      "problems": 21,
+      "terminal_no_label": 0,
+      "turns": 16
+    },
+    {
+      "decisions": 215,
+      "game_seed": 20201,
+      "placement": 8,
+      "problems": 16,
+      "terminal_no_label": 0,
+      "turns": 16
+    },
+    {
+      "decisions": 308,
+      "game_seed": 20202,
+      "placement": 4,
+      "problems": 23,
+      "terminal_no_label": 4,
+      "turns": 14
+    },
+    {
+      "decisions": 241,
+      "game_seed": 20203,
+      "placement": 4,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 201,
+      "game_seed": 20204,
+      "placement": 7,
+      "problems": 17,
+      "terminal_no_label": 0,
+      "turns": 13
+    },
+    {
+      "decisions": 251,
+      "game_seed": 20205,
+      "placement": 3,
+      "problems": 17,
+      "terminal_no_label": 2,
+      "turns": 12
+    },
+    {
+      "decisions": 188,
+      "game_seed": 20206,
+      "placement": 6,
+      "problems": 17,
+      "terminal_no_label": 2,
+      "turns": 12
+    },
+    {
+      "decisions": 304,
+      "game_seed": 20207,
+      "placement": 5,
+      "problems": 22,
+      "terminal_no_label": 2,
+      "turns": 14
+    },
+    {
+      "decisions": 228,
+      "game_seed": 20208,
+      "placement": 5,
+      "problems": 17,
+      "terminal_no_label": 0,
+      "turns": 16
+    },
+    {
+      "decisions": 311,
+      "game_seed": 20209,
+      "placement": 3,
+      "problems": 23,
+      "terminal_no_label": 0,
+      "turns": 16
+    },
+    {
+      "decisions": 257,
+      "game_seed": 20210,
+      "placement": 5,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 208,
+      "game_seed": 20211,
+      "placement": 6,
+      "problems": 17,
+      "terminal_no_label": 0,
+      "turns": 13
+    },
+    {
+      "decisions": 189,
+      "game_seed": 20212,
+      "placement": 7,
+      "problems": 17,
+      "terminal_no_label": 0,
+      "turns": 16
+    },
+    {
+      "decisions": 271,
+      "game_seed": 20213,
+      "placement": 6,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 18
+    },
+    {
+      "decisions": 211,
+      "game_seed": 20214,
+      "placement": 5,
+      "problems": 15,
+      "terminal_no_label": 0,
+      "turns": 12
+    },
+    {
+      "decisions": 260,
+      "game_seed": 20215,
+      "placement": 3,
+      "problems": 23,
+      "terminal_no_label": 4,
+      "turns": 13
+    },
+    {
+      "decisions": 238,
+      "game_seed": 20216,
+      "placement": 7,
+      "problems": 19,
+      "terminal_no_label": 2,
+      "turns": 13
+    },
+    {
+      "decisions": 218,
+      "game_seed": 20217,
+      "placement": 3,
+      "problems": 23,
+      "terminal_no_label": 4,
+      "turns": 14
+    },
+    {
+      "decisions": 270,
+      "game_seed": 20218,
+      "placement": 7,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 227,
+      "game_seed": 20219,
+      "placement": 6,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 16
+    },
+    {
+      "decisions": 246,
+      "game_seed": 20220,
+      "placement": 3,
+      "problems": 19,
+      "terminal_no_label": 4,
+      "turns": 13
+    },
+    {
+      "decisions": 236,
+      "game_seed": 20221,
+      "placement": 6,
+      "problems": 18,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 272,
+      "game_seed": 20222,
+      "placement": 7,
+      "problems": 17,
+      "terminal_no_label": 0,
+      "turns": 13
+    },
+    {
+      "decisions": 331,
+      "game_seed": 20223,
+      "placement": 4,
+      "problems": 23,
+      "terminal_no_label": 4,
+      "turns": 13
+    },
+    {
+      "decisions": 330,
+      "game_seed": 20224,
+      "placement": 6,
+      "problems": 18,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 226,
+      "game_seed": 20225,
+      "placement": 6,
+      "problems": 18,
+      "terminal_no_label": 2,
+      "turns": 12
+    },
+    {
+      "decisions": 234,
+      "game_seed": 20226,
+      "placement": 6,
+      "problems": 17,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 247,
+      "game_seed": 20227,
+      "placement": 7,
+      "problems": 17,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 215,
+      "game_seed": 20228,
+      "placement": 6,
+      "problems": 15,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 248,
+      "game_seed": 20229,
+      "placement": 4,
+      "problems": 21,
+      "terminal_no_label": 2,
+      "turns": 14
+    },
+    {
+      "decisions": 238,
+      "game_seed": 20230,
+      "placement": 6,
+      "problems": 16,
+      "terminal_no_label": 0,
+      "turns": 13
+    },
+    {
+      "decisions": 240,
+      "game_seed": 20231,
+      "placement": 5,
+      "problems": 17,
+      "terminal_no_label": 0,
+      "turns": 13
+    },
+    {
+      "decisions": 241,
+      "game_seed": 20232,
+      "placement": 5,
+      "problems": 19,
+      "terminal_no_label": 2,
+      "turns": 13
+    },
+    {
+      "decisions": 234,
+      "game_seed": 20233,
+      "placement": 5,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 223,
+      "game_seed": 20234,
+      "placement": 6,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 167,
+      "game_seed": 20235,
+      "placement": 7,
+      "problems": 15,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 223,
+      "game_seed": 20236,
+      "placement": 7,
+      "problems": 16,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 178,
+      "game_seed": 20237,
+      "placement": 7,
+      "problems": 13,
+      "terminal_no_label": 0,
+      "turns": 12
+    },
+    {
+      "decisions": 210,
+      "game_seed": 20238,
+      "placement": 7,
+      "problems": 15,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 238,
+      "game_seed": 20239,
+      "placement": 6,
+      "problems": 18,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 233,
+      "game_seed": 20240,
+      "placement": 3,
+      "problems": 23,
+      "terminal_no_label": 0,
+      "turns": 16
+    },
+    {
+      "decisions": 256,
+      "game_seed": 20241,
+      "placement": 6,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 148,
+      "game_seed": 20242,
+      "placement": 8,
+      "problems": 13,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 282,
+      "game_seed": 20243,
+      "placement": 6,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 241,
+      "game_seed": 20244,
+      "placement": 6,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 193,
+      "game_seed": 20245,
+      "placement": 8,
+      "problems": 13,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 256,
+      "game_seed": 20246,
+      "placement": 7,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 241,
+      "game_seed": 20247,
+      "placement": 5,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 241,
+      "game_seed": 20248,
+      "placement": 3,
+      "problems": 21,
+      "terminal_no_label": 6,
+      "turns": 12
+    },
+    {
+      "decisions": 220,
+      "game_seed": 20249,
+      "placement": 6,
+      "problems": 17,
+      "terminal_no_label": 2,
+      "turns": 12
+    },
+    {
+      "decisions": 193,
+      "game_seed": 20250,
+      "placement": 7,
+      "problems": 13,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 227,
+      "game_seed": 20251,
+      "placement": 5,
+      "problems": 19,
+      "terminal_no_label": 2,
+      "turns": 13
+    },
+    {
+      "decisions": 220,
+      "game_seed": 20252,
+      "placement": 7,
+      "problems": 15,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 346,
+      "game_seed": 20253,
+      "placement": 7,
+      "problems": 21,
+      "terminal_no_label": 0,
+      "turns": 16
+    },
+    {
+      "decisions": 250,
+      "game_seed": 20254,
+      "placement": 6,
+      "problems": 17,
+      "terminal_no_label": 0,
+      "turns": 13
+    },
+    {
+      "decisions": 196,
+      "game_seed": 20255,
+      "placement": 5,
+      "problems": 17,
+      "terminal_no_label": 0,
+      "turns": 14
+    },
+    {
+      "decisions": 206,
+      "game_seed": 20256,
+      "placement": 8,
+      "problems": 15,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 261,
+      "game_seed": 20257,
+      "placement": 6,
+      "problems": 19,
+      "terminal_no_label": 0,
+      "turns": 17
+    },
+    {
+      "decisions": 240,
+      "game_seed": 20258,
+      "placement": 4,
+      "problems": 20,
+      "terminal_no_label": 2,
+      "turns": 13
+    },
+    {
+      "decisions": 240,
+      "game_seed": 20259,
+      "placement": 7,
+      "problems": 17,
+      "terminal_no_label": 0,
+      "turns": 15
+    },
+    {
+      "decisions": 242,
+      "game_seed": 20260,
+      "placement": 3,
+      "problems": 19,
+      "terminal_no_label": 4,
+      "turns": 12
+    },
+    {
+      "decisions": 227,
+      "game_seed": 20261,
+      "placement": 3,
+      "problems": 19,
+      "terminal_no_label": 2,
+      "turns": 13
+    },
+    {
+      "decisions": 234,
+      "game_seed": 20262,
+      "placement": 6,
+      "problems": 17,
+      "terminal_no_label": 0,
+      "turns": 16
+    },
+    {
+      "decisions": 261,
+      "game_seed": 20263,
+      "placement": 4,
+      "problems": 21,
+      "terminal_no_label": 2,
+      "turns": 14
+    }
+  ],
+  "policy_top1_in_ref": 151,
+  "policy_top1_in_ref_rate": 0.1298366294067068,
+  "problems": 1163,
+  "problems_path": "data/board_problems/problems_s14_late.jsonl",
+  "problems_sha256": "fe4d74f12db72479b3a860391cd4170d967121cfc0e90da9a3de4703f06776eb",
+  "ref_floor": {
+    "10000": 616,
+    "6000": 435,
+    "8000": 112
+  },
+  "ref_level": {
+    "tier": 554,
+    "turn_tier": 185,
+    "turn_tier_gold": 424
+  },
+  "ref_mass_legal_mean": 0.6009320007279914,
+  "ref_mass_legal_p50": 0.6108786610878661,
+  "ref_match_rate": 1.0,
+  "ref_matched": 1163,
+  "ref_missing": 0,
+  "ref_missing_rate": 0.0,
+  "reference": {
+    "floors": [
+      10000,
+      8000,
+      6000
+    ],
+    "levels": [
+      "by_turn_tier_gold",
+      "by_turn_tier",
+      "by_tier",
+      "by_turn",
+      "all"
+    ],
+    "path": "/home/data/users/gaoletian/projects/HSBRSIM/data/firestone_bc/bc_samples.jsonl.gz",
+    "rows": {
+      "10000": 7048,
+      "6000": 192022,
+      "8000": 21357
+    }
+  },
+  "schema": "board_problem_v1",
+  "seconds": 80.2,
+  "skipped": {
+    "focus_turn": 0,
+    "fork_cap": 6054,
+    "min_delta": 0,
+    "min_turn": 64,
+    "no_label": 54,
+    "no_ref": 0,
+    "no_supervisable": 1737
+  },
+  "strength_after_p50": 222.0,
+  "strength_before_p50": 78.0,
+  "strength_delta_log1p_p50": 1.1711829815029455,
+  "strength_delta_mean": 1.1865192836548109,
+  "strength_delta_p50": 1.1337036084793803,
+  "strength_delta_p90": 2.012989130339034,
+  "strength_norm": {
+    "mean": 1.230784555387064,
+    "source": "problems_survived",
+    "std": 0.7175260900569305,
+    "target": "delta_log1p"
+  },
+  "tier_up_rate": 0.524505588993981,
+  "total_seconds": 87.4,
+  "turn_max": 13,
+  "turn_min": 1
+}

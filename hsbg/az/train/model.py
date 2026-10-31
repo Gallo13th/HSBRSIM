@@ -88,6 +88,16 @@ def attach_move_head_split(model: Any) -> Any:
     return _attach(model)
 
 
+def attach_process_head(model: Any) -> Any:
+    """给已加载的旧 entity checkpoint 追加过程价值辅助头（Linear(d,3)）。
+
+    见 :func:`hsbg.az.train.entity_model.attach_process_head`；只被
+    ``forward_process()`` 使用，不影响策略前向。
+    """
+    from .entity_model import attach_process_head as _attach
+    return _attach(model)
+
+
 if True:  # 命名空间占位：TinyAZNet 在下方用 torch.nn 定义（需要 torch 时惰性加载）
     pass
 
@@ -96,7 +106,8 @@ def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FL
               n_actions: int = N_ACTIONS, n_ranks: int = N_RANKS,
               seq_head: bool = False, bc_card_head: bool = False,
               bc_card_dim: Optional[int] = None,
-              move_head_split: bool = False, strength_head: bool = False, **kwargs):
+              move_head_split: bool = False, strength_head: bool = False,
+              process_head: bool = False, **kwargs):
     """构造策略网络：tiny（MLP）或 entity（AutoTavern 风格实体 Transformer）。
 
     ``seq_head=True`` 时额外构建「动作序列辅助头」（trunk -> 245 logits，
@@ -120,6 +131,7 @@ def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FL
         kwargs["bc_card_head"] = bool(bc_card_head)
         kwargs["move_head_split"] = bool(move_head_split)
         kwargs["strength_head"] = bool(strength_head)
+        kwargs["process_head"] = bool(process_head)
         if bc_card_dim is not None:
             kwargs["bc_card_dim"] = int(bc_card_dim)
         return build_entity_net(**kwargs)
@@ -133,6 +145,7 @@ def build_net(hidden: int = 256, *, arch: str = "tiny", obs_floats: int = OBS_FL
         kwargs["bc_card_head"] = bool(bc_card_head)
         kwargs["move_head_split"] = bool(move_head_split)
         kwargs["strength_head"] = bool(strength_head)
+        kwargs["process_head"] = bool(process_head)
         if bc_card_dim is not None:
             kwargs["bc_card_dim"] = int(bc_card_dim)
         return build_entity_net(**kwargs)
@@ -324,6 +337,11 @@ def save_checkpoint(model: Any, path: str, *, meta: Optional[Dict[str, Any]] = N
             payload["meta"].setdefault("strength_norm", {
                 "mean": float(_norm.get("mean", 0.0) or 0.0),
                 "std": float(_norm.get("std", 1.0) or 1.0)})
+    # 过程价值辅助头（可选）：默认 False = 旧 checkpoint 逐位一致
+    _proc_head = getattr(model, "process_head", None)
+    payload["meta"].setdefault("process_head", bool(_proc_head is not None))
+    if _proc_head is not None:
+        payload["meta"].setdefault("process_head_dim", int(_proc_head.out_features))
     if hasattr(model, "d_model"):
         payload["meta"].setdefault("d_model", int(model.d_model))
         payload["meta"].setdefault("n_layers", int(getattr(model.trunk, "num_layers", 8)))
@@ -360,12 +378,16 @@ def load_checkpoint(path: str, device: str = "cpu") -> tuple[Any, Dict[str, Any]
     # 场面强度辅助头（可选）：meta 声明或 state_dict 里确有 strength_head.* 都重建
     has_strength_head = bool(meta.get("strength_head", False)) or any(
         str(k).startswith("strength_head.") for k in state)
+    # 过程价值辅助头（可选）：meta 声明或 state_dict 里确有 process_head.* 都重建
+    has_process_head = bool(meta.get("process_head", False)) or any(
+        str(k).startswith("process_head.") for k in state)
     if arch == "entity18m":
         model = build_net(arch="entity18m", seq_head=seq_head,
                           bc_card_head=has_card_head,
                           bc_card_dim=(card_dim or None),
                           move_head_split=has_move_split,
-                          strength_head=has_strength_head)
+                          strength_head=has_strength_head,
+                          process_head=has_process_head)
     elif arch == "entity":
         model = build_net(arch="entity", d_model=int(meta.get("d_model", 384)),
                           n_layers=int(meta.get("n_layers", 8)),
@@ -373,7 +395,8 @@ def load_checkpoint(path: str, device: str = "cpu") -> tuple[Any, Dict[str, Any]
                           seq_head=seq_head, bc_card_head=has_card_head,
                           bc_card_dim=(card_dim or None),
                           move_head_split=has_move_split,
-                          strength_head=has_strength_head)
+                          strength_head=has_strength_head,
+                          process_head=has_process_head)
     else:
         model = build_net(hidden, seq_head=seq_head, bc_card_head=has_card_head,
                           bc_card_dim=(card_dim or None))
@@ -399,6 +422,7 @@ __all__ = [
     "attach_bc_card_head",
     "attach_move_head_split",
     "attach_strength_head",
+    "attach_process_head",
     "bc_card_head_dim",
     "NetEvaluator",
     "feature_stats",

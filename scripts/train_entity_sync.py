@@ -50,11 +50,17 @@ from hsbg.az.train.tier_target import parse_tier_target_table  # noqa: E402
 from hsbg.az.train.model import (  # noqa: E402
     attach_bc_card_head,
     attach_move_head_split,
+    attach_process_head,
     attach_strength_head,
     bc_card_head_dim,
     build_net,
     load_checkpoint,
     save_checkpoint,
+)
+from hsbg.az.train.curriculum import (  # noqa: E402
+    anneal_progress,
+    curriculum_schedule,
+    gold_mult_at,
 )
 from hsbg.az.train.ppo import (  # noqa: E402
     CollectConfig,
@@ -410,6 +416,13 @@ def main() -> int:
                     help="场面题 CE 周期（按 iteration；默认 1=每次）")
     ap.add_argument("--problem-batch", type=int, default=128,
                     help="每批题目行数（题目 CE 与强度辅助头共用同一批 + 同一次前向）")
+    ap.add_argument("--problem-turn-weight", default="",
+                    help="场面题 turn 加权（默认空 = 不加权，逐位等价）："
+                         "'10:2,12:3,14:4,15:4'；未列出的 turn 权重 1，权重 0 = "
+                         "该 turn 的题从池里剔除。非法语法直接报错退出")
+    ap.add_argument("--problem-min-strength-delta", type=float, default=0.0,
+                    help="场面题强度增量过滤（默认 0 = 不过滤）：只保留 "
+                         "label.strength_delta（t+3 log1p 增量）>= 阈值的题")
     ap.add_argument("--strength-aux-coef", type=float, default=0.0,
                     help="强度辅助头系数（0=关闭，默认）：t+3 战团强度增量的 log1p "
                          "回归 + tier+1 二分类，只在有标注（t+3 时存活）的题目上算")
@@ -423,6 +436,26 @@ def main() -> int:
                          "无法校准）、random=保持 nn.Linear 随机初始化（纯消融）")
     ap.add_argument("--strength-head-ridge", type=float, default=1.0,
                     help="离线拟合的 ridge 强度（乘以样本数；默认 1.0）")
+    # ---- 经济（金币）课程（默认关闭 = 逐位等价；见 docs/CURRICULUM_SCALING.md）----
+    ap.add_argument("--gold-curriculum", type=int, default=0,
+                    help="1=启用经济课程（--curriculum-stage 仍为 none 时按 warmup 处理）；"
+                         "默认 0=关闭")
+    ap.add_argument("--curriculum-stage", default="none",
+                    choices=["none", "warmup", "anneal"],
+                    help="none=关闭（默认，逐位等价）；warmup=金币收入 ×mult 在 "
+                         "--curriculum-anneal-decisions 内线性降到 1.0；anneal=先保持 "
+                         "mult 半个窗口再线性降到 1.0")
+    ap.add_argument("--curriculum-gold-mult", type=float, default=1.0,
+                    help="金币收入倍数（默认 1.0；warmup 建议 3.0）")
+    ap.add_argument("--curriculum-anneal-decisions", type=int, default=10_000_000,
+                    help="线性退火窗口（累计 decisions；默认 10M）")
+    # ---- 缩放教师 DAgger / 过程价值（默认关闭 = 逐位等价）----
+    ap.add_argument("--teacher-bc-coef", type=float, default=0.0,
+                    help="在线缩放教师 CE 系数（0=关闭，默认）；采集侧只在 "
+                         "gold>=10 且 tier>=4 的决策上产出教师标签")
+    ap.add_argument("--process-value-coef", type=float, default=0.0,
+                    help="过程价值辅助头系数（0=关闭，默认）：预测 log1p(酒馆永久 buff) / "
+                         "log1p(施法数) / log1p(consume 数)")
     ap.add_argument("--entropy-coef", type=float, default=0.005)
     ap.add_argument("--max-actions-per-turn", type=int, default=40)
     ap.add_argument("--max-steps", type=int, default=20000)
@@ -493,6 +526,25 @@ def main() -> int:
     ap.add_argument("--out", default="runs/az_entity_sync")
     args = ap.parse_args()
     args.out = os.path.abspath(args.out)
+    # 经济课程：gold_curriculum=1 且 stage=none 时按 warmup 处理；非法倍数/窗口启动期报错
+    if int(args.gold_curriculum) and str(args.curriculum_stage) == "none":
+        args.curriculum_stage = "warmup"
+    try:
+        _curr_cfg = curriculum_schedule(
+            stage=str(args.curriculum_stage),
+            mult=float(args.curriculum_gold_mult),
+            anneal_decisions=float(args.curriculum_anneal_decisions))
+    except ValueError as exc:
+        print(f"[error] 经济课程参数非法: {exc}", file=sys.stderr)
+        return 2
+    if (_curr_cfg["curriculum_stage"] != "none"
+            and _curr_cfg["curriculum_gold_mult"] == 1.0):
+        print("[warn] 经济课程已开启但 --curriculum-gold-mult=1.0：金币不变（等价关闭）",
+              flush=True)
+    if (float(args.teacher_bc_coef) > 0.0
+            or float(args.process_value_coef) > 0.0) and not int(args.lockstep):
+        print("[warn] 教师 DAgger / 过程价值标签只在 --lockstep 1 采集路径产出；"
+              "本次非 lockstep 将得到空标签（对应损失为 0）", flush=True)
     if float(args.library_p) > 0.0:
         print("[error] --library-p（v1 单座位注入）未通过终审，已禁用；"
               "请用 --trajectory-pool/--trajectory-p", file=sys.stderr)
@@ -718,6 +770,27 @@ def main() -> int:
         if int(getattr(args, _nm)) <= 0:
             print(f"[error] --{_nm.replace('_', '-')} 必须 >= 1", file=sys.stderr)
             return 2
+    # 题池开关（默认关闭）：turn 权重语法 + 强度增量阈值**启动即校验**（非法报错退出）。
+    # 只在「启用场面题或显式给了开关」时导入 board_problems（保持默认路径不导入）。
+    problem_turn_weights = {}
+    _board_flag = (float(args.problem_bc_coef) > 0.0
+                   or float(args.strength_aux_coef) > 0.0
+                   or bool(str(args.problem_turn_weight or "").strip())
+                   or float(args.problem_min_strength_delta) > 0.0)
+    if _board_flag:
+        try:
+            from hsbg.az.train.board_problems import (format_turn_weights,
+                                                     parse_turn_weights)
+            problem_turn_weights = parse_turn_weights(
+                str(args.problem_turn_weight or ""))
+        except ValueError as exc:
+            print(f"[error] --problem-turn-weight 非法：{exc}", file=sys.stderr)
+            return 2
+    _pmd = float(args.problem_min_strength_delta)
+    if not np.isfinite(_pmd) or _pmd < 0.0:
+        print(f"[error] --problem-min-strength-delta 必须有限且 >= 0，"
+              f"得到 {args.problem_min_strength_delta!r}", file=sys.stderr)
+        return 2
     _strength_enabled = bool(float(args.strength_aux_coef) > 0.0)
     _problem_enabled = bool(float(args.problem_bc_coef) > 0.0)
     _board_enabled = bool(_strength_enabled or _problem_enabled)
@@ -885,6 +958,25 @@ def main() -> int:
               "(bc_card_weight=0)", flush=True)
         bc_card_head = False
         args.bc_card_weight = 0.0
+    if float(args.process_value_coef) > 0.0:
+        if getattr(model, "process_head", None) is None:
+            if args.trainer_state:
+                print("[warn] --trainer-state 路径的 state 不含 process_head："
+                      "本次关闭 process_value_coef=0（请在 --checkpoint 路径追加头）",
+                      flush=True)
+                args.process_value_coef = 0.0
+            else:
+                try:
+                    attach_process_head(model)
+                    print(f"[process] checkpoint 无 process_head：已追加 "
+                          f"Linear({bc_card_head_dim(model)}, 3)（log1p 酒馆永久 buff / "
+                          f"施法数 / consume 数）", flush=True)
+                except Exception as exc:  # noqa: BLE001 - 非 entity/测试替身
+                    print(f"[warn] 追加 process_head 失败（本次关闭 "
+                          f"process_value_coef=0）：{exc!r}", flush=True)
+                    args.process_value_coef = 0.0
+        else:
+            print("[process] checkpoint 已带 process_head（沿用权重）", flush=True)
     model.to(torch.device(args.device))
     print(f"[net] arch={arch} params={sum(p.numel() for p in model.parameters()):,}",
           flush=True)
@@ -897,7 +989,10 @@ def main() -> int:
         try:
             from hsbg.az.train.board_problems import load_problem_pool
             _t_prob = time.time()
-            problem_pool = load_problem_pool(str(args.problem_pool))
+            problem_pool = load_problem_pool(
+                str(args.problem_pool),
+                min_strength_delta=float(args.problem_min_strength_delta),
+                turn_weights=str(args.problem_turn_weight or ""))
             if len(problem_pool) == 0:
                 raise ValueError(f"题目池为空/不存在: {args.problem_pool}")
             _ps = problem_pool.summary()
@@ -906,6 +1001,19 @@ def main() -> int:
                   f"aux_valid={_ps['aux_valid']}({_ps['aux_valid_rate']:.1%}) "
                   f"turns={_ps['by_turn']} "
                   f"load={time.time() - _t_prob:.1f}s", flush=True)
+            _pfil = dict(_ps.get("filter") or {})
+            print(f"[problems] filter: pool_size={_pfil.get('problem_pool_size')} "
+                  f"used={_pfil.get('problem_pool_used')} "
+                  f"dropped_by_delta={_pfil.get('problem_pool_dropped_by_delta')} "
+                  f"dropped_by_turn={_pfil.get('problem_pool_dropped_by_turn')} "
+                  f"min_strength_delta={float(_pmd):g} "
+                  f"turn_weight={format_turn_weights(problem_turn_weights) or '-'} "
+                  f"used_turn_weight="
+                  f"{format_turn_weights(problem_pool.turn_weights) or '-'} "
+                  f"late_turn(>= {_ps.get('late_turn_min')})="
+                  f"{_ps.get('late_turn_problems')} "
+                  f"delta_p50={_ps.get('strength_delta_p50', 0.0):.3f}",
+                  flush=True)
             print(f"[problems] by_tag={json.dumps(_ps['by_tag'], ensure_ascii=False)} "
                   f"tier_up_rate={_ps['tier_up_rate']:.3f} "
                   f"strength_p50 before={_ps['strength_before_p50']:.0f} "
@@ -964,6 +1072,8 @@ def main() -> int:
     if (_problem_enabled or _strength_enabled):
         print(f"[problems] problem_bc_coef={float(args.problem_bc_coef):g} "
               f"every={int(args.problem_bc_every)} "
+              f"turn_weight={format_turn_weights(problem_turn_weights) or '-'} "
+              f"min_strength_delta={float(args.problem_min_strength_delta):g} "
               f"strength_aux_coef={float(args.strength_aux_coef):g} "
               f"every={int(args.strength_aux_every)} "
               f"batch={int(args.problem_batch)} "
@@ -1060,9 +1170,14 @@ def main() -> int:
         problem_bc_every=int(args.problem_bc_every),
         problem_batch=int(args.problem_batch),
         problem_pool_path=str(args.problem_pool),
+        problem_turn_weight=str(args.problem_turn_weight or ""),
+        problem_min_strength_delta=float(args.problem_min_strength_delta),
         strength_aux_coef=float(args.strength_aux_coef),
         strength_aux_every=int(args.strength_aux_every),
-        strength_tier_pos_weight=float(args.strength_tier_pos_weight))
+        strength_tier_pos_weight=float(args.strength_tier_pos_weight),
+        # 缩放教师 DAgger / 过程价值（默认 0 = 逐位等价）
+        teacher_bc_coef=float(args.teacher_bc_coef),
+        process_value_coef=float(args.process_value_coef))
     trainer: Optional[PPOTrainer] = None
     if args.trainer_state and os.path.isfile(args.trainer_state):
         trainer = PPOTrainer.load(model, args.trainer_state, config=p_cfg,
@@ -1438,6 +1553,11 @@ def main() -> int:
         _mp = float(args.mirror_p)
         if str(args.mirror_p_ramp).strip():
             _mp = float(ramp_p(int(idx), str(args.mirror_p_ramp)))
+        # 经济课程：按**已累计 decisions** 求本 iteration 的金币倍数（默认 none -> 1.0）
+        _gold_mult = gold_mult_at(
+            cum_decisions, stage=_curr_cfg["curriculum_stage"],
+            mult=_curr_cfg["curriculum_gold_mult"],
+            anneal_decisions=_curr_cfg["curriculum_anneal_decisions"])
         c_cfg = CollectConfig(
             games=int(args.games), seed=int(args.seed) + idx * 1000,
             opponent=str(args.opponent), behavior=str(args.behavior),
@@ -1483,7 +1603,13 @@ def main() -> int:
             tier_target_coef=float(args.tier_target_coef),
             tier_penalty=float(args.tier_penalty),
             tier_bonus=float(args.tier_bonus),
-            tier_target_table=str(args.tier_target_table))
+            tier_target_table=str(args.tier_target_table),
+            # 经济课程（默认 none+1.0 -> 采集侧不碰金币，逐位等价）
+            curriculum_stage=str(_curr_cfg["curriculum_stage"]),
+            curriculum_gold_mult=float(_gold_mult),
+            # 在线缩放教师 / 过程价值标签（默认 False -> 不查教师、不读日志）
+            teacher_bc=bool(float(args.teacher_bc_coef) > 0.0),
+            process_value=bool(float(args.process_value_coef) > 0.0))
         t_c = time.time()
         if pool is not None:
             batch, collect_meta = pool.collect(
@@ -1676,6 +1802,23 @@ def main() -> int:
                                "history_prev_s": round(float(_history_s_prev), 3)},
                    "batch_server": (dict(batch_server.stats) if batch_server is not None else None),
                    "seconds": time.time() - t0}
+            if problem_pool is not None:
+                # 题池过滤口径（默认 0/空 -> dropped 全 0）：池大小 / 按 delta 丢 /
+                # 按 turn 丢，与 ppo 段的 problem_pool_* 同源
+                rec["problems"] = dict(problem_pool.filter_report)
+            # 经济课程可观测性（默认关闭时也写，字段固定：stage/mult/progress）
+            _curr_prog = float(anneal_progress(
+                cum_decisions, _curr_cfg["curriculum_anneal_decisions"]))
+            rec["curriculum_stage"] = str(_curr_cfg["curriculum_stage"])
+            rec["curriculum_gold_mult"] = round(
+                float(c_cfg.curriculum_gold_mult), 6)
+            rec["curriculum_anneal_progress"] = round(_curr_prog, 6)
+            rec["curriculum"] = {
+                "stage": str(_curr_cfg["curriculum_stage"]),
+                "gold_mult": round(float(c_cfg.curriculum_gold_mult), 6),
+                "anneal_progress": round(_curr_prog, 6),
+                "decisions": int(cum_decisions),
+            }
             history.append(rec)
             print(f"[iter {i}] ts={time.strftime('%H:%M:%S')} samples={len(batch)} "
                   f"updates={stats['trainer_updates']} "
@@ -1700,7 +1843,15 @@ def main() -> int:
                   + (f" saux={stats['strength_aux_loss']:.4f}"
                      f" s_mse={stats.get('strength_mse', 0.0):.4f}"
                      f" s_bce={stats.get('strength_bce', 0.0):.4f}"
-                     if _strength_enabled and "strength_aux_loss" in stats else ""),
+                     if _strength_enabled and "strength_aux_loss" in stats else "")
+                  + (f" goldx={c_cfg.curriculum_gold_mult:g}"
+                     if str(_curr_cfg["curriculum_stage"]) != "none" else "")
+                  + (f" teach={stats['teacher_bc_loss']:.4f}"
+                     f" teach_n={stats.get('teacher_samples', 0.0):.0f}"
+                     if "teacher_bc_loss" in stats else "")
+                  + (f" proc={stats['process_value_loss']:.4f}"
+                     f" proc_n={stats.get('process_samples', 0.0):.0f}"
+                     if "process_value_loss" in stats else ""),
                   flush=True)
 
             # 版本化快照：trainer 为权威，model 为导出；manifest 最后原子发布

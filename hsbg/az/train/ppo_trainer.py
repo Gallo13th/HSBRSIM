@@ -274,7 +274,12 @@ class PPOTrainer:
         path = str(getattr(self.config, "problem_pool_path", "") or
                    DEFAULT_PROBLEM_PATH)
         try:
-            pool = load_problem_pool(path)
+            pool = load_problem_pool(
+                path,
+                min_strength_delta=float(
+                    getattr(self.config, "problem_min_strength_delta", 0.0) or 0.0),
+                turn_weights=str(
+                    getattr(self.config, "problem_turn_weight", "") or ""))
             if len(pool) == 0:
                 raise ValueError(f"题目池为空/不存在: {path}")
             self.problem_pool = pool
@@ -291,6 +296,28 @@ class PPOTrainer:
     def problem_summary(self) -> Optional[Dict[str, Any]]:
         pool = self.problem_pool
         return pool.summary() if pool is not None else None
+
+    def problem_report(self) -> Dict[str, Any]:
+        """池过滤报告（进训练 history：池大小 / 按 delta 丢 / 按 turn 丢）。
+
+        默认（空权重 + delta=0）时 ``dropped_*`` 全 0、``problem_pool_used ==
+        problem_pool_size``，且这份报告只在启用场面题时被读取（未启用返回空字典）。
+        """
+        pool = self.problem_pool
+        if pool is None:
+            return {}
+        rep = dict(getattr(pool, "filter_report", {}) or {})
+        rep.setdefault("problem_pool_size", int(len(pool)))
+        rep.setdefault("problem_pool_used", int(len(pool)))
+        rep.setdefault("problem_pool_dropped_by_delta", 0)
+        rep.setdefault("problem_pool_dropped_by_turn", 0)
+        rep["problem_pool_min_strength_delta"] = float(
+            getattr(self.config, "problem_min_strength_delta", 0.0) or 0.0)
+        rep["problem_pool_turn_weight"] = str(
+            getattr(self.config, "problem_turn_weight", "") or "")
+        rep["turn_weights"] = {str(t): float(w) for t, w in
+                               dict(getattr(pool, "turn_weights", {}) or {}).items()}
+        return rep
 
     def _problem_batch(self) -> Tuple[Optional[BoardProblemBatch], float, float]:
         """按 iteration 周期抽一批题目 -> ``(batch|None, bc_coef, aux_coef)``。
@@ -349,6 +376,10 @@ class PPOTrainer:
         stats["trainer_updates"] = int(self.updates)
         stats["lr"] = float(self.optimizer.param_groups[0]["lr"])
         stats["anchor_coef"] = float(self.config.anchor_coef)
+        if "problem_bc_loss" in stats or "strength_aux_loss" in stats:
+            # 池过滤口径（默认 0/空 -> 全 0）：只在**真的算了题目损失**的步出现，
+            # 保证默认关闭时 stats 结构/浮点与旧版逐位一致。
+            stats.update(self.problem_report())
         if self.anchor_forward is not None:
             stats["anchor_compile"] = self.anchor_forward.describe()
         return stats
