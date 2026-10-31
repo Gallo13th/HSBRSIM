@@ -87,6 +87,7 @@ from .archetype_bias import (ArchetypeBias, aggregate_archetype_bias,
                              DEFAULT_MODEL as ARCH_MODEL)
 from .reward_shaping import RewardShaper
 from .tier_target import TierTargetTracker, aggregate_tier_target
+from .power_trace import compact_diagnostics, compute_credit
 
 # ── 数值边界 ──────────────────────────────────────────────────────────────
 #: torch 侧非法 logits 的填充值（float32 下 ``exp(-1e30)=0``，避免 -inf 制造 NaN 梯度）。
@@ -541,6 +542,23 @@ class PPOConfig:
     target_kl: float = 0.02        # >0 且 kl_early_stop 时启用
     kl_early_stop: bool = True
     normalize_advantage: bool = True
+    #: ── 信用分配（§B，默认 gae = 旧路径逐位等价）──
+    #: ``gae`` | ``power`` | ``geom``。只有 != gae 时才改 advantage 核；
+    #: gae 路径仍调用旧 ``compute_gae``，不新增 records/meta 键。
+    adv_estimator: str = "gae"
+    #: 幂率核 ``w_l=(1+l/κ)^(−α)`` 的参数（默认关闭时不影响任何计算）。
+    power_alpha: float = 0.5
+    power_kappa: float = 3.0
+    #: horizon 归一化（§B.1）。离线诊断显示 normalize=1 会把早期 |A| 压成 ~1/L，
+    #: 实际 A/B 建议用 0（PPO loss 内仍会做全局 advantage normalization）。
+    power_normalize: bool = True
+    #: lag 截断（0=不截断）。
+    power_cutoff: int = 0
+    #: ``decision`` | ``turn``；turn 模式使用未来 elapsed turn 的 SMDP 折扣。
+    credit_timebase: str = "decision"
+    #: 动作条件 baseline 安全边界：**actor baseline 只用 V(s)**，默认 0。
+    #: 非 0 直接报错（Q(s,a) 只允许进 critic/TD loss，不能直接当 PG baseline）。
+    baseline_action_dependent: int = 0
     max_grad_norm: float = 0.5
     device: str = "cpu"
     seed: int = 0
@@ -551,6 +569,28 @@ class PPOConfig:
         mode = str(self.value_loss).strip().lower()
         if mode not in ("rank", "mse"):
             raise ValueError(f"value_loss 只能是 rank|mse，得到 {self.value_loss!r}")
+        # ── 信用分配（§B）：默认 gae；非法参数在构造期早失败 ──
+        self.adv_estimator = str(self.adv_estimator).strip().lower()
+        if self.adv_estimator not in ("gae", "power", "geom"):
+            raise ValueError(
+                f"adv_estimator 只能是 gae|power|geom，得到 {self.adv_estimator!r}")
+        if int(self.baseline_action_dependent) != 0:
+            raise ValueError(
+                "baseline_action_dependent 必须为 0：动作条件 Q(s,a) 只允许进 "
+                "critic/TD loss 与 A=Q−V；直接当 actor baseline 有偏（§B.3）")
+        if self.adv_estimator in ("power", "geom"):
+            if not math.isfinite(float(self.power_alpha)) or float(self.power_alpha) < 0.0:
+                raise ValueError(f"power_alpha 必须 >= 0，得到 {self.power_alpha!r}")
+            if not math.isfinite(float(self.power_kappa)) or float(self.power_kappa) <= 0.0:
+                raise ValueError(f"power_kappa 必须 > 0，得到 {self.power_kappa!r}")
+            if int(self.power_cutoff) < 0:
+                raise ValueError(f"power_cutoff 必须 >= 0，得到 {self.power_cutoff!r}")
+        self.credit_timebase = str(self.credit_timebase).strip().lower()
+        if self.credit_timebase not in ("decision", "turn"):
+            raise ValueError(
+                f"credit_timebase 只能是 decision|turn，得到 {self.credit_timebase!r}")
+        if self.credit_timebase == "turn" and self.adv_estimator == "gae":
+            raise ValueError("credit_timebase=turn 需要 adv_estimator=power|geom")
         self.value_loss = mode
         self.compile_train = compile_train_mode(self.compile_train)
         self.anchor_amp = bool(self.anchor_amp)
@@ -823,7 +863,13 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
                              gamma: float = 1.0, lam: float = 0.95,
                              step_penalty: float = 0.0,
                              meta: Optional[Dict[str, Any]] = None,
-                             seq_aux: bool = False) -> PPOBatch:
+                             seq_aux: bool = False,
+                             adv_estimator: str = "gae",
+                             power_alpha: float = 0.5,
+                             power_kappa: float = 3.0,
+                             power_normalize: bool = True,
+                             power_cutoff: int = 0,
+                             credit_timebase: str = "decision") -> PPOBatch:
     """把决策记录列表整理成 ``PPOBatch``（奖励/GAE 均已计算）。
 
     ``records`` 每条至少包含::
@@ -911,6 +957,23 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
         "gamma": float(gamma), "lam": float(lam), "step_penalty": float(step_penalty),
         "dropped_unknown_rank": int(dropped), "episodes": int(ep),
     })
+    adv_mode = str(adv_estimator).strip().lower()
+    if adv_mode not in ("gae", "", "geom", "power"):
+        raise ValueError(f"adv_estimator 只能是 gae|power|geom，得到 {adv_estimator!r}")
+    if adv_mode not in ("gae", ""):
+        # 幂率/几何核：替换 GAE 内部时间核；GAE 默认路径完全不进这里，
+        # records/meta 与旧版逐位一致（见 docs/CREDIT_ASSIGNMENT.md）。
+        mode = "geom" if adv_mode == "geom" else "power"
+        advantages, returns, _diag = compute_credit(
+            rewards, values, dones, mode=mode, gamma=float(gamma),
+            lam=float(lam), alpha=float(power_alpha),
+            kappa=float(power_kappa), cutoff=int(power_cutoff),
+            normalize=bool(power_normalize),
+            timebase=str(credit_timebase), turns=turns)
+        merged_meta.update({
+            "adv_estimator": mode,
+            "credit": compact_diagnostics(_diag),
+        })
     # 动作序列辅助标签：同 (game_id, seat, turn) 的动作集合 = multi-hot(245) uint8。
     # 只在 seq_aux=True 时构造（默认关闭 -> 批次字段/内存与旧路径完全一致）。
     seq_target = (seq_targets_from_records(recs) if seq_aux else None)
@@ -2653,7 +2716,13 @@ def pack_records_arrays(records: Sequence[Dict[str, Any]],
 
 def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0,
                             lam: float = 0.95, step_penalty: float = 0.0,
-                            meta: Optional[Dict[str, Any]] = None) -> "PPOBatch":
+                            meta: Optional[Dict[str, Any]] = None,
+                            adv_estimator: str = "gae",
+                            power_alpha: float = 0.5,
+                            power_kappa: float = 3.0,
+                            power_normalize: bool = True,
+                            power_cutoff: int = 0,
+                            credit_timebase: str = "decision") -> "PPOBatch":
     """SoA 数组 → PPOBatch（与 ``build_batch_from_records`` 等价，但零 dict）。
 
     可选字段 ``seq_target``（动作序列辅助标签）存在且形状正确时透传给批次；
@@ -2715,6 +2784,22 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
     merged_meta.update({"gamma": float(gamma), "lam": float(lam),
                         "step_penalty": float(step_penalty),
                         "dropped_unknown_rank": dropped, "episodes": int(ep)})
+    adv_mode = str(adv_estimator).strip().lower()
+    if adv_mode not in ("gae", "", "geom", "power"):
+        raise ValueError(f"adv_estimator 只能是 gae|power|geom，得到 {adv_estimator!r}")
+    if adv_mode not in ("gae", ""):
+        # 与 build_batch_from_records 同一分支：默认 gae 不进这里（逐位等价）。
+        mode = "geom" if adv_mode == "geom" else "power"
+        advantages, returns, _diag = compute_credit(
+            rewards, values, dones, mode=mode, gamma=float(gamma),
+            lam=float(lam), alpha=float(power_alpha),
+            kappa=float(power_kappa), cutoff=int(power_cutoff),
+            normalize=bool(power_normalize),
+            timebase=str(credit_timebase), turns=turns)
+        merged_meta.update({
+            "adv_estimator": mode,
+            "credit": compact_diagnostics(_diag),
+        })
     # 动作序列辅助标签：有则透传（缺字段/形状不符 -> None，不报错）
     seq_target = t.get(SEQ_TARGET_KEY)
     if seq_target is not None:
@@ -2746,7 +2831,13 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                       step_penalty: float = 0.0,
                       norm_mean: Optional[np.ndarray] = None,
                       norm_std: Optional[np.ndarray] = None,
-                      progress: bool = False) -> Tuple[PPOBatch, Dict[str, Any]]:
+                      progress: bool = False,
+                      adv_estimator: str = "gae",
+                      power_alpha: float = 0.5,
+                      power_kappa: float = 3.0,
+                      power_normalize: bool = True,
+                      power_cutoff: int = 0,
+                      credit_timebase: str = "decision") -> Tuple[PPOBatch, Dict[str, Any]]:
     """MCTS 自对弈采集一条 PPO 轨迹批次。
 
     ``config.opponent="self"``：8 座自对弈（复用 ``selfplay.play_selfplay_game``）；
@@ -2924,7 +3015,13 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
             "checkpoint 续训（随机网络可能陷入 Play/Cancel 循环）。")
     batch = build_batch_from_records(records, gamma=gamma, lam=lam,
                                      step_penalty=step_penalty, meta=collect_meta,
-                                     seq_aux=bool(cfg.seq_aux))
+                                     seq_aux=bool(cfg.seq_aux),
+                                     adv_estimator=adv_estimator,
+                                     power_alpha=power_alpha,
+                                     power_kappa=power_kappa,
+                                     power_normalize=power_normalize,
+                                     power_cutoff=power_cutoff,
+                                     credit_timebase=credit_timebase)
     batch.meta.update({
         "collect_seconds": float(time.time() - t0),
         "collect": {k: v for k, v in collect_meta.items() if k != "games_meta"},

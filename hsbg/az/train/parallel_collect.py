@@ -258,7 +258,13 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
                                step_penalty: float = 0.0,
                                norm_mean: Optional[np.ndarray] = None,
                                norm_std: Optional[np.ndarray] = None,
-                               progress: bool = False) -> Tuple[PPOBatch, Dict[str, Any]]:
+                               progress: bool = False,
+                               adv_estimator: str = "gae",
+                               power_alpha: float = 0.5,
+                               power_kappa: float = 3.0,
+                               power_normalize: bool = True,
+                               power_cutoff: int = 0,
+                               credit_timebase: str = "decision") -> Tuple[PPOBatch, Dict[str, Any]]:
     t0 = time.time()
     records, meta_out = collect_ppo_records_parallel(
         model, config, workers=workers, search_fn=search_fn,
@@ -267,7 +273,13 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
         norm_mean=norm_mean, norm_std=norm_std, progress=progress)
     batch = build_batch_from_records(records, gamma=gamma, lam=lam,
                                      step_penalty=step_penalty, meta=meta_out,
-                                     seq_aux=bool(getattr(config, "seq_aux", False)))
+                                     seq_aux=bool(getattr(config, "seq_aux", False)),
+                                     adv_estimator=adv_estimator,
+                                     power_alpha=power_alpha,
+                                     power_kappa=power_kappa,
+                                     power_normalize=power_normalize,
+                                     power_cutoff=power_cutoff,
+                                     credit_timebase=credit_timebase)
     batch.meta.update({"collect_seconds": time.time() - t0,
                        "collect": {k: v for k, v in meta_out.items()
                                    if k != "games_meta"}})

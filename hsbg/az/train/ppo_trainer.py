@@ -354,6 +354,15 @@ class PPOTrainer:
         return stats
 
     def state_dict(self) -> Dict[str, Any]:
+        # 默认 gae 时把新增的信用分配字段从 trainer.pt 里剔除，保持旧 checkpoint
+        # 字节级兼容（load 时 PPOConfig(**state["config"]) 会取同样的默认值）。
+        cfg = dict(self.config.__dict__)
+        if str(cfg.get("adv_estimator", "gae")).strip().lower() == "gae" \
+                and int(cfg.get("baseline_action_dependent", 0)) == 0:
+            for _key in ("adv_estimator", "power_alpha", "power_kappa",
+                         "power_normalize", "power_cutoff", "credit_timebase",
+                         "baseline_action_dependent"):
+                cfg.pop(_key, None)
         return {
             "model": self.model.state_dict(),
             "optimizer": self.optimizer.state_dict(),
@@ -365,7 +374,7 @@ class PPOTrainer:
             "updates": int(self.updates),
             "lr_min_ratio": float(self.lr_min_ratio),
             "max_updates": int(self.max_updates),
-            "config": dict(self.config.__dict__),
+            "config": cfg,
             "extra": dict(self.extra),
         }
 

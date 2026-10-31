@@ -222,6 +222,26 @@ def main() -> int:
                     help="GAE λ（与折扣 γ 无关；论文 0.995）")
     ap.add_argument("--gamma", type=float, default=1.0,
                     help="训练折扣 γ（默认 1.0：8 座单局终局效用；不是 GAE 的 λ）")
+    # ── 信用分配（§B；默认 gae = 旧路径逐位等价）──
+    ap.add_argument("--adv-estimator", default="gae",
+                    choices=["gae", "power", "geom"],
+                    help="advantage 时间核：gae=旧 GAE；power=幂率/分数阶；geom=几何对照")
+    ap.add_argument("--power-alpha", type=float, default=0.25,
+                    help="幂率核 α>=0（w_l=(1+l/κ)^(−α)）；仅 adv-estimator=power 生效")
+    ap.add_argument("--power-kappa", type=float, default=10.0,
+                    help="幂率核 κ>0；离线推荐 α=0.25, κ=10（见 docs/CREDIT_ASSIGNMENT.md）")
+    ap.add_argument("--power-normalize", type=int, default=1, choices=[0, 1],
+                    help="1=horizon 归一化（§B.1）；离线诊断建议 A/B 用 0"
+                         "（归一化会把早期 |A| 压成 ~1/L）")
+    ap.add_argument("--power-cutoff", type=int, default=0,
+                    help="lag 截断（0=不截断）")
+    ap.add_argument("--credit-timebase", default="decision",
+                    choices=["decision", "turn"],
+                    help="decision=按动作步；turn=未来 elapsed turn 的 SMDP 折扣")
+    ap.add_argument("--baseline-action-dependent", type=int, default=0,
+                    choices=[0, 1],
+                    help="动作条件 baseline：仅允许 0（actor baseline 只用 V(s)）。"
+                         "1 会直接报错，见 §B.3")
     ap.add_argument("--max-grad-norm", type=float, default=0.5,
                     help="梯度裁剪范数（论文 1.0）")
     ap.add_argument("--grad-accum", type=int, default=1,
@@ -771,6 +791,32 @@ def main() -> int:
     if args.workers <= 0 or args.batch_size <= 0:
         print("[error] workers/batch-size 必须 >0", file=sys.stderr)
         return 2
+    # 信用分配（§B）安全边界：默认 gae 完全不进入新路径。
+    if int(args.baseline_action_dependent) != 0:
+        print("[error] --baseline-action-dependent 只允许 0：动作条件 Q(s,a) 只能进 "
+              "critic/TD loss，不能直接当 actor baseline（有偏，§B.3）。"
+              "若要做 b(s,a) 必须走双采样/显式加权修正并通过 tests/test_credit.py。",
+              file=sys.stderr)
+        return 2
+    if str(args.adv_estimator) in ("power", "geom"):
+        if not (float(args.power_alpha) >= 0.0):
+            print("[error] --power-alpha 必须 >= 0", file=sys.stderr)
+            return 2
+        if not (float(args.power_kappa) > 0.0):
+            print("[error] --power-kappa 必须 > 0", file=sys.stderr)
+            return 2
+        if int(args.power_cutoff) < 0:
+            print("[error] --power-cutoff 必须 >= 0", file=sys.stderr)
+            return 2
+        print(f"[credit] adv_estimator={args.adv_estimator} "
+              f"alpha={args.power_alpha:g} kappa={args.power_kappa:g} "
+              f"normalize={int(args.power_normalize)} "
+              f"cutoff={int(args.power_cutoff)} timebase={args.credit_timebase}",
+              flush=True)
+    elif str(args.credit_timebase) != "decision":
+        print("[error] --credit-timebase turn 需要 --adv-estimator power|geom",
+              file=sys.stderr)
+        return 2
     if args.trainer_state and not os.path.isfile(args.trainer_state):
         print(f"[error] trainer-state 不存在: {args.trainer_state}", file=sys.stderr)
         return 2
@@ -971,8 +1017,15 @@ def main() -> int:
 
     p_cfg = PPOConfig(
         epochs=int(args.epochs), minibatch=int(args.minibatch), lr=float(args.lr),
-        clip=float(args.clip), gamma=float(args.gamma),
+        clip=float(args.clip), gamma=float(args.gamma), lam=float(args.lam),
         target_kl=float(args.target_kl),
+        adv_estimator=str(args.adv_estimator),
+        power_alpha=float(args.power_alpha),
+        power_kappa=float(args.power_kappa),
+        power_normalize=bool(int(args.power_normalize)),
+        power_cutoff=int(args.power_cutoff),
+        credit_timebase=str(args.credit_timebase),
+        baseline_action_dependent=int(args.baseline_action_dependent),
         entropy_coef=float(args.entropy_coef), pi_coef=float(args.pi_coef),
         max_grad_norm=float(args.max_grad_norm),
         grad_accum=int(args.grad_accum), amp=str(args.amp),
@@ -1436,6 +1489,12 @@ def main() -> int:
             batch, collect_meta = pool.collect(
                 c_cfg, int(args.games), return_records=True, progress=not pipeline_on,
                 seed=int(c_cfg.seed), gamma=float(p_cfg.gamma), lam=float(args.lam),
+                adv_estimator=str(args.adv_estimator),
+                power_alpha=float(args.power_alpha),
+                power_kappa=float(args.power_kappa),
+                power_normalize=bool(int(args.power_normalize)),
+                power_cutoff=int(args.power_cutoff),
+                credit_timebase=str(args.credit_timebase),
                 weights_version=(published["version"] if wv is None else wv),
                 weights_path=(published["path"] if wp is None else wp))
         elif args.workers > 1:
@@ -1445,14 +1504,26 @@ def main() -> int:
                 eval_fn=evaluator, device=str(args.device),
                 seed=int(args.seed) + idx * 1000, gamma=float(p_cfg.gamma),
                 lam=float(args.lam),
-                norm_mean=norm_mean, norm_std=norm_std, progress=True)
+                norm_mean=norm_mean, norm_std=norm_std, progress=True,
+                adv_estimator=str(args.adv_estimator),
+                power_alpha=float(args.power_alpha),
+                power_kappa=float(args.power_kappa),
+                power_normalize=bool(int(args.power_normalize)),
+                power_cutoff=int(args.power_cutoff),
+                credit_timebase=str(args.credit_timebase))
         else:
             batch, collect_meta = collect_ppo_batch(
                 model, c_cfg, search_fn=search_fn, search_config=search_cfg,
                 eval_fn=evaluator, device=str(args.device),
                 seed=int(args.seed) + idx * 1000, gamma=float(p_cfg.gamma),
                 lam=float(args.lam),
-                norm_mean=norm_mean, norm_std=norm_std, progress=True)
+                norm_mean=norm_mean, norm_std=norm_std, progress=True,
+                adv_estimator=str(args.adv_estimator),
+                power_alpha=float(args.power_alpha),
+                power_kappa=float(args.power_kappa),
+                power_normalize=bool(int(args.power_normalize)),
+                power_cutoff=int(args.power_cutoff),
+                credit_timebase=str(args.credit_timebase))
         return batch, collect_meta, c_cfg, time.time() - t_c
 
     def _pre_ratio(batch: Any, n: int = 2048) -> float:

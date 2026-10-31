@@ -388,8 +388,15 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     task["tmpdir"], f"rec_{task_id}_w{index}.npz")
                 if bool(task.get("rust_collector", False)) and search_fn is None:
                     _save_built_batch(
-                        build_batch_from_arrays(arr, gamma=float(task.get("gamma", 1.0)),
-                                                lam=float(task.get("lam", 0.95))),
+                        build_batch_from_arrays(
+                            arr, gamma=float(task.get("gamma", 1.0)),
+                            lam=float(task.get("lam", 0.95)),
+                            adv_estimator=str(task.get("adv_estimator", "gae")),
+                            power_alpha=float(task.get("power_alpha", 0.5)),
+                            power_kappa=float(task.get("power_kappa", 3.0)),
+                            power_normalize=bool(task.get("power_normalize", True)),
+                            power_cutoff=int(task.get("power_cutoff", 0)),
+                            credit_timebase=str(task.get("credit_timebase", "decision"))),
                         records_file)
                 else:
                     packed = pack_records_arrays(
@@ -398,7 +405,13 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                         _save_built_batch(
                             build_batch_from_arrays(
                                 packed, gamma=float(task.get("gamma", 1.0)),
-                                lam=float(task.get("lam", 0.95))),
+                                lam=float(task.get("lam", 0.95)),
+                                adv_estimator=str(task.get("adv_estimator", "gae")),
+                                power_alpha=float(task.get("power_alpha", 0.5)),
+                                power_kappa=float(task.get("power_kappa", 3.0)),
+                                power_normalize=bool(task.get("power_normalize", True)),
+                                power_cutoff=int(task.get("power_cutoff", 0)),
+                                credit_timebase=str(task.get("credit_timebase", "decision"))),
                             records_file)
                     except BaseException:  # noqa: BLE001 - 回退到父进程构建
                         np.savez(records_file, **packed)
@@ -649,6 +662,12 @@ class ProcessActorPool:
                 progress: bool = False,
                 seed: Optional[int] = None,
                 gamma: float = 1.0, lam: float = 0.95,
+                adv_estimator: str = "gae",
+                power_alpha: float = 0.5,
+                power_kappa: float = 3.0,
+                power_normalize: bool = True,
+                power_cutoff: int = 0,
+                credit_timebase: str = "decision",
                 weights_version: Optional[int] = None,
                 weights_path: Optional[str] = None) -> Tuple[PPOBatch, Dict[str, Any]]:
         n = max(1, int(games))
@@ -671,6 +690,12 @@ class ProcessActorPool:
                 "seed": seed_i, "threads": self.threads,
                 "return_records": bool(return_records),
                 "tmpdir": self.tmpdir, "gamma": float(gamma), "lam": float(lam),
+                "adv_estimator": str(adv_estimator),
+                "power_alpha": float(power_alpha),
+                "power_kappa": float(power_kappa),
+                "power_normalize": bool(power_normalize),
+                "power_cutoff": int(power_cutoff),
+                "credit_timebase": str(credit_timebase),
                 "weights_version": weights_version, "weights_path": weights_path,
                 "lockstep": bool(getattr(cfg, "lockstep", False)),
                 "cfg": {**asdict(cfg), "games": gcount,
@@ -848,7 +873,14 @@ class ProcessActorPool:
         # 统一协议：任何 shard 回退成 raw SoA 时，父进程先把它补齐成 batch 再合并
         for i, p in enumerate(packed_all):
             if "advantages" not in p:
-                lb = build_batch_from_arrays(p, gamma=float(gamma), lam=float(lam))
+                lb = build_batch_from_arrays(
+                    p, gamma=float(gamma), lam=float(lam),
+                    adv_estimator=str(adv_estimator),
+                    power_alpha=float(power_alpha),
+                    power_kappa=float(power_kappa),
+                    power_normalize=bool(power_normalize),
+                    power_cutoff=int(power_cutoff),
+                    credit_timebase=str(credit_timebase))
                 packed_all[i] = {
                     "features": lb.features, "cards": lb.cards, "masks": lb.masks,
                     "actions": lb.actions, "old_logprobs": lb.old_logprobs,
@@ -876,12 +908,33 @@ class ProcessActorPool:
         elif packed_all:
             merged = {k: np.concatenate([p[k] for p in packed_all if k in p], axis=0)
                       for k in packed_all[0]}
-            batch = build_batch_from_arrays(merged, gamma=float(gamma),
-                                            lam=float(lam), meta=meta)
+            batch = build_batch_from_arrays(
+                merged, gamma=float(gamma), lam=float(lam), meta=meta,
+                adv_estimator=str(adv_estimator),
+                power_alpha=float(power_alpha),
+                power_kappa=float(power_kappa),
+                power_normalize=bool(power_normalize),
+                power_cutoff=int(power_cutoff),
+                credit_timebase=str(credit_timebase))
         else:
-            batch = build_batch_from_records(records, gamma=float(gamma),
-                                             lam=float(lam), meta=meta)
+            batch = build_batch_from_records(
+                records, gamma=float(gamma), lam=float(lam), meta=meta,
+                adv_estimator=str(adv_estimator),
+                power_alpha=float(power_alpha),
+                power_kappa=float(power_kappa),
+                power_normalize=bool(power_normalize),
+                power_cutoff=int(power_cutoff),
+                credit_timebase=str(credit_timebase))
         build_batch_s = time.time() - t_b0
+        if str(adv_estimator).strip().lower() != "gae":
+            # 默认 gae 不新增键；启用时记录核参数（逐 shard diagnostics 已在
+            # worker build 时用 compact_diagnostics 摘要，这里只回传有效配置）。
+            meta["adv_estimator"] = str(adv_estimator).strip().lower()
+            meta["credit"] = {
+                "alpha": float(power_alpha), "kappa": float(power_kappa),
+                "normalize": bool(power_normalize), "cutoff": int(power_cutoff),
+                "timebase": str(credit_timebase),
+            }
         meta["parent_read_s"] = float(t_read)
         meta["records_bytes"] = int(records_bytes)
         meta["build_batch_s"] = float(build_batch_s)
