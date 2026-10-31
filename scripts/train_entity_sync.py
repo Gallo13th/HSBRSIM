@@ -202,6 +202,9 @@ def main() -> int:
                     help="偏好表路径（空= data/archetype/archetype_table.json）")
     ap.add_argument("--archetype-model", default="",
                     help="分类器模型路径（空= data/archetype/archetype_model.npz）")
+    ap.add_argument("--archetype-cache", type=int, default=0,
+                    help="1=流派特征/分类走输入哈希缓存（输出逐位相同，但实测命中率≈0，"
+                         "默认 0 关闭；见 docs/PERF_COLLECT.md）")
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--sims", type=int, default=4)
     ap.add_argument("--determinizations", type=int, default=1)
@@ -279,6 +282,10 @@ def main() -> int:
                          "data/real_library/library_real_quasi_full.jsonl"
                          "（scripts/build_fidelity_library.py 生成）；见 "
                          "docs/FIDELITY_INJECTION.md")
+    ap.add_argument("--human-board-fast-inject", type=int, default=0,
+                    help="1=人类战团注入走快速路径（payload 注入视图缓存 + orjson + "
+                         "ended 位字符串替换）；**与默认路径逐位等价**（同 seed 动作序列/"
+                         "状态 JSON 完全相同），实测采集侧 Python 成本降约四成。默认 0=旧路径")
     # ---- 势函数奖励塑形（默认关闭，见 docs/REWARD_SHAPING.md）----
     ap.add_argument("--shaping-coef", type=float, default=0.0,
                     help="势函数奖励塑形系数 λ；0=关闭（默认，records/GAE 与旧路径逐位等价）")
@@ -1256,6 +1263,7 @@ def main() -> int:
             move_cap=int(args.move_cap),
             archetype_bias_coef=float(args.archetype_bias_coef),
             archetype_min_prob=float(args.archetype_min_prob),
+            archetype_cache=bool(int(args.archetype_cache)),
             archetype_table=str(args.archetype_table),
             archetype_model=str(args.archetype_model),
             move_repeat_limit=int(args.move_repeat_limit),
@@ -1271,6 +1279,7 @@ def main() -> int:
             human_board_sample=str(args.human_board_sample),
             human_board_set_tier=bool(int(args.human_board_set_tier)),
             human_board_fidelity=str(args.human_board_fidelity),
+            human_board_fast_inject=bool(int(args.human_board_fast_inject)),
             frozen_opponent=str(args.frozen_opponent),
             frozen_seats=int(args.frozen_seats),
             rust_collector=bool(int(args.rust_collector)),

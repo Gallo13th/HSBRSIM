@@ -353,6 +353,8 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     human_board_sample=str(getattr(cfg, "human_board_sample", "auto")),
                     human_board_set_tier=bool(getattr(cfg, "human_board_set_tier", True)),
                     human_board_fidelity=str(getattr(cfg, "human_board_fidelity", "board")),
+                    human_board_fast_inject=bool(
+                        getattr(cfg, "human_board_fast_inject", False)),
                     gamma=float(task.get("gamma", 1.0)),
                     opponent_policy=opp_pol)
             else:

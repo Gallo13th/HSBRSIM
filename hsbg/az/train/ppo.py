@@ -344,6 +344,11 @@ class CollectConfig:
     #: 准完整库 ``data/real_library/library_real_quasi_full.jsonl``；见
     #: ``docs/FIDELITY_INJECTION.md``。
     human_board_fidelity: str = "board"
+    #: 人类战团注入**快速路径**（``full``/``hand`` 档有效）：缓存 payload 注入视图
+    #: （每个库行只解析一次）+ orjson 编解码 + ``ended_turn`` 字符串替换。
+    #: **默认 False = 逐位等价旧行为**；开启后同 seed 动作序列/状态也完全相同
+    #: （见 ``tests/test_fast_injection.py`` 与 docs/FIDELITY_INJECTION.md）。
+    human_board_fast_inject: bool = False
     #: 冻结对手模型（分裂模型/自对弈的对手）：空=引擎 bot；给 checkpoint 则 bot 座位由它驱动
     frozen_opponent: str = ""
     #: 由冻结对手模型驱动的 bot 座位数（0=全 bot，7=全部 7 席；1–2 性价比最高）
@@ -384,6 +389,9 @@ class CollectConfig:
     archetype_bias_coef: float = 0.0
     #: 检测置信度门槛：只有 ``max_prob >= 该值`` 才偏置（低置信 → 不偏置，默认 0.6）。
     archetype_min_prob: float = 0.6
+    #: 流派特征的**输入哈希缓存**（默认关）：同一 ``(features, cards, mask, 历史修订号)``
+    #: 只算一次；输出与不缓存逐位相同。实测命中率 ≈0（每决策特征都会变），默认关闭。
+    archetype_cache: bool = False
     #: 偏好表 / 分类器模型路径（空 = 默认 ``data/archetype/*``）。
     archetype_table: str = ""
     archetype_model: str = ""
@@ -2093,6 +2101,8 @@ class PPOSelfPlayPolicy(Policy):
                             or ARCH_MODEL),
                 coef=_ab_coef,
                 min_prob=float(getattr(self.config, "archetype_min_prob", 0.6) or 0.6),
+                # 输入哈希缓存（默认关；命中率实测≈0，见 docs/PERF_COLLECT.md）
+                cache=bool(getattr(self.config, "archetype_cache", False)),
                 # 卡牌下标 → 卡 id（top_cards 分项用；引擎缺失时退化为不带卡牌分项）
                 card_index_of=engine_card_id_lookup())
         if move_model:
@@ -2117,7 +2127,12 @@ class PPOSelfPlayPolicy(Policy):
 
     def archetype_bias_meta(self) -> Dict[str, Any]:
         """流派偏置统计（默认关闭 -> ``{}``，不新增 meta 键）。"""
-        return {} if self._abias is None else self._abias.to_meta()
+        if self._abias is None:
+            return {}
+        out = self._abias.to_meta()
+        if bool(getattr(self._abias, "cache_enabled", False)):
+            out.update(self._abias.cache_meta())
+        return out
 
     def reseed(self, seed: int) -> None:
         """每局固定 RNG：并行/串行都按 seed+game_id 重建，保证可复现。"""

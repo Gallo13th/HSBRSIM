@@ -455,6 +455,13 @@ class HumanBoardPool:
                     "source": SOURCE}
         out = dict(pick.payload)
         out["has_detail"] = True
+        # 快速注入视图缓存（按库行复用）：``pick.payload`` 是池里常驻的原始 dict，
+        # 这里让所有采样副本共享同一个 ``_inject_views`` 容器，避免每次注入重建模板。
+        views = pick.payload.get("_inject_views")
+        if not isinstance(views, dict):
+            views = {}
+            pick.payload["_inject_views"] = views
+        out["_inject_views"] = views
         out["board"] = [dict(b) for b in (pick.payload.get("board") or [])]
         out["board_flat"] = [list(x) for x in (pick.payload.get("board_flat")
                                               or pick.board)]
@@ -623,7 +630,8 @@ def inject_turn(game: Any, pool: HumanBoardPool, turn: int, *,
                 set_tier: bool = True,
                 tier_fn: Optional[Any] = None,
                 seats: Optional[Sequence[int]] = None,
-                fidelity: str = "board") -> HumanBoardStats:
+                fidelity: str = "board",
+                fast_inject: bool = False) -> HumanBoardStats:
     """新回合开始（任何座位行动前）给随机 N 个非 learner 座位注入人类战团。
 
     - 座位：``seats`` 给定时用它（固定座位，便于复现）；否则用 :func:`random_seats`
@@ -637,6 +645,8 @@ def inject_turn(game: Any, pool: HumanBoardPool, turn: int, *,
       :func:`hsbg.az.train.human_obs_full.inject_quasi_state`
       （``Game.apply_turn_snapshots`` + ``ended_turn`` 复位），把手牌 / 可推断 counters
       一起注入；库行没有 payload 时退化 board-only 并记 ``payload_missing``；
+    - ``fast_inject``：把注入切到快速路径（payload 注入视图缓存 + orjson + ended 位字符串
+      替换）。**语义与默认路径逐位等价**（同 seed 动作序列/状态 JSON 相同），默认 False。
     - 拒绝只记 ``rejected``，该座位保持原状态；
     - ``set_tier``：是否同时写入 :func:`turn_tier` 派生 tier（默认 True；full 档优先用
       观测到的 tavern tier）；``tier_fn`` 可覆盖派生函数。
@@ -702,7 +712,8 @@ def inject_turn(game: Any, pool: HumanBoardPool, turn: int, *,
             try:
                 rep = inject_quasi_state(
                     game, seat, payload, fid, reset_ended=True,
-                    tier_fn=(tier_of if set_tier else None))
+                    tier_fn=(tier_of if set_tier else None),
+                    fast=bool(fast_inject))
             except BaseException as exc:  # noqa: BLE001 - 引擎异常 -> 该座位保持 bot
                 st.errors += 1
                 st.last_rejected.append([seat, repr(exc)[:200]])

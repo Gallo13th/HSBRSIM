@@ -239,7 +239,11 @@ def _minion_tribes(f: np.ndarray, base: int) -> np.ndarray:
 
 def _item_blocks(f: np.ndarray, sl: slice, n: int) -> Tuple[np.ndarray, np.ndarray,
                                                             np.ndarray]:
-    """物品块（shop/hand）：返回 ``(tribes[n,11], is_minion[n], present[n])``。"""
+    """物品块（shop/hand）：返回 ``(tribes[n,11], is_minion[n], present[n])``。
+
+    保留逐格循环：实测（2026-10-31）numpy 的 fancy-index / as_strided 在小数组上比
+    直接标量索引**更慢**（n=7 时 12.0/14.3 µs vs 7.4 µs），因此不做向量化。
+    """
     tribes = np.zeros((n, N_TRIBES), dtype=np.float32)
     is_minion = np.zeros((n,), dtype=bool)
     present = np.zeros((n,), dtype=bool)
@@ -397,6 +401,9 @@ class _Hist:
     gold_sum: float = 0.0
     gold_n: int = 0
     last_turn: int = -1
+    #: 影响特征向量的状态修订号（``observe`` 的回合切换 / ``note_action`` 命中时自增）。
+    #: 用于可选的输入哈希缓存：同一 ``(features, cards, mask, rev)`` 才可复用结果。
+    rev: int = 0
     obs: Optional[ArchetypeObs] = None
 
 
@@ -435,6 +442,7 @@ class ArchetypeHistory:
             st.gold_sum += float(obs.gold)
             st.gold_n += 1
             st.last_turn = int(obs.turn)
+            st.rev += 1
         st.obs = obs
         return st
 
@@ -449,6 +457,7 @@ class ArchetypeHistory:
         if at is None:
             return
         st.n += 1
+        st.rev += 1
         st.type_counts[_TYPE_INDEX[at]] += 1.0
         if at in RHYTHM_TYPES:
             b = bucket_of(o.turn)
@@ -462,15 +471,29 @@ class ArchetypeHistory:
                     del st.flow_events[:-FLOW_EVENT_KEEP]
 
     def vector(self, game_id: Any, seat: Any, obs: ArchetypeObs,
-               *, hero_vocab: Sequence[str] = ()) -> np.ndarray:
+               *, hero_vocab: Sequence[str] = (),
+               hero_index: Optional[Dict[str, int]] = None) -> np.ndarray:
         """当前时刻的特征向量（长度 :data:`FEATURE_DIM`）。"""
         st = self._get(game_id, seat)
-        return build_vector(st, obs, hero_vocab=hero_vocab)
+        return build_vector(st, obs, hero_vocab=hero_vocab, hero_index=hero_index)
+
+
+#: 每个 turn 桶的宽度（float32；与 ``np.float32 标量 / Python float``
+#: 在 NEP50 下的语义一致 -> 向量化后逐位等价）。
+_BUCKET_WIDTHS = np.asarray([float(hi - lo + 1) for (lo, hi) in TURN_BUCKETS],
+                            dtype=np.float32)
+#: ``FLOW_DECAY ** k`` 预计算表（k=0..63；``**`` 是确定性 IEEE 运算，表值逐位相同）。
+_FLOW_DECAY_POW: Tuple[float, ...] = tuple(float(FLOW_DECAY) ** k for k in range(64))
 
 
 def build_vector(st: _Hist, obs: ArchetypeObs, *,
-                 hero_vocab: Sequence[str] = ()) -> np.ndarray:
-    """由历史 + 当前观测拼特征向量（训练/推理**唯一**入口，防两侧漂移）。"""
+                 hero_vocab: Sequence[str] = (),
+                 hero_index: Optional[Dict[str, int]] = None) -> np.ndarray:
+    """由历史 + 当前观测拼特征向量（训练/推理**唯一**入口，防两侧漂移）。
+
+    ``hero_index``：``hero_vocab`` 的 ``{name: idx}`` 预映射（可选）。给定时跳过
+    ``tuple.index`` 的线性查找；**结果与原路径逐位相同**（同一 idx）。
+    """
     x = np.zeros(FEATURE_DIM, dtype=np.float32)
     off = 0
     n = int(st.n)
@@ -485,12 +508,9 @@ def build_vector(st: _Hist, obs: ArchetypeObs, *,
     if n > 0:
         x[off: off + N_ACTION_TYPES] = st.type_counts / float(n)
     off += N_ACTION_TYPES
-    # 节奏：每类动作在每个桶内的次数（除以桶宽，口径统一）
-    for ti in range(N_RHYTHM):
-        for b in range(N_BUCKETS):
-            lo, hi = TURN_BUCKETS[b]
-            width = float(hi - lo + 1)
-            x[off + ti * N_BUCKETS + b] = st.rhythm[ti, b] / width
+    # 节奏：每类动作在每个桶内的次数（除以桶宽，口径统一；向量化，逐位等价）
+    x[off: off + N_RHYTHM * N_BUCKETS] = (
+        st.rhythm / _BUCKET_WIDTHS).astype(np.float32, copy=False).reshape(-1)
     off += N_RHYTHM * N_BUCKETS
     # 买入/打出流向种族占比
     flow_total = float(st.flow.sum())
@@ -500,8 +520,11 @@ def build_vector(st: _Hist, obs: ArchetypeObs, *,
     # 近期流向（指数衰减）：越近的买/打越能说明当前在打什么流派
     if st.flow_events:
         acc = np.zeros(N_TRIBES, dtype=np.float32)
+        _pow = _FLOW_DECAY_POW
+        _npow = len(_pow)
         for ev_turn, ev_t in st.flow_events:
-            w = float(FLOW_DECAY) ** max(0, turn - int(ev_turn))
+            k = turn - int(ev_turn)
+            w = _pow[k] if 0 <= k < _npow else float(FLOW_DECAY) ** max(0, k)
             acc[int(ev_t) % N_TRIBES] += w
         tot = float(acc.sum())
         if tot > 0:
@@ -533,16 +556,20 @@ def build_vector(st: _Hist, obs: ArchetypeObs, *,
     other = HERO_VOCAB_SIZE
     idx = -1
     if obs.hero_id:
-        try:
-            idx = int(hero_vocab.index(obs.hero_id)) if obs.hero_id in hero_vocab else -1
-        except ValueError:
-            idx = -1
+        if hero_index is not None:
+            idx = int(hero_index.get(str(obs.hero_id), -1))
+        else:
+            try:
+                idx = int(hero_vocab.index(obs.hero_id)) if obs.hero_id in hero_vocab else -1
+            except ValueError:
+                idx = -1
     if 0 <= idx < HERO_VOCAB_SIZE:
         x[off + idx] = 1.0
     else:
         x[off + other] = 1.0
     off += HERO_VOCAB_SIZE + 1
-    assert off == FEATURE_DIM, (off, FEATURE_DIM)
+    if off != FEATURE_DIM:
+        raise AssertionError((off, FEATURE_DIM))
     return x
 
 
@@ -701,17 +728,21 @@ def bias_from_pref(pref: Dict[str, Any], base: Dict[str, Any], obs: ArchetypeObs
     top_cards = {str(k): float(v) for k, v in (pref.get("top_cards") or {}).items()}
     wa = [float(w_buy.get(t, 0.0) or 0.0) for t in TRIBES]
     wb = [float(b_buy.get(t, 0.0) or 0.0) for t in TRIBES]
+    cards_arr = np.asarray(cards).reshape(-1) if cards is not None else None
+    shop_tribe: Optional[np.ndarray] = None
     for slot in range(N_SHOP):
         if not bool(obs.shop_present[slot]) or not bool(obs.shop_minion[slot]):
             continue
-        t = int(np.argmax(obs.shop_tribes[slot]))
+        if shop_tribe is None:          # 惰性整块 argmax（与逐格 argmax 逐位相同）
+            shop_tribe = obs.shop_tribes.argmax(axis=1)
+        t = int(shop_tribe[slot])
         g = _tribe_gain(wa, wb, t)
         if g > 0.0:
             bias[A_BUY + slot] += c * BUY_W * g
-        if card_index_of is not None and cards is not None and top_cards:
+        if card_index_of is not None and cards_arr is not None and top_cards:
             try:
                 # 注意：cards 块与 features 块的切片不同（这里取 card_shop 块）
-                idx = int(np.asarray(cards).reshape(-1)[SLICE_CARD_SHOP.start + slot])
+                idx = int(cards_arr[SLICE_CARD_SHOP.start + slot])
                 cid = str(card_index_of(idx)) if idx > 0 else ""
             except Exception:  # noqa: BLE001 - 卡 id 解析失败只跳过卡牌分项
                 cid = ""
@@ -719,10 +750,13 @@ def bias_from_pref(pref: Dict[str, Any], base: Dict[str, Any], obs: ArchetypeObs
             if share >= CARD_MIN_SHARE:
                 bias[A_BUY + slot] += c * CARD_W * min(1.0, share / CARD_SCALE)
     # 打：手牌种族 affinity × PLAY_FACTOR
+    hand_tribe: Optional[np.ndarray] = None
     for h in range(N_HAND):
         if not bool(obs.hand_present[h]) or not bool(obs.hand_minion[h]):
             continue
-        t = int(np.argmax(obs.hand_tribes[h]))
+        if hand_tribe is None:
+            hand_tribe = obs.hand_tribes.argmax(axis=1)
+        t = int(hand_tribe[h])
         g = _tribe_gain(wa, wb, t)
         if g <= 0.0:
             continue
@@ -784,7 +818,8 @@ class ArchetypeBias:
     def __init__(self, *, table_path: str = DEFAULT_TABLE,
                  model_path: str = DEFAULT_MODEL, coef: float = 0.5,
                  min_prob: float = 0.6, max_bias: float = MAX_TOTAL,
-                 card_index_of: Optional[Callable[[int], str]] = None) -> None:
+                 card_index_of: Optional[Callable[[int], str]] = None,
+                 cache: bool = False) -> None:
         self.coef = float(coef)
         self.min_prob = float(min_prob)
         self.table_path = str(table_path)
@@ -799,6 +834,14 @@ class ArchetypeBias:
         self.stats = ArchetypeBiasStats()
         self._card_index_of = card_index_of
         self._card_cache: Dict[int, str] = {}
+        #: hero_vocab 的 ``{name: idx}`` 预映射（跳过 tuple.index 线性查找）
+        self._hero_index: Dict[str, int] = {str(h): i
+                                           for i, h in enumerate(self.hero_vocab)}
+        #: 输入哈希缓存开关（默认关；命中率实测见 docs/PERF_COLLECT.md）。
+        self.cache_enabled = bool(cache)
+        self._cache: Dict[Any, Any] = {}
+        self.cache_hits = 0
+        self.cache_misses = 0
         for key in ("baseline", "archetypes"):
             if key not in self.table:
                 raise ValueError(f"流派偏好表缺字段 {key}: {table_path}")
@@ -848,15 +891,57 @@ class ArchetypeBias:
         return pb, bb
 
     # -- 主入口 -------------------------------------------------------------
+    def _stats_add(self, level: str, name: str, prob: float,
+                   n_pos: int, bias_sum: float) -> None:
+        """按「检测结果」累加统计（缓存命中时也要重放，保证口径一致）。"""
+        self.stats.decisions += 1
+        if level == "none":
+            self.stats.lvl_none += 1
+            return
+        self.stats.detected += 1
+        self.stats.prob_sum += float(prob)
+        self.stats.name_counts[name] = self.stats.name_counts.get(name, 0) + 1
+        if level == "archetype":
+            self.stats.lvl_archetype += 1
+        else:
+            self.stats.lvl_tribe += 1
+        if n_pos > 0:
+            self.stats.applied += 1
+            self.stats.bias_actions += int(n_pos)
+            self.stats.bias_sum += float(bias_sum)
+
     def bias(self, features: Any, cards: Any, mask: Any, *,
              game_id: Any, seat: Any) -> Optional[np.ndarray]:
-        """当前决策的 245 维 bias（无偏置返回 ``None``）；同时更新统计。"""
+        """当前决策的 245 维 bias（无偏置返回 ``None``）；同时更新统计。
+
+        可选**输入哈希缓存**（``ArchetypeBias(cache=True)`` / ``--archetype-cache 1``）：
+        同一 ``(features, cards, mask, 历史修订号)`` 只算一次特征与分类；命中时直接
+        重放统计并返回同一份 bias。**缓存与否输出逐位相同**（见
+        ``tests/test_archetype_fast.py``）。实测命中率约 0（见 docs/PERF_COLLECT.md）。
+        """
         obs = parse_obs(features, cards, hero_id_of=self.card_id_of)
-        self.history.observe(game_id, seat, obs)
-        x = self.history.vector(game_id, seat, obs, hero_vocab=self.hero_vocab)
+        st = self.history.observe(game_id, seat, obs)
+        key = None
+        if self.cache_enabled:
+            try:
+                key = (hash(np.asarray(features, dtype=np.float32).tobytes()),
+                       hash(np.asarray(cards).tobytes()),
+                       hash(np.asarray(mask).tobytes()),
+                       int(st.rev))
+            except Exception:  # noqa: BLE001 - 非法输入 -> 不缓存
+                key = None
+            if key is not None:
+                hit = self._cache.get(key)
+                if hit is not None:
+                    self.cache_hits += 1
+                    level, name, prob, n_pos, bias_sum, arr = hit
+                    self._stats_add(level, name, prob, n_pos, bias_sum)
+                    return None if arr is None else arr.copy()
+                self.cache_misses += 1
+        x = self.history.vector(game_id, seat, obs, hero_vocab=self.hero_vocab,
+                                hero_index=self._hero_index)
         p_t = self.tribe_model.probs(x)[0]
         p_a = self.arch_model.probs(x)[0]
-        self.stats.decisions += 1
         i_a = int(np.argmax(p_a))
         i_t = int(np.argmax(p_t))
         name_a = str(self.arch_model.classes[i_a])
@@ -879,25 +964,36 @@ class ArchetypeBias:
                 level, name, prob = "tribe", name_t, prob_t
 
         if got is None:
-            self.stats.lvl_none += 1
+            self._stats_add("none", "", 0.0, 0, 0.0)
+            if key is not None:
+                self._cache_put(key, ("none", "", 0.0, 0, 0.0, None))
             return None
-        self.stats.detected += 1
-        self.stats.prob_sum += float(prob)
-        self.stats.name_counts[name] = self.stats.name_counts.get(name, 0) + 1
-        if level == "archetype":
-            self.stats.lvl_archetype += 1
-        else:
-            self.stats.lvl_tribe += 1
         pref, base = got
         bias = bias_from_pref(pref, base, obs, mask, coef=self.coef,
                               card_index_of=self.card_id_of, cards=cards)
         n_pos = int((bias > 0).sum())
+        bias_sum = float(bias.sum())
+        self._stats_add(level, name, prob, n_pos, bias_sum)
+        if key is not None:
+            self._cache_put(key, (level, name, prob, n_pos, bias_sum,
+                                  None if n_pos == 0 else bias))
         if n_pos == 0:
             return None
-        self.stats.applied += 1
-        self.stats.bias_actions += n_pos
-        self.stats.bias_sum += float(bias.sum())
         return bias
+
+    def _cache_put(self, key: Any, val: Any) -> None:
+        if len(self._cache) > 8192:
+            self._cache.clear()
+        self._cache[key] = val
+
+    def cache_meta(self) -> Dict[str, Any]:
+        """缓存命中率（写进 collect meta，便于判断是否值得开）。"""
+        tot = int(self.cache_hits) + int(self.cache_misses)
+        return {"archetype_cache_on": bool(self.cache_enabled),
+                "archetype_cache_hits": int(self.cache_hits),
+                "archetype_cache_misses": int(self.cache_misses),
+                "archetype_cache_hit_rate": (float(self.cache_hits) / tot
+                                             if tot else 0.0)}
 
     def note_action(self, action: Any, *, game_id: Any, seat: Any) -> None:
         """记录己方实际动作（供下一次决策的特征向量）。"""

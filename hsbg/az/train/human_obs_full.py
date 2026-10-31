@@ -497,12 +497,236 @@ def _hand_json(payload: Dict[str, Any], first_eid: int
 #: 保真度档位（与训练 ``--human-board-fidelity`` 一致）。
 FIDELITY_MODES = ("board", "hand", "full")
 
+# ──────────────────────── 快速注入路径（默认关闭）────────────────────────
+# 开启条件：``inject_quasi_state(fast=True)``（训练入口 ``--human-board-fast-inject 1``）。
+# 语义与慢路径**逐位等价**（同一游戏同 seed 下动作序列/状态 JSON 完全相同），只改三件事：
+#   1. payload -> 注入视图（不可变模板）缓存：每个 ``(库行, fidelity)`` 只解析一次；
+#   2. JSON 编解码换成 orjson（若可用；无 orjson 时自动退回标准库，语义不变）；
+#   3. 复位 ``ended_turn`` 只在无 player overlay 时做字符串替换，避免第二次全帧往返。
+# 慢路径（``fast=False``）代码保持原样，因此关闭时行为与历史版本完全一致。
+
+try:  # pragma: no cover - 环境相关
+    import orjson as _ORJSON
+except BaseException:  # noqa: BLE001 - 没有 orjson 时退回标准库
+    _ORJSON = None
+
+#: 当前可用的快速 JSON 后端名（写进日志/meta；不影响语义）。
+FAST_JSON_BACKEND = "orjson" if _ORJSON is not None else "stdlib"
+
+
+def fast_json_available() -> bool:
+    """快速 JSON 后端是否可用（orjson）。"""
+    return _ORJSON is not None
+
+
+def _fast_loads(text: Any) -> Any:
+    """快速 JSON 解码（orjson 优先；语义与 ``json.loads`` 相同）。"""
+    if _ORJSON is not None:
+        try:
+            return _ORJSON.loads(text)
+        except BaseException:  # noqa: BLE001 - 非标准 JSON（NaN 等）-> 标准库
+            pass
+    return json.loads(text)
+
+
+def _fast_dumps(obj: Any) -> str:
+    """快速 JSON 编码（orjson 优先；语义与 ``json.dumps`` 相同）。"""
+    if _ORJSON is not None:
+        try:
+            return _ORJSON.dumps(obj).decode("utf-8")
+        except BaseException:  # noqa: BLE001 - 超出 orjson 能力（大整数/非 str 键）-> 标准库
+            pass
+    return json.dumps(obj)
+
+
+def _inject_view(payload: Dict[str, Any], fid: str) -> Dict[str, Any]:
+    """把 payload 预编译成**与座位无关**的注入视图（按 ``(payload, fidelity)`` 缓存）。
+
+    视图里 board/hand 是**模板 dict**（``eid``/``hid`` 是占位 0，注入时按座位覆盖），
+    因此同一库行跨回合/跨座位重复注入时不需要重新解析 payload、不需要重建 mask。
+
+    ``engine`` 侧 ``commit_snapshot`` 会把帧内所有 EID 重新分配给新值，注入时写入的
+    占位 EID 不会进入最终状态；唯一约束是帧内 EID 非 0 且互不重复（见
+    ``snapshot.rs::validate_entity_ids``），由注入侧的 ``nid`` 连续分配保证。
+    """
+    with_counters = (fid == "full")
+    board_tpl: List[Dict[str, Any]] = []
+    for b in payload.get("board") or ():
+        board_tpl.append(_minion_json(b, 0, with_counters=with_counters))
+    hand_tpl: Optional[List[Dict[str, Any]]] = None
+    if payload.get("hand_available") and payload.get("hand") is not None:
+        hand_tpl, _nid = _hand_json(payload, 0)
+    view = {"board": board_tpl, "hand": hand_tpl,
+            "hand_applied": hand_tpl is not None,
+            "with_counters": with_counters}
+    cache = payload.get("_inject_views")
+    if isinstance(cache, dict):
+        cache[fid] = view
+    return view
+
+
+def _get_inject_view(payload: Dict[str, Any], fid: str) -> Dict[str, Any]:
+    """取（或惰性构建）payload 的注入视图缓存。"""
+    cache = payload.get("_inject_views")
+    if not isinstance(cache, dict):
+        cache = {}
+        payload["_inject_views"] = cache
+    view = cache.get(fid)
+    if view is not None:
+        FAST_STATS["view_hits"] += 1
+        return view
+    FAST_STATS["view_builds"] += 1
+    return _inject_view(payload, fid)
+
+
+#: 快速路径计数器（测试/诊断；不影响行为）。
+FAST_STATS: Dict[str, int] = {
+    "fast_calls": 0, "view_hits": 0, "view_builds": 0,
+    "ended_replace_ok": 0, "ended_replace_fallback": 0,
+}
+
+
+def _reset_ended_by_replace(s: str) -> Optional[str]:
+    """把 ``player_json`` 字符串里的 ``ended_turn`` 从 true 改成 false（O(n) 但极便宜）。
+
+    找不到期望片段时返回 ``None``（调用方退回 load/dump 全帧路径，保证 fail-safe）。
+    """
+    out = s.replace('"ended_turn":true', '"ended_turn":false', 1)
+    if out != s:
+        FAST_STATS["ended_replace_ok"] += 1
+        return out
+    if '"ended_turn":false' in s:
+        # 已经是 false（极端并发/复核场景）：无需改写，直接把原串回传。
+        FAST_STATS["ended_replace_ok"] += 1
+        return s
+    FAST_STATS["ended_replace_fallback"] += 1
+    return None
+
+
+def _fast_inject_quasi_state(game: Any, seat: int, payload: Dict[str, Any],
+                             fid: str, *, reset_ended: bool,
+                             tier_fn: Optional[Any],
+                             player_overlay: str) -> Dict[str, Any]:
+    """快速注入（与 :func:`inject_quasi_state` 慢路径逐位等价；见上方说明）。"""
+    FAST_STATS["fast_calls"] += 1
+    board = payload.get("board") or []
+    av = payload.get("availability") or {}
+    unavailable = sorted(k for k, v in av.items() if str(v).startswith("unavailable"))
+    tier = payload.get("tier")
+    if tier is None and tier_fn is not None:
+        try:
+            tier = int(tier_fn(int(payload.get("turn") or 1)))
+        except BaseException:  # noqa: BLE001
+            tier = None
+    view = _get_inject_view(payload, fid)
+    with_counters = bool(view["with_counters"])
+
+    try:
+        frame = _fast_loads(game.player_json(seat))
+    except BaseException as exc:  # noqa: BLE001
+        return {"applied": False, "reason": f"player_json:{exc!r}"[:160], "mode": fid,
+                "hand_applied": False, "counters_applied": False,
+                "unavailable_fields": unavailable, "pool_balance_ok": True}
+    used = {int(m.get("eid", 0)) for m in (frame.get("board") or [])}
+    used |= {int(h.get("hid", 0)) for h in (frame.get("hand") or [])}
+    used |= {int(s.get("sid", 0)) for s in (frame.get("shop") or [])}
+    nid = max(used | {50000}) + 1
+
+    new_board: List[Dict[str, Any]] = []
+    for tpl in view["board"]:
+        m = dict(tpl)
+        m["eid"] = nid
+        new_board.append(m)
+        nid += 1
+    frame["board"] = new_board
+    hand_applied = False
+    if view["hand"] is not None:
+        hjs: List[Dict[str, Any]] = []
+        for tpl in view["hand"]:
+            item = tpl["item"]
+            h = dict(tpl)
+            h["hid"] = nid
+            if "Minion" in item:
+                mj = dict(item["Minion"])
+                mj["eid"] = nid
+                h["item"] = {"Minion": mj}
+            else:
+                h["item"] = {"Spell": dict(item["Spell"])}
+            hjs.append(h)
+            nid += 1
+        frame["hand"] = hjs
+        hand_applied = True
+        unavailable = [f for f in unavailable if f != "hand"]
+    if with_counters and tier is not None:
+        frame["tier"] = int(tier)
+    gold = payload.get("gold")
+    if with_counters and gold is not None:
+        frame["gold"] = int(gold)
+        unavailable = [f for f in unavailable if f != "gold"]
+    try:
+        rep = game.apply_turn_snapshots([[seat, _fast_dumps(frame)]], None)
+    except BaseException as exc:  # noqa: BLE001
+        return {"applied": False, "reason": f"apply_exc:{exc!r}"[:160], "mode": fid,
+                "hand_applied": False, "counters_applied": False,
+                "unavailable_fields": unavailable, "pool_balance_ok": True}
+    if not int(rep.get("applied", 0)):
+        rej = rep.get("rejected") or [[seat, "unknown"]]
+        return {"applied": False, "reason": str(rej[0][1])[:160], "mode": fid,
+                "hand_applied": False, "counters_applied": False,
+                "unavailable_fields": unavailable,
+                "pool_balance_ok": bool(rep.get("pool_balance_ok", True))}
+    ov_mode = str(player_overlay or "none").strip().lower()
+    if ov_mode not in PLAYER_OVERLAY_MODES:
+        ov_mode = "combat"
+    ov_src = payload.get("player") if isinstance(payload.get("player"), dict) else None
+    ov_in: Dict[str, Any] = {}
+    if ov_src and ov_mode != "none":
+        for k in PLAYER_COMBAT_FIELDS:
+            if k in ov_src:
+                ov_in[k] = ov_src[k]
+        if ov_mode == "all":
+            for k in PLAYER_ACTIVE_FIELDS:
+                if k in ov_src:
+                    ov_in[k] = ov_src[k]
+    ended = not bool(game.needs_action(seat))
+    if ov_in or (reset_ended and ended):
+        try:
+            if ov_in:
+                pj = _fast_loads(game.player_json(seat))
+                pj.update(ov_in)
+                if reset_ended and ended:
+                    pj["ended_turn"] = False
+                game.set_player_from_json(seat, _fast_dumps(pj), True, False)
+            else:
+                s = game.player_json(seat)
+                s2 = _reset_ended_by_replace(s) if ended else s
+                if s2 is None:      # 预期外 -> 退回全帧 load/dump（语义相同）
+                    pj = _fast_loads(s)
+                    pj["ended_turn"] = False
+                    s2 = _fast_dumps(pj)
+                game.set_player_from_json(seat, s2, True, False)
+        except BaseException as exc:  # noqa: BLE001
+            return {"applied": False, "reason": f"writeback:{exc!r}"[:160], "mode": fid,
+                    "hand_applied": False, "counters_applied": False,
+                    "unavailable_fields": unavailable,
+                    "pool_balance_ok": bool(rep.get("pool_balance_ok", True))}
+    return {
+        "applied": True, "reason": "ok", "mode": fid,
+        "hand_applied": bool(hand_applied),
+        "counters_applied": bool(with_counters),
+        "unavailable_fields": unavailable,
+        "pool_balance_ok": bool(rep.get("pool_balance_ok", True)),
+        "applied_seats": int(rep.get("applied", 0)),
+        "overlay": sorted(ov_in),
+    }
+
 
 def inject_quasi_state(game: Any, seat: int, payload: Dict[str, Any],
                        fidelity: str = "full", *,
                        reset_ended: bool = True,
                        tier_fn: Optional[Any] = None,
-                       player_overlay: str = "combat") -> Dict[str, Any]:
+                       player_overlay: str = "combat",
+                       fast: bool = False) -> Dict[str, Any]:
     """把一个准完整 payload 注入 ``game`` 的 ``seat``。
 
     - ``fidelity="board"``：完全走 ``Game.inject_board``（**与现状逐位等价**）；
@@ -515,6 +739,10 @@ def inject_quasi_state(game: Any, seat: int, payload: Dict[str, Any],
     只搬「战斗开始触发」组（这是战斗数值的真实来源）/ ``"all"`` 连 hero+powers 一起搬
     （会改变后续回合的主动玩法，训练里不建议）。
 
+    ``fast=True``：走快速路径（payload 注入视图缓存 + orjson + ended 位字符串替换），
+    **语义与 ``fast=False`` 逐位等价**（同 seed 动作序列/状态完全相同，见
+    ``tests/test_fast_injection.py``）。默认 False = 逐位等价旧行为。
+
     返回 dict：``applied`` / ``reason`` / ``mode`` / ``hand_applied`` /
     ``counters_applied`` / ``unavailable_fields`` / ``pool_balance_ok`` / ``overlay``。
     """
@@ -524,6 +752,10 @@ def inject_quasi_state(game: Any, seat: int, payload: Dict[str, Any],
                 "hand_applied": False, "counters_applied": False,
                 "unavailable_fields": [], "pool_balance_ok": True}
     seat = int(seat)
+    if fast and fid != "board":
+        return _fast_inject_quasi_state(
+            game, seat, payload, fid, reset_ended=bool(reset_ended),
+            tier_fn=tier_fn, player_overlay=player_overlay)
     board = payload.get("board") or []
     av = payload.get("availability") or {}
     unavailable = sorted(k for k, v in av.items() if str(v).startswith("unavailable"))
@@ -629,9 +861,10 @@ def inject_quasi_state(game: Any, seat: int, payload: Dict[str, Any],
 
 
 __all__ = [
-    "EOT_STAGE", "FIDELITY_MODES", "FIELDS_INJECTABLE", "FIELDS_UNAVAILABLE",
+    "EOT_STAGE", "FAST_JSON_BACKEND", "FAST_STATS", "FIDELITY_MODES",
+    "FIELDS_INJECTABLE", "FIELDS_UNAVAILABLE",
     "KW_BITS", "KW_NAMES", "PLAYER_ACTIVE_FIELDS", "PLAYER_COMBAT_FIELDS",
     "PLAYER_OVERLAY_MODES", "SCHEMA", "SCHEMA_VERSION", "TAG_TO_KW",
-    "availability_defaults", "inject_quasi_state", "is_golden_card_id",
-    "load_card_meta", "minion_template", "parse_observation",
+    "availability_defaults", "fast_json_available", "inject_quasi_state",
+    "is_golden_card_id", "load_card_meta", "minion_template", "parse_observation",
 ]

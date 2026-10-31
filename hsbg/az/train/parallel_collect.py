@@ -295,6 +295,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                          human_board_sample: str = "auto",
                          human_board_set_tier: bool = True,
                          human_board_fidelity: str = "board",
+                         human_board_fast_inject: bool = False,
                          gamma: float = 1.0,
                          ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """lock-step 采集：N 局同步推进，每轮把所有待决策局拼成一个 batch 前向一次。
@@ -441,6 +442,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     if human_fidelity not in ("board", "hand", "full"):
         raise ValueError(f"human_board_fidelity 非法: {human_board_fidelity!r}"
                          "（只支持 board/hand/full）")
+    human_fast_inject = bool(human_board_fast_inject) and human_fidelity != "board"
     if human_on and human_fidelity != "board":
         _pk = int(getattr(human_board_pool, "payload_kept", 0) or 0)
         if _pk <= 0:
@@ -490,7 +492,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             rng=st["human_rng"], learner_seat=seat, stats=st["human_stats"],
             mirror_seats=st.get("mirror_applied_seats") or (),
             num_players=N_PLAYERS, set_tier=human_set_tier,
-            fidelity=human_fidelity)
+            fidelity=human_fidelity, fast_inject=human_fast_inject)
 
     def _maybe_inject(st: Dict[str, Any]) -> None:
         """新回合注入总入口（顺序固定：镜像快照 → 人类战团）。"""
@@ -711,6 +713,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                                    if human_on else 0),
             "human_board_source": HUMAN_BOARD_SOURCE,
             "human_board_fidelity": str(human_fidelity),
+            "human_board_fast_inject": bool(human_fast_inject),
             "human_board_payload_rows": int(
                 getattr(human_board_pool, "payload_kept", 0) or 0) if human_on else 0,
             "records": int(len(records)), "illegal_actions": int(illegal),
