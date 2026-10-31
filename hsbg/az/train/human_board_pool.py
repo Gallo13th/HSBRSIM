@@ -20,6 +20,16 @@
 同强度的多条用 ``rng`` 随机抽（避免总取上限）。默认 ``sample="auto"`` 走**难度曲线**：
 ``turn<=8 → p50``、``9..12 → p75``、``>=13 → p90``（见 :func:`sample_mode_for_turn`）。
 
+**保真度（2026-10-31 新增，默认 ``board`` 逐位不变）**：``inject_turn`` /
+:func:`inject_all` 新增 ``fidelity ∈ {board, hand, full}``。``board`` 走原
+``Game.inject_board``（board-only，逐位等价旧行为）；``hand`` / ``full`` 走
+:func:`hsbg.az.train.human_obs_full.inject_quasi_state`
+（→ ``Game.apply_turn_snapshots``，Python 侧封装，Rust 零改动），把**手牌 / 可推断
+counters（关键词位、金身、圣盾层数、tavern tier）**一起注入。这需要**准完整库**
+``data/real_library/library_real_quasi_full.jsonl``（``scripts/build_fidelity_library.py``
+生成）；旧 board-only 库在 hand/full 档会退化为 board-only 并计 ``payload_missing``。
+见 ``docs/FIDELITY_INJECTION.md``。
+
 **过滤**（保守，宁可少用也不把脏帧带进对局）：空战团、``len(board)>7``、非整数卡、
 ``atk<0`` / ``hp<=0``、单随从 ``atk+hp > 100_000``、战团 ``Σ(atk+hp) > 250_000``、
 卡表里不是 minion 的卡。后两条针对观测里的**极端离群值**（例如单个随从 128,981/128,920）：
@@ -92,6 +102,16 @@ def _percentile_index(q: float, n: int) -> int:
     return min(n - 1, max(0, int(math.floor(float(q) * (n - 1) + 0.5))))
 
 
+def _opt_int(value: Any) -> Optional[int]:
+    """``None`` / 非法值 -> ``None``；否则 ``int``（payload 透传，不做语义校验）。"""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 # ────────────────────────── 卡表校验（可选） ──────────────────────────
 
 _MINION_CIDS: Optional[set] = None
@@ -130,6 +150,12 @@ class HumanBoard:
     board: List[List[int]] = field(default_factory=list)
     game_id: str = ""
     hero: Optional[int] = None
+    #: 准完整 payload（``hand`` / ``counters`` / ``tier`` / ``availability``）；
+    #: 旧 board-only 库为 ``None``（hand/full 档会退化为 board-only）。
+    payload: Optional[Dict[str, Any]] = None
+    #: 手牌数量（payload 缺失时为 0）与观测到的 tavern tier。
+    hand_n: int = 0
+    tier: Optional[int] = None
 
     def to_json(self) -> Dict[str, Any]:
         return {"turn": int(self.turn), "strength": int(self.strength),
@@ -158,6 +184,8 @@ class HumanBoardPool:
         self.check_cards = bool(check_cards)
         self.rows = 0
         self.kept = 0
+        #: 带准完整 payload（``board_detail``）的行数；hand/full 档必须 > 0。
+        self.payload_kept = 0
         self.bad_lines = 0
         #: 过滤计数：``{"empty_board": 4, "board_over_7": 12, ...}``
         self.filtered: Dict[str, int] = {}
@@ -192,6 +220,8 @@ class HumanBoardPool:
                     continue
                 self.index.setdefault(int(hb.turn), []).append(hb)
                 self._sorted.pop(int(hb.turn), None)   # 桶内容变了，缓存失效
+                if isinstance(hb.payload, dict):
+                    self.payload_kept += 1
                 added += 1
         self.kept += added
         return added
@@ -218,14 +248,25 @@ class HumanBoardPool:
             return None
         entries: List[Tuple[int, int, int, int]] = []
         for i, m in enumerate(raw):
-            if not isinstance(m, dict):
-                self._drop("bad_entry")
-                return None
-            try:
-                card = int(m["card"])
-                atk = int(m["atk"])
-                hp = int(m["hp"])
-            except (KeyError, TypeError, ValueError):
+            # 兼容两种行格式：``{"card","atk","hp","position"}``（旧库）与
+            # ``[card, atk, hp]``（``library_real_quasi_full.jsonl`` 的扁平板）。
+            if isinstance(m, dict):
+                try:
+                    card = int(m["card"])
+                    atk = int(m["atk"])
+                    hp = int(m["hp"])
+                except (KeyError, TypeError, ValueError):
+                    self._drop("bad_entry")
+                    return None
+                pos = m.get("position", i + 1)
+            elif isinstance(m, (list, tuple)) and len(m) >= 3:
+                try:
+                    card, atk, hp = int(m[0]), int(m[1]), int(m[2])
+                except (TypeError, ValueError):
+                    self._drop("bad_entry")
+                    return None
+                pos = m[3] if len(m) > 3 else i + 1
+            else:
                 self._drop("bad_entry")
                 return None
             if card <= 0 or atk < 0 or hp <= 0:
@@ -234,7 +275,6 @@ class HumanBoardPool:
             if atk + hp > self.max_minion_stat:
                 self._drop("stat_outlier")
                 return None
-            pos = m.get("position", i + 1)
             try:
                 pos = int(pos)
             except (TypeError, ValueError):
@@ -257,10 +297,71 @@ class HumanBoardPool:
             return None
         # position 升序（同 position/缺失时保持原顺序）；输出 [[card, atk, hp], ...]。
         entries.sort(key=lambda e: (e[0],))
-        return HumanBoard(turn=turn, strength=strength,
-                          board=[[int(c), int(a), int(h)] for (_p, c, a, h) in entries],
+        flat = [[int(c), int(a), int(h)] for (_p, c, a, h) in entries]
+        payload = self._row_to_payload(row, turn, flat)
+        return HumanBoard(turn=turn, strength=strength, board=flat,
                           game_id=str(row.get("game_id", "")),
-                          hero=(int(row["hero"]) if row.get("hero") is not None else None))
+                          hero=(int(row["hero"]) if row.get("hero") is not None else None),
+                          payload=payload,
+                          hand_n=(len(payload.get("hand") or []) if payload else 0),
+                          tier=(payload.get("tier") if payload else None))
+
+    def _row_to_payload(self, row: Dict[str, Any], turn: int,
+                        flat: List[List[int]]) -> Optional[Dict[str, Any]]:
+        """准完整库行 -> payload（``board_detail`` 存在时）；旧库返回 ``None``。
+
+        payload 键：``board / board_flat / hand / hand_available / tier /
+        gold / hero_hp / main_placement / availability / source``。
+
+        ``gold`` / ``hero_hp`` / ``main_placement`` **有字段才带值**：
+        10k+ 准完整库没有这三个字段 -> ``None``（与旧的 ``"gold": None`` 逐位一致）；
+        Firestone 近期库带齐 -> full 档注入时 gold 会一起写回目标座位。
+        """
+        detail = row.get("board_detail")
+        if not isinstance(detail, list) or len(detail) != len(flat):
+            return None
+        board: List[Dict[str, Any]] = []
+        for i, (m, f) in enumerate(zip(detail, flat)):
+            if not isinstance(m, dict):
+                return None
+            try:
+                board.append({
+                    "card": int(m.get("card", f[0])),
+                    "atk": int(m.get("atk", f[1])),
+                    "hp": int(m.get("hp", f[2])),
+                    "golden": bool(m.get("golden")),
+                    "kw": int(m.get("kw") or 0),
+                    "bonus_kw": int(m.get("bonus_kw") or 0),
+                    "shield_max": int(m.get("shield_max") or 1),
+                    "position": i + 1,
+                })
+            except (TypeError, ValueError):
+                return None
+        hand = row.get("hand")
+        hand = [dict(x) for x in hand] if isinstance(hand, list) else []
+        try:
+            tier = int(row["tier"]) if row.get("tier") is not None else None
+        except (TypeError, ValueError):
+            tier = None
+        av = row.get("availability")
+        return {
+            "schema": row.get("schema") or "hsbg.human_state_quasi_full",
+            "schema_version": int(row.get("schema_version") or 1),
+            "turn": int(turn),
+            "board": board,
+            "board_flat": [list(x) for x in flat],
+            "hand": hand,
+            "hand_available": bool(row.get("hand_available")),
+            "tier": tier,
+            # 以下三字段**有字段才带值**：准完整 10k+ 库没有 gold / hero_hp /
+            # main_placement，取到 None 时与旧行为逐位一致；Firestone 库带齐时
+            # full 档会把 gold 一起写回（`human_obs_full.inject_quasi_state`）。
+            "gold": _opt_int(row.get("gold")),
+            "hero_hp": _opt_int(row.get("hero_hp")),
+            "main_placement": _opt_int(row.get("main_placement")),
+            "availability": dict(av) if isinstance(av, dict) else {},
+            "source": str(row.get("source") or SOURCE),
+        }
 
     # ---- 采样 ----
     def has(self, turn: int) -> bool:
@@ -298,13 +399,12 @@ class HumanBoardPool:
             self._sorted[key] = out
         return out
 
-    def sample(self, turn: int, rng: Optional[random.Random] = None,
-               mode: Optional[str] = None) -> Optional[List[List[int]]]:
-        """取 ``turn`` 桶内按 ``mode`` 分位的一条战团（``None`` = 该回合完全没数据）。
+    def _pick(self, turn: int, rng: Optional[random.Random],
+              mode: Optional[str]) -> Optional[HumanBoard]:
+        """分位采样选中的那一条 :class:`HumanBoard`（**唯一**的 RNG 消费点）。
 
-        ``mode=None`` 用池的 ``sample_mode``；``"auto"`` 走 :func:`sample_mode_for_turn`。
-        分位算法与 ``MirrorSnapshotPool.get`` 一致：按 strength 升序的最近秩，同强度随机抽。
-        热路径 O(log n)：每回合每座位一次调用，桶有几百条时不重排、不线性扫描。
+        ``sample`` / ``sample_payload`` 都只调用它一次，因此 board 与 hand/full
+        两档消耗的 RNG 序列**完全相同**（换档不改变座位/难度分布）。
         """
         hit = self._bucket(turn)
         if hit is None:
@@ -318,17 +418,49 @@ class HumanBoardPool:
         r = rng or random
         if m == "max":
             ordered, _ = self._sorted_bucket(bucket_turn, cands)
-            return [list(x) for x in ordered[-1].board]
+            return ordered[-1]
         q = SAMPLE_PERCENTILES.get(m)
         if q is None:
             # 未知模式退化为均匀随机（与 mirror 一致）。
-            return [list(x) for x in cands[r.randrange(len(cands))].board]
+            return cands[r.randrange(len(cands))]
         ordered, strengths = self._sorted_bucket(bucket_turn, cands)
         target = strengths[_percentile_index(q, len(strengths))]
         lo = bisect.bisect_left(strengths, target)
         hi = bisect.bisect_right(strengths, target)
-        pick = ordered[lo + r.randrange(max(1, hi - lo))]
-        return [list(x) for x in pick.board]
+        return ordered[lo + r.randrange(max(1, hi - lo))]
+
+    def sample(self, turn: int, rng: Optional[random.Random] = None,
+               mode: Optional[str] = None) -> Optional[List[List[int]]]:
+        """取 ``turn`` 桶内按 ``mode`` 分位的一条战团（``None`` = 该回合完全没数据）。
+
+        ``mode=None`` 用池的 ``sample_mode``；``"auto"`` 走 :func:`sample_mode_for_turn`。
+        分位算法与 ``MirrorSnapshotPool.get`` 一致：按 strength 升序的最近秩，同强度随机抽。
+        热路径 O(log n)：每回合每座位一次调用，桶有几百条时不重排、不线性扫描。
+        """
+        pick = self._pick(turn, rng, mode)
+        return None if pick is None else [list(x) for x in pick.board]
+
+    def sample_payload(self, turn: int, rng: Optional[random.Random] = None,
+                       mode: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """同 :meth:`sample` 的分位选择，但返回**准完整 payload**（旧库返回 ``None``）。"""
+        pick = self._pick(turn, rng, mode)
+        if pick is None:
+            return None
+        if not isinstance(pick.payload, dict):
+            # 旧 board-only 库：返回 has_detail=False，调用方退化到 inject_board
+            # （单次 RNG 抽取不变，因此换档不改变座位/难度分布）。
+            return {"turn": int(turn), "board": [], "board_flat": [list(x) for x in pick.board],
+                    "hand": [], "hand_available": False, "tier": pick.tier, "gold": None,
+                    "availability": {}, "has_detail": False,
+                    "source": SOURCE}
+        out = dict(pick.payload)
+        out["has_detail"] = True
+        out["board"] = [dict(b) for b in (pick.payload.get("board") or [])]
+        out["board_flat"] = [list(x) for x in (pick.payload.get("board_flat")
+                                              or pick.board)]
+        out["hand"] = [dict(h) for h in (pick.payload.get("hand") or [])]
+        out["availability"] = dict(pick.payload.get("availability") or {})
+        return out
 
     # ---- 统计 ----
     def stats(self) -> Dict[str, Any]:
@@ -356,6 +488,8 @@ class HumanBoardPool:
             "turn_min": (turns[0] if turns else 0),
             "turn_max": (turns[-1] if turns else 0),
             "boards": int(sum(len(v) for v in self.index.values())),
+            "payload_rows": int(self.payload_kept),
+            "fidelity_detail": ("quasi_full" if self.payload_kept else "board_only"),
             "per_turn": per_turn,
             "schedule": {str(b): m for b, m in TURN_SCHEDULE},
             "max_minion_stat": int(self.max_minion_stat),
@@ -390,6 +524,15 @@ class HumanBoardStats:
     pool_unbalanced: int = 0    # 注入后 pool_balance 不守恒的次数（应为 0）
     nearest_bucket: int = 0     # 采样退化为最近回合的次数（回合超出数据范围）
     tier_set: int = 0           # 同时写入派生 tier 的次数
+    #: 保真度档位（``board`` / ``hand`` / ``full``）；board 档其余计数恒为 0。
+    fidelity: str = "board"
+    hand_applied: int = 0       # 成功注入手牌的座位数
+    counters_applied: int = 0   # 成功注入可推断 counters 的座位数
+    full_applied: int = 0       # 走 apply_turn_snapshots 成功的座位数
+    payload_missing: int = 0    # hand/full 档但库行没有 payload -> 退化 board-only
+    hand_unavailable: int = 0   # payload 里手牌不可得（对手视角 / 未揭示）
+    counters_unavailable: int = 0
+    unavailable_fields: Dict[str, int] = field(default_factory=dict)
     last_rejected: List[List[Any]] = field(default_factory=list)
     rejected_by_reason: Dict[str, int] = field(default_factory=dict)
 
@@ -403,6 +546,16 @@ class HumanBoardStats:
         self.pool_unbalanced += other.pool_unbalanced
         self.nearest_bucket += other.nearest_bucket
         self.tier_set += other.tier_set
+        if other.fidelity != "board" or not self.fidelity:
+            self.fidelity = other.fidelity
+        self.hand_applied += int(other.hand_applied)
+        self.counters_applied += int(other.counters_applied)
+        self.full_applied += int(other.full_applied)
+        self.payload_missing += int(other.payload_missing)
+        self.hand_unavailable += int(other.hand_unavailable)
+        self.counters_unavailable += int(other.counters_unavailable)
+        for k, v in (other.unavailable_fields or {}).items():
+            self.unavailable_fields[str(k)] = int(self.unavailable_fields.get(str(k), 0)) + int(v)
         for k, v in other.rejected_by_reason.items():
             self.rejected_by_reason[k] = self.rejected_by_reason.get(k, 0) + int(v)
         for r in other.last_rejected[:4]:
@@ -421,6 +574,16 @@ class HumanBoardStats:
             "human_board_pool_unbalanced": int(self.pool_unbalanced),
             "human_board_nearest_bucket": int(self.nearest_bucket),
             "human_board_tier_set": int(self.tier_set),
+            # 保真度（board/hand/full）与逐字段可得性：history.jsonl 直接读这些键。
+            "human_board_fidelity": str(self.fidelity or "board"),
+            "human_board_hand_applied": int(self.hand_applied),
+            "human_board_counters_applied": int(self.counters_applied),
+            "human_board_full_applied": int(self.full_applied),
+            "human_board_payload_missing": int(self.payload_missing),
+            "human_board_hand_unavailable": int(self.hand_unavailable),
+            "human_board_counters_unavailable": int(self.counters_unavailable),
+            "human_board_unavailable_fields": {
+                str(k): int(v) for k, v in sorted(self.unavailable_fields.items())},
             "human_board_last_rejected": [list(x) for x in self.last_rejected],
             "human_board_rejected_by_reason": {
                 str(k): int(v) for k, v in sorted(self.rejected_by_reason.items())},
@@ -447,6 +610,10 @@ def random_seats(count: int, rng: Optional[random.Random] = None,
     return sorted(r.sample(pool, k))
 
 
+#: 保真度档位（训练 ``--human-board-fidelity``）。
+FIDELITIES = ("board", "hand", "full")
+
+
 def inject_turn(game: Any, pool: HumanBoardPool, turn: int, *,
                 seats_count: int = 2, p: float = 1.0,
                 rng: Optional[random.Random] = None, learner_seat: int = 0,
@@ -455,7 +622,8 @@ def inject_turn(game: Any, pool: HumanBoardPool, turn: int, *,
                 num_players: int = 8,
                 set_tier: bool = True,
                 tier_fn: Optional[Any] = None,
-                seats: Optional[Sequence[int]] = None) -> HumanBoardStats:
+                seats: Optional[Sequence[int]] = None,
+                fidelity: str = "board") -> HumanBoardStats:
     """新回合开始（任何座位行动前）给随机 N 个非 learner 座位注入人类战团。
 
     - 座位：``seats`` 给定时用它（固定座位，便于复现）；否则用 :func:`random_seats`
@@ -463,18 +631,29 @@ def inject_turn(game: Any, pool: HumanBoardPool, turn: int, *,
     - 每个座位独立掷 ``p``；命中后 ``attempt += 1``；缺数据 -> ``missing``；
     - **优先级**：``mirror_seats`` 里的座位本回合已被镜像快照占用（引擎里
       ``ended_turn=true``），直接跳过并记 ``skipped_by_mirror``；
-    - 引擎侧每个座位一次 ``Game.inject_board`` 调用（board-only，事务性）；
-      拒绝只记 ``rejected``，该座位保持原状态；
-    - ``set_tier``：是否同时写入 :func:`turn_tier` 派生 tier（默认 True）；``tier_fn``
-      可覆盖派生函数。
+    - ``fidelity="board"``（**默认**）：每个座位一次 ``Game.inject_board``（board-only，
+      事务性），行为与旧版**逐位等价**（RNG / 状态 / meta 旧键都不变）；
+    - ``fidelity="hand"`` / ``"full"``：走
+      :func:`hsbg.az.train.human_obs_full.inject_quasi_state`
+      （``Game.apply_turn_snapshots`` + ``ended_turn`` 复位），把手牌 / 可推断 counters
+      一起注入；库行没有 payload 时退化 board-only 并记 ``payload_missing``；
+    - 拒绝只记 ``rejected``，该座位保持原状态；
+    - ``set_tier``：是否同时写入 :func:`turn_tier` 派生 tier（默认 True；full 档优先用
+      观测到的 tavern tier）；``tier_fn`` 可覆盖派生函数。
     """
     st = stats if stats is not None else HumanBoardStats()
+    fid = str(fidelity or "board").strip().lower()
+    if fid not in FIDELITIES:
+        fid = "board"
+    st.fidelity = fid
     r = rng or random
     prob = max(0.0, min(1.0, float(p)))
     mirror_set = {int(s) for s in mirror_seats}
     seat_list = ([int(s) for s in seats] if seats is not None
                  else random_seats(int(seats_count), r, num_players, learner_seat))
     tier_of = tier_fn or turn_tier
+    if fid != "board":
+        from .human_obs_full import inject_quasi_state   # noqa: PLC0415
     for seat in seat_list:
         seat = int(seat)
         if seat == int(learner_seat):
@@ -486,12 +665,27 @@ def inject_turn(game: Any, pool: HumanBoardPool, turn: int, *,
             continue
         st.attempt += 1
         before_fallback = int(getattr(pool, "nearest_fallbacks", 0))
-        try:
-            board = pool.sample(int(turn), rng=r)
-        except BaseException:  # noqa: BLE001 - 数据问题 -> 该座位保持 bot
-            st.errors += 1
-            st.last_rejected.append([-1, "sample_error"])
-            continue
+        payload: Optional[Dict[str, Any]] = None
+        if fid == "board":
+            try:
+                board = pool.sample(int(turn), rng=r)
+            except BaseException:  # noqa: BLE001 - 数据问题 -> 该座位保持 bot
+                st.errors += 1
+                st.last_rejected.append([-1, "sample_error"])
+                continue
+        else:
+            try:
+                payload = pool.sample_payload(int(turn), rng=r)
+            except BaseException:  # noqa: BLE001
+                st.errors += 1
+                st.last_rejected.append([-1, "sample_error"])
+                continue
+            if payload is None:
+                st.missing += 1
+                continue
+            board = payload.get("board_flat") or []
+            if not payload.get("has_detail", False):
+                st.payload_missing += 1
         if int(getattr(pool, "nearest_fallbacks", 0)) > before_fallback:
             st.nearest_bucket += 1
         if not board:
@@ -500,8 +694,47 @@ def inject_turn(game: Any, pool: HumanBoardPool, turn: int, *,
         tier = int(tier_of(int(turn))) if set_tier else None
         if tier is not None and not (1 <= tier <= 7):
             tier = None
+        # ---- hand / full：准完整注入（Python 侧封装，失败退化不改状态） ----
+        if fid != "board" and bool(payload.get("has_detail", False)):
+            if not set_tier:
+                payload = dict(payload)
+                payload["tier"] = None
+            try:
+                rep = inject_quasi_state(
+                    game, seat, payload, fid, reset_ended=True,
+                    tier_fn=(tier_of if set_tier else None))
+            except BaseException as exc:  # noqa: BLE001 - 引擎异常 -> 该座位保持 bot
+                st.errors += 1
+                st.last_rejected.append([seat, repr(exc)[:200]])
+                continue
+            if bool(rep.get("applied")):
+                st.applied += 1
+                st.full_applied += 1
+                if bool(rep.get("hand_applied")):
+                    st.hand_applied += 1
+                elif payload.get("hand_available") is False:
+                    st.hand_unavailable += 1
+                if bool(rep.get("counters_applied")):
+                    st.counters_applied += 1
+                else:
+                    st.counters_unavailable += 1
+                for f in (rep.get("unavailable_fields") or ()):
+                    st.unavailable_fields[str(f)] = int(
+                        st.unavailable_fields.get(str(f), 0)) + 1
+                if tier is not None:
+                    st.tier_set += 1
+                if not bool(rep.get("pool_balance_ok", True)):
+                    st.pool_unbalanced += 1
+            else:
+                st.rejected += 1
+                cls = _reject_class(rep.get("reason"))
+                st.rejected_by_reason[cls] = st.rejected_by_reason.get(cls, 0) + 1
+                if len(st.last_rejected) < 16:
+                    st.last_rejected.append([seat, str(rep.get("reason"))[:200]])
+            continue
+        # ---- board-only（默认档；也是旧库/无 payload 的退化路径） ----
         try:
-            rep = game.inject_board(seat, board, tier)
+            rep = game.inject_board(seat, [list(x) for x in board], tier)
         except BaseException as exc:  # noqa: BLE001 - 引擎异常 -> 该座位保持 bot
             st.errors += 1
             st.last_rejected.append([seat, repr(exc)[:200]])
@@ -522,7 +755,7 @@ def inject_turn(game: Any, pool: HumanBoardPool, turn: int, *,
 
 
 __all__ = [
-    "MAX_BOARD", "MAX_BOARD_STRENGTH", "MAX_MINION_STAT", "SAMPLE_MODES",
+    "FIDELITIES", "MAX_BOARD", "MAX_BOARD_STRENGTH", "MAX_MINION_STAT", "SAMPLE_MODES",
     "SAMPLE_PERCENTILES", "SOURCE", "TURN_SCHEDULE", "TURN_TIER",
     "HumanBoard", "HumanBoardPool", "HumanBoardStats", "inject_turn",
     "load_pool", "minion_cids", "random_seats", "sample_mode_for_turn",

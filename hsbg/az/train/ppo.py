@@ -82,6 +82,9 @@ from .seq_aux import (
 from .dpo_upgrade import UpgradeSamples, dpo_pair_loss
 from .move_guard import (MoveGuard, DEFAULT_MOVE_CAP,
                          DEFAULT_MOVE_REPEAT_LIMIT, aggregate_move_guard)
+from .archetype_bias import (ArchetypeBias, aggregate_archetype_bias,
+                             engine_card_id_lookup, DEFAULT_TABLE as ARCH_TABLE,
+                             DEFAULT_MODEL as ARCH_MODEL)
 from .reward_shaping import RewardShaper
 from .tier_target import TierTargetTracker, aggregate_tier_target
 
@@ -336,6 +339,11 @@ class CollectConfig:
     human_board_sample: str = "auto"
     #: True=同时写入按 turn 派生的酒馆等级（人类数据没有 tier 字段）。
     human_board_set_tier: bool = True
+    #: 人类战团保真度：``board``（默认，board-only，逐位等价旧行为）/
+    #: ``hand``（board+手牌）/ ``full``（board+hand+可推断 counters）。hand/full 需要
+    #: 准完整库 ``data/real_library/library_real_quasi_full.jsonl``；见
+    #: ``docs/FIDELITY_INJECTION.md``。
+    human_board_fidelity: str = "board"
     #: 冻结对手模型（分裂模型/自对弈的对手）：空=引擎 bot；给 checkpoint 则 bot 座位由它驱动
     frozen_opponent: str = ""
     #: 由冻结对手模型驱动的 bot 座位数（0=全 bot，7=全部 7 席；1–2 性价比最高）
@@ -369,6 +377,16 @@ class CollectConfig:
     tier_bonus: float = 0.15
     #: 目标曲线 ``turn:tier``（逗号分隔），默认 ``7:4,9:5,12:6``。
     tier_target_table: str = "7:4,9:5,12:6"
+    #: ── 流派（archetype）软偏置（默认关闭；见 docs/ARCHETYPE_BIAS.md）──
+    #: 系数：**0 = 关闭**（不构造对象、不碰 logits、不新增 meta 键，旧路径逐位等价）。
+    #: 建议 0.5–2.0：对「当前流派在当前 turn 的偏好动作」加 ``coef * 相对增益`` 的 logit，
+    #: **只加不减、不屏蔽任何合法动作**（PPO 仍可偏离）。
+    archetype_bias_coef: float = 0.0
+    #: 检测置信度门槛：只有 ``max_prob >= 该值`` 才偏置（低置信 → 不偏置，默认 0.6）。
+    archetype_min_prob: float = 0.6
+    #: 偏好表 / 分类器模型路径（空 = 默认 ``data/archetype/*``）。
+    archetype_table: str = ""
+    archetype_model: str = ""
 
 
 #: ``compile_train`` 取值 -> ``torch.compile`` 模式（0=关闭，不在表内）。
@@ -2064,6 +2082,19 @@ class PPOSelfPlayPolicy(Policy):
                                      self.config, "move_repeat_limit",
                                      DEFAULT_MOVE_REPEAT_LIMIT)))
                        if bool(getattr(self.config, "move_guard", False)) else None)
+        # 流派软偏置（默认 coef=0 -> 不构造对象、零开销；见 docs/ARCHETYPE_BIAS.md）
+        self._abias = None
+        _ab_coef = float(getattr(self.config, "archetype_bias_coef", 0.0) or 0.0)
+        if _ab_coef > 0.0:
+            self._abias = ArchetypeBias(
+                table_path=(str(getattr(self.config, "archetype_table", "") or "")
+                            or ARCH_TABLE),
+                model_path=(str(getattr(self.config, "archetype_model", "") or "")
+                            or ARCH_MODEL),
+                coef=_ab_coef,
+                min_prob=float(getattr(self.config, "archetype_min_prob", 0.6) or 0.6),
+                # 卡牌下标 → 卡 id（top_cards 分项用；引擎缺失时退化为不带卡牌分项）
+                card_index_of=engine_card_id_lookup())
         if move_model:
             self.model.to(self.device)
         self.model.eval()
@@ -2077,10 +2108,16 @@ class PPOSelfPlayPolicy(Policy):
         # 只清「本回合已选动作」历史（key 本身含 game_id，状态天然按局隔离）。
         if self._guard is not None:
             self._guard.clear_state()
+        if self._abias is not None:
+            self._abias.clear_state()
 
     def move_guard_meta(self) -> Dict[str, Any]:
         """守卫统计（默认关闭 -> ``{}``，不新增 meta 键）。"""
         return {} if self._guard is None else self._guard.to_meta()
+
+    def archetype_bias_meta(self) -> Dict[str, Any]:
+        """流派偏置统计（默认关闭 -> ``{}``，不新增 meta 键）。"""
+        return {} if self._abias is None else self._abias.to_meta()
 
     def reseed(self, seed: int) -> None:
         """每局固定 RNG：并行/串行都按 seed+game_id 重建，保证可复现。"""
@@ -2184,6 +2221,9 @@ class PPOSelfPlayPolicy(Policy):
             # Move 才计入本回合换位历史（供下一决策计算逆换位/重复/cap）。
             self._guard.note_action(action, game_id=self.game_id,
                                     seat=seat, turn=turn)
+        if self._abias is not None:
+            # 流派特征用的己方动作历史（只统计人类口径动作；机械动作不计）
+            self._abias.note_action(action, game_id=self.game_id, seat=seat)
         self.records.append({
             "features": (f.astype(np.float32, copy=True)
                          if self.norm_mean is None else np.asarray(
@@ -2218,16 +2258,28 @@ class PPOSelfPlayPolicy(Policy):
             mask, guard_forced = self._guard.guarded_mask(
                 mask, game_id=self.game_id, seat=seat,
                 turn=int(getattr(game, "turn", -1)))
+        # 流派软偏置：先用可见观测 + 己方动作历史做检测，拿到 245 维非负 bias。
+        abias = (self._abias.bias(f, c, mask, game_id=self.game_id, seat=seat)
+                 if self._abias is not None else None)
         if self._can_fast_act():
             # worker 侧采样：省掉 prior 回传 + 调用方 numpy softmax/采样
             seed = int(self._rng.integers(0, 2 ** 63 - 1))
-            a, lp, value = self.eval_fn.act(f, c, mask,
-                                            float(self.config.temperature), seed)
+            if abias is None:
+                # 关闭时**不传** bias 关键字：兼容旧 eval_fn 签名（逐位等价旧路径）
+                a, lp, value = self.eval_fn.act(f, c, mask,
+                                                float(self.config.temperature), seed)
+            else:
+                a, lp, value = self.eval_fn.act(f, c, mask,
+                                                float(self.config.temperature), seed,
+                                                bias=abias)
             return self._finish(game, seat, f, c, mask, action=int(a), logprob=float(lp),
                                 value=float(value), target_pi=None, out_pi=None,
                                 guard_forced=guard_forced)
 
         logits, value = self._net_predict(f, c, mask, seat)
+        if abias is not None:
+            # 与 worker 侧同口径：logits + bias 后再 masked softmax / 温度
+            logits = np.asarray(logits, dtype=np.float32) + abias
         p_net = masked_probs_np(logits, mask, float(self.config.temperature))
         target_pi = self._run_search(game, seat, mask)
         behavior = str(self.config.behavior).strip().lower()
@@ -2282,14 +2334,29 @@ class PPOSelfPlayPolicy(Policy):
                 mask, guard_forced = self._guard.guarded_mask(
                     mask, game_id=self.game_id, seat=s,
                     turn=int(getattr(g, "turn", -1)))
-            prepared.append((g, s, gid, f, c, mask, guard_forced))
+            abias = (self._abias.bias(f, c, mask, game_id=self.game_id, seat=s)
+                     if self._abias is not None else None)
+            prepared.append((g, s, gid, f, c, mask, guard_forced, abias))
         F = np.stack([p[3] for p in prepared]).astype(np.float32, copy=False)
         C = np.stack([p[4] for p in prepared]).astype(np.int64, copy=False)
         M = np.stack([p[5] for p in prepared]).astype(bool, copy=False)
+        B = None
+        if any(p[7] is not None for p in prepared):
+            # 只有一部分行需要偏置时也整批传（未命中的行是全 0，等价于不加）
+            B = np.zeros((len(prepared), N_ACTIONS), dtype=np.float32)
+            for i, p in enumerate(prepared):
+                if p[7] is not None:
+                    B[i] = p[7]
         seed = int(self._rng.integers(0, 2 ** 63 - 1))
-        acts, lps, vals = self.eval_fn.act_batch(F, C, M,
-                                                 float(self.config.temperature), seed)
-        for i, (g, s, gid, f, c, mask, gf) in enumerate(prepared):
+        if B is None:
+            # 关闭时**不传** bias 关键字：兼容旧 eval_fn 签名（逐位等价旧路径）
+            acts, lps, vals = self.eval_fn.act_batch(F, C, M,
+                                                     float(self.config.temperature), seed)
+        else:
+            acts, lps, vals = self.eval_fn.act_batch(F, C, M,
+                                                     float(self.config.temperature), seed,
+                                                     bias=B)
+        for i, (g, s, gid, f, c, mask, gf, _ab) in enumerate(prepared):
             if gid is not None:
                 self.game_id = int(gid)
             out.append(self._finish(g, s, f, c, mask, action=int(acts[i]),
@@ -2643,6 +2710,8 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
     collect_meta.update(aggregate_tier_target(games_meta))
     # 换位去抖守卫统计（默认关闭 -> 空 dict，不新增键）。
     collect_meta.update(policy.move_guard_meta())
+    # 流派软偏置统计（默认关闭 -> 空 dict，不新增键）。
+    collect_meta.update(policy.archetype_bias_meta())
     if not records:
         raise RuntimeError(
             f"采集失败：{truncated}/{len(games_meta)} 局在 max_steps={int(cfg.max_steps)} "
@@ -2693,4 +2762,5 @@ __all__ = [
     "train_ppo",
     "PPOSelfPlayPolicy",
     "collect_ppo_batch",
+    "aggregate_archetype_bias",
 ]

@@ -477,3 +477,92 @@ def test_inject_turn_applied_out_supports_mirror_priority(tmp_path: Path):
     assert out == [target], out
     assert meta["mirror_applied"] == 1
     assert meta["mirror_missing"] == 1
+
+
+# ────────────────────────── 7. payload 透传 gold / hero_hp / main_placement ──────────────────────────
+
+
+def _detail_row(turn: int, *, gold=None, hero_hp=None, main_placement=None,
+                source: str = "firestone_pms+xml") -> dict:
+    """构造一条带 ``board_detail`` 的准完整行（Firestone 库字段形态）。"""
+    out = {
+        "turn": int(turn), "strength": 12, "board": [[CARD_A, 5, 7]],
+        "board_detail": [{"card": CARD_A, "atk": 5, "hp": 7, "golden": False,
+                          "kw": 0, "bonus_kw": 0, "shield_max": 1, "position": 1}],
+        "hand": [], "hand_available": True, "tier": 4,
+        "hero": 371, "source": source, "game_id": "g-payload",
+        "schema": "hsbg.human_state_quasi_full", "schema_version": 1,
+    }
+    if gold is not None:
+        out["gold"] = gold          # 故意不做类型转换：由 _row_to_payload 兜底
+    if hero_hp is not None:
+        out["hero_hp"] = hero_hp
+    if main_placement is not None:
+        out["main_placement"] = main_placement
+    return out
+
+
+def test_payload_carries_gold_hero_hp_main_placement(tmp_path: Path):
+    """行里有 ``gold`` / ``hero_hp`` / ``main_placement`` 时，payload 原样带上。"""
+    pool = synth_pool(tmp_path, [_detail_row(5, gold=9, hero_hp=23, main_placement=1)])
+    pay = pool.sample_payload(5, random.Random(0), "p50")
+    assert pay is not None and pay["has_detail"] is True
+    assert pay["gold"] == 9
+    assert pay["hero_hp"] == 23
+    assert pay["main_placement"] == 1
+    # board / hand / tier 的原有语义不变
+    assert pay["board_flat"] == [[CARD_A, 5, 7]]
+    assert pay["tier"] == 4 and pay["hand"] == []
+
+
+def test_payload_defaults_to_none_when_fields_absent(tmp_path: Path):
+    """行里没有这些字段 -> payload 为 ``None``（与旧的 ``"gold": None`` 逐位一致）。"""
+    row = _detail_row(6)
+    for key in ("gold", "hero_hp", "main_placement"):
+        row.pop(key, None)
+    pool = synth_pool(tmp_path, [row])
+    pay = pool.sample_payload(6, random.Random(0), "p50")
+    assert pay["gold"] is None
+    assert pay["hero_hp"] is None
+    assert pay["main_placement"] is None
+
+
+def test_payload_bad_values_degrade_to_none(tmp_path: Path):
+    """非法/缺失值不能让整行失效：退化为 ``None``，其余字段照常。"""
+    row = _detail_row(7, gold="not-an-int", hero_hp=None, main_placement=3.9)
+    row.pop("hero_hp", None)
+    pool = synth_pool(tmp_path, [row])
+    pay = pool.sample_payload(7, random.Random(0), "p50")
+    assert pay["gold"] is None
+    assert pay["hero_hp"] is None
+    assert pay["main_placement"] == 3
+    assert pool.kept == 1
+
+
+def test_real_quasi_library_payload_has_no_gold():
+    """真实 10k+ 准完整库没有 gold/hero_hp/main_placement -> payload 全 None。
+
+    这是「默认不改变现有库逐位行为」的回归锚点：A 臂（quasi_full）的 payload 与改动前
+    完全一致（唯一的差别是新增了两个恒为 None 的键，注入路径不会读它们）。
+    """
+    quasi = ROOT / "data" / "real_library" / "library_real_quasi_full.jsonl"
+    pool = HB.load_pool(str(quasi))
+    assert pool is not None and pool.payload_kept > 1000
+    pay = pool.sample_payload(10, random.Random(7), "p50")
+    assert pay is not None and pay["has_detail"] is True
+    assert pay["gold"] is None
+    assert pay["hero_hp"] is None
+    assert pay["main_placement"] is None
+
+
+def test_real_firestone_library_payload_keeps_gold():
+    """真实 Firestone 近期库：self 帧的 payload 带上 gold（覆盖率 ~57%）。"""
+    path = ROOT / "data" / "real_library" / "library_firestone_recent.jsonl"
+    pool = HB.load_pool(str(path))
+    assert pool is not None and pool.payload_kept > 10_000
+    with_gold = 0
+    for turn in pool.turns():
+        for hb in pool.index[turn][:5]:
+            if isinstance(hb.payload, dict) and hb.payload.get("gold") is not None:
+                with_gold += 1
+    assert with_gold > 0, "Firestone 库应有一部分行带 gold"

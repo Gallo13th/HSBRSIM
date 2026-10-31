@@ -283,3 +283,18 @@ board 与采样一致、`set_tier` 生效；镜像优先（`skipped_by_mirror`�
 5. 人类帧是「回合末」、注入在「回合初」，对手会略偏强（有意为之）；
 6. 没有任何「合法性重放」校验：我们**不**重放人类动作，也不声称该战团在引擎里可达
    （卡表同版本但组合/加成历史不同），只保证引擎状态自洽（池守恒、EID 唯一、引用不悬空）。
+
+## 11. 保真度扩展（2026-10-31）
+
+上面 §2 的「board-only 近似」仍是**默认行为**（`--human-board-fidelity board`，逐位不变）。
+若需要把**手牌 / 可推断 counters（关键词位、金身、圣盾层数、tavern tier）**一起注入：
+
+```bash
+PYTHONPATH=rust/python:. python scripts/build_fidelity_library.py --stats   # 一次性
+python scripts/train_entity_sync.py ... \
+  --human-boards data/real_library/library_real_quasi_full.jsonl \
+  --human-board-fidelity full     # board | hand | full
+```
+
+数据可得性矩阵、三档配对数字、开销、训练接线与局限见 **`docs/FIDELITY_INJECTION.md`**；
+实现为 `hsbg/az/train/human_obs_full.py`（Python 侧封装，Rust 核心零改动）。

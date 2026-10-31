@@ -32,6 +32,12 @@ INJECTION_KEYS = (
     "human_board_rejected", "human_board_missing", "human_board_errors",
     "human_board_skipped_by_mirror", "human_board_p", "human_board_sample",
     "human_board_seats", "human_board_source", "human_board_last_rejected",
+    # 保真度（board/hand/full）与逐字段可得性：验证「是否真的注入了 hand/counters」。
+    "human_board_fidelity", "human_board_hand_applied",
+    "human_board_counters_applied", "human_board_full_applied",
+    "human_board_payload_missing", "human_board_hand_unavailable",
+    "human_board_counters_unavailable", "human_board_unavailable_fields",
+    "human_board_payload_rows",
 )
 #: 跨 worker 聚合口径：事件计数求和、开关取 any、概率取均值、设置取首个值。
 INJECTION_SUM_KEYS = frozenset({
@@ -40,12 +46,18 @@ INJECTION_SUM_KEYS = frozenset({
     "human_board_attempt", "human_board_applied", "human_board_rejected",
     "human_board_missing", "human_board_errors",
     "human_board_skipped_by_mirror",
+    "human_board_hand_applied", "human_board_counters_applied",
+    "human_board_full_applied", "human_board_payload_missing",
+    "human_board_hand_unavailable", "human_board_counters_unavailable",
 })
+#: 逐字段可得性计数：跨 worker 逐键求和（dict 合并）。
+INJECTION_DICT_KEYS = frozenset({"human_board_unavailable_fields"})
 INJECTION_ANY_KEYS = frozenset({"mirror_on", "human_board_on"})
 INJECTION_MEAN_KEYS = frozenset({"mirror_p", "human_board_p"})
 INJECTION_FIRST_KEYS = frozenset({
     "mirror_sample", "mirror_p_ramp", "mirror_seats", "mirror_frames",
     "human_board_sample", "human_board_seats", "human_board_source",
+    "human_board_fidelity", "human_board_payload_rows",
 })
 
 
@@ -92,6 +104,17 @@ def aggregate_injection(sources: Any) -> Dict[str, Any]:
             nums = [n for n in (_numeric(v) for v in vals) if n is not None]
             if nums:
                 out[key] = float(sum(nums) / len(nums))
+        elif key in INJECTION_DICT_KEYS:
+            merged: Dict[str, Any] = {}
+            for v in vals:
+                if not isinstance(v, dict):
+                    continue
+                for kk, vv in v.items():
+                    n = _numeric(vv)
+                    if n is not None:
+                        merged[str(kk)] = int(merged.get(str(kk), 0) + int(n))
+            if merged:
+                out[key] = dict(sorted(merged.items()))
         elif key in INJECTION_FIRST_KEYS:
             out[key] = vals[0]
         else:  # 未知的注入键：保留首值，宁可多记也不丢

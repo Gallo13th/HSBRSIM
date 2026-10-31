@@ -49,6 +49,10 @@ class LeafRequest:
     seed: Optional[int] = None
     action: Optional[int] = None
     logprob: Optional[float] = None
+    #: 逐行 logit 偏置 ``[k, 245] f32``（流派软偏置；None = 不加，旧路径零开销）。
+    #: 在 worker 里加在 **logits 上**（先于 masked softmax 的 temperature 除法），
+    #: 与主进程 ``_net_predict`` 的 ``logits + bias`` 口径一致。
+    bias: Optional[np.ndarray] = None
 
 
 class BatchLeafServer:
@@ -102,7 +106,8 @@ class BatchLeafServer:
     def submit(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
                timeout: float = 0.5, copy: bool = False, *,
                want_action: bool = False, temperature: float = 1.0,
-               seed: Optional[int] = None, batch_mode: bool = False) -> LeafRequest:
+               seed: Optional[int] = None, batch_mode: bool = False,
+               bias: Optional[np.ndarray] = None) -> LeafRequest:
         with self._state_lock:
             if self._state != "open":
                 raise RuntimeError(f"BatchLeafServer is {self._state}")
@@ -117,6 +122,8 @@ class BatchLeafServer:
                                   self._pack(cards, np.int64),
                                   self._pack(mask, bool))
             req.want_action = bool(want_action)
+            req.bias = (None if bias is None
+                        else self._pack(bias, np.float32))
             req.temperature = float(temperature)
             req.seed = seed
             req.batch_mode = bool(batch_mode)
@@ -151,10 +158,11 @@ class BatchLeafServer:
 
     def act(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
             temperature: float = 1.0, seed: Optional[int] = None,
-            timeout: float = 30.0) -> Tuple[int, float, float]:
+            timeout: float = 30.0, bias: Optional[np.ndarray] = None
+            ) -> Tuple[int, float, float]:
         """worker 侧采样：返回 ``(action, logprob, value)``，不构造 245 维 prior。"""
         req = self.submit(features, cards, mask, want_action=True,
-                          temperature=temperature, seed=seed)
+                          temperature=temperature, seed=seed, bias=bias)
         if not req.event.wait(timeout=timeout):
             raise TimeoutError("batch leaf timeout")
         if req.error is not None:
@@ -164,14 +172,15 @@ class BatchLeafServer:
 
     def act_batch(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
                   temperature: float = 1.0, seed: Optional[int] = None,
-                  timeout: float = 60.0):
+                  timeout: float = 60.0, bias: Optional[np.ndarray] = None):
         """一次请求携带 2D 批：返回 (actions, logprobs, values)，批内每行独立 seed=seed+j。
 
         lock-step actor 的底层原语：N 局拼一个批、一次前向、一次 GIL 往返。
         """
         req = self.submit(np.atleast_2d(features), np.atleast_2d(cards),
                           np.atleast_2d(mask), want_action=True,
-                          temperature=temperature, seed=seed, batch_mode=True)
+                          temperature=temperature, seed=seed, batch_mode=True,
+                          bias=(None if bias is None else np.atleast_2d(bias)))
         if not req.event.wait(timeout=timeout):
             raise TimeoutError("batch leaf timeout")
         if req.error is not None:
@@ -272,15 +281,32 @@ class BatchLeafServer:
                 c = np.concatenate([np.atleast_2d(r.cards) for r in batch], axis=0)
                 m = np.concatenate([np.atleast_2d(r.mask) for r in batch], axis=0)
                 owner = []
+                row_base = []
                 _off = 0
+                _row = 0
                 for ri, r in enumerate(batch):
                     k = int(np.atleast_2d(r.features).shape[0])
                     owner.extend([ri] * k)
+                    row_base.append(_row)       # 该请求在整批 f/logits 里的行起点
+                    _row += k
                     if r.batch_mode:
                         r._row_off = _off       # 在「所有 batch_mode 行」里的偏移
                     _off += k if r.batch_mode else 0
                 t0 = time.monotonic()
                 plog, rlog = self.evaluator.logits(f, c, m)
+                if any(getattr(r, "bias", None) is not None for r in batch):
+                    # 流派软偏置：逐行加到 logits（只在 worker 侧做，主进程零拷贝）
+                    plog = np.array(plog, copy=True)
+                    for ri, r in enumerate(batch):
+                        bvec = getattr(r, "bias", None)
+                        if bvec is None:
+                            continue
+                        k = int(np.atleast_2d(r.features).shape[0])
+                        bb = np.asarray(bvec, dtype=plog.dtype).reshape(k, -1)
+                        if bb.shape[1] != plog.shape[1]:
+                            raise ValueError(
+                                f"bias 维度 {bb.shape} 与 logits {plog.shape} 不一致")
+                        plog[row_base[ri]: row_base[ri] + k] += bb
                 fwd = time.monotonic() - t0
                 off = 0
                 batched = [r for r in batch if r.batch_mode]
@@ -397,13 +423,15 @@ class BatchPPOEvaluator:
         return self.server.call(features, cards, mask, seat)
 
     def act(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
-            temperature: float = 1.0, seed: Optional[int] = None
-            ) -> Tuple[int, float, float]:
-        return self.server.act(features, cards, mask, temperature, seed)
+            temperature: float = 1.0, seed: Optional[int] = None,
+            bias: Optional[np.ndarray] = None) -> Tuple[int, float, float]:
+        return self.server.act(features, cards, mask, temperature, seed, bias=bias)
 
     def act_batch(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
-                  temperature: float = 1.0, seed: Optional[int] = None):
-        return self.server.act_batch(features, cards, mask, temperature, seed)
+                  temperature: float = 1.0, seed: Optional[int] = None,
+                  bias: Optional[np.ndarray] = None):
+        return self.server.act_batch(features, cards, mask, temperature, seed,
+                                     bias=bias)
 
 
 __all__ = ["LeafRequest", "BatchLeafServer", "BatchPPOEvaluator"]

@@ -1,0 +1,7 @@
+# 原始回放/PMS 体积大，不入库；需要时用 scripts/fetch_firestone_replays.py 重抓。
+xmlz/
+pms/
+bgs-perfect-games.json
+index.json
+*.tar.gz
+*.part

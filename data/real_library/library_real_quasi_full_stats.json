@@ -1,0 +1,155 @@
+{
+  "schema": "hsbg.human_state_quasi_full.stats",
+  "schema_version": 1,
+  "created": "2026-10-31T03:07:20",
+  "repo": "/home/data/users/gaoletian/projects/HSBRSIM",
+  "obs_dir": "data/real_library/obs/observations",
+  "files": 376,
+  "rows_input": 13120,
+  "rows_parsed": 13120,
+  "rows_kept": 1961,
+  "dedup": true,
+  "drop": {
+    "board_too_large": 12,
+    "drop": 8848,
+    "duplicate": 2245,
+    "incomplete_stats": 54
+  },
+  "stage_input": {
+    "first_attack_after_start_effects": 8622,
+    "recruitment_end_at_phase_switch": 4498
+  },
+  "perspective_input": {
+    "observed_opponent": 4312,
+    "self": 8808
+  },
+  "build_numbers": {
+    "250339": 4744,
+    "251952": 1246,
+    "253216": 3212,
+    "254477": 3918
+  },
+  "eot_stage": "recruitment_end_at_phase_switch",
+  "turns": {
+    "1": 56,
+    "2": 96,
+    "3": 139,
+    "4": 177,
+    "5": 182,
+    "6": 182,
+    "7": 181,
+    "8": 181,
+    "9": 182,
+    "10": 172,
+    "11": 152,
+    "12": 115,
+    "13": 79,
+    "14": 41,
+    "15": 18,
+    "16": 7,
+    "17": 1
+  },
+  "availability": {
+    "fields": [
+      "board",
+      "golden",
+      "keywords",
+      "shield_max",
+      "tavern_tier",
+      "hand"
+    ],
+    "unavailable": [
+      "gold",
+      "counter",
+      "gems",
+      "attachments",
+      "deathrattle_scripts",
+      "player_counters",
+      "hero_power_uses",
+      "shop",
+      "pool_delta"
+    ],
+    "counts": {
+      "attachments=unavailable": 1961,
+      "board=observed": 1961,
+      "counter=unavailable": 1961,
+      "deathrattle_scripts=unavailable": 1961,
+      "gems=unavailable": 1961,
+      "gold=unavailable": 1961,
+      "golden=observed": 1961,
+      "hand=observed": 1961,
+      "hero=observed_not_injected": 1961,
+      "hero_power_uses=unavailable": 1961,
+      "keywords=observed": 1961,
+      "player_counters=unavailable": 1961,
+      "pool_delta=unavailable": 1961,
+      "shield_max=observed": 1961,
+      "shop=unavailable": 1961,
+      "tavern_tier=observed": 1961
+    },
+    "frac_hand_available": 1.0,
+    "frac_tier_observed": 1.0
+  },
+  "hidden_state_per_frame": {
+    "kw_bits_mean": 2.642,
+    "kw_bits_p50": 2.0,
+    "kw_bits_p90": 6.0,
+    "kw_value_mean": 20.213,
+    "kw_value_p50": 6.0,
+    "kw_value_p90": 64.0,
+    "golden_mean": 0.876,
+    "frac_frames_golden": 0.4661,
+    "hand_mean": 1.443,
+    "hand_p50": 1.0,
+    "hand_p90": 4.0,
+    "frac_frames_hand": 0.5915,
+    "hand_n_hist": {
+      "0": 801,
+      "1": 486,
+      "2": 271,
+      "3": 164,
+      "4": 99,
+      "5": 43,
+      "6": 39,
+      "7": 25,
+      "8": 15,
+      "9": 10,
+      "10": 8
+    },
+    "kw_hist": {
+      "DIVINE_SHIELD": 1405,
+      "MAGNETIC": 75,
+      "POISONOUS": 6,
+      "REBORN": 1004,
+      "STEALTH": 171,
+      "TAUNT": 1588,
+      "VENOMOUS": 229,
+      "WINDFURY": 702
+    },
+    "tier_hist": {
+      "1": 85,
+      "2": 273,
+      "3": 324,
+      "4": 293,
+      "5": 415,
+      "6": 571
+    }
+  },
+  "tag_to_kw": {
+    "189": "WINDFURY",
+    "190": "TAUNT",
+    "191": "STEALTH",
+    "194": "DIVINE_SHIELD",
+    "363": "POISONOUS",
+    "849": "MAGNETIC",
+    "1085": "REBORN",
+    "2853": "VENOMOUS",
+    "3614": "TAUNT",
+    "3617": "DIVINE_SHIELD",
+    "3619": "STEALTH",
+    "3620": "POISONOUS",
+    "3621": "REBORN",
+    "3622": "WINDFURY"
+  },
+  "seconds": 9.5
+}

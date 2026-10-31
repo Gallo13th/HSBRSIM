@@ -36,6 +36,7 @@ from .human_board_pool import inject_turn as inject_human_boards
 from .mirror_snapshots import (MirrorStats, inject_turn, mirror_seats,
                                mirror_seats_random)
 from .move_guard import aggregate_move_guard
+from .archetype_bias import aggregate_archetype_bias
 from .reward_shaping import RewardShaper, aggregate_shaping
 from .tier_target import TierTargetTracker, aggregate_tier_target
 
@@ -158,6 +159,7 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
     meta.update(shaper.stats())
     meta.update(tracker.stats())
     meta.update(policy.move_guard_meta())
+    meta.update(policy.archetype_bias_meta())
     return records, meta
 
 
@@ -241,6 +243,8 @@ def collect_ppo_records_parallel(
     meta_out.update(aggregate_tier_target(games_meta))
     # 换位去抖守卫统计（默认关闭 -> 空 dict，不新增键）
     meta_out.update(aggregate_move_guard(games_meta))
+    # 流派软偏置统计（默认关闭 -> 空 dict，不新增键）
+    meta_out.update(aggregate_archetype_bias(games_meta))
     return records, meta_out
 
 
@@ -290,6 +294,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                          human_board_seats: int = 2,
                          human_board_sample: str = "auto",
                          human_board_set_tier: bool = True,
+                         human_board_fidelity: str = "board",
                          gamma: float = 1.0,
                          ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """lock-step 采集：N 局同步推进，每轮把所有待决策局拼成一个 batch 前向一次。
@@ -310,6 +315,12 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     镜像快照优先（镜像注过 / 被它置 ``ended_turn`` 的座位记 ``skipped_by_mirror``）。
     被注入了人类战团的座位**本回合照常行动**（bot 在人类战团之上继续打），这与镜像
     「整场面 = 回合末 → ended_turn」的语义不同。
+
+    **保真度**（``human_board_fidelity``，默认 ``board``）：``board`` 走
+    ``Game.inject_board``（board-only，逐位等价旧行为）；``hand`` / ``full`` 走
+    ``Game.apply_turn_snapshots``（Python 侧封装，Rust 零改动）把手牌 / 可推断
+    counters 一起注入，注入后仍把 ``ended_turn`` 复位，让座位照常行动（同上语义）。
+    见 ``docs/FIDELITY_INJECTION.md``。
 
     课程模式（``mirror_seat_random=True``）：每回合用 :func:`mirror_seats_random` 从全部
     非 learner 座位重抽 ``mirror_seats_count`` 个（learner 一定不在其中）；默认 False 时
@@ -426,6 +437,21 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             "hsbg_engine.Game 缺少 inject_board：当前 import 的引擎是旧构建"
             f"（{getattr(__import__('hsbg_engine'), '__file__', '?')}）。"
             "请用 `PYTHONPATH=rust/python:.` 或 `pip install -e rust/python` 后重跑。")
+    human_fidelity = str(human_board_fidelity or "board").strip().lower()
+    if human_fidelity not in ("board", "hand", "full"):
+        raise ValueError(f"human_board_fidelity 非法: {human_board_fidelity!r}"
+                         "（只支持 board/hand/full）")
+    if human_on and human_fidelity != "board":
+        _pk = int(getattr(human_board_pool, "payload_kept", 0) or 0)
+        if _pk <= 0:
+            raise RuntimeError(
+                f"--human-board-fidelity={human_fidelity} 需要准完整库"
+                '（"data/real_library/library_real_quasi_full.jsonl"，'
+                "由 scripts/build_fidelity_library.py 生成）；当前人类战团库没有任何"
+                " board_detail payload，注入会 100% 退化成 board-only。")
+        need = "apply_turn_snapshots"
+        if not hasattr(_probe, need):
+            raise RuntimeError(f"hsbg_engine.Game 缺少 {need}：旧构建无法做 hand/full 注入")
 
     def _maybe_mirror(st: Dict[str, Any]) -> None:
         """新回合开始、任何座位行动前注入该 turn 的快照（每 turn 只尝试一次）。"""
@@ -463,7 +489,8 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             g, human_board_pool, t, seats_count=human_targets, p=human_p,
             rng=st["human_rng"], learner_seat=seat, stats=st["human_stats"],
             mirror_seats=st.get("mirror_applied_seats") or (),
-            num_players=N_PLAYERS, set_tier=human_set_tier)
+            num_players=N_PLAYERS, set_tier=human_set_tier,
+            fidelity=human_fidelity)
 
     def _maybe_inject(st: Dict[str, Any]) -> None:
         """新回合注入总入口（顺序固定：镜像快照 → 人类战团）。"""
@@ -683,6 +710,9 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             "human_board_boards": (int(getattr(human_board_pool, "kept", 0))
                                    if human_on else 0),
             "human_board_source": HUMAN_BOARD_SOURCE,
+            "human_board_fidelity": str(human_fidelity),
+            "human_board_payload_rows": int(
+                getattr(human_board_pool, "payload_kept", 0) or 0) if human_on else 0,
             "records": int(len(records)), "illegal_actions": int(illegal),
             "truncated_games": int(truncated),
             "games_meta": metas, "forced_end_turns": int(policy.forced_actions)}
@@ -703,4 +733,6 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     meta.update(aggregate_tier_target(metas))
     # 换位去抖守卫统计（默认关闭 -> 空 dict，不新增键；policy 服务全部 N 局）。
     meta.update(policy.move_guard_meta())
+    # 流派软偏置统计（默认关闭 -> 空 dict，不新增键）。
+    meta.update(policy.archetype_bias_meta())
     return records, meta

@@ -191,6 +191,17 @@ def main() -> int:
                     help="每回合换位次数上限：>=cap 后屏蔽全部 Move（默认 3；0=本回合禁止换位）")
     ap.add_argument("--move-repeat-limit", type=int, default=2,
                     help="同一 (from,to) 本回合出现 >=N 次后屏蔽（默认 2；1=不允许重复）")
+    # ── 流派（archetype）软偏置（默认关闭；见 docs/ARCHETYPE_BIAS.md）──
+    ap.add_argument("--archetype-bias-coef", type=float, default=0.0,
+                    help="流派软偏置系数：0=关闭（逐位等价旧路径）。对当前流派在当前 "
+                         "turn 的偏好动作加 coef*相对增益 的 logit（只加不减、不屏蔽），"
+                         "建议 0.5–2.0")
+    ap.add_argument("--archetype-min-prob", type=float, default=0.6,
+                    help="检测置信度门槛：max_prob >= 该值才偏置（低置信不偏置，默认 0.6）")
+    ap.add_argument("--archetype-table", default="",
+                    help="偏好表路径（空= data/archetype/archetype_table.json）")
+    ap.add_argument("--archetype-model", default="",
+                    help="分类器模型路径（空= data/archetype/archetype_model.npz）")
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--sims", type=int, default=4)
     ap.add_argument("--determinizations", type=int, default=1)
@@ -260,6 +271,14 @@ def main() -> int:
                          "/ t>=13 p90，默认）")
     ap.add_argument("--human-board-set-tier", type=int, default=1,
                     help="1=同时写入按 turn 派生的酒馆等级（人类数据没有 tier 字段；默认 1）")
+    ap.add_argument("--human-board-fidelity", default="board",
+                    choices=["board", "hand", "full"],
+                    help="人类战团注入保真度：board=board-only（默认，逐位等价现状）；"
+                         "hand=board+手牌；full=board+hand+可推断 counters"
+                         "（关键词位/金身/圣盾层数/tavern tier）。hand/full 需要 "
+                         "data/real_library/library_real_quasi_full.jsonl"
+                         "（scripts/build_fidelity_library.py 生成）；见 "
+                         "docs/FIDELITY_INJECTION.md")
     # ---- 势函数奖励塑形（默认关闭，见 docs/REWARD_SHAPING.md）----
     ap.add_argument("--shaping-coef", type=float, default=0.0,
                     help="势函数奖励塑形系数 λ；0=关闭（默认，records/GAE 与旧路径逐位等价）")
@@ -450,6 +469,23 @@ def main() -> int:
         if not os.path.isfile(str(args.human_boards)):
             print(f"[error] --human-boards 文件不存在: {args.human_boards}", file=sys.stderr)
             return 2
+        _fid = str(getattr(args, "human_board_fidelity", "board") or "board")
+        if _fid != "board":
+            _need_rows = 0
+            try:
+                _need_rows = sum(1 for _ in open(args.human_boards, encoding="utf-8")
+                                 if '"board_detail"' in _)
+            except BaseException:  # noqa: BLE001
+                _need_rows = 0
+            if _need_rows <= 0:
+                print(f"[error] --human-board-fidelity={_fid} 需要准完整库"
+                      "（含 board_detail 的行）；当前文件没有："
+                      f"{args.human_boards}\n"
+                      "  先跑 PYTHONPATH=rust/python:. python "
+                      "scripts/build_fidelity_library.py --stats", file=sys.stderr)
+                return 2
+            print(f"[info] 人类战团保真度 = {_fid}（准完整行 {_need_rows}；"
+                  "注入走 apply_turn_snapshots + ended_turn 复位）", flush=True)
         if not int(args.lockstep):
             print("[warn] 人类战团注入只在 --lockstep 1 路径生效", flush=True)
         elif (float(args.mirror_p) > 0.0 or _mirror_ramp):
@@ -1218,6 +1254,10 @@ def main() -> int:
             lockstep=bool(int(args.lockstep)),
             move_guard=bool(int(args.move_guard)),
             move_cap=int(args.move_cap),
+            archetype_bias_coef=float(args.archetype_bias_coef),
+            archetype_min_prob=float(args.archetype_min_prob),
+            archetype_table=str(args.archetype_table),
+            archetype_model=str(args.archetype_model),
             move_repeat_limit=int(args.move_repeat_limit),
             library_pool=str(args.library_pool), library_p=float(args.library_p),
             trajectory_pool=str(args.trajectory_pool), trajectory_p=float(args.trajectory_p),
@@ -1230,6 +1270,7 @@ def main() -> int:
             human_board_seats=int(args.human_board_seats),
             human_board_sample=str(args.human_board_sample),
             human_board_set_tier=bool(int(args.human_board_set_tier)),
+            human_board_fidelity=str(args.human_board_fidelity),
             frozen_opponent=str(args.frozen_opponent),
             frozen_seats=int(args.frozen_seats),
             rust_collector=bool(int(args.rust_collector)),

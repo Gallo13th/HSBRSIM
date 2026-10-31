@@ -49,6 +49,7 @@ from .runlog import aggregate_injection
 from .reward_shaping import aggregate_shaping
 from .tier_target import aggregate_tier_target
 from .move_guard import aggregate_move_guard
+from .archetype_bias import aggregate_archetype_bias
 from .ppo import (CollectConfig, PPOBatch, PPOSelfPlayPolicy, build_batch_from_arrays,
                   build_batch_from_records, pack_records_arrays)
 
@@ -351,6 +352,7 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     human_board_seats=int(getattr(cfg, "human_board_seats", 2)),
                     human_board_sample=str(getattr(cfg, "human_board_sample", "auto")),
                     human_board_set_tier=bool(getattr(cfg, "human_board_set_tier", True)),
+                    human_board_fidelity=str(getattr(cfg, "human_board_fidelity", "board")),
                     gamma=float(task.get("gamma", 1.0)),
                     opponent_policy=opp_pol)
             else:
@@ -833,6 +835,7 @@ class ProcessActorPool:
         meta.update(aggregate_tier_target(metas))
         # 换位去抖守卫：逐 shard 汇总（默认关闭 -> 空 dict，不新增键）。
         meta.update(aggregate_move_guard(metas))
+        meta.update(aggregate_archetype_bias(metas))
         if not records and not packed_all:
             # 采集侧没有有效记录（全部截断/非法），保持与单进程一致的报错语义
             raise RuntimeError(
