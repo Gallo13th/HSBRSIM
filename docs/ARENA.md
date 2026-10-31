@@ -35,8 +35,14 @@ ARENA_API_KEY=... PYTHONPATH=rust/python:.:scripts $P scripts/arena_client.py \
 | 文件 | 作用 |
 |---|---|
 | `scripts/arena_client.py` | 竞技场官方连接器（`/downloads/client.py`，vendored 未改）。HTTP + 重试 + 幂等 request_id + 心跳 |
-| `scripts/arena_agent.py` | 本地策略 `act(observation, context)`：加载 checkpoint → v2 观测取 v1 前缀 → 卡牌下标重映射 → masked argmax |
+| `scripts/arena_agent.py` | 本地策略 `act(observation, context)`：加载 checkpoint → v2 观测取 v1 前缀 → 卡牌下标重映射 → **换位去抖守卫**（默认开，`ARENA_MOVE_GUARD=0` 可回退）→ masked argmax |
 | `scripts/build_arena_card_map.py` | 生成 `runs/arena/card_map.json`（竞技场卡牌 index → 我们 obs 值） |
+
+> **部署侧换位守卫默认开启**：训练期一直开着的 `MoveGuard` 现在也接在
+> `arena_agent.act` 里（规则/参数/统计与训练完全一致，`ARENA_MOVE_CAP=3`、
+> `ARENA_MOVE_REPEAT_LIMIT=2`）。不开时实测每回合换位 p90 = 39、max 40、
+> 50% 的有换位回合净盘面不变（纯空转）。规则、开关、回合判定启发式与短跑对比见
+> **`docs/ARENA_GUARD.md`**。
 
 ## 2. 跨版本适配（关键，别忽略）
 

@@ -92,6 +92,13 @@ on-policy 样本自然把「连按」的 logprob 压下去。
 - `net_board_unchanged_move_ratio`：**只在换过位的回合里**净盘面不变的比例（空转率）；
 - `tier_p50_t9` / `tier_p50_t12`：t9 / t12 的酒馆等级 p50。
 
+> **部署侧（TavernArena）同样必须开守卫**：`scripts/arena_agent.act` 已接入同一个
+> `MoveGuard`，`ARENA_MOVE_GUARD` 默认 `1`（`ARENA_MOVE_CAP=3`、
+> `ARENA_MOVE_REPEAT_LIMIT=2`）。不开时竞技场路径实测 moves/turn 均值 8.87 /
+> p90 39.2 / max 40、50% 的有换位回合净盘面不变；开了是 0.76 / p90 3 / max 3。
+> 开关、回合判定启发式与验证见 **`docs/ARENA_GUARD.md`**，
+> `scripts/quality_monitor.py --policy arena` 可离线复现部署路径。
+
 > 注意：本次顺带修了 `_play` 的驱动循环——历史实现用 `while needs_action(p)` 连续
 > 推进，引擎在 EndTurn 后可能立刻进入下一回合，会把两个回合的 learner 动作记进
 > 同一 turn 行（实测出现「单回合 73 次换位」的假数据）。现与 official eval

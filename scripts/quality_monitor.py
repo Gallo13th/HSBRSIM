@@ -25,7 +25,7 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from hsbg.az.train.common import engine_available, mask_from_bytes, obs_arrays  # noqa: E402
+from hsbg.az.train.common import engine_available, mask_from_bytes  # noqa: E402
 from hsbg.az.train.model import load_checkpoint  # noqa: E402
 from hsbg.az.train.ppo import PPOEvaluator, PPOSelfPlayPolicy  # noqa: E402
 
@@ -118,6 +118,60 @@ def _play(seed: int, policy, q: dict) -> dict | None:
             "death_strength": death_strength, "turns": turns}
 
 
+class _ArenaPolicy:
+    """把 ``scripts/arena_agent.act`` 包成 quality_monitor 的口径（部署路径离线复现）。
+
+    观测直接喂本地引擎的 v1 字节（features 3227 / cards 124 / mask 245），所以必须
+    ``ARENA_CARD_MAP=off``：本地 cards 已经是 37.0 下标，再走竞技场 36.6→37.0 映射
+    会整体错位。守卫开关由 ``--move-guard/--move-cap/--move-repeat-limit`` 写进同名
+    环境变量 —— 与线上部署**同一条代码路径**（见 docs/ARENA_GUARD.md）。
+
+    每回合动作上限由**驱动侧**模拟竞技场的 ``context.action_limit``（默认 40，与训练
+    评测路径 ``max_actions_per_turn`` 同口径）：达到上限后只允许 EndTurn。这是环境
+    约束、不是 agent 逻辑；不加它，本地引擎不会像服务器那样强制结束回合，无守卫的
+    策略会把 20,000 步预算刷满（truncation），短跑跑不完。
+    """
+
+    name = "arena_agent"
+
+    def __init__(self, args) -> None:  # noqa: ANN001 - argparse.Namespace
+        import scripts.arena_agent as AA
+        self._AA = AA
+        self._match = 0
+        self._max_actions_per_turn = 40        # 竞技场 action_limit / 训练同口径
+        self._turn_actions: dict = {}
+        os.environ["ARENA_MODEL"] = os.path.abspath(args.checkpoint)
+        os.environ["ARENA_DEVICE"] = str(args.device)
+        os.environ["ARENA_CARD_MAP"] = "off"     # 本地观测已是 37.0 下标，不能映射
+        os.environ["ARENA_MOVE_GUARD"] = "1" if int(args.move_guard) else "0"
+        os.environ["ARENA_MOVE_CAP"] = str(int(args.move_cap))
+        os.environ["ARENA_MOVE_REPEAT_LIMIT"] = str(int(args.move_repeat_limit))
+
+    def reset(self) -> None:
+        self._match += 1
+        self._turn_actions = {}
+        self._AA.reset_state()
+
+    def move_guard_meta(self) -> dict:
+        return self._AA.guard_meta()
+
+    def decide(self, game, seat: int = 0):  # noqa: ANN001
+        from types import SimpleNamespace
+        raw = game.observe(int(seat))
+        mask = mask_from_bytes(game.legal_mask(int(seat)))
+        key = (int(self._match), int(seat), int(game.turn))
+        n_used = int(self._turn_actions.get(key, 0)) + 1
+        self._turn_actions[key] = n_used
+        if n_used > self._max_actions_per_turn and bool(mask[0]):
+            return SimpleNamespace(action=0, info={"forced": True})
+        obs = {"features": np.frombuffer(raw[0], dtype=np.float32).copy(),
+               "cards": np.frombuffer(raw[1], dtype=np.int32).copy(),
+               "action_mask": mask.astype(np.uint8)}
+        ctx = {"match_id": int(self._match), "seat": int(seat),
+               "turn": int(game.turn)}
+        return SimpleNamespace(action=int(self._AA.act(obs, ctx)), info={})
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--checkpoint", default="runs/champion_c0_1746.pt")
@@ -127,6 +181,9 @@ def main() -> int:
     ap.add_argument("--seed-base", type=int, default=520000)
     ap.add_argument("--max-steps", type=int, default=20000)
     ap.add_argument("--calibration", default="data/real_library/strength_calibration.json")
+    ap.add_argument("--policy", default="selfplay", choices=("selfplay", "arena"),
+                    help="selfplay=训练侧策略（默认）；arena=走 scripts/arena_agent.act "
+                         "的部署路径（换位守卫默认开，见 docs/ARENA_GUARD.md）")
     ap.add_argument("--move-guard", type=int, default=0, choices=[0, 1],
                     help="1=评测时也启用换位去抖守卫（默认 0=纯模型行为）")
     ap.add_argument("--move-cap", type=int, default=3,
@@ -139,21 +196,27 @@ def main() -> int:
         print("[error] hsbg_engine 不可用", file=sys.stderr)
         return 2
 
-    model, meta = load_checkpoint(args.checkpoint, device=args.device)
-    ev = PPOEvaluator(model, device=args.device,
-                      norm_mean=meta.get("norm_mean"), norm_std=meta.get("norm_std"))
-    from hsbg.az.train.ppo import CollectConfig
-    cfg = CollectConfig(games=1, seed=int(args.seed_base), opponent="bot", behavior="net",
-                        max_steps=int(args.max_steps),
-                        move_guard=bool(int(args.move_guard)),
-                        move_cap=int(args.move_cap),
-                        move_repeat_limit=int(args.move_repeat_limit))
-    policy = PPOSelfPlayPolicy(model, device=args.device, config=cfg, eval_fn=ev,
-                               seed=int(args.seed_base), move_model=False)
+    if args.policy == "arena":
+        # 部署路径：checkpoint/设备/守卫全部由 arena_agent 的环境变量在 act 内消费。
+        policy = _ArenaPolicy(args)
+        cfg_dict = {"max_steps": int(args.max_steps)}
+    else:
+        model, meta = load_checkpoint(args.checkpoint, device=args.device)
+        ev = PPOEvaluator(model, device=args.device,
+                          norm_mean=meta.get("norm_mean"), norm_std=meta.get("norm_std"))
+        from hsbg.az.train.ppo import CollectConfig
+        cfg = CollectConfig(games=1, seed=int(args.seed_base), opponent="bot", behavior="net",
+                            max_steps=int(args.max_steps),
+                            move_guard=bool(int(args.move_guard)),
+                            move_cap=int(args.move_cap),
+                            move_repeat_limit=int(args.move_repeat_limit))
+        policy = PPOSelfPlayPolicy(model, device=args.device, config=cfg, eval_fn=ev,
+                                   seed=int(args.seed_base), move_model=False)
+        cfg_dict = cfg.__dict__
 
     rows = []
     for g in range(int(args.games)):
-        r = _play(int(args.seed_base) + g, policy, cfg.__dict__)
+        r = _play(int(args.seed_base) + g, policy, cfg_dict)
         if r:
             rows.append(r)
     # 聚合：每 turn 的强度分位
@@ -219,6 +282,7 @@ def main() -> int:
     else:
         all_deaths, death_turns = [], []
     out = {"checkpoint": args.checkpoint, "games": len(rows),
+           "policy": args.policy,
            "seed_base": int(args.seed_base),
            "placements": [r["placement"] for r in rows],
            "mean_rank": float(np.mean([r["placement"] for r in rows])) if rows else None,
@@ -284,10 +348,13 @@ def main() -> int:
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     json.dump(out, open(args.out, "w"), ensure_ascii=False, indent=2)
     print(json.dumps({k: out[k] for k in (
-        "games", "mean_rank", "top4", "win", "death_turn_p50", "death_strength_p50",
+        "games", "policy", "move_guard", "mean_rank", "top4", "win", "death_turn_p50",
+        "death_strength_p50",
         "moves_per_turn_mean", "moves_per_turn_p90", "moves_per_turn_max",
+        "moves_per_turn_p50", "turns_with_move",
+        "net_board_unchanged_ratio",
         "moves_per_move_legal_turn_mean", "moves_per_move_turn_mean",
-        "net_board_unchanged_turns", "net_board_unchanged_ratio",
+        "net_board_unchanged_turns",
         "net_board_unchanged_move_turns", "net_board_unchanged_move_ratio",
         "tier_p50_t9", "tier_p50_t12", "tier_p50_t15",
         "tier_ge5_t9", "tier_ge5_t12", "tier_ge5_t15",
