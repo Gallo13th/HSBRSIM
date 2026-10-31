@@ -192,6 +192,32 @@ def main() -> int:
     out["tune"] = {"ckpt": tune_ck, "panel_seed_base": 830901, "games": 256,
                    "configs": trows}
 
+    # ── 确认跑：t6 在正式封存面板上 vs 默认 t1 / vs off ─────────────────────
+    conf: Dict[str, Any] = {}
+    for key, fn, base_tag in (("t6_vs_t1", f"ab_{tune_ck}_t6_confirm.json", "t1"),
+                              ("t6_vs_off", f"ab_{tune_ck}_off_vs_t6.json", "off")):
+        path = os.path.join(D, fn)
+        if not os.path.isfile(path):
+            continue
+        rep = _load(path) or {}
+        d = (rep.get("rank") or {}).get("delta") or {}
+        t4 = rep.get("top4") or {}
+        conf[key] = {
+            "base": base_tag,
+            "n_pairs": (rep.get("protocol") or {}).get("paired_games"),
+            "base_mean_rank": (rep.get("rank") or {}).get("off_mean"),
+            "t6_mean_rank": (rep.get("rank") or {}).get("on_mean"),
+            "delta": d,
+            "delta_panel_means": (rep.get("rank") or {}).get("delta_panel_means"),
+            "top4": {"off": t4.get("off"), "on": t4.get("on"), "delta": t4.get("delta"),
+                     "delta_ci": t4.get("delta_ci")},
+            "strength": rep.get("strength"),
+            "cost": rep.get("cost"),
+            "criteria": rep.get("criteria"),
+            "file": path,
+        }
+    out["confirm"] = conf
+
     # ── 叶值消融：h*/tier* 已在调参目录里，单独列出 ────────────────────────
     abl: Dict[str, Any] = {}
     for name, row in trows.items():

@@ -15,7 +15,9 @@
 相关实现：
 `hsbg/az/train/infer_search.py`（搜索 + 策略包装）、
 `scripts/human_panel_eval.py` / `scripts/quality_monitor.py`（`--infer-search*` CLI）、
-`scripts/infer_search_ab.py`（配对 A/B 分析）、`tests/test_infer_search.py`（9 项契约）。
+`scripts/infer_search_ab.py`（配对 A/B 分析）、`tests/test_infer_search.py`（11 项契约）。
+本节之后新增的**正式协议**（3 checkpoint × 512×2 封存面板）、**搜索调参**、**叶值消融**
+与**部署默认配置**见 §7。
 搜索本身的沙盒证据见 `runs/search_labels_v2/REPORT.md`；面板口径见
 `docs/EVAL_PANELS.md`。
 
@@ -81,10 +83,10 @@ s16b 同口径面板（6.355）同量级（checkpoint 不是同一份文件，�
 | 位置 | 内容 |
 |---|---|
 | `hsbg/az/train/infer_search.py` | `InferSearchConfig` / `InferSearcher`（rollout 搜索）/ `InferSearchPolicy`（包装层）/ `trace_summary`（Σ(turn) 轨迹） |
-| `scripts/human_panel_eval.py` | `--infer-search {0,1}`、`--infer-search-turns {1,3}`、`--infer-search-max-per-turn 3`、`--infer-search-when`、`--infer-search-action`、`--infer-search-topk`、`--infer-search-adv-clip`、`--infer-search-max-ms`、`--infer-search-seed`；面板 JSON 新增 `panels[i].search`（统计）与 `panels[i].strength`（Σ(turn) 轨迹 + 逐局行） |
+| `scripts/human_panel_eval.py` | `--infer-search {0,1}`、`--infer-search-turns {1,3}`、`--infer-search-max-per-turn`、`--infer-search-when`、`--infer-search-action`、`--infer-search-topk`、`--infer-search-adv-clip`、`--infer-search-max-ms`、`--infer-search-seed`、**`--infer-search-tier-bonus` / `--infer-search-health-bonus`**（叶值附加项）；面板 JSON 新增 `panels[i].search`（统计）与 `panels[i].strength`（Σ(turn) 轨迹 + 逐局行） |
 | `scripts/quality_monitor.py` | 同名 CLI；输出新增 `infer_search`（含 `search_calls / search_ms_total / mean_ms_per_call / search_ms_per_game / switch_rate / search_timeouts` 与 `strength_t12_p50 / t15_p50`） |
 | `scripts/infer_search_ab.py` | 两个面板 JSON 的**逐局配对**分析：Δrank + bootstrap CI、top4、强度比、成本、判据 |
-| `tests/test_infer_search.py` | 9 项契约（pass-through、不改局面、叶值/π 合法、回合预算、守卫终止、turns=3 更深、统计自洽、snapshot/since 增量） |
+| `tests/test_infer_search.py` | 11 项契约（pass-through、不改局面、叶值/π 合法、回合预算、守卫终止、turns=3 更深、统计自洽、snapshot/since 增量、**`leaf_score` 权重契约、叶值附加项接线**） |
 
 **记录字段**（面板 `panels[i].search`，两臂都写，便于 A/B 对齐）：
 
@@ -402,10 +404,12 @@ PYTHONPATH=rust/python:. $PY -m pytest tests/test_infer_search.py -q
 
 - **三个 checkpoint 全部通过判据**（Δ ≤ −0.10 且 CI 上界 < +0.05），CI 上界都在 −0.27 ~ −0.31，
   离 +0.05 有 0.3 以上余量；**两个封存面板方向一致**（分层 bootstrap CI 与合并 CI 几乎相同）。
-- **最好的组合 = `s14` + `t1`：5.9131**（比 s16b t1 低 0.024、比 s16 t1 低 0.031；三个
+- **t1 口径最好的组合 = `s14` + `t1`：5.9131**（比 s16b t1 低 0.024、比 s16 t1 低 0.031；
+  再叠上 §7.3/§7.4 的 `max_per_turn=6` 得到 **`s14` + `t6` = 5.8428**，是全部 4 个
+  checkpoint×配置组合里最低的（off→t6 的配对 Δ = −0.433）。三个
   checkpoint 的 t1 名次在 5.91–5.94，彼此差 ≤0.03，远小于 CI 半宽 0.09 ⇒ 三者的
   **搜索后**名次统计上不可区分；但 off 臂上 s14 最稳（两面板 6.277 / 6.273，另两个
-  checkpoint 的面板间波动 0.08–0.21））。
+  checkpoint 的面板间波动 0.08–0.21）。
 - top4 也是三个 checkpoint 全部 +4.8 ~ +6.3pp：`s16` +4.79pp CI [+2.3, +7.2]、
   `s16b` +6.25pp CI [+3.7, +8.8]、`s14` +5.86pp CI [+3.2, +8.5] —— 1024 局下
   **top4 提升已经显著**（256 局面板的 CI 还跨 0，§4.1）。
@@ -464,7 +468,28 @@ solo 口径仍是 §4.3 的 3.8×。三个 checkpoint 的搜索次数/局几乎�
   （−0.11）能在这个样本量下被分辨**；其余配置的 |Δ| < 0.06 都在噪声内，不能读成
   「更差」，只能读成「没有可测收益」。
 
-### 7.4 t6 确认跑与叶值消融
+### 7.4 t6 的正式面板确认跑 + 叶值消融
+
+**先把调参结论放回正式面板**（`runs/infer_search_formal/confirm/s14_t6_panel{A,B}.json`，
+与 §7.2 的 `human_s14_t1.json` **同 seed/seat 逐局配对**，n = 1024）：
+
+| 对比（s14） | 基线 mean rank | t6 mean rank | **配对 Δ [95% CI]** | SE | 面板 A / B Δ | top4 |
+|---|---:|---:|---:|---:|---:|---:|
+| t6 vs 默认 t1 | 5.9131 | **5.8428** | **−0.070 [−0.135, −0.006]** | 0.033 | −0.076 / −0.064 | 14.94% → **17.77%**（+2.83pp） |
+| t6 vs off | 6.2754 | **5.8428** | **−0.433 [−0.523, −0.343]** | 0.046 | −0.451 / −0.414 | 9.08% → **17.77%** |
+
+- **256 局的 −0.109 在 1024 局上回落到 −0.070**（SE 从 0.066 降到 0.033）：方向、量级都在，
+  但**小样本调参表会放大效应量** —— 可信的部署增益是 **−0.070**，不是 −0.109。
+- 判据：Δ = −0.070 ≤ −0.05 且 **CI 上界 −0.006 < +0.05** ⇒ **达标**；而且 CI 上界 < 0，
+  即「t6 优于默认 t1」在 95% 水平上显著。两个封存面板同向（−0.076 / −0.064）。
+- top4 也显著（+2.83pp，CI [+0.49, +5.27]）；冠军率仍然 0/1024。
+- **t6 相对 t1 没有额外买到强度**：t10/t11/t12 条件 p50 = ×1.04 / ×1.04 / ×0.99，
+  无条件 `E[Σ_t12]` ×1.01，t12 存活率基本持平（22.1/22.9% → 23.8/22.1%）⇒ 它的收益纯粹来自
+  「同一回合内多搜几次、把次序排对」，**不是后期复利**。这也解释了它为什么比 `any`
+  （把预算摊到更早的回合、t12 存活率能到 29.7%）更划算：名次要的是**当前回合的最优动作**。
+- 代价：搜索次数 19.2 → 32.0 次/局（×1.67），单次搜索延迟不变；s14 solo 实测
+  **p50 130 ms / p90 267 ms / max 291 ms**（`latency_solo_s14_t1.json`，n=14）⇒
+  **max-ms 300 会砍掉约 5% 的尾延迟搜索，500 基本不触发**。
 
 叶值消融（同一 256 局面板 830901，逐局配对）：
 
@@ -503,22 +528,68 @@ solo 口径仍是 §4.3 的 3.8×。三个 checkpoint 的搜索次数/局几乎�
 - 每局 t1 大约 380 次 leaf forward（`139 决策 + 19 次搜索 × 102.6 rollout 步 / 8 候选`），
   4090 上的饱和吞吐 ≈ **420 leaf-forward/s** ⇒ 6 条并发臂正好吃满。**跑评测请开 4–6
   条并发，不要开 8 条以上**；本节所有成本数字都是 6 条并发下的墙钟（单次搜索 155–236 ms），
-  **solo 的 p50 仍按 §5.4 的 118 ms**（代码改动只在默认路径外面加了一次 `game.health()`，
-  per-call 影响 < 1%）。
+  **solo 的 p50 = 130 ms / p90 267 ms / max 291 ms**（s14 实测，§7.4；与 §5.4 的
+  118 ms 同量级，差异来自机器负载）。
 
 ### 7.6 部署默认配置建议
 
 | 场景 | 建议配置 | 依据 |
 |---|---|---|
-| **评测/面板（评模型用）** | `--infer-search 1 --infer-search-turns 1 --infer-search-when carrier_or_spell --infer-search-max-per-turn 6 --infer-search-topk 8 --infer-search-action pi_argmax`（= **t6**） | 256 局调参 Δ −0.109（CI 上界 +0.023）；成本 ×1.7 搜索、×1.7 墙钟，评测 1024 局从 ~30 min 到 ~50 min |
-| **训练期异步评测（`--eval-async 1`）** | 同上，再加 `--infer-search-max-ms 500` | 异步评测有排队语义，500 ms 兜底几乎不触发（solo p90 257 ms），超时退回 π_base 不影响结论 |
-| **本地/自托管对局（有完整 `hsbg_engine.Game`）** | 同上；**必须带 `--infer-search-max-ms 300–500`** | solo p50 118 / p90 257 / max 306 ms；300 ms 会砍掉 ~5–10% 的尾延迟搜索（超时退回 π_base 是安全的） |
-| **竞技场（TavernArena 协议 v2）** | **暂不开搜索**（`arena_agent.act()` 只有 4017/447 观测，没有本地 `Game`，rollout 无从展开）；若未来竞技场允许本地引擎镜像，再按上一行的 max-ms 开 | `scripts/arena_agent.py` 是 obs→动作的单次前向，无法构造候选 rollout；这是**能力边界，不是调参问题** |
-| **成本敏感 / 只想赚便宜的名次** | `--infer-search-max-per-turn 1` | 触发 7.1 次/局（省 62% 搜索）、搜索耗时 1147 ms/局，Δ 仅 +0.059（退 0.06 名），且 top4 +1.95pp |
+| **评测/面板（评模型用）** | `--infer-search 1 --infer-search-turns 1 --infer-search-when carrier_or_spell --infer-search-max-per-turn 6 --infer-search-topk 8 --infer-search-action pi_argmax`（= **t6**） | 正式面板 1024 局确认：s14 + t6 = **5.8428**（off 6.2754，t1 5.9131），t6−t1 = **−0.070 [−0.135, −0.006]**、top4 17.77%；成本 = 搜索次数 ×1.67、单次延迟不变 |
+| **训练期异步评测（`--eval-async 1`）** | 同上，再加 `--infer-search-max-ms 500` | 异步评测有排队语义，500 ms 兜底几乎不触发（solo p90 267 ms），超时退回 π_base 不影响结论 |
+| **本地/自托管对局（有完整 `hsbg_engine.Game`）** | 同上；**必须带 `--infer-search-max-ms 300–500`** | s14 solo 实测 p50 130 / p90 267 / max 291 ms；300 ms 会砍掉 ~5% 的尾延迟搜索（超时退回 π_base 是安全的），500 ms 基本不触发 |
+| **竞技场（TavernArena 协议 v2）** | **真实竞技场客户端暂不开搜索**：`arena_agent.act()` 只有 4017/447 观测，没有本地 `Game`，rollout 无从展开。**本地模拟（`quality_monitor --policy arena`）可以开**（那里有 engine `Game`，按上一行带 max-ms） | `scripts/arena_agent.py` 是 obs→动作的单次前向，无法构造候选 rollout；这是**能力边界，不是调参问题**。arena 的硬超时若 < 300 ms，宁可不搜（超时退回 π_base 只是回到旧行为） |
+| **成本敏感 / 只想赚便宜的名次** | `--infer-search-max-per-turn 1` | 触发 7.1 次/局（省 62% 搜索）、搜索耗时 1147 ms/局（并发下），Δ 仅 +0.059（退 0.06 名），且 top4 +1.95pp |
 
-**一句话**：正式协议下 **s14 + t1（max_per_turn=3）已经是 5.91**，三个 checkpoint 都能
-稳定拿到 −0.36 ~ −0.40 名；**t6（max_per_turn=6）在 s14 上把名次再压 −0.11**（CI 上界
-+0.023），代价是搜索耗时 ×1.7 ⇒ **部署默认取 t6，若延迟/成本紧张退回默认 t1**。
+**一句话**：正式协议下三个 checkpoint 的 t1 都稳定拿到 **−0.36 ~ −0.40** 名
+（s14 最好 5.9131）；**`max_per_turn 3 → 6` 在正式面板上再压 −0.070**
+（s14 5.9131 → **5.8428**，CI [−0.135, −0.006]，CI 上界 < 0），代价是搜索次数 ×1.67、
+单次延迟不变 ⇒ **部署默认取 t6**；若评测墙钟/成本敏感，退回默认 t1（差 0.07 名）或
+`max_per_turn=1`（差 0.13 名、搜索省 62%）。叶值加 health/tier 项只有 −0.01/−0.05 的
+边际效果（CI 跨 0），**不建议为了它们改默认叶值**。
+
+### 7.7 复现命令
+
+```bash
+PY=/home/data/users/gaoletian/.conda/envs/hiermolgen/bin/python
+cd /home/data/users/gaoletian/projects/HSBRSIM
+
+# 0) 冻结三个 checkpoint（主训练在跑，先快照；s16b 是 step 1001）
+mkdir -p runs/infer_search_formal
+cp runs/az_entity_s14/model.pt  runs/infer_search_formal/ckpt_s14.pt
+cp runs/az_entity_s16/model.pt  runs/infer_search_formal/ckpt_s16.pt
+cp runs/az_entity_s16b/model.pt runs/infer_search_formal/ckpt_s16b.pt
+
+# 1) 正式协议：3 ckpt × {off, t1} × 512 局 × 2 不重叠封存面板（830001 / 830513），
+#    6 条臂并发正好吃满 cuda:7（见 runs/infer_search_formal/launch_formal.sh）
+bash runs/infer_search_formal/launch_formal.sh
+
+# 2) 多面板配对 A/B（合并 1024 局 + 面板分层 bootstrap + 逐面板 Δ）
+PYTHONPATH=rust/python:. $PY scripts/infer_search_formal_ab.py \
+  --off runs/infer_search_formal/human_s14_off.json \
+  --on  runs/infer_search_formal/human_s14_t1.json \
+  --out runs/infer_search_formal/ab_s14_t1.json
+
+# 3) 调参 + 叶值消融（256 局单面板 830901；最多 2–3 并发，见 §7.5）
+CKPT=s14 SLOTS=3 bash runs/infer_search_formal/launch_queue.sh
+
+# 4) t6 确认跑（正式两面板各 512 局）+ 与默认 t1 / off 的逐局配对
+PYTHONPATH=rust/python:. $PY scripts/infer_search_confirm_ab.py \
+  --base runs/infer_search_formal/human_s14_t1.json \
+  --arm runs/infer_search_formal/confirm/s14_t6_panelA.json \
+  --arm runs/infer_search_formal/confirm/s14_t6_panelB.json \
+  --out runs/infer_search_formal/ab_s14_t6_confirm.json
+
+# 5) 汇总（正式 + 调参 + 消融 + 确认跑 + 排名）→ SUMMARY.json
+PYTHONPATH=rust/python:. $PY scripts/infer_search_formal_summary.py \
+  --dir runs/infer_search_formal --bootstrap 20000
+
+# 6) 部署口径的 solo 延迟
+PYTHONPATH=rust/python:. $PY scripts/infer_search_latency.py \
+  --checkpoint runs/infer_search_formal/ckpt_s14.pt --device cuda:7 \
+  --turns 1 --topk 8 --max-per-turn 3 --samples 16 \
+  --out runs/infer_search_formal/latency_solo_s14_t1.json
+```
 
 ---
 
@@ -546,5 +617,7 @@ solo 口径仍是 §4.3 的 3.8×。三个 checkpoint 的搜索次数/局几乎�
 | `runs/infer_search_formal/human_{s14,s16,s16b}_{off,t1}.json` | **正式 512×2 面板**的 6 个负载（每臂 1024 局） |
 | `runs/infer_search_formal/tune/s14_*.json` | 调参/消融 256 局单面板（`ref`/`w_any`/`w_spell`/`t1`/`t6`/`k16`/`h002`/`tier002`） |
 | `runs/infer_search_formal/confirm/s14_t6_panel{A,B}.json` | t6 在正式封存面板上的确认跑 |
+| `runs/infer_search_formal/ab_s14_{t6_confirm,off_vs_t6}.json` | t6 vs 默认 t1 / t6 vs off 的正式面板配对报告 |
+| `runs/infer_search_formal/latency_solo_s14_t1.json` | s14 的 solo 单次延迟（p50 130 / p90 267 / max 291 ms） |
 | `runs/infer_search_formal/SUMMARY.json` | 正式 + 调参 + 消融 + 排名的机器可读汇总 |
-| `runs/infer_search_formal/concurrency_bench.json` | cuda:7 并发/吞吐基准（§7.6 的依据） |
+| `runs/infer_search_formal/concurrency_bench.json` | cuda:7 并发/吞吐基准（§7.5 的依据） |
