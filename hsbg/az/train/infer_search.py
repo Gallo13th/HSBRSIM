@@ -113,8 +113,15 @@ class InferSearchConfig:
     search_when: str = "carrier_or_spell"
     #: 覆盖动作的规则（见 ACTION_MODES）
     action: str = "pi_argmax"
-    #: rollout 行为：greedy（确定性、叶值 = 精确结果）/ sample（期望价值）
-    rollout_mode: str = "greedy"
+    #: rollout 行为：auto（K=1 时 greedy，K>1 时 sample）/ greedy / sample。
+    #: **auto 是新增默认值**：K=1 逐位等于旧路径（greedy），K>1 才切到采样型搜索。
+    rollout_mode: str = "auto"
+    #: 同一动作的独立 rollout 数 K（随机性感知搜索：对 RNG/隐藏信息做蒙特卡洛）。
+    #: K=1 时逐位等于旧路径；K>1 时叶值 = K 次叶分的均值，并给出标准误。
+    rollouts: int = 1
+    #: ``auto``/``sample`` 的基准 RNG 种子（同一 searcher 内按「第几次搜索 × 候选 ×
+    #: 副本」派生；同 seed 可复现，换 seed 得到不同样本）。
+    rollout_seed: int = 0
     #: π 构造（与沙盒同一套，透传给 ``sandbox_rollout.pi_from_q``）
     pi_mode: str = "advantage"
     q_temp: float = 0.0
@@ -156,8 +163,15 @@ class InferSearchConfig:
             raise ValueError("max_ms_per_search 必须 >= 0（0 = 不限）")
         if str(self.action) not in ACTION_MODES:
             raise ValueError(f"action 只能是 {ACTION_MODES}")
-        if str(self.rollout_mode) not in ("greedy", "sample"):
-            raise ValueError("rollout_mode 只能是 greedy|sample")
+        if str(self.rollout_mode) not in ("auto", "greedy", "sample"):
+            raise ValueError("rollout_mode 只能是 auto|greedy|sample")
+        if not (1 <= int(self.rollouts) <= 64):
+            raise ValueError("rollouts 必须在 1..64")
+        if int(self.rollouts) > 1 and str(self.rollout_mode) == "greedy":
+            # greedy + K>1 的所有副本会逐位相同（引擎无 RNG 重播种 API），K 是白花的；
+            # 明确拒绝而不是静默浪费算力。
+            raise ValueError("rollouts>1 需要 rollout_mode=auto|sample"
+                             "（greedy 的 K 个副本必然相同）")
         for name in ("tier_bonus", "carrier_bonus", "health_bonus", "health_ref"):
             v = float(getattr(self, name))
             if not math.isfinite(v):
@@ -167,11 +181,18 @@ class InferSearchConfig:
         search_when_names(str(self.search_when))    # 触发校验
         return self
 
+    def effective_rollout_mode(self) -> str:
+        """``auto`` → K=1 用 greedy（旧路径逐位一致）/ K>1 用 sample（蒙特卡洛）。"""
+        mode = str(self.rollout_mode)
+        if mode == "auto":
+            return "greedy" if int(self.rollouts) <= 1 else "sample"
+        return mode
+
     def rollout_config(self) -> RolloutConfig:
         """映射成沙盒的 ``RolloutConfig``（π 构造唯一真源）。"""
         rc = RolloutConfig(
             topk=int(self.topk), turns=int(self.turns),
-            rollout_mode=str(self.rollout_mode), pi_mode=str(self.pi_mode),
+            rollout_mode=self.effective_rollout_mode(), pi_mode=str(self.pi_mode),
             q_temp=float(self.q_temp), q_temp_scale=float(self.q_temp_scale),
             adv_clip=float(self.adv_clip), tier_bonus=float(self.tier_bonus),
             carrier_bonus=float(self.carrier_bonus),
@@ -192,10 +213,10 @@ class SearchOutcome:
 
     pi: np.ndarray              # f32[245]，支撑 = cands
     cands: np.ndarray           # i64[n]，π_base 先验降序
-    q: np.ndarray               # f64[n]，叶分 = L(Σ_end) [+ w·tier + w·health]
-    sigma_end: np.ndarray       # i64[n]，回合末战团 Σ（真值）
-    tier_end: np.ndarray        # i64[n]，叶位置酒馆等级（0..6）
-    health_end: np.ndarray      # i64[n]，叶位置英雄血量（-1 = 引擎不可用）
+    q: np.ndarray               # f64[n]，叶分 = mean_k L(Σ_end,k) [+ w·tier + w·health]
+    sigma_end: np.ndarray       # i64[n]，回合末战团 Σ（K 次的均值，四舍五入）
+    tier_end: np.ndarray        # i64[n]，叶位置酒馆等级（0..6；K 次均值）
+    health_end: np.ndarray      # i64[n]，叶位置英雄血量（-1 = 引擎不可用；K 次均值）
     base: int                   # π_base top-1
     best: int                   # argmax Q
     best_q: float
@@ -210,6 +231,11 @@ class SearchOutcome:
     elapsed_ms: float
     leaf_steps: int
     truncated: int
+    #: 随机性感知搜索的诊断量（K=1 时为 0/None，逐位不影响旧口径）
+    q_se: np.ndarray = None          # f64[n]，mean 的标准误（K>1）
+    sigma_se: np.ndarray = None      # f64[n]，Σ 的标准误（K>1）
+    q_samples: np.ndarray = None     # f64[n,K]，每条候选的 K 次叶分（诊断/单测）
+    rollouts: int = 1
 
     def as_dict(self, k: int = 8) -> Dict[str, Any]:
         p = np.asarray(self.pi, dtype=np.float64)
@@ -228,6 +254,9 @@ class SearchOutcome:
                 "sigma_best": int(self.sigma_best),
                 "value": round(float(self.value), 6),
                 "q_std": round(float(self.q_std), 6),
+                "q_se": ([round(float(v), 6) for v in self.q_se]
+                         if self.q_se is not None else None),
+                "rollouts": int(self.rollouts),
                 "tau": round(float(self.tau), 6),
                 "switch": bool(self.switch),
                 "elapsed_ms": round(float(self.elapsed_ms), 3),
@@ -254,6 +283,9 @@ class _Roll:
     steps: int = 0
     done: bool = False
     truncated: bool = False
+    #: 该副本的 RNG（K>1 时逐副本独立；K=1 greedy 不读）
+    rng: Any = None
+    replica: int = 0
 
 
 def _masked_softmax_rows(logits: Any, mask: Any) -> np.ndarray:
@@ -291,6 +323,8 @@ class InferSearcher:
         self.switched = 0
         self.leaf_steps = 0
         self.truncated = 0
+        #: 搜索序号（派生逐副本 RNG；同 seed 同调用序 ⇒ 逐位可复现）
+        self._search_seq = 0
 
     # ── 观测解码 ────────────────────────────────────────────────────────
     def tags(self, feats: np.ndarray, cards: np.ndarray) -> DecisionTags:
@@ -409,21 +443,37 @@ class InferSearcher:
             root_health = self.health(game, seat)
             root_turn = int(getattr(game, "turn", 0))
             target = root_turn + max(0, int(self.cfg.turns) - 1)
+            # ── 随机性感知：每个候选跑 K 个独立副本 ─────────────────────────
+            # 引擎没有 RNG 重播种 API（``Game.copy()`` 会连同 RNG 状态一起复制），
+            # 所以独立性来自「逐副本不同的动作采样流」：副本各自从 π_base 采样后续
+            # 动作，动作序列不同 ⇒ 后续商店刷新/战斗的引擎 RNG 消耗不同 ⇒ 隐藏信息
+            # 沿不同分支展开。K=1 且 greedy 时与旧路径逐位一致。
+            K = int(self.cfg.rollouts)
+            eff_mode = self.cfg.effective_rollout_mode()
+            base_seed = (int(self.cfg.rollout_seed) if int(self.cfg.rollout_seed) > 0
+                         else int(self.cfg.seed))
+            seq = int(self._search_seq)
+            self._search_seq += 1
             rolls: List[_Roll] = []
-            for a in cands.tolist():
-                g = game.copy()
-                r = _Roll(cand=int(a), game=g, root_turn=root_turn,
-                          target_turn=int(target), sigma=int(sigma_root),
-                          tier=int(root_tier), health=int(root_health))
-                r.turn_actions = 1
-                try:
-                    g.step(seat, int(a))
-                except (RuntimeError, ValueError):
-                    r.truncated = True
-                    r.done = True
-                if not r.done and bool(g.is_over()):
-                    r.done = True
-                rolls.append(r)
+            for ci, a in enumerate(cands.tolist()):
+                for k in range(K):
+                    g = game.copy()
+                    r = _Roll(cand=int(a), game=g, root_turn=root_turn,
+                              target_turn=int(target), sigma=int(sigma_root),
+                              tier=int(root_tier), health=int(root_health),
+                              replica=int(k))
+                    if eff_mode == "sample":
+                        r.rng = np.random.default_rng(
+                            [base_seed, seq, int(ci), int(k)])
+                    r.turn_actions = 1
+                    try:
+                        g.step(seat, int(a))
+                    except (RuntimeError, ValueError):
+                        r.truncated = True
+                        r.done = True
+                    if not r.done and bool(g.is_over()):
+                        r.done = True
+                    rolls.append(r)
             max_steps = int(self.cfg.max_rollout_steps) or (64 * int(self.cfg.turns) + 64)
             steps_total = 0
             it = 0
@@ -479,12 +529,22 @@ class InferSearcher:
                     r.health = self.health(r.game, seat)
                     r.steps += 1
                     steps_total += 1
-                    a = int(np.argmax(pri[k]))
+                    if eff_mode == "sample" and r.rng is not None:
+                        pk = np.asarray(pri[k], dtype=np.float64)
+                        s = float(pk.sum())
+                        if s > 0.0 and np.all(np.isfinite(pk)):
+                            a = int(r.rng.choice(N_ACTIONS, p=pk / s))
+                        else:
+                            a = int(np.argmax(pri[k]))
+                    else:
+                        a = int(np.argmax(pri[k]))
                     r.turn_actions += 1
                     if int(self.cfg.rollout_max_actions_per_turn) > 0 \
                             and r.turn_actions > int(self.cfg.rollout_max_actions_per_turn) \
                             and bool(gm[0]):
                         a = 0           # 与评测同口径的回合守卫
+                    if not bool(gm[int(a)]):     # 采样退化时兜底到先验 argmax
+                        a = int(np.argmax(pri[k]))
                     try:
                         r.game.step(seat, int(a))
                     except (RuntimeError, ValueError):
@@ -497,10 +557,26 @@ class InferSearcher:
                 if not r.done:
                     r.truncated = True
                     r.done = True
-            q = np.asarray([self.leaf_q(r) for r in rolls], dtype=np.float64)
-            sg = np.asarray([int(r.sigma) for r in rolls], dtype=np.int64)
-            tg = np.asarray([int(r.tier) for r in rolls], dtype=np.int64)
-            hg = np.asarray([int(r.health) for r in rolls], dtype=np.int64)
+            # ── 聚合：K 次的均值 + 标准误（K=1 时与旧路径逐位一致）──────────
+            n_c = int(cands.size)
+            q_samples = np.asarray([self.leaf_q(r) for r in rolls],
+                                   dtype=np.float64).reshape(n_c, K)
+            sig_samples = np.asarray([int(r.sigma) for r in rolls],
+                                     dtype=np.float64).reshape(n_c, K)
+            tier_samples = np.asarray([int(r.tier) for r in rolls],
+                                      dtype=np.float64).reshape(n_c, K)
+            health_samples = np.asarray([int(r.health) for r in rolls],
+                                        dtype=np.float64).reshape(n_c, K)
+            q = q_samples.mean(axis=1)
+            if K > 1:
+                q_se = q_samples.std(axis=1, ddof=1) / math.sqrt(K)
+                sig_se = sig_samples.std(axis=1, ddof=1) / math.sqrt(K)
+            else:
+                q_se = np.zeros(n_c, dtype=np.float64)
+                sig_se = np.zeros(n_c, dtype=np.float64)
+            sg = np.rint(sig_samples.mean(axis=1)).astype(np.int64)
+            tg = np.rint(tier_samples.mean(axis=1)).astype(np.int64)
+            hg = np.rint(health_samples.mean(axis=1)).astype(np.int64)
             pi, tau, V = pi_from_q(p, cands, q, self._rc)
             order = np.argsort(-np.asarray(p, dtype=np.float64)[cands], kind="stable")
             base_idx = int(order[0]) if cands.size else 0
@@ -520,7 +596,8 @@ class InferSearcher:
                 value=float(V), q_std=float(np.std(q)) if q.size else 0.0,
                 tau=float(tau), action=int(cands[base_idx]), switch=False,
                 elapsed_ms=float(el), leaf_steps=int(steps_total),
-                truncated=n_trunc)
+                truncated=n_trunc, q_se=q_se, sigma_se=sig_se,
+                q_samples=q_samples, rollouts=int(K))
         except Exception:      # noqa: BLE001 - 搜索失败绝不打断评测
             self.errors += 1
             return None
@@ -583,6 +660,9 @@ class InferSearchPolicy(Policy):
         self.search_errors = 0
         self.leaf_steps = 0
         self.rollout_truncated = 0
+        #: K 次采样的叶值标准误累计（随机性感知搜索的方差诊断）
+        self.q_se_sum = 0.0
+        self.q_spread_sum = 0.0
         self._turn_searched: Dict[Tuple[int, int], int] = {}
         self._dec_in_turn: Dict[Tuple[int, int], int] = {}
 
@@ -631,12 +711,19 @@ class InferSearchPolicy(Policy):
         return {
             "search_enabled": int(self.cfg.enabled),
             "search_turns": int(self.cfg.turns),
+            "search_rollouts": int(self.cfg.rollouts),
+            "search_rollout_mode": str(self.cfg.effective_rollout_mode()),
             "search_when": str(self.cfg.search_when),
             "search_action": str(self.cfg.action),
             "decisions": int(self.decisions),
             "search_calls": n,
             "search_ms_total": round(float(self.search_ms_total), 1),
             "mean_ms_per_call": round(float(self.search_ms_total) / n, 2) if n else None,
+            "mean_q_se": (round(float(self.q_se_sum) / n, 6) if n else None),
+            "mean_q_spread": (round(float(self.q_spread_sum) / n, 6) if n else None),
+            "q_se_ratio": (round(float(self.q_se_sum)
+                                 / max(float(self.q_spread_sum), 1e-12), 4)
+                           if n and self.q_spread_sum > 0 else None),
             "mean_ms_per_decision": (round(float(self.search_ms_total)
                                            / max(int(self.decisions), 1), 3)
                                      if n else None),
@@ -672,6 +759,8 @@ class InferSearchPolicy(Policy):
                 "leaf_steps": int(self.leaf_steps),
                 "truncated": int(self.rollout_truncated),
                 "searched": int(self.searched_decisions),
+                "q_se_sum": float(self.q_se_sum),
+                "q_spread_sum": float(self.q_spread_sum),
                 "games": int(len(self.games))}
 
     def since(self, snap: Dict[str, Any]) -> Dict[str, Any]:
@@ -690,6 +779,15 @@ class InferSearchPolicy(Policy):
                 - int(snap.get("timeouts", 0)),
                 "leaf_steps": int(self.leaf_steps) - int(snap["leaf_steps"]),
                 "rollout_truncated": int(self.rollout_truncated) - int(snap["truncated"]),
+                "mean_q_se": (round((float(self.q_se_sum)
+                                     - float(snap.get("q_se_sum", 0.0))) / n, 6)
+                              if n else None),
+                "q_se_ratio": (
+                    round((float(self.q_se_sum) - float(snap.get("q_se_sum", 0.0)))
+                          / max(float(self.q_spread_sum)
+                                - float(snap.get("q_spread_sum", 0.0)), 1e-12), 4)
+                    if n and (float(self.q_spread_sum)
+                              - float(snap.get("q_spread_sum", 0.0))) > 0 else None),
                 "games": games,
                 "search_calls_per_game": round(n / games, 2) if games else None,
                 "search_ms_per_game": round(ms / games, 1) if games else None}
@@ -745,6 +843,9 @@ class InferSearchPolicy(Policy):
         self.search_ms_total += float(out.elapsed_ms)
         self.leaf_steps += int(out.leaf_steps)
         self.rollout_truncated += int(out.truncated)
+        if out.q_se is not None:
+            self.q_se_sum += float(np.mean(out.q_se))
+            self.q_spread_sum += float(out.q_std)
         g["search_calls"] = int(g["search_calls"]) + 1
         g["search_ms"] = float(g["search_ms"]) + float(out.elapsed_ms)
         # 动作规则
@@ -761,6 +862,9 @@ class InferSearchPolicy(Policy):
             g["switched"] = int(g["switched"]) + 1
         info.update({"search": True, "search_action": str(self.cfg.action),
                      "search_turns": int(self.cfg.turns),
+                     "search_rollouts": int(out.rollouts),
+                     "search_q_se_mean": (round(float(np.mean(out.q_se)), 6)
+                                          if out.q_se is not None else None),
                      "search_calls": int(g["search_calls"]),
                      "search_base": int(out.base), "search_best": int(out.best),
                      "search_pick": int(pick),

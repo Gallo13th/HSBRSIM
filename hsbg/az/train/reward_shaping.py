@@ -37,6 +37,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -158,6 +159,19 @@ def _features_float_view(features: Any) -> memoryview:
     return view
 
 
+def _sigma_tier_from_obs(features: Any) -> Tuple[int, int]:
+    """标准观测 features → ``(Σ 战团 atk+hp, tier)``（快路径）。"""
+    view = _features_float_view(features)
+    strength = 0
+    for i in range(N_BOARD):
+        base = _BOARD_START + i * MINION_F
+        if view[base + MINION_PRESENT] > 0.5:
+            strength += int(round(view[base + MINION_ATK] * _MINION_STAT_SCALE))
+            strength += int(round(view[base + MINION_HP] * _MINION_STAT_SCALE))
+    tier = int(round(view[GLOBAL_FIELD_INDEX["tier"]] * _TIER_SCALE))
+    return int(strength), int(tier)
+
+
 def potential_from_obs(features: Any, *, w_str: float = 1.0,
                        w_tier: float = 0.5,
                        tier_bonus: Sequence[float] = DEFAULT_TIER_BONUS) -> float:
@@ -168,16 +182,56 @@ def potential_from_obs(features: Any, *, w_str: float = 1.0,
     这里用 ``memoryview.cast("f")`` 直接读少量槽位，避免 numpy 小数组开销
     （实测 numpy 版 ~12 µs → memoryview 版 ~2 µs）。
     """
-    view = _features_float_view(features)
-    strength = 0
-    for i in range(N_BOARD):
-        base = _BOARD_START + i * MINION_F
-        if view[base + MINION_PRESENT] > 0.5:
-            strength += int(round(view[base + MINION_ATK] * _MINION_STAT_SCALE))
-            strength += int(round(view[base + MINION_HP] * _MINION_STAT_SCALE))
-    tier = int(round(view[GLOBAL_FIELD_INDEX["tier"]] * _TIER_SCALE))
+    strength, tier = _sigma_tier_from_obs(features)
     return (float(w_str) * float(strength)
             + float(w_tier) * tier_bonus_value(tier, tier_bonus))
+
+
+#: log 强度势的归一化参考（与沙盒/叶值同一曲线：L(Σ)=log1p(Σ)/log1p(30000)）
+LOG_STRENGTH_REF = 30000.0
+
+
+def potential_log_strength_from_obs(features: Any, *, w_str: float = 1.0,
+                                    w_tier: float = 0.0,
+                                    tier_bonus: Sequence[float] = DEFAULT_TIER_BONUS
+                                    ) -> float:
+    """``Φ = w_str · log1p(Σ)/log1p(30000) [+ w_tier·tier_bonus]``。
+
+    与 :func:`potential_from_obs` 的唯一差别是强度项走 **log**：整局望远镜求和 =
+    ``w_str·L(Σ_T)``（口径与 ``docs/ECONOMY_SANDBOX.md`` 的沙盒奖励、推理期叶值一致），
+    因此 ``shaping_coef=0.7`` 就是「0.7 强度」而不是「0.7×Σ（数百）」。默认
+    ``w_tier=0``：tier 项在 log 口径下会盖过强度，不默认叠加。
+    """
+    strength, tier = _sigma_tier_from_obs(features)
+    out = float(w_str) * (math.log1p(max(0, int(strength)))
+                          / math.log1p(float(LOG_STRENGTH_REF)))
+    if float(w_tier) != 0.0:
+        out += float(w_tier) * tier_bonus_value(tier, tier_bonus)
+    return float(out)
+
+
+def potential_log_strength(game: Any, seat: int, *, w_str: float = 1.0,
+                           w_tier: float = 0.0,
+                           tier_bonus: Sequence[float] = DEFAULT_TIER_BONUS) -> float:
+    """读 ``game`` 的 learner ``seat`` 当前 log 强度势（观测快路径，失败退回 JSON）。"""
+    try:
+        out = game.observe(int(seat))
+        feats = out[0] if isinstance(out, (tuple, list)) else out
+        return potential_log_strength_from_obs(feats, w_str=w_str, w_tier=w_tier,
+                                               tier_bonus=tier_bonus)
+    except Exception:  # noqa: BLE001 - 引擎版本差异/测试 mock：退回 JSON
+        pass
+    try:
+        player = json.loads(game.player_json(int(seat)))
+    except Exception:  # noqa: BLE001 - 状态不可读时按 0（不阻断采集）
+        return 0.0
+    strength = float(board_strength(player)) if isinstance(player, dict) else 0.0
+    out = float(w_str) * (math.log1p(max(0.0, strength))
+                          / math.log1p(float(LOG_STRENGTH_REF)))
+    if float(w_tier) != 0.0 and isinstance(player, dict):
+        out += float(w_tier) * tier_bonus_value(player.get("tier", 0), tier_bonus)
+    return float(out)
+
 
 
 def potential(game: Any, seat: int, *, w_str: float = 1.0, w_tier: float = 0.5,
@@ -269,6 +323,9 @@ class RewardShaper:
         """
         self.coef = float(getattr(cfg, "shaping_coef", 0.0) or 0.0)
         self.enabled = self.coef != 0.0
+        self.mode = str(getattr(cfg, "shaping_mode", "sigma") or "sigma")
+        if self.mode not in ("sigma", "log_strength"):
+            raise ValueError(f"shaping_mode 只能是 sigma|log_strength，得到 {self.mode!r}")
         self.w_str = float(getattr(cfg, "shaping_w_str", 1.0))
         self.w_tier = float(getattr(cfg, "shaping_w_tier", 0.5))
         if self.enabled:
@@ -314,8 +371,13 @@ class RewardShaper:
         if not self.enabled:
             return 0.0
         t0 = time.perf_counter()
-        value = potential(game, int(seat), w_str=self.w_str,
-                          w_tier=self.w_tier, tier_bonus=self.tier_bonus)
+        if self.mode == "log_strength":
+            value = potential_log_strength(
+                game, int(seat), w_str=self.w_str, w_tier=self.w_tier,
+                tier_bonus=self.tier_bonus)
+        else:
+            value = potential(game, int(seat), w_str=self.w_str,
+                              w_tier=self.w_tier, tier_bonus=self.tier_bonus)
         self.seconds += time.perf_counter() - t0
         self.calls += 1
         return value
@@ -364,6 +426,7 @@ class RewardShaper:
         n = int(self.count)
         out: Dict[str, Any] = {
             "shaping_coef": float(self.coef),
+            "shaping_mode": self.mode,
             "shaping_gamma": float(self.gamma),
             "shaping_gamma_train": float(self.gamma_train),
             "shaping_gamma_aligned": bool(self.gamma_aligned),
@@ -406,6 +469,7 @@ def aggregate_shaping(metas: Iterable[Any], *,
     bias_total = sum(float(m.get("reward_shaping_bias_sum", 0.0)) for m in rows)
     out: Dict[str, Any] = {
         "shaping_coef": float(first.get("shaping_coef", 0.0)),
+        "shaping_mode": str(first.get("shaping_mode", "sigma")),
         "shaping_gamma": float(first.get("shaping_gamma", SHAPING_GAMMA)),
         "shaping_gamma_train": float(first.get(
             "shaping_gamma_train", first.get("shaping_gamma", SHAPING_GAMMA))),
@@ -440,6 +504,9 @@ __all__ = [
     "potential_from_player_json",
     "potential_from_obs",
     "potential",
+    "potential_log_strength",
+    "potential_log_strength_from_obs",
+    "LOG_STRENGTH_REF",
     "shaping_reward",
     "shaping_bias_per_episode",
     "shaping_gamma_warning",

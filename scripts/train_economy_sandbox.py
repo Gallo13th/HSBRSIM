@@ -90,8 +90,12 @@ def _num(s: str) -> int:
     return int(round(float(t) * m))
 
 
-def parse_gold_ramp(spec: str) -> List[Tuple[int, int]]:
-    """解析 ``"0:99,2M:30,6M:15,10M:10"`` -> ``[(0,99),(2000000,30),...]``（升序）。"""
+def parse_ramp(spec: str, *, name: str = "ramp", vmin: int = 0,
+               vmax: int = 99) -> List[Tuple[int, int]]:
+    """解析 ``"0:99,2M:30,6M:15,10M:10"`` -> ``[(0,99),(2000000,30),...]``（升序）。
+
+    ``vmin/vmax`` 是档位值域（金币 0..99、每回合动作上限 1..200 等）。
+    """
     if not spec or not str(spec).strip():
         return []
     pts: List[Tuple[int, int]] = []
@@ -100,19 +104,30 @@ def parse_gold_ramp(spec: str) -> List[Tuple[int, int]]:
         if not part:
             continue
         if ":" not in part:
-            raise ValueError(f"gold-ramp 项 {part!r} 需要 'decisions:gold'")
+            raise ValueError(f"{name} 项 {part!r} 需要 'decisions:value'")
         a, b = part.split(":", 1)
         pts.append((_num(a), int(float(b))))
     pts.sort(key=lambda x: x[0])
     if pts[0][0] != 0:
-        raise ValueError("gold-ramp 的第一个点必须是 0（起始金币）")
+        raise ValueError(f"{name} 的第一个点必须是 0")
     for d, g in pts:
-        if d < 0 or not (0 <= g <= 99):
-            raise ValueError(f"gold-ramp 非法点 {d}:{g}（decisions>=0，gold 在 0..99）")
+        if d < 0 or not (int(vmin) <= g <= int(vmax)):
+            raise ValueError(f"{name} 非法点 {d}:{g}"
+                             f"（decisions>=0，取值在 {vmin}..{vmax}）")
     for (d0, _g0), (d1, _g1) in zip(pts, pts[1:]):
         if d1 <= d0:
-            raise ValueError("gold-ramp 的阈值必须严格递增")
+            raise ValueError(f"{name} 的阈值必须严格递增")
     return pts
+
+
+def parse_gold_ramp(spec: str) -> List[Tuple[int, int]]:
+    """金币课程解析（取值 0..99）。"""
+    return parse_ramp(spec, name="gold-ramp", vmin=0, vmax=99)
+
+
+def parse_cap_ramp(spec: str) -> List[Tuple[int, int]]:
+    """每回合动作上限课程解析（取值 1..200）。"""
+    return parse_ramp(spec, name="action-cap-ramp", vmin=1, vmax=200)
 
 
 def gold_at(ramp: Sequence[Tuple[int, int]], decisions: int, default: int) -> int:
@@ -174,11 +189,17 @@ def _autocast_ctx(dtype: str):
 
 
 def batch_act(model, feats, cards, masks, device, *, sample: bool = True,
-              chunk: int = 4096, dtype: str = "fp32"):
+              chunk: int = 4096, dtype: str = "fp32",
+              bias: Optional[np.ndarray] = None):
     """批量策略：返回 (actions, logprobs, values)（numpy）。
 
     ``dtype`` 必须与训练一致（``PPOConfig.amp``）：采集与训练不同 dtype 会让
     logprob 不一致 → ratio 起点偏离 1 → KL 早停。
+
+    ``bias``（``f32[n, 245]``，复利核心牌先验／背景惩罚）**只改采样分布**：
+    采样用 ``logits + bias``，但返回的 ``logprobs`` 仍是**无偏** logits 的对数似然。
+    这样 PPO 的 ``ratio = exp(new - old)`` 在第一次更新时仍严格等于 1（不会被 KL
+    早停打掉），而梯度会把策略往「先验偏好的动作」推 —— 等价于用先验做行为整形。
     """
     torch = _torch()
     from hsbg.az.train.ppo import forward_model
@@ -194,16 +215,44 @@ def batch_act(model, feats, cards, masks, device, *, sample: bool = True,
             logits, _rank, value = forward_model(model, f, c, m)
             logits = logits.float().masked_fill(~m, -1e9)
             logp_all = torch.log_softmax(logits, dim=-1)
+            if bias is not None:
+                bt = torch.from_numpy(
+                    np.ascontiguousarray(bias[s:e], dtype=np.float32)).to(device)
+                s_logits = (logits + bt).masked_fill(~m, -1e9)
+            else:
+                s_logits = logits
             if sample:
-                probs = logp_all.exp()
+                # 无 bias 时保持旧路径（``logp_all.exp()``）逐位不变
+                probs = (logp_all.exp() if bias is None
+                         else torch.softmax(s_logits, dim=-1))
                 a = torch.multinomial(probs, 1).squeeze(1)
             else:
-                a = logits.argmax(dim=-1)
+                a = s_logits.argmax(dim=-1)
             lp = logp_all.gather(1, a.unsqueeze(1)).squeeze(1)
             acts[s:e] = a.detach().cpu().numpy()
             logps[s:e] = lp.detach().cpu().numpy()
             vals[s:e] = value.detach().float().cpu().numpy()
     return acts, logps, vals
+
+
+def prior_bias_rows(prior, obs: Sequence[SandboxObs], game_ids: Sequence[int],
+                    *, seat: int = 0) -> Optional[np.ndarray]:
+    """一批观测 → ``f32[n, 245]`` 先验 bias；``prior is None`` 时返回 ``None``（逐位等价）。
+
+    走 :meth:`hsbg.az.train.compound_prior.CompoundPrior.bias`（与正式采集同一套口径：
+    只给合法的 Buy/Choose 位写值、只加不减 + 可选背景惩罚）。
+    """
+    if prior is None:
+        return None
+    out = np.zeros((len(obs), 245), dtype=np.float32)
+    touched = False
+    for i, o in enumerate(obs):
+        b = prior.bias(o.features, o.cards, o.mask,
+                       game_id=int(game_ids[i]), seat=int(seat))
+        if b is not None:
+            out[i] = b
+            touched = True
+    return out if touched else None
 
 
 def check_logprob_consistency(model, obs_batch: Sequence[SandboxObs], device: str,
@@ -309,7 +358,8 @@ def build_ppo_batch(records: Sequence[Dict[str, Any]]) -> Any:
 def evaluate(model, cfg: SandboxConfig, games: int, device: str,
              seed0: int = 900000, n_envs: int = 48, *,
              sample: bool = False, dtype: str = "fp32",
-             carrier_audit: int = 0) -> Dict[str, Any]:
+             carrier_audit: int = 0, prior=None,
+             core_ids: Optional[Sequence[str]] = None) -> Dict[str, Any]:
     """评测：``sample=False`` 走 greedy（argmax），``sample=True`` 按 T=1 采样。
 
     注意：完整游戏里的行为策略（``PPOSelfPlayPolicy``，``CollectConfig.temperature``）
@@ -320,15 +370,18 @@ def evaluate(model, cfg: SandboxConfig, games: int, device: str,
     ``quality_monitor --carrier-audit 1`` 同口径 —— 目标选择（动作 30..45）
     命中的 option eid 属于载体时 +1（每次目标选择多取一次 ``view(0)`` ≈0.45ms）。
     """
-    vec = VectorEconomySandbox(cfg, n_envs=min(n_envs, max(1, games)), seed0=seed0)
+    vec = VectorEconomySandbox(cfg, n_envs=min(n_envs, max(1, games)), seed0=seed0,
+                               core_ids=core_ids)
     obs = vec.reset()
     cids = set(carrier_ids()) if carrier_audit else set()
     casts = [0] * vec.n_envs
     eps: List[Dict[str, Any]] = []
     while len(eps) < games:
         f, c, m = stack_obs(obs)
+        pb = (prior_bias_rows(prior, obs, [int(e.seed) for e in vec.envs])
+              if prior is not None else None)
         a, _lp, _v = batch_act(model, f, c, m, device, sample=bool(sample),
-                              dtype=dtype)
+                               dtype=dtype, bias=pb)
         if cids:
             for i in range(vec.n_envs):
                 try:
@@ -511,6 +564,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--gold-per-turn", type=int, default=10)
     ap.add_argument("--sandbox-gold-ramp", default="",
                     help='金币课程，例如 "0:99,2M:30,6M:15,10M:10"（按累计决策数切换）')
+    ap.add_argument("--sandbox-action-cap-ramp", default="",
+                    help='每回合动作上限课程，例如 "0:120,2M:40,4M:20"（按累计决策数切换；'
+                         '切换时重建环境）')
     ap.add_argument("--sandbox-free-tier6", dest="sandbox_free_tier6", type=int,
                     default=0, help="1 = 开局 tier6 + 升级免费（ceiling_probe 口径），默认 0")
     ap.add_argument("--gold-mode", default="set", choices=["set", "add"])
@@ -518,10 +574,25 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--num-players", type=int, default=8)
     ap.add_argument("--sandbox-reward", dest="reward", default="log_strength",
                     choices=["log_strength", "auc_strength", "final_strength",
-                             "board_delta"])
+                             "board_delta", "t12_t15"])
     ap.add_argument("--sandbox-reward-mix", dest="reward_mix", default="")
     ap.add_argument("--strength-ref", type=float, default=30000.0)
     ap.add_argument("--lobby-types", default="")
+    # 复利链条核心牌先验（默认关；见 hsbg/az/train/compound_prior.py + docs/COMPOUND_CHAINS.md）
+    ap.add_argument("--compound-prior-coef", type=float, default=0.0,
+                    help="对「当前流派核心牌」的 Buy/Choose 动作加 +coef logit（只加不减；"
+                         "0=关，逐位等价旧路径）")
+    ap.add_argument("--archetype-background-penalty", type=float, default=0.0,
+                    help="对「其他流派核心牌」（非公用牌）加 -penalty logit（0=关）")
+    ap.add_argument("--compound-archetype", default="",
+                    help='指定目标流派（如 "DEMON" / "demon_boost_shop"）；空=用分类器判定')
+    ap.add_argument("--compound-table", default="",
+                    help="复利卡表路径（默认 data/scaling/compound_cards.json）")
+    ap.add_argument("--compound-prior-min-prob", type=float, default=0.6,
+                    help="分类器判定的置信度门槛（与 archetype_bias 同口径）")
+    ap.add_argument("--compound-core-metric", type=int, default=-1,
+                    help="1=统计「目标流派核心牌在场数」，0=关，-1=auto"
+                         "（有先验或指定了 --compound-archetype 时开）")
     # PPO
     ap.add_argument("--lr", type=float, default=3e-6,
                     help="默认 3e-6（dd3 稳定档；lr≥1.5e-5 在 25 万决策内退化）")
@@ -571,9 +642,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         hist_f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         hist_f.flush()
 
+    ramp = parse_gold_ramp(args.sandbox_gold_ramp)
+    gold0 = gold_at(ramp, 0, int(args.gold_per_turn))
+    cap_ramp = parse_cap_ramp(args.sandbox_action_cap_ramp)
+    cap0 = gold_at(cap_ramp, 0, int(args.action_cap))
+
     cfg = SandboxConfig(
         turns=int(args.turns), gold_per_turn=int(args.gold_per_turn),
-        gold_mode=str(args.gold_mode), action_cap=int(args.action_cap),
+        gold_mode=str(args.gold_mode), action_cap=int(cap0),
         num_players=int(args.num_players), reward=str(args.reward),
         reward_mix=str(args.reward_mix), strength_ref=float(args.strength_ref),
         lobby_types=tuple(x.strip().upper() for x in args.lobby_types.split(",") if x.strip()),
@@ -582,15 +658,51 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     cfg.validate()
     print(f"[sandbox] cfg={json.dumps(cfg.engine_config(), ensure_ascii=False)}", flush=True)
 
-    ramp = parse_gold_ramp(args.sandbox_gold_ramp)
-    gold0 = gold_at(ramp, 0, int(args.gold_per_turn))
     print(f"[sandbox] gold ramp={ramp or '(无，固定 %d)' % int(args.gold_per_turn)} "
-          f"start_gold={gold0} free_tier6={bool(int(args.sandbox_free_tier6))} "
+          f"start_gold={gold0} action-cap ramp={cap_ramp or '(无，固定 %d)' % int(args.action_cap)} "
+          f"start_cap={cap0} free_tier6={bool(int(args.sandbox_free_tier6))} "
           f"dtype={args.dtype}", flush=True)
 
     if args.from_scratch:
         args.checkpoint = ""
     model, meta = build_model(args)
+
+    # ── 复利核心牌先验（默认关：两个系数都为 0 时**不构造**对象）──────────
+    prior = None
+    core_ids: Optional[List[str]] = None
+    prior_summary: Dict[str, Any] = {}
+    _coef = float(args.compound_prior_coef)
+    _pen = float(args.archetype_background_penalty)
+    if _coef > 0.0 or _pen > 0.0:
+        from hsbg.az.train.compound_prior import (  # noqa: PLC0415
+            DEFAULT_COMPOUND, CompoundPrior, engine_card_id_lookup)
+        prior = CompoundPrior(
+            coef=_coef, background_penalty=_pen,
+            compound_path=(str(args.compound_table) or DEFAULT_COMPOUND),
+            archetype=str(args.compound_archetype or ""),
+            min_prob=float(args.compound_prior_min_prob),
+            card_index_of=engine_card_id_lookup())
+        prior_summary = prior.summary()
+        print(f"[compound] 先验开：coef={_coef} penalty={_pen} "
+              f"target={args.compound_archetype or '(分类器判定)'} "
+              f"detector={prior_summary['detector']} "
+              f"tribes={prior_summary['n_tribes']} archetypes={prior_summary['n_archetypes']} "
+              f"common={prior_summary['n_common']} ids={prior_summary['n_all_ids']}",
+              flush=True)
+        log_rec({"event": "compound_prior", **prior_summary})
+    # 核心牌在场度量：目标流派核心集（指定了流派用它，否则用全流派核心集）
+    if int(args.compound_core_metric) != 0 and (
+            int(args.compound_core_metric) > 0 or prior is not None
+            or bool(args.compound_archetype)):
+        from hsbg.az.train.compound_prior import (  # noqa: PLC0415
+            DEFAULT_COMPOUND, all_core_ids, core_ids_for)
+        _tbl = str(args.compound_table) or DEFAULT_COMPOUND
+        if str(args.compound_archetype):
+            core_ids = core_ids_for(str(args.compound_archetype), path=_tbl)
+        else:
+            core_ids = all_core_ids(path=_tbl)
+        print(f"[compound] 核心牌度量开：{len(core_ids)} 张 "
+              f"(target={args.compound_archetype or 'ALL'})", flush=True)
 
     # ── 配方断言（启动即失败，不要训练到一半才发现）─────────────────────
     mb = max(1, int(args.minibatch))
@@ -651,7 +763,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     # 采样环境（金币课程：初始档位）
     vec = VectorEconomySandbox(cfg.replaced(gold_per_turn=gold0),
-                               n_envs=int(args.envs), seed0=int(args.seed) * 1000)
+                               n_envs=int(args.envs), seed0=int(args.seed) * 1000,
+                               core_ids=core_ids)
     obs = vec.reset()
 
     # ── 启动 dtype/logprob 自检（真实观测，不进入训练前就失败）──────────
@@ -674,30 +787,35 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         both = {}
         gnow = gold_at(ramp, decisions, int(args.gold_per_turn)) if ramp \
             else int(args.gold_per_turn)
-        ev_cfg = cfg.replaced(gold_per_turn=int(gnow))
+        cnow = gold_at(cap_ramp, decisions, int(cap0)) if cap_ramp else int(cap0)
+        ev_cfg = cfg.replaced(gold_per_turn=int(gnow), action_cap=int(cnow))
         for mode in ("greedy", "sample"):
             ev = evaluate(model, ev_cfg, games, args.device,
                           seed0=int(args.eval_seed_base), sample=(mode == "sample"),
-                          dtype=str(args.dtype))
+                          dtype=str(args.dtype), prior=prior, core_ids=core_ids)
             both[mode] = ev
             log_rec({"event": "eval", "mode": mode, "decisions": decisions,
                      "update": trainer.updates, "final": bool(final),
-                     "gold": int(gnow), "tag": tag, **ev})
+                     "gold": int(gnow), "action_cap": int(cnow), "tag": tag, **ev})
         g = both["greedy"]
         s = both["sample"]
-        print(f"[eval] {tag} (gold={gnow}) sample: t12 p50={s['sigma_t12_p50']:.0f} "
+        print(f"[eval] {tag} (gold={gnow} cap={cnow}) sample: t12 p50={s['sigma_t12_p50']:.0f} "
               f"p90={s['sigma_t12_p90']:.0f} t15 p50={s['sigma_t15_p50']:.0f} "
               f"tier={s['tier_p50']:.0f} carrier={s['carrier_rate']:.2f} "
-              f"spells={s['spells_p50']:.0f} tav={s['tavern_buff_p50']:.0f} | "
+              f"spells={s['spells_p50']:.0f} tav={s['tavern_buff_p50']:.0f}"
+              + (f" core={s['core_t15_p50']:.0f}" if "core_t15_p50" in s else "")
+              + f" | "
               f"greedy: t12={g['sigma_t12_p50']:.0f} t15={g['sigma_t15_p50']:.0f} "
               f"tier={g['tier_p50']:.0f} carrier={g['carrier_rate']:.2f} "
-              f"spells={g['spells_p50']:.0f}", flush=True)
+              f"spells={g['spells_p50']:.0f}"
+              + (f" core={g['core_t15_p50']:.0f}" if "core_t15_p50" in g else ""),
+              flush=True)
         both["primary"] = s
         if s["sigma_t12_p50"] > best["t12"]:
             best.update({"t12": float(s["sigma_t12_p50"]),
                          "t15": float(s["sigma_t15_p50"]),
                          "decisions": int(decisions), "tag": tag,
-                         "gold": int(gnow)})
+                         "gold": int(gnow), "action_cap": int(cnow)})
         return both
 
     if next_eval is not None:
@@ -710,16 +828,35 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         # 金币课程：跨过阈值就给所有环境换档（新 reset 的局立刻生效）
         gnow = gold_at(ramp, decisions, int(args.gold_per_turn)) if ramp \
             else int(args.gold_per_turn)
+        cnow = gold_at(cap_ramp, decisions, int(cap0)) if cap_ramp else int(cap0)
         if int(gnow) != int(vec.gold_per_turn):
             vec.set_gold_per_turn(int(gnow))
             print(f"[sandbox] gold ramp -> {gnow}/回合 @ {decisions / 1e3:.0f}k 决策",
                   flush=True)
             log_rec({"event": "gold_ramp", "decisions": int(decisions),
                      "gold": int(gnow)})
+        # 每回合动作上限课程：切档要重建环境（RulesConfig 的 turn_action_caps 固定）
+        if int(cnow) != int(vec.cfg.action_cap):
+            vec = VectorEconomySandbox(
+                cfg.replaced(gold_per_turn=int(gnow), action_cap=int(cnow)),
+                n_envs=int(args.envs), seed0=int(args.seed) * 1000 + int(decisions),
+                core_ids=core_ids)
+            obs = vec.reset()
+            buf = [[] for _ in range(int(args.envs))]
+            print(f"[sandbox] action-cap ramp -> {cnow}/回合 @ {decisions / 1e3:.0f}k 决策"
+                  "（环境重建）", flush=True)
+            log_rec({"event": "action_cap_ramp", "decisions": int(decisions),
+                     "action_cap": int(cnow)})
         f, c, m = stack_obs(obs)
         turn_now = [o.turn for o in obs]
+        pb = (prior_bias_rows(prior, obs, [int(e.seed) for e in vec.envs])
+              if prior is not None else None)
         a, lp, v = batch_act(model, f, c, m, args.device, sample=True,
-                             dtype=str(args.dtype))
+                             dtype=str(args.dtype), bias=pb)
+        if prior is not None:
+            # 偏置器的历史特征要看到「己方实际动作」（与正式采集同口径）
+            for i in range(int(args.envs)):
+                prior.note_action(int(a[i]), game_id=int(vec.envs[i].seed), seat=0)
         nobs, rewards, dones, infos = vec.step(a)
         for i in range(int(args.envs)):
             buf[i].append({"features": f[i], "cards": c[i], "mask": m[i],
@@ -812,7 +949,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                    "decisions_per_s": decisions / max(1e-9,
                                                       time.perf_counter() - t_start),
                    "episodes": episodes, "best": best, "eval": ev, "bc": bc_rep,
-                   "gold_ramp": ramp, "config": _cfg_dict(cfg), "args": vars(args)},
+                   "gold_ramp": ramp, "action_cap_ramp": cap_ramp,
+                   "compound_prior": (prior.to_meta() if prior is not None else {}),
+                   "compound_summary": prior_summary,
+                   "compound_core_ids": (core_ids or []),
+                   "config": _cfg_dict(cfg), "args": vars(args)},
                   fh, ensure_ascii=False, indent=1)
     hist_f.close()
     return 0

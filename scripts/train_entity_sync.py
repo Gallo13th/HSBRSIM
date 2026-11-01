@@ -378,9 +378,18 @@ def main() -> int:
                     help="塑形折扣 γ_s（默认空=跟随训练 --gamma；只有与训练 γ 严格相等才满足"
                          "策略不变性；显式不一致会启动期警告并记录累计偏差）")
     ap.add_argument("--shaping-w-str", type=float, default=1.0,
-                    help="Φ 的 Σ(atk+hp) 权重（默认 1.0）")
+                    help="Φ 的 Σ(atk+hp) 权重（默认 1.0；log_strength 口径下乘 L(Σ)）")
     ap.add_argument("--shaping-w-tier", type=float, default=0.5,
-                    help="Φ 的 TIER_BONUS 权重（默认 0.5）")
+                    help="Φ 的 TIER_BONUS 权重（默认 0.5；log_strength 口径建议 0）")
+    ap.add_argument("--shaping-mode", default="sigma", choices=["sigma", "log_strength"],
+                    help="塑形强度口径：sigma（默认，原始 Σ）/ log_strength（L(Σ)，与"
+                         "沙盒/推理期叶值同曲线；整局望远镜和 = shaping_coef·L(Σ_T)）")
+    ap.add_argument("--rank-utility-coef", type=float, default=1.0,
+                    help="终局名次效用系数（默认 1.0=旧行为）。混合奖励用："
+                         "0.3 = 0.7·强度 + 0.3·名次")
+    ap.add_argument("--terminal-strength-coef", type=float, default=0.0,
+                    help="终局强度奖励系数（默认 0=关闭）：末步额外加 coef·L(Σ_末决策)；"
+                         "0.7 = 0.7·强度 + 0.3·名次")
     ap.add_argument("--shaping-tier-bonus", default="0,0,20,60,150,400,900",
                     help="按 tier 直接索引的奖励表（逗号分隔；索引 0=占位，越界按 0）")
     # ---- 等级进度奖励（tier-target，默认关闭，见 docs/TIER_TARGET.md）----
@@ -1240,6 +1249,8 @@ def main() -> int:
         epochs=int(args.epochs), minibatch=int(args.minibatch), lr=float(args.lr),
         clip=float(args.clip), gamma=float(args.gamma), lam=float(args.lam),
         target_kl=float(args.target_kl),
+        rank_utility_coef=float(args.rank_utility_coef),
+        terminal_strength_coef=float(args.terminal_strength_coef),
         adv_estimator=str(args.adv_estimator),
         power_alpha=float(args.power_alpha),
         power_kappa=float(args.power_kappa),
@@ -1713,6 +1724,7 @@ def main() -> int:
             shaping_gamma=args.shaping_gamma,
             shaping_w_str=float(args.shaping_w_str),
             shaping_w_tier=float(args.shaping_w_tier),
+            shaping_mode=str(args.shaping_mode),
             shaping_tier_bonus=str(args.shaping_tier_bonus),
             # 等级进度奖励（默认 coef=0 -> 零影响）
             tier_target_coef=float(args.tier_target_coef),
@@ -1736,6 +1748,8 @@ def main() -> int:
                 power_normalize=bool(int(args.power_normalize)),
                 power_cutoff=int(args.power_cutoff),
                 credit_timebase=str(args.credit_timebase),
+                rank_utility_coef=float(args.rank_utility_coef),
+                terminal_strength_coef=float(args.terminal_strength_coef),
                 weights_version=(published["version"] if wv is None else wv),
                 weights_path=(published["path"] if wp is None else wp))
         elif args.workers > 1:
@@ -1751,7 +1765,9 @@ def main() -> int:
                 power_kappa=float(args.power_kappa),
                 power_normalize=bool(int(args.power_normalize)),
                 power_cutoff=int(args.power_cutoff),
-                credit_timebase=str(args.credit_timebase))
+                credit_timebase=str(args.credit_timebase),
+                rank_utility_coef=float(args.rank_utility_coef),
+                terminal_strength_coef=float(args.terminal_strength_coef))
         else:
             batch, collect_meta = collect_ppo_batch(
                 model, c_cfg, search_fn=search_fn, search_config=search_cfg,
@@ -1764,7 +1780,9 @@ def main() -> int:
                 power_kappa=float(args.power_kappa),
                 power_normalize=bool(int(args.power_normalize)),
                 power_cutoff=int(args.power_cutoff),
-                credit_timebase=str(args.credit_timebase))
+                credit_timebase=str(args.credit_timebase),
+                rank_utility_coef=float(args.rank_utility_coef),
+                terminal_strength_coef=float(args.terminal_strength_coef))
         return batch, collect_meta, c_cfg, time.time() - t_c, _hb_state
 
     def _pre_ratio(batch: Any, n: int = 2048) -> float:

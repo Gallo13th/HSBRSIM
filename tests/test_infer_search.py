@@ -20,11 +20,12 @@ import pytest
 
 from hsbg.az.train.common import mask_from_bytes, obs_arrays
 from hsbg.az.train.infer_search import (InferSearchConfig, InferSearchPolicy,
-                                        InferSearcher, leaf_score, leaf_value,
-                                        trace_summary)
+                                        InferSearcher, _Roll, leaf_score,
+                                        leaf_value, trace_summary)
 from hsbg.az.train.policies import Decision, Policy
-from hsbg.az.train.sandbox_rollout import (MOVE_HI, MOVE_LO, DecisionTags,
-                                           root_candidates)
+from hsbg.az.train.sandbox_rollout import (FEAT_TIER, FEAT_TIER_SCALE, MOVE_HI,
+                                           MOVE_LO, DecisionTags, pi_from_q,
+                                           root_candidates, sigmas_from_features)
 
 pytest.importorskip("hsbg_engine")
 
@@ -365,3 +366,156 @@ def test_leaf_bonus_wired_into_search():
     big = _searcher(enabled=1, turns=1, search_when="any", topk=6,
                     health_bonus=10.0).search(g, 0)
     assert big is not None and np.all(np.isfinite(big.q))
+
+
+# ── 7. 随机性感知搜索（StochasticSearcher：K 次采样）──────────────────────
+def _legacy_reference_search(sr: InferSearcher, game, seat: int = 0):
+    """K=1 旧路径的独立复刻（greedy rollout，用于逐位等价回归）。
+
+    刻意不复用 ``InferSearcher.search``，否则测试变成同义反复：这里按修改前的
+    实现（单副本、argmax rollout、叶值 = 单次 L(Σ)）重写一遍。
+    """
+    f, c = obs_arrays(game.observe(seat))
+    mask = mask_from_bytes(game.legal_mask(seat))
+    p = sr.prior_batch(f[None, :], c[None, :], mask[None, :])[0]
+    cands = root_candidates(mask, p, int(sr.cfg.topk), skip_move=bool(sr.cfg.skip_move))
+    if cands.size < 2:
+        return None
+    root_turn = int(game.turn)
+    target = root_turn + max(0, int(sr.cfg.turns) - 1)
+    sigma_root = sr.sigma(f)
+    rolls = []
+    for a in cands.tolist():
+        g = game.copy()
+        r = _Roll(cand=int(a), game=g, root_turn=root_turn, target_turn=int(target),
+                  sigma=int(sigma_root), tier=max(0, int(round(float(
+                      f[FEAT_TIER]) * FEAT_TIER_SCALE))), health=sr.health(game, seat))
+        r.turn_actions = 1
+        try:
+            g.step(seat, int(a))
+        except (RuntimeError, ValueError):
+            r.truncated = r.done = True
+        if not r.done and bool(g.is_over()):
+            r.done = True
+        rolls.append(r)
+    max_steps = int(sr.cfg.max_rollout_steps) or (64 * int(sr.cfg.turns) + 64)
+    steps = 0
+    for _ in range(max_steps):
+        todo = [r for r in rolls if not r.done]
+        if not todo:
+            break
+        batch = []
+        for r in todo:
+            g = r.game
+            if bool(g.is_over()) or int(g.turn) > int(r.target_turn):
+                r.done = True
+                continue
+            if bool(g.needs_action(seat)):
+                gf, gc = obs_arrays(g.observe(seat))
+                gm = mask_from_bytes(g.legal_mask(seat))
+                batch.append((r, gf, gc, gm))
+                continue
+            if int(sr.cfg.turns) <= 1:
+                r.done = True
+                continue
+            if not sr._alive(g, seat):
+                r.done = True
+                continue
+            if not sr._advance_others(g, seat):
+                r.truncated = r.done = True
+                continue
+        if not batch:
+            continue
+        fmat = np.stack([b[1] for b in batch])
+        cmat = np.stack([b[2] for b in batch])
+        mmat = np.stack([b[3] for b in batch])
+        pri = sr.prior_batch(fmat, cmat, mmat)
+        sig = sigmas_from_features(fmat)
+        tiers = np.rint(np.asarray(fmat, dtype=np.float64)[:, FEAT_TIER]
+                        * FEAT_TIER_SCALE).astype(np.int64)
+        for k, (r, _gf, _gc, gm) in enumerate(batch):
+            r.sigma = int(round(float(sig[k])))
+            r.tier = max(0, int(tiers[k]))
+            r.health = sr.health(r.game, seat)
+            r.steps += 1
+            steps += 1
+            a = int(np.argmax(pri[k]))
+            r.turn_actions += 1
+            if int(sr.cfg.rollout_max_actions_per_turn) > 0 \
+                    and r.turn_actions > int(sr.cfg.rollout_max_actions_per_turn) \
+                    and bool(gm[0]):
+                a = 0
+            try:
+                r.game.step(seat, int(a))
+            except (RuntimeError, ValueError):
+                r.truncated = r.done = True
+                continue
+            if bool(r.game.is_over()):
+                r.done = True
+    q = np.asarray([sr.leaf_q(r) for r in rolls], dtype=np.float64)
+    sg = np.asarray([int(r.sigma) for r in rolls], dtype=np.int64)
+    from hsbg.az.train.sandbox_rollout import pi_from_q
+    pi, _tau, value = pi_from_q(p, cands, q, sr._rc)
+    return {"q": q, "sigma_end": sg, "pi": pi, "cands": np.asarray(cands),
+            "leaf_steps": int(steps)}
+
+
+def test_k1_is_bit_identical_to_legacy_path():
+    """K=1（auto→greedy）必须与旧实现逐位一致：q / sigma_end / π / 候选。"""
+    from hsbg.az.train.sandbox_rollout import pi_from_q  # noqa: F401
+    g = _midgame(min_turn=5)
+    sr = _searcher(enabled=1, turns=1, search_when="any", topk=5)
+    out = sr.search(g, 0)
+    ref = _legacy_reference_search(sr, g)
+    assert out is not None and ref is not None
+    assert np.array_equal(out.cands, ref["cands"])
+    assert np.array_equal(out.q, ref["q"])
+    assert np.array_equal(out.sigma_end, ref["sigma_end"])
+    assert np.array_equal(out.pi, ref["pi"])
+    assert int(out.rollouts) == 1
+    assert np.all(out.q_se == 0.0)
+
+
+def test_stochastic_rollouts_mean_se_and_seed_determinism():
+    """K>1：叶值 = K 次均值；SE = std/√K；同 seed 逐位可复现、换 seed 有差异。"""
+    g = _midgame(min_turn=5)
+    kw = dict(enabled=1, turns=1, search_when="any", topk=5, rollouts=4,
+              rollout_mode="sample", rollout_seed=12345)
+    o1 = _searcher(**kw).search(g, 0)
+    o2 = _searcher(**kw).search(g, 0)
+    o3 = _searcher(**{**kw, "rollout_seed": 999}).search(g, 0)
+    assert o1 is not None and o2 is not None and o3 is not None
+    for o in (o1, o2, o3):
+        assert int(o.rollouts) == 4
+        assert o.q_samples.shape == (int(o.cands.size), 4)
+        # 均值 / 标准误契约
+        assert np.allclose(o.q, o.q_samples.mean(axis=1), atol=1e-12)
+        want_se = o.q_samples.std(axis=1, ddof=1) / np.sqrt(4.0)
+        assert np.allclose(o.q_se, want_se, atol=1e-12)
+        assert np.all(o.q_se >= 0.0)
+    # 同 seed / 同调用序 ⇒ 逐位相同
+    assert np.array_equal(o1.q, o2.q)
+    assert np.array_equal(o1.q_samples, o2.q_samples)
+    # 换 seed ⇒ 至少一条候选的样本序列不同（引擎无重播种 API，用动作采样流近似）
+    assert not np.array_equal(o1.q_samples, o3.q_samples)
+    # K 次采样确实不同（同一候选内部至少一处方差 > 0）
+    assert np.any(o1.q_se > 0.0), "K=4 的采样副本完全一致：独立性没生效"
+
+
+def test_rollouts_gt1_greedy_is_rejected():
+    """greedy + K>1 的副本必然相同 ⇒ 配置层直接拒绝（不静默浪费算力）。"""
+    with pytest.raises(ValueError):
+        InferSearchConfig(enabled=1, rollouts=4, rollout_mode="greedy").validate()
+    # auto 在 K=1/K>1 下分别解析为 greedy/sample
+    assert InferSearchConfig(rollouts=1).effective_rollout_mode() == "greedy"
+    assert InferSearchConfig(rollouts=4).effective_rollout_mode() == "sample"
+
+
+def test_search_timeout_falls_back_to_none():
+    """``--infer-search-max-ms`` 超时：立即放弃本次搜索、调用方退回 π_base。"""
+    g = _midgame(min_turn=5)
+    sr = _searcher(enabled=1, turns=1, search_when="any", topk=6,
+                   max_ms_per_search=1e-9)
+    assert sr.search(g, 0) is None
+    assert sr.timeouts == 1
+    assert sr.calls == 0

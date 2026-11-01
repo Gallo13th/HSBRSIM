@@ -120,6 +120,8 @@ class ExitConfig:
     # ── 搜索口径（与 infer_search / AB 面板同源）──────────────────────────
     turns: int = 1
     topk: int = 8
+    #: 随机性感知搜索的独立 rollout 数（1 = 旧路径；标签质量用 K>1 更稳）
+    rollouts: int = 1
     max_searches_per_turn: int = 3
     search_when: str = "carrier_or_spell"
     pi_mode: str = "advantage"
@@ -171,6 +173,8 @@ class ExitConfig:
             raise ValueError("turns 必须 >= 1")
         if int(self.topk) < 2:
             raise ValueError("topk 必须 >= 2")
+        if not (1 <= int(self.rollouts) <= 64):
+            raise ValueError("rollouts 必须在 1..64")
         if str(self.behavior) not in ("greedy", "sample"):
             raise ValueError("behavior 只能是 greedy|sample")
         if str(self.weight_mode) not in ("adv", "awr", "none"):
@@ -195,6 +199,7 @@ class ExitConfig:
     def search_config(self) -> InferSearchConfig:
         return InferSearchConfig(
             enabled=0, turns=int(self.turns), topk=int(self.topk),
+            rollouts=int(self.rollouts),
             max_searches_per_turn=int(self.max_searches_per_turn),
             search_when=str(self.search_when), action="pi_argmax",
             pi_mode=str(self.pi_mode), q_temp=float(self.q_temp),

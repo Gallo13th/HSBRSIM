@@ -231,6 +231,8 @@ def _panel(seed_base: int, games: int, seats: int, per_seat: int, *,
     # ── 推理期搜索统计 / Σ(turn) 强度轨迹（search 开关两条臂口径一致）─────────
     search_meta: Dict[str, Any] = {
         "enabled": int(s_cfg.enabled), "turns": int(s_cfg.turns),
+        "rollouts": int(s_cfg.rollouts),
+        "rollout_mode": str(s_cfg.effective_rollout_mode()),
         "when": str(s_cfg.search_when), "action": str(s_cfg.action),
         "topk": int(s_cfg.topk), "max_per_turn": int(s_cfg.max_searches_per_turn),
         "adv_clip": float(s_cfg.adv_clip),
@@ -253,6 +255,12 @@ def _panel(seed_base: int, games: int, seats: int, per_seat: int, *,
         "rollout_truncated": sum(int(s.get("rollout_truncated") or 0) for s in all_search),
         "leaf_steps": int(_ls),
         "leaf_steps_per_call": round(float(_ls) / _calls, 1) if _calls else None,
+        "mean_q_se": (round(sum(float(s.get("mean_q_se") or 0.0)
+                               for s in all_search) / max(_calls, 1), 6)
+                      if _calls else None),
+        "q_se_ratio": (round(sum(float(s.get("q_se_ratio") or 0.0) * int(
+            s.get("search_calls") or 0) for s in all_search) / max(_calls, 1), 4)
+            if _calls else None),
         "search_calls_per_game": round(float(_calls) / max(int(games), 1), 2),
         "search_ms_per_game": round(float(_ms) / max(int(games), 1), 1),
         "per_seat": all_search,
@@ -369,6 +377,12 @@ def main() -> int:
                          "argmax_q（叶值最优）/ sample（按 π_search 采样）")
     ap.add_argument("--infer-search-topk", type=int, default=8,
                     help="根候选数 = π_base top-k 非 Move 合法动作（默认 8）")
+    ap.add_argument("--infer-search-rollouts", type=int, default=1,
+                    help="随机性感知搜索：同一动作的独立 rollout 数 K（默认 1 = 旧路径；"
+                         "K>1 时叶值 = K 次 Monte-Carlo 均值，并记录标准误）")
+    ap.add_argument("--infer-search-rollout-mode", default="auto",
+                    choices=["auto", "greedy", "sample"],
+                    help="rollout 行为：auto（K=1 greedy / K>1 sample）/ greedy / sample")
     ap.add_argument("--infer-search-tier-bonus", type=float, default=0.0,
                     help="叶值 tier 项权重：+w·(tier/6)（默认 0 = 纯 log1p(Σ)）")
     ap.add_argument("--infer-search-health-bonus", type=float, default=0.0,
@@ -412,6 +426,8 @@ def main() -> int:
         search_when=str(args.infer_search_when),
         action=str(args.infer_search_action),
         topk=int(args.infer_search_topk),
+        rollouts=int(args.infer_search_rollouts),
+        rollout_mode=str(args.infer_search_rollout_mode),
         adv_clip=float(args.infer_search_adv_clip),
         tier_bonus=float(args.infer_search_tier_bonus),
         health_bonus=float(args.infer_search_health_bonus),

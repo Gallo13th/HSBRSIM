@@ -402,7 +402,10 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                             power_kappa=float(task.get("power_kappa", 3.0)),
                             power_normalize=bool(task.get("power_normalize", True)),
                             power_cutoff=int(task.get("power_cutoff", 0)),
-                            credit_timebase=str(task.get("credit_timebase", "decision"))),
+                            credit_timebase=str(task.get("credit_timebase", "decision")),
+                            rank_utility_coef=float(task.get("rank_utility_coef", 1.0)),
+                            terminal_strength_coef=float(
+                                task.get("terminal_strength_coef", 0.0))),
                         records_file)
                 else:
                     packed = pack_records_arrays(
@@ -417,7 +420,10 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                                 power_kappa=float(task.get("power_kappa", 3.0)),
                                 power_normalize=bool(task.get("power_normalize", True)),
                                 power_cutoff=int(task.get("power_cutoff", 0)),
-                                credit_timebase=str(task.get("credit_timebase", "decision"))),
+                                credit_timebase=str(task.get("credit_timebase", "decision")),
+                            rank_utility_coef=float(task.get("rank_utility_coef", 1.0)),
+                            terminal_strength_coef=float(
+                                task.get("terminal_strength_coef", 0.0))),
                             records_file)
                     except BaseException:  # noqa: BLE001 - 回退到父进程构建
                         np.savez(records_file, **packed)
@@ -674,6 +680,8 @@ class ProcessActorPool:
                 power_normalize: bool = True,
                 power_cutoff: int = 0,
                 credit_timebase: str = "decision",
+                rank_utility_coef: float = 1.0,
+                terminal_strength_coef: float = 0.0,
                 weights_version: Optional[int] = None,
                 weights_path: Optional[str] = None) -> Tuple[PPOBatch, Dict[str, Any]]:
         n = max(1, int(games))
@@ -702,6 +710,8 @@ class ProcessActorPool:
                 "power_normalize": bool(power_normalize),
                 "power_cutoff": int(power_cutoff),
                 "credit_timebase": str(credit_timebase),
+                "rank_utility_coef": float(rank_utility_coef),
+                "terminal_strength_coef": float(terminal_strength_coef),
                 "weights_version": weights_version, "weights_path": weights_path,
                 "lockstep": bool(getattr(cfg, "lockstep", False)),
                 "cfg": {**asdict(cfg), "games": gcount,
@@ -904,7 +914,9 @@ class ProcessActorPool:
                     power_kappa=float(power_kappa),
                     power_normalize=bool(power_normalize),
                     power_cutoff=int(power_cutoff),
-                    credit_timebase=str(credit_timebase))
+                    credit_timebase=str(credit_timebase),
+                    rank_utility_coef=float(rank_utility_coef),
+                    terminal_strength_coef=float(terminal_strength_coef))
                 packed_all[i] = {
                     "features": lb.features, "cards": lb.cards, "masks": lb.masks,
                     "actions": lb.actions, "old_logprobs": lb.old_logprobs,
@@ -944,7 +956,9 @@ class ProcessActorPool:
                 power_kappa=float(power_kappa),
                 power_normalize=bool(power_normalize),
                 power_cutoff=int(power_cutoff),
-                credit_timebase=str(credit_timebase))
+                credit_timebase=str(credit_timebase),
+                rank_utility_coef=float(rank_utility_coef),
+                terminal_strength_coef=float(terminal_strength_coef))
         else:
             batch = build_batch_from_records(
                 records, gamma=float(gamma), lam=float(lam), meta=meta,
@@ -953,7 +967,9 @@ class ProcessActorPool:
                 power_kappa=float(power_kappa),
                 power_normalize=bool(power_normalize),
                 power_cutoff=int(power_cutoff),
-                credit_timebase=str(credit_timebase))
+                credit_timebase=str(credit_timebase),
+                rank_utility_coef=float(rank_utility_coef),
+                terminal_strength_coef=float(terminal_strength_coef))
         build_batch_s = time.time() - t_b0
         if str(adv_estimator).strip().lower() != "gae":
             # 默认 gae 不新增键；启用时记录核参数（逐 shard diagnostics 已在

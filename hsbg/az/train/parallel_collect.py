@@ -268,7 +268,9 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
                                power_kappa: float = 3.0,
                                power_normalize: bool = True,
                                power_cutoff: int = 0,
-                               credit_timebase: str = "decision") -> Tuple[PPOBatch, Dict[str, Any]]:
+                               credit_timebase: str = "decision",
+                               rank_utility_coef: float = 1.0,
+                               terminal_strength_coef: float = 0.0) -> Tuple[PPOBatch, Dict[str, Any]]:
     t0 = time.time()
     records, meta_out = collect_ppo_records_parallel(
         model, config, workers=workers, search_fn=search_fn,
@@ -283,7 +285,9 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
                                      power_kappa=power_kappa,
                                      power_normalize=power_normalize,
                                      power_cutoff=power_cutoff,
-                                     credit_timebase=credit_timebase)
+                                     credit_timebase=credit_timebase,
+                                     rank_utility_coef=rank_utility_coef,
+                                     terminal_strength_coef=terminal_strength_coef)
     batch.meta.update({"collect_seconds": time.time() - t0,
                        "collect": {k: v for k, v in meta_out.items()
                                    if k != "games_meta"}})

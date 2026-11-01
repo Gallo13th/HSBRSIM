@@ -101,6 +101,27 @@ MASKED_LOGIT = -1e30
 #: logprob 下限（行为分布采样时防 log(0)）。
 LOGPROB_FLOOR = 1e-12
 
+#: 战团强度 Σ 在标准观测里的位置（board 块 7×31，atk/hp 已 /10）。
+BOARD_SLICE = slice(68, 285)
+BOARD_N, BOARD_F = 7, 31
+STRENGTH_LOG_REF = 30000.0
+
+
+def log_strength_from_features(features: Any) -> np.ndarray:
+    """features[n,3227] → ``L(Σ) = log1p(Σ)/log1p(30000)``（与沙盒/叶值同一曲线）。
+
+    只用于「0.7·强度 + 0.3·名次」的终局强度项；要求 features 是**原始编码**
+    （未做输入标准化）。Σ 用 ``docs/ECONOMY_SANDBOX.md`` §1 的 board 块口径：
+    ``board[i,0] > 0.5`` 表示有随从，atk/hp 乘以 10 还原。
+    """
+    arr = np.asarray(features, dtype=np.float32)
+    if arr.ndim == 1:
+        arr = arr[None, :]
+    b = arr[:, BOARD_SLICE].reshape(arr.shape[0], BOARD_N, BOARD_F)
+    present = b[:, :, 0] > 0.5
+    sig = np.where(present, b[:, :, 1] + b[:, :, 2], 0.0).sum(axis=1) * 10.0
+    return np.log1p(np.maximum(sig, 0.0)) / np.log1p(float(STRENGTH_LOG_REF))
+
 
 def _torch():
     try:
@@ -376,6 +397,9 @@ class CollectConfig:
     #: Φ(s) = shaping_w_str * Σ(atk+hp) + shaping_w_tier * TIER_BONUS[tier]
     shaping_w_str: float = 1.0
     shaping_w_tier: float = 0.5
+    #: 塑形势的强度口径：``sigma``（默认，原始 Σ）/ ``log_strength``（L(Σ)，
+    #: 整局望远镜求和 = shaping_coef·L(Σ_T)，与沙盒/叶值同一曲线）。
+    shaping_mode: str = "sigma"
     #: 逗号分隔的 tier 奖励表，**按 tier 直接索引**（索引 0 为占位；越界按 0）。
     shaping_tier_bonus: str = "0,0,20,60,150,400,900"
     #: ── 等级进度奖励（tier-target，默认关闭；见 docs/TIER_TARGET.md）──
@@ -986,6 +1010,12 @@ class PPOConfig:
     clip: float = 0.2
     gamma: float = 1.0             # 8 座单局终局效用，通常不折扣
     lam: float = 0.95              # GAE λ
+    #: 终局名次效用的系数（默认 1.0 = 旧行为）。用于「0.7·强度 + 0.3·名次」这类
+    #: 混合奖励：强度项走势函数塑形（``shaping_mode=log_strength``），名次项乘本系数。
+    rank_utility_coef: float = 1.0
+    #: 终局强度奖励系数（默认 0 = 关闭）：末步额外加 ``coef·L(Σ_末决策)``。
+    #: 与 ``rank_utility_coef`` 一起构成「0.7·强度 + 0.3·名次」的目标奖励。
+    terminal_strength_coef: float = 0.0
     entropy_coef: float = 0.01
     value_coef: float = 0.5
     #: MCTS visit π 辅助交叉熵权重 alpha（0 = 关闭，退化为纯 PPO）
@@ -1228,6 +1258,12 @@ class PPOConfig:
             _v = float(getattr(self, _name) or 0.0)
             if not math.isfinite(_v) or _v < 0.0:
                 raise ValueError(f"{_name} 必须 >= 0，得到 {_v!r}")
+        _ruc = float(getattr(self, "rank_utility_coef", 1.0) or 0.0)
+        if not math.isfinite(_ruc) or _ruc < 0.0:
+            raise ValueError(f"rank_utility_coef 必须 >= 0，得到 {_ruc!r}")
+        _tsc = float(getattr(self, "terminal_strength_coef", 0.0) or 0.0)
+        if not math.isfinite(_tsc) or _tsc < 0.0:
+            raise ValueError(f"terminal_strength_coef 必须 >= 0，得到 {_tsc!r}")
         for _name in ("problem_bc_every", "strength_aux_every", "problem_batch"):
             if int(getattr(self, _name) or 0) <= 0:
                 raise ValueError(f"{_name} 必须 >= 1，得到 {getattr(self, _name)!r}")
@@ -1488,7 +1524,9 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
                              power_kappa: float = 3.0,
                              power_normalize: bool = True,
                              power_cutoff: int = 0,
-                             credit_timebase: str = "decision") -> PPOBatch:
+                             credit_timebase: str = "decision",
+                             rank_utility_coef: float = 1.0,
+                             terminal_strength_coef: float = 0.0) -> PPOBatch:
     """把决策记录列表整理成 ``PPOBatch``（奖励/GAE 均已计算）。
 
     ``records`` 每条至少包含::
@@ -1563,7 +1601,13 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
             end += 1
         episode_ids[start:end] = ep
         last = end - 1
-        rewards[last] = float(utility_from_rank([int(ranks[last])])[0]) - float(step_penalty)
+        rewards[last] = (float(rank_utility_coef)
+                         * float(utility_from_rank([int(ranks[last])])[0])
+                         - float(step_penalty))
+        if float(terminal_strength_coef) != 0.0:
+            rewards[last] += (float(terminal_strength_coef)
+                              * float(log_strength_from_features(
+                                  features[last:last + 1])[0]))
         if has_reward:
             rewards[last] += float(recs[last].get("reward", 0.0))
         dones[last] = 1.0
@@ -3496,7 +3540,9 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
                             power_kappa: float = 3.0,
                             power_normalize: bool = True,
                             power_cutoff: int = 0,
-                            credit_timebase: str = "decision") -> "PPOBatch":
+                            credit_timebase: str = "decision",
+                            rank_utility_coef: float = 1.0,
+                            terminal_strength_coef: float = 0.0) -> "PPOBatch":
     """SoA 数组 → PPOBatch（与 ``build_batch_from_records`` 等价，但零 dict）。
 
     可选字段 ``seq_target``（动作序列辅助标签）存在且形状正确时透传给批次；
@@ -3548,7 +3594,13 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
     last_of_ep[:-1] = key_change[1:]
     last_of_ep[-1] = True
     util = utility_from_rank(ranks[valid][order])
-    rewards[last_of_ep] = np.asarray(util, dtype=np.float32)[last_of_ep] - float(step_penalty)
+    rewards[last_of_ep] = (float(rank_utility_coef)
+                           * np.asarray(util, dtype=np.float32)[last_of_ep]
+                           - float(step_penalty))
+    if float(terminal_strength_coef) != 0.0:
+        _ls = log_strength_from_features(t["features"])
+        rewards[last_of_ep] += (float(terminal_strength_coef)
+                                * _ls[last_of_ep].astype(np.float32))
     if base_reward is not None:
         rewards[last_of_ep] += base_reward[last_of_ep]
     dones[last_of_ep] = 1.0
@@ -3627,7 +3679,9 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                       power_kappa: float = 3.0,
                       power_normalize: bool = True,
                       power_cutoff: int = 0,
-                      credit_timebase: str = "decision") -> Tuple[PPOBatch, Dict[str, Any]]:
+                      credit_timebase: str = "decision",
+                      rank_utility_coef: float = 1.0,
+                      terminal_strength_coef: float = 0.0) -> Tuple[PPOBatch, Dict[str, Any]]:
     """MCTS 自对弈采集一条 PPO 轨迹批次。
 
     ``config.opponent="self"``：8 座自对弈（复用 ``selfplay.play_selfplay_game``）；
@@ -3851,7 +3905,9 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
                                      power_kappa=power_kappa,
                                      power_normalize=power_normalize,
                                      power_cutoff=power_cutoff,
-                                     credit_timebase=credit_timebase)
+                                     credit_timebase=credit_timebase,
+                                     rank_utility_coef=rank_utility_coef,
+                                     terminal_strength_coef=terminal_strength_coef)
     batch.meta.update({
         "collect_seconds": float(time.time() - t0),
         "collect": {k: v for k, v in collect_meta.items() if k != "games_meta"},

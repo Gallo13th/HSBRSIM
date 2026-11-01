@@ -179,9 +179,9 @@ class SandboxConfig:
         if self.gold_mode not in ("set", "add"):
             raise ValueError("gold_mode 只能是 set|add")
         if self.reward not in ("log_strength", "auc_strength", "final_strength",
-                               "board_delta"):
+                               "board_delta", "t12_t15"):
             raise ValueError("reward 只能是 log_strength|auc_strength|final_strength|"
-                             "board_delta")
+                             "board_delta|t12_t15")
         if not (2 <= int(self.num_players) <= 8):
             raise ValueError("num_players 必须在 2..8")
         for name, _w in self.mix_terms():
@@ -231,12 +231,16 @@ class EconomySandbox:
     """
 
     def __init__(self, config: Optional[SandboxConfig] = None, *,
-                 carriers: Optional[Iterable[str]] = None):
+                 carriers: Optional[Iterable[str]] = None,
+                 core_ids: Optional[Iterable[str]] = None):
         self.cfg = config or SandboxConfig()
         self.cfg.validate()
         self._cfg_json = self.cfg.engine_json()
         self._mix = self.cfg.mix_terms()
         self._carriers = set(carriers) if carriers is not None else set(carrier_ids())
+        #: 复利核心牌（``data/scaling/compound_cards.json`` 的目标流派核心集）；只用于度量。
+        #: ``None`` = 不统计（不新增 "core" 键 → 旧路径的度量逐位不变）。
+        self._core = set(core_ids) if core_ids is not None else None
         self._engine = None
         self.g = None
         self.seed = int(self.cfg.seed)
@@ -417,7 +421,7 @@ class EconomySandbox:
         board = me.get("board") or []
         sigma = sum(int(m.get("atk") or 0) + int(m.get("hp") or 0) for m in board)
         carriers = sum(1 for m in board if str(m.get("id") or "") in self._carriers)
-        return {
+        out: Dict[str, Any] = {
             "turn": int(v.get("turn") or self.g.turn),
             "sigma": int(sigma),
             "tier": int(me.get("tier") or 0),
@@ -430,6 +434,11 @@ class EconomySandbox:
             "minions_bought": int(st.get("minions_bought") or 0),
             "refreshes": int(st.get("refreshes") or 0),
         }
+        if self._core is not None:
+            # 目标流派核心牌在场数（复利先验的效果度量；未配置时不新增键）
+            out["core"] = int(sum(1 for m in board
+                                  if str(m.get("id") or "") in self._core))
+        return out
 
     @staticmethod
     def sigma_from_features(features: np.ndarray) -> int:
@@ -450,6 +459,14 @@ class EconomySandbox:
             r = L - self._prev_L
         elif mode == "auc_strength":
             r = L
+        elif mode == "t12_t15":
+            # 目标（L 归一化口径，与 value 头/叶值同一曲线）：
+            #   T = L(Σ12) + 0.5·L(Σ15)
+            # 逐回合密集分解（精确望远镜，形状优势不变）：
+            #   t<=12: r_t = 1.5·(L_t − L_{t−1})；t>12: r_t = 0.5·(L_t − L_{t−1})
+            #   Σ_t r_t = 1.5·L12 + 0.5·(L15 − L12) = 1.0·L12 + 0.5·L15
+            coef = 1.5 if int(met["turn"]) <= 12 else 0.5
+            r = coef * (L - self._prev_L)
         else:  # final_strength：只在最后一回合给
             last = int(met["turn"]) >= int(self.cfg.turns)
             r = L if last else 0.0
@@ -534,7 +551,7 @@ class EconomySandbox:
 
         last = rows[-1] if rows else {}
         tiers = [int(r["tier"]) for r in rows] or [0]
-        return {
+        out: Dict[str, Any] = {
             "seed": int(self.seed),
             "turns": len(rows),
             "sigma_by_turn": {int(r["turn"]): int(r["sigma"]) for r in rows},
@@ -558,6 +575,12 @@ class EconomySandbox:
                 "free_tier6": bool(self.cfg.free_tier6),
                 "num_players": int(self.cfg.num_players)},
         }
+        if self._core is not None:
+            # 复利核心牌在场数的整局口径：t15 / 单局最大 / 有核心牌的回合数
+            out["core_t15"] = _val(15, "core", int(last.get("core") or 0))
+            out["core_max"] = max((int(r.get("core") or 0) for r in rows), default=0)
+            out["core_turns"] = sum(1 for r in rows if int(r.get("core") or 0) > 0)
+        return out
 
 
 # ── 向量化（训练采样用：同进程 lockstep）───────────────────────────────────
@@ -572,10 +595,11 @@ class VectorEconomySandbox:
     """
 
     def __init__(self, config: Optional[SandboxConfig] = None, n_envs: int = 64,
-                 seed0: int = 0):
+                 seed0: int = 0, core_ids: Optional[Iterable[str]] = None):
         self.cfg = config or SandboxConfig()
         self.n_envs = max(1, int(n_envs))
-        self.envs = [EconomySandbox(self.cfg) for _ in range(self.n_envs)]
+        self.envs = [EconomySandbox(self.cfg, core_ids=core_ids)
+                     for _ in range(self.n_envs)]
         self._next_seed = int(seed0)
         self.episodes: List[Dict[str, Any]] = []
         self.decisions = 0
@@ -734,6 +758,18 @@ def summarize(episodes: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
         "return_mean": float(np.mean(col("return"))) if episodes else 0.0,
         "decisions_mean": float(np.mean(col("decisions"))) if episodes else 0.0,
     }
+    # 「目标流派核心牌在场数」只有在环境配了 ``core_ids`` 时才出现（默认不新增键）：
+    # 核心牌 = ``data/scaling/compound_cards.json`` 里该流派的核心集（见
+    # docs/COMPOUND_CHAINS.md）。度量口径与 ``carriers`` 完全平行。
+    if any("core_t15" in e for e in episodes):
+        cc = col("core_t15")
+        out["core_t15_p50"] = _pct(cc, 50)
+        out["core_t15_mean"] = float(np.mean(cc)) if cc else 0.0
+        out["core_rate"] = float(np.mean([
+            1.0 if float(e.get("core_max") or 0) > 0 else 0.0 for e in episodes])) \
+            if episodes else 0.0
+        out["core_turns_mean"] = float(np.mean(
+            [float(e.get("core_turns") or 0) for e in episodes])) if episodes else 0.0
     # 「对载体施法数」只有在调用方做了载体审计（``carrier_audit=1``）时才出现：
     # 口径与完整游戏 ``quality_monitor --carrier-audit 1`` 的
     # ``casts_on_carrier`` 一致（目标选择命中载体 eid 的次数）。
@@ -762,7 +798,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--num-players", type=int, default=8)
     ap.add_argument("--sandbox-reward", dest="reward", default="log_strength",
                     choices=["log_strength", "auc_strength", "final_strength",
-                             "board_delta"])
+                             "board_delta", "t12_t15"])
     ap.add_argument("--sandbox-reward-mix", dest="reward_mix", default="")
     ap.add_argument("--lobby-types", default="")
     ap.add_argument("--free-tier6", dest="free_tier6", type=int, default=0,

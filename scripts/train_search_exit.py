@@ -216,6 +216,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # 搜索口径
     ap.add_argument("--turns", type=int, default=1)
     ap.add_argument("--topk", type=int, default=8)
+    ap.add_argument("--search-rollouts", type=int, default=1,
+                    help="搜索的独立 rollout 数 K（1=旧路径；K>1=随机性感知 Monte-Carlo）")
     ap.add_argument("--max-per-turn", type=int, default=3)
     ap.add_argument("--search-when", default="carrier_or_spell")
     ap.add_argument("--adv-clip", type=float, default=30.0)
@@ -272,6 +274,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         max_steps=int(args.max_steps), max_actions_per_turn=int(args.max_actions_per_turn),
         behavior=str(args.behavior), human_boards=str(args.human_boards),
         turns=int(args.turns), topk=int(args.topk),
+        rollouts=int(args.search_rollouts),
         max_searches_per_turn=int(args.max_per_turn),
         search_when=str(args.search_when), adv_clip=float(args.adv_clip),
         weight_mode=str(args.weight_mode), weight_stat=str(args.weight_stat),
