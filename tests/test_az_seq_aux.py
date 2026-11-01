@@ -252,7 +252,11 @@ def test_batch_fields_unchanged_and_optional_only():
         "dones", "advantages", "returns", "seats", "game_ids", "ranks", "turns",
         "target_pi", "has_pi", "episode_ids", "forced",
     )
-    assert BATCH_OPTIONAL_FIELDS == (SEQ_TARGET_KEY,)
+    # 可选字段：seq_target + 教师/过程价值 + 搜索行为混合（μ 的 logprob）；
+    # 每个都只在启用时出现，默认关闭时 npz 字段集合与旧版一致（见各自主测）。
+    assert BATCH_OPTIONAL_FIELDS == (
+        SEQ_TARGET_KEY, "teacher_action", "process_target",
+        "behavior_logprobs", "pi_logprobs")
 
 
 def test_build_batch_from_records_seq_off_has_no_labels(tmp_path):

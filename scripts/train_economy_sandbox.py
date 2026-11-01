@@ -359,7 +359,8 @@ def evaluate(model, cfg: SandboxConfig, games: int, device: str,
              seed0: int = 900000, n_envs: int = 48, *,
              sample: bool = False, dtype: str = "fp32",
              carrier_audit: int = 0, prior=None,
-             core_ids: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+             core_ids: Optional[Sequence[str]] = None,
+             trinket_ids: Optional[Sequence[str]] = None) -> Dict[str, Any]:
     """评测：``sample=False`` 走 greedy（argmax），``sample=True`` 按 T=1 采样。
 
     注意：完整游戏里的行为策略（``PPOSelfPlayPolicy``，``CollectConfig.temperature``）
@@ -374,6 +375,7 @@ def evaluate(model, cfg: SandboxConfig, games: int, device: str,
                                core_ids=core_ids)
     obs = vec.reset()
     cids = set(carrier_ids()) if carrier_audit else set()
+    trs = {str(x) for x in (trinket_ids or ())}
     casts = [0] * vec.n_envs
     eps: List[Dict[str, Any]] = []
     while len(eps) < games:
@@ -417,11 +419,20 @@ def evaluate(model, cfg: SandboxConfig, games: int, device: str,
                 ep = dict(ep)
                 ep["casts_on_carrier"] = int(casts[i])
                 casts[i] = 0
+            if trs:
+                # 饰品命中率：本局「曾经拥有过」的饰品里，有多少张属于目标阵容的关键饰品
+                ep = dict(ep)
+                picked = {str(x) for x in (ep.get("trinket_ids") or ())}
+                hits = sorted(picked & trs)
+                ep["trinket_hits"] = len(hits)
+                ep["trinket_hit"] = bool(hits)
+                ep["trinket_hit_ids"] = hits
             eps.append(ep)
     rep = summarize(eps[:games])
     rep["mode"] = "sample" if sample else "greedy"
     rep["gold"] = int(cfg.gold_per_turn)
     rep["free_tier6"] = bool(cfg.free_tier6)
+    rep["trinkets"] = (None if cfg.trinkets is None else bool(cfg.trinkets))
     # 终局强度的 L 口径（与训练奖励同一条曲线）
     rep["LT_p50"] = math.log1p(max(0.0, float(rep["sigma_t15_p50"]))) / \
         math.log1p(float(cfg.strength_ref))
@@ -569,13 +580,48 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                          '切换时重建环境）')
     ap.add_argument("--sandbox-free-tier6", dest="sandbox_free_tier6", type=int,
                     default=0, help="1 = 开局 tier6 + 升级免费（ceiling_probe 口径），默认 0")
-    ap.add_argument("--gold-mode", default="set", choices=["set", "add"])
+    ap.add_argument("--gold-mode", default="fixed", choices=["fixed", "add", "growth", "set"],
+                    help="收入口径：fixed=每回合重置为 --gold-per-turn（= 旧 set，默认，逐位等价）；"
+                         "add=引擎收入 + gold_per_turn + gold_add×(turn−1)；"
+                         "growth=引擎收入 + scale×(base×(1+rate)^(turn−1) + per_carrier×载体数)")
+    ap.add_argument("--gold-add", type=int, default=0,
+                    help="add 模式每回合额外收入的斜率（第 t 回合 +gold_add×(t−1) 金）")
+    ap.add_argument("--gold-growth-rate", type=float, default=0.0,
+                    help="growth 模式每回合复利率（0.15 = 每回合 ×1.15）")
+    ap.add_argument("--gold-per-carrier", type=int, default=0,
+                    help="growth 模式每个上回合在场载体额外给的金币")
+    ap.add_argument("--sandbox-income-scale", dest="income_scale", type=float, default=1.0,
+                    help="注入项整体缩放（上界探针；默认 1.0 逐位等价）")
+    ap.add_argument("--gold-cap", type=int, default=99,
+                    help="注入后的金币上限（0 = 不封顶）")
     ap.add_argument("--action-cap", type=int, default=40)
     ap.add_argument("--num-players", type=int, default=8)
     ap.add_argument("--sandbox-reward", dest="reward", default="log_strength",
                     choices=["log_strength", "auc_strength", "final_strength",
-                             "board_delta", "t12_t15"])
+                             "board_delta", "t12_t15", "exp_growth"])
     ap.add_argument("--sandbox-reward-mix", dest="reward_mix", default="")
+    ap.add_argument("--sandbox-trinkets", dest="sandbox_trinkets", type=int, default=-1,
+                    help="饰品开关：-1 = 引擎默认（第 6/9 回合 4 选 1，与改动前逐位一致）；"
+                         "1 = 显式开启（钉住 6/9 回合 + 4 选项）；0 = 关闭")
+    ap.add_argument("--sandbox-growth-w-final", dest="growth_w_final", type=float, default=1.0,
+                    help="exp_growth: 终局强度 L_T 的权重 w1")
+    ap.add_argument("--sandbox-growth-w-super", dest="growth_w_super", type=float, default=0.2,
+                    help="exp_growth: 超线性（ΔlnΣ − 基线斜率）的权重 w2（value 头是 tanh，"
+                         "整局回报要留在 ~[-2,2]：w1=1.0 + w2=0.2 + w3=0.3 是安全上限）")
+    ap.add_argument("--sandbox-growth-slope-base", dest="growth_slope_base", type=float,
+                    default=0.35, help="exp_growth: 基线对数斜率（低于它不加分）")
+    ap.add_argument("--sandbox-growth-from", dest="growth_from", type=int, default=10,
+                    help="exp_growth: 从第几回合开始给超线性奖励")
+    ap.add_argument("--sandbox-growth-w-ratio", dest="growth_w_ratio", type=float, default=0.0,
+                    help="exp_growth: 指数段（t12→t15 ≥3×）的权重 w3")
+    ap.add_argument("--comps-json", default="data/scaling/comps_top.json",
+                    help="Firestone 阵容数据（scripts/comp_lines_fetch.py 产物）")
+    ap.add_argument("--core-from-comps", dest="core_from_comps", type=int, default=0,
+                    help="1 = 用 comps_top.json 的核心牌并集做「核心牌命中率」度量"
+                         "（默认 0 = 用 compound_cards.json）")
+    ap.add_argument("--trinket-target-from-comps", dest="trinket_target_from_comps", type=int,
+                    default=1,
+                    help="1 = 用 comps_top.json 的关键饰品并集做「饰品命中率」度量（默认 1）")
     ap.add_argument("--strength-ref", type=float, default=30000.0)
     ap.add_argument("--lobby-types", default="")
     # 复利链条核心牌先验（默认关；见 hsbg/az/train/compound_prior.py + docs/COMPOUND_CHAINS.md）
@@ -650,10 +696,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     cfg = SandboxConfig(
         turns=int(args.turns), gold_per_turn=int(args.gold_per_turn),
         gold_mode=str(args.gold_mode), action_cap=int(cap0),
+        gold_add=int(args.gold_add),
+        gold_growth_rate=float(args.gold_growth_rate),
+        gold_per_carrier=int(args.gold_per_carrier),
+        income_scale=float(args.income_scale),
+        gold_cap=int(args.gold_cap),
         num_players=int(args.num_players), reward=str(args.reward),
         reward_mix=str(args.reward_mix), strength_ref=float(args.strength_ref),
         lobby_types=tuple(x.strip().upper() for x in args.lobby_types.split(",") if x.strip()),
         free_tier6=bool(int(args.sandbox_free_tier6)),
+        trinkets=(None if int(args.sandbox_trinkets) < 0
+                  else bool(int(args.sandbox_trinkets))),
+        growth_w_final=float(args.growth_w_final),
+        growth_w_super=float(args.growth_w_super),
+        growth_slope_base=float(args.growth_slope_base),
+        growth_from=int(args.growth_from),
+        growth_w_ratio=float(args.growth_w_ratio),
         seed=int(args.seed))
     cfg.validate()
     print(f"[sandbox] cfg={json.dumps(cfg.engine_config(), ensure_ascii=False)}", flush=True)
@@ -703,6 +761,40 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             core_ids = all_core_ids(path=_tbl)
         print(f"[compound] 核心牌度量开：{len(core_ids)} 张 "
               f"(target={args.compound_archetype or 'ALL'})", flush=True)
+
+    # ── Firestone 阵容（scripts/comp_lines_fetch.py）→ 核心牌 / 关键饰品命中率 ──
+    comps_summary: Dict[str, Any] = {}
+    trinket_ids: Optional[List[str]] = None
+    if bool(int(args.core_from_comps)) or bool(int(args.trinket_target_from_comps)):
+        _cpath = str(args.comps_json)
+        if not os.path.isabs(_cpath):
+            _cpath = os.path.join(ROOT, _cpath)
+        if os.path.exists(_cpath):
+            with open(_cpath, encoding="utf-8") as _f:
+                _comps = json.load(_f)
+            _cs = _comps.get("comps") or []
+            if bool(int(args.core_from_comps)):
+                core_ids = sorted({str(c["id"]) for x in _cs
+                                   for c in (x.get("core_cards") or ())
+                                   if str(c.get("id"))})
+            trinket_ids = sorted({str(t["id"]) for x in _cs
+                                  for t in (x.get("trinkets") or ())
+                                  if str(t.get("id"))})
+            comps_summary = {
+                "path": os.path.relpath(_cpath, ROOT),
+                "n_comps": len(_cs),
+                "core_ids": len(core_ids or ()),
+                "trinket_ids": len(trinket_ids or ()),
+                "top": [x.get("name") for x in _cs[:10]],
+            }
+            print(f"[comps] {len(_cs)} 套阵容；核心牌 {len(core_ids or ())} 张"
+                  f"（core_from_comps={bool(int(args.core_from_comps))}）；"
+                  f"关键饰品 {len(trinket_ids)} 张", flush=True)
+            log_rec({"event": "comps", **comps_summary})
+        else:
+            print(f"[comps][warn] 找不到 {_cpath}，跳过命中率度量", flush=True)
+    if cfg.trinkets is None and int(args.sandbox_trinkets) < 0:
+        trinket_ids = None      # 没开饰品计量就别算命中率
 
     # ── 配方断言（启动即失败，不要训练到一半才发现）─────────────────────
     mb = max(1, int(args.minibatch))
@@ -792,7 +884,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         for mode in ("greedy", "sample"):
             ev = evaluate(model, ev_cfg, games, args.device,
                           seed0=int(args.eval_seed_base), sample=(mode == "sample"),
-                          dtype=str(args.dtype), prior=prior, core_ids=core_ids)
+                          dtype=str(args.dtype), prior=prior, core_ids=core_ids,
+                          trinket_ids=trinket_ids)
             both[mode] = ev
             log_rec({"event": "eval", "mode": mode, "decisions": decisions,
                      "update": trainer.updates, "final": bool(final),
@@ -804,11 +897,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
               f"tier={s['tier_p50']:.0f} carrier={s['carrier_rate']:.2f} "
               f"spells={s['spells_p50']:.0f} tav={s['tavern_buff_p50']:.0f}"
               + (f" core={s['core_t15_p50']:.0f}" if "core_t15_p50" in s else "")
+              + (f" trk={s.get('trinkets_p50', 0):.0f}/{s.get('trinket_hit_rate', 0):.2f}"
+                 if "trinket_hit_rate" in s else "")
+              + f" | growth: slope_late={s.get('growth_slope_late_p50', 0):.3f} "
+              f"curv={s.get('growth_curv_p50', 0):+.4f} "
+              f"r12_15={s.get('growth_ratio_12_15_p50', 0):.2f} "
+              f"exp_rate={s.get('exp_segment_rate', 0):.2f}"
               + f" | "
               f"greedy: t12={g['sigma_t12_p50']:.0f} t15={g['sigma_t15_p50']:.0f} "
               f"tier={g['tier_p50']:.0f} carrier={g['carrier_rate']:.2f} "
               f"spells={g['spells_p50']:.0f}"
-              + (f" core={g['core_t15_p50']:.0f}" if "core_t15_p50" in g else ""),
+              + (f" core={g['core_t15_p50']:.0f}" if "core_t15_p50" in g else "")
+              + (f" trk_hit={g.get('trinket_hit_rate', 0):.2f}"
+                 if "trinket_hit_rate" in g else ""),
               flush=True)
         both["primary"] = s
         if s["sigma_t12_p50"] > best["t12"]:

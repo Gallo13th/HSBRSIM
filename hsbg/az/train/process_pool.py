@@ -44,7 +44,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from .common import to_jsonable
+from .common import N_PLAYERS, to_jsonable
+from .behavior_mix import aggregate_behavior_mix
 from .runlog import aggregate_injection
 from .reward_shaping import aggregate_shaping
 from .tier_target import aggregate_tier_target
@@ -62,6 +63,9 @@ _TRAJ_CACHE: Dict[str, Any] = {}
 _MIRROR_CACHE: Dict[Any, Any] = {}
 _HUMAN_BOARD_CACHE: Dict[Any, Any] = {}
 _OPP_CACHE: Dict[Any, Any] = {}
+#: 搜索行为混合（μ=(1−ε)π+ε·π_search）的 InferSearcher 缓存（按配置/seed 复用；
+#: 权重热加载是 in-place 的，searcher 自动看到新权重）。
+_MIX_SEARCHERS: Dict[Any, Any] = {}
 
 
 def _save_built_batch(batch: Any, path: str) -> None:
@@ -76,6 +80,11 @@ def _save_built_batch(batch: Any, path: str) -> None:
     if getattr(batch, "process_target", None) is not None:
         # 过程价值目标（默认关闭时不写）
         extra["process_target"] = batch.process_target
+    if getattr(batch, "behavior_logprobs", None) is not None:
+        # 搜索行为混合的 μ logprob / π logprob（默认关闭时不写）
+        extra["behavior_logprobs"] = batch.behavior_logprobs
+        if getattr(batch, "pi_logprobs", None) is not None:
+            extra["pi_logprobs"] = batch.pi_logprobs
     np.savez(path, features=batch.features, cards=batch.cards, masks=batch.masks,
              actions=batch.actions, old_logprobs=batch.old_logprobs,
              values=batch.values, rewards=batch.rewards, dones=batch.dones,
@@ -229,6 +238,47 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
             except Exception:  # noqa: BLE001
                 pass
             server.reset_stats()
+            # ── 搜索作为行为策略（默认 eps=0 -> behavior_mix=None，零开销）──
+            behavior_mix = None
+            _bm_eps = float(getattr(cfg, "behavior_mix_eps", 0.0) or 0.0)
+            if _bm_eps > 0.0:
+                if not bool(task.get("lockstep", False)):
+                    raise RuntimeError(
+                        "--behavior-mix-eps>0 只支持 --lockstep 1 采集路径"
+                        "（混合行为策略需要 lockstep 采集器在决策点调用搜索）")
+                if str(getattr(cfg, "behavior", "net")).strip().lower() != "net":
+                    raise RuntimeError(
+                        "--behavior-mix-eps>0 需要 --behavior net（μ 的网络分量是 π）")
+                from .infer_search import InferSearchConfig, InferSearcher
+                from .behavior_mix import BehaviorMixConfig, BehaviorMixer
+                _key = (int(task["seed"]), str(cfg.behavior_mix_when),
+                        int(cfg.behavior_mix_topk), int(cfg.behavior_mix_turns),
+                        int(cfg.behavior_mix_max_per_turn),
+                        float(cfg.behavior_mix_max_ms),
+                        int(getattr(cfg, "behavior_mix_exact", 1)))
+                _searcher = _MIX_SEARCHERS.get(_key)
+                if _searcher is None:
+                    _scfg = InferSearchConfig(
+                        enabled=1, turns=int(cfg.behavior_mix_turns),
+                        max_searches_per_turn=int(cfg.behavior_mix_max_per_turn),
+                        topk=int(cfg.behavior_mix_topk),
+                        search_when=str(cfg.behavior_mix_when),
+                        action="pi_argmax", pi_mode="advantage", adv_clip=30.0,
+                        max_ms_per_search=float(cfg.behavior_mix_max_ms),
+                        seed=int(task["seed"])).validate()
+                    _searcher = InferSearcher(evaluator, _scfg, n_players=N_PLAYERS)
+                    _MIX_SEARCHERS[_key] = _searcher
+                behavior_mix = BehaviorMixer(
+                    _searcher,
+                    BehaviorMixConfig(
+                        eps=_bm_eps, when=str(cfg.behavior_mix_when),
+                        max_per_turn=int(cfg.behavior_mix_max_per_turn),
+                        topk=int(cfg.behavior_mix_topk),
+                        turns=int(cfg.behavior_mix_turns),
+                        max_ms=float(cfg.behavior_mix_max_ms),
+                        exact=int(getattr(cfg, "behavior_mix_exact", 1)),
+                        seed=int(task["seed"])),
+                    n_players=N_PLAYERS)
             if bool(task.get("rust_collector", False)) and search_fn is None:
                 arr, cmeta = collect_ppo_rust(
                     model, cfg, eval_fn=evaluator, device=device,
@@ -362,7 +412,8 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     human_board_fast_inject=bool(
                         getattr(cfg, "human_board_fast_inject", False)),
                     gamma=float(task.get("gamma", 1.0)),
-                    opponent_policy=opp_pol)
+                    opponent_policy=opp_pol,
+                    behavior_mix=behavior_mix)
             else:
                 if str(getattr(cfg, "library_pool", "")) and \
                         float(getattr(cfg, "library_p", 0.0)) > 0.0:
@@ -879,6 +930,10 @@ class ProcessActorPool:
         # 换位去抖守卫：逐 shard 汇总（默认关闭 -> 空 dict，不新增键）。
         meta.update(aggregate_move_guard(metas))
         meta.update(aggregate_archetype_bias(metas))
+        # 搜索行为混合（默认关闭 -> 空 dict，不新增键）：worker meta 逐 shard 汇总。
+        _bm_agg = aggregate_behavior_mix(metas)
+        if _bm_agg:
+            meta["behavior_mix"] = _bm_agg
         # 缩放课程 / 教师 / 过程价值（默认关闭 -> 不新增键）
         if any(str(m.get("curriculum_stage", "none")) != "none" for m in metas):
             meta["curriculum_stage"] = str(
@@ -934,13 +989,19 @@ class ProcessActorPool:
                     packed_all[i]["teacher_action"] = lb.teacher_action
                 if getattr(lb, "process_target", None) is not None:
                     packed_all[i]["process_target"] = lb.process_target
+                if getattr(lb, "behavior_logprobs", None) is not None:
+                    packed_all[i]["behavior_logprobs"] = lb.behavior_logprobs
+                    if getattr(lb, "pi_logprobs", None) is not None:
+                        packed_all[i]["pi_logprobs"] = lb.pi_logprobs
         if packed_all and all("advantages" in p for p in packed_all):
             # L4：worker 已构建好 batch（episode_id 全局唯一）→ 父进程只拼接
             keys = ["features", "cards", "masks", "actions", "old_logprobs", "values",
                     "rewards", "dones", "advantages", "returns", "seats", "game_ids",
                     "ranks", "turns", "forced", "has_pi", "episode_ids", "target_pi"]
-            # 可选字段：所有 shard 都带才拼接（动作序列 / 教师 / 过程价值；默认关闭时全都没有）
-            keys += [k for k in ("seq_target", "teacher_action", "process_target")
+            # 可选字段：所有 shard 都带才拼接（动作序列 / 教师 / 过程价值 / 行为混合；
+            # 默认关闭时全都没有）
+            keys += [k for k in ("seq_target", "teacher_action", "process_target",
+                                 "behavior_logprobs", "pi_logprobs")
                      if all(k in p for p in packed_all)]
             merged = {k: np.concatenate([p[k] for p in packed_all], axis=0) for k in keys}
             meta["episodes"] = int(len(np.unique(merged["episode_ids"])))

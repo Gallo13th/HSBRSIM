@@ -49,6 +49,13 @@ class LeafRequest:
     seed: Optional[int] = None
     action: Optional[int] = None
     logprob: Optional[float] = None
+    #: True = 该请求要「整批逐行 prior」（``priors[k,245]``），不走采样。
+    #: 搜索的 rollout 每步要为 k 个候选各算一次 π：逐行 submit 会变成 k 次队列往返
+    #: （实测每次 ~12 ms），这里合成一次批量前向 + 一次往返（见 ``logits_batch``）。
+    want_prior_batch: bool = False
+    priors: Optional[np.ndarray] = None
+    plog: Optional[np.ndarray] = None
+    rlog: Optional[np.ndarray] = None
     #: 逐行 logit 偏置 ``[k, 245] f32``（流派软偏置；None = 不加，旧路径零开销）。
     #: 在 worker 里加在 **logits 上**（先于 masked softmax 的 temperature 除法），
     #: 与主进程 ``_net_predict`` 的 ``logits + bias`` 口径一致。
@@ -107,7 +114,8 @@ class BatchLeafServer:
                timeout: float = 0.5, copy: bool = False, *,
                want_action: bool = False, temperature: float = 1.0,
                seed: Optional[int] = None, batch_mode: bool = False,
-               bias: Optional[np.ndarray] = None) -> LeafRequest:
+               bias: Optional[np.ndarray] = None,
+               want_prior_batch: bool = False) -> LeafRequest:
         with self._state_lock:
             if self._state != "open":
                 raise RuntimeError(f"BatchLeafServer is {self._state}")
@@ -127,6 +135,7 @@ class BatchLeafServer:
             req.temperature = float(temperature)
             req.seed = seed
             req.batch_mode = bool(batch_mode)
+            req.want_prior_batch = bool(want_prior_batch)
             req.submit_t = time.monotonic()
             try:
                 self._q.put(req, timeout=float(timeout))
@@ -186,6 +195,34 @@ class BatchLeafServer:
         if req.error is not None:
             raise req.error
         return req.actions, req.logprobs, req.values
+
+    def logits_batch(self, features: np.ndarray, cards: np.ndarray,
+                     mask: np.ndarray, timeout: float = 60.0) -> Any:
+        """整批一次前向，返回 ``(plog[k,245], rlog[k,8])``（f32，CPU numpy）。
+
+        搜索 rollout 的 ``prior_batch`` 用它替代逐行 ``__call__``：k 次队列往返 → 1 次。
+        """
+        req = self.submit(np.atleast_2d(features), np.atleast_2d(cards),
+                          np.atleast_2d(mask), batch_mode=True,
+                          want_prior_batch=True)
+        if not req.event.wait(timeout=timeout):
+            raise TimeoutError("batch leaf timeout")
+        if req.error is not None:
+            raise req.error
+        return req.plog, req.rlog
+
+    def prior_batch(self, features: np.ndarray, cards: np.ndarray,
+                    mask: np.ndarray, temperature: float = 1.0,
+                    timeout: float = 60.0) -> np.ndarray:
+        """整批逐行 masked softmax 概率 ``[k,245]``（一次往返；非法位严格 0）。"""
+        req = self.submit(np.atleast_2d(features), np.atleast_2d(cards),
+                          np.atleast_2d(mask), temperature=float(temperature),
+                          batch_mode=True, want_prior_batch=True)
+        if not req.event.wait(timeout=timeout):
+            raise TimeoutError("batch leaf timeout")
+        if req.error is not None:
+            raise req.error
+        return req.priors
 
     def call_many(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
                   timeout: float = 60.0) -> List[Tuple[np.ndarray, float]]:
@@ -317,6 +354,22 @@ class BatchLeafServer:
                     acts_all = lps_all = vals_all = None
                 for i, r in enumerate(batch):
                     temp = float(r.temperature) if r.temperature else self.temperature
+                    if getattr(r, "want_prior_batch", False):
+                        # 整批逐行 prior：一次前向回传所有行的 masked softmax
+                        k = int(np.atleast_2d(r.features).shape[0])
+                        base = row_base[i]
+                        r.plog = np.asarray(plog[base:base + k], dtype=np.float32)
+                        r.rlog = np.asarray(rlog[base:base + k], dtype=np.float32)
+                        if int(k) == 1:
+                            r.prior = masked_probs_np(plog[base], m[base], temp)
+                            r.prior = (r.prior / max(float(r.prior.sum()), 1e-12)
+                                       ).astype(np.float32)
+                        r.priors = np.asarray(
+                            [masked_probs_np(plog[base + j], m[base + j], temp)
+                             for j in range(int(k))], dtype=np.float32)
+                        r.value = float(value_from_rank_logits_np(rlog[base])[0])
+                        r.event.set()
+                        continue
                     if r.batch_mode:
                         k = int(np.atleast_2d(r.features).shape[0])
                         a0 = int(getattr(r, "_row_off", off))
@@ -421,6 +474,17 @@ class BatchPPOEvaluator:
     def __call__(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
                  seat: int = 0) -> Tuple[np.ndarray, float]:
         return self.server.call(features, cards, mask, seat)
+
+    def logits(self, features: np.ndarray, cards: Any = None,
+               mask: Any = None):
+        """批量 logits（``(plog[k,245], rlog[k,8])``）：与 ``PPOEvaluator.logits`` 同接口，
+        但走 batch server 的一次前向 + 一次往返（搜索 rollout 的 ``prior_batch`` 用）。"""
+        return self.server.logits_batch(features, cards, mask)
+
+    def prior_batch(self, features: np.ndarray, cards: np.ndarray,
+                    mask: np.ndarray, temperature: float = 1.0) -> np.ndarray:
+        return self.server.prior_batch(features, cards, mask,
+                                       temperature=temperature)
 
     def act(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
             temperature: float = 1.0, seed: Optional[int] = None,

@@ -238,6 +238,29 @@ def main() -> int:
     ap.add_argument("--determinizations", type=int, default=1)
     ap.add_argument("--opponent", default="bot", choices=["bot", "self", "weak"])
     ap.add_argument("--behavior", default="net", choices=["net", "mcts", "mixed"])
+    # ── 搜索作为行为策略：μ=(1−ε)π+ε·π_search（默认 eps=0 = 关闭、逐位等价旧路径）──
+    #   见 hsbg/az/train/behavior_mix.py 与 docs/BEHAVIOR_MIX_PPO.md。
+    ap.add_argument("--behavior-mix-eps", type=float, default=0.0,
+                    help="关键决策以该概率改用 π_search 采样（μ=(1−ε)π+ε·π_search）；"
+                         "0=关闭（默认，逐位等价旧路径）；建议 0.1–0.3")
+    ap.add_argument("--behavior-mix-when", default="carrier_or_spell",
+                    help="关键决策口径（sandbox_rollout.SEARCH_WHEN_NAMES；可逗号组合，"
+                         "默认 carrier_or_spell，与 t6/AB 面板同口径）")
+    ap.add_argument("--behavior-mix-max-per-turn", type=int, default=6,
+                    help="每回合最多搜索几次（0=不限；默认 6 = t6 配置）")
+    ap.add_argument("--behavior-mix-topk", type=int, default=8,
+                    help="根候选数 = π top-k 非 Move 合法动作（默认 8）")
+    ap.add_argument("--behavior-mix-turns", type=int, default=1,
+                    help="叶值 horizon：1=到本回合末（默认，沿用 s17 的 t1 口径）")
+    ap.add_argument("--behavior-mix-max-ms", type=float, default=500.0,
+                    help="单次搜索墙钟上限（ms；0=不限）：超时放弃搜索、回退按 π 采样")
+    ap.add_argument("--behavior-mix-exact", type=int, default=1, choices=[0, 1],
+                    help="1=精确模式（默认）：每个关键决策都跑搜索，logp_mu 对全部"
+                         "分支精确（IS 比 π/μ 无偏，权重 ≤1/(1−ε)）；"
+                         "0=只在 ε 命中时搜索（成本 ×ε，跨分支不再等价 marginal μ）")
+    ap.add_argument("--behavior-mix-report", default="",
+                    help="可选：逐 iteration 的混合统计 JSONL 落盘路径（空=只写进 "
+                         "history.jsonl 的 collect 段）")
     ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--minibatch", type=int, default=128)
     ap.add_argument("--lr", type=float, default=1e-4)
@@ -719,6 +742,33 @@ def main() -> int:
                   "同座位同回合镜像快照优先（记 human_board_skipped_by_mirror）", flush=True)
     elif str(args.human_boards):
         print("[warn] --human-boards 已设置但 --human-board-p=0：本次不注入", flush=True)
+    # ── 搜索作为行为策略 μ=(1−ε)π+ε·π_search（默认 eps=0 = 完全关闭）──────────
+    if float(args.behavior_mix_eps) > 0.0:
+        if not (0.0 <= float(args.behavior_mix_eps) < 1.0):
+            print("[error] --behavior-mix-eps 必须在 [0,1)", file=sys.stderr)
+            return 2
+        if not int(args.lockstep) or int(args.processes) <= 1:
+            print("[error] --behavior-mix-eps>0 需要 --lockstep 1 且 --processes>1"
+                  "（混合行为策略只在进程池的 lockstep 采集器里生效）",
+                  file=sys.stderr)
+            return 2
+        if str(args.behavior) != "net":
+            print("[error] --behavior-mix-eps>0 需要 --behavior net"
+                  "（μ 的网络分量是 π；mcts/mixed 会再叠一层 MCTS 混合）",
+                  file=sys.stderr)
+            return 2
+        print(f"[behavior-mix] 开启：eps={float(args.behavior_mix_eps):g} "
+              f"when={args.behavior_mix_when} "
+              f"max_per_turn={int(args.behavior_mix_max_per_turn)} "
+              f"topk={int(args.behavior_mix_topk)} turns={int(args.behavior_mix_turns)} "
+              f"max_ms={float(args.behavior_mix_max_ms):g}；"
+              "records 写 logp_mu/logp_pi，PPO ratio 分母 = logp_mu", flush=True)
+    if str(args.behavior_mix_report):
+        _bm_dir = os.path.dirname(os.path.abspath(str(args.behavior_mix_report)))
+        if _bm_dir:
+            os.makedirs(_bm_dir, exist_ok=True)
+        print(f"[behavior-mix] 逐 iteration 统计 -> {args.behavior_mix_report}",
+              flush=True)
 
     # ---- 势函数奖励塑形（默认关闭；coef=0 时零影响）----
     if float(args.shaping_coef) < 0.0:
@@ -1299,7 +1349,15 @@ def main() -> int:
         strength_tier_pos_weight=float(args.strength_tier_pos_weight),
         # 缩放教师 DAgger / 过程价值（默认 0 = 逐位等价）
         teacher_bc_coef=float(args.teacher_bc_coef),
-        process_value_coef=float(args.process_value_coef))
+        process_value_coef=float(args.process_value_coef),
+        # 搜索行为混合（默认 eps=0 -> PPO 侧只用于回显/统计，未启用时整组键被移除）
+        behavior_mix_eps=float(args.behavior_mix_eps),
+        behavior_mix_when=str(args.behavior_mix_when),
+        behavior_mix_max_per_turn=int(args.behavior_mix_max_per_turn),
+        behavior_mix_topk=int(args.behavior_mix_topk),
+        behavior_mix_turns=int(args.behavior_mix_turns),
+        behavior_mix_max_ms=float(args.behavior_mix_max_ms),
+        behavior_mix_exact=int(args.behavior_mix_exact))
     trainer: Optional[PPOTrainer] = None
     if args.trainer_state and os.path.isfile(args.trainer_state):
         trainer = PPOTrainer.load(model, args.trainer_state, config=p_cfg,
@@ -1736,7 +1794,15 @@ def main() -> int:
             curriculum_gold_mult=float(_gold_mult),
             # 在线缩放教师 / 过程价值标签（默认 False -> 不查教师、不读日志）
             teacher_bc=bool(float(args.teacher_bc_coef) > 0.0),
-            process_value=bool(float(args.process_value_coef) > 0.0))
+            process_value=bool(float(args.process_value_coef) > 0.0),
+            # 搜索作为行为策略（默认 eps=0 -> 不构造 mixer、零开销）
+            behavior_mix_eps=float(args.behavior_mix_eps),
+            behavior_mix_when=str(args.behavior_mix_when),
+            behavior_mix_max_per_turn=int(args.behavior_mix_max_per_turn),
+            behavior_mix_topk=int(args.behavior_mix_topk),
+            behavior_mix_turns=int(args.behavior_mix_turns),
+            behavior_mix_max_ms=float(args.behavior_mix_max_ms),
+            behavior_mix_exact=int(args.behavior_mix_exact))
         t_c = time.time()
         if pool is not None:
             batch, collect_meta = pool.collect(
@@ -2068,6 +2134,20 @@ def main() -> int:
             if _eval_seg:
                 rec["eval"] = _eval_seg
             append_record(history_path, to_jsonable(rec))
+            if str(args.behavior_mix_report):
+                # 混合行为策略的逐 iteration 统计（ε 命中率 / 搜索覆盖率 / KL(μ‖π)
+                # / 采集侧搜索耗时 / PPO 侧 IS 权重与 ESS）；默认关闭时不落盘。
+                _bm_c = (collect_meta.get("behavior_mix")
+                         if isinstance(collect_meta, dict) else None) or {}
+                _bm_p = (stats.get("behavior_mix") or {}) if isinstance(stats, dict) else {}
+                append_record(str(args.behavior_mix_report), to_jsonable({
+                    "iter": int(i),
+                    "decisions": int(cum_decisions),
+                    "updates": int(stats.get("trainer_updates", 0) or 0),
+                    "collect_s": float(_collect_s),
+                    "collect": _bm_c,
+                    "ppo": _bm_p,
+                }))
             _history_s = time.time() - _th0
 
             cum_decisions += int(slim.get("decisions", 0))

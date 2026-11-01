@@ -311,6 +311,23 @@ class CollectConfig:
     behavior: str = "net"
     temperature: float = 1.0       # 网络采样温度（logits / τ）
     pi_epsilon: float = 0.0        # mixed 行为分布中网络概率权重 ε
+    #: ── 搜索作为行为策略（μ=(1−ε)π+ε·π_search；默认 0 = 关闭、逐位等价旧路径）──
+    #: 见 ``hsbg/az/train/behavior_mix.py`` 与 ``docs/BEHAVIOR_MIX_PPO.md``。
+    #: 关键决策点以概率 ``behavior_mix_eps`` 用 ``InferSearcher`` 的 π_search 采样；
+    #: records 额外写 ``logp_mu``/``logp_pi``，PPO 的 ratio 分母改用 ``logp_mu``。
+    behavior_mix_eps: float = 0.0
+    #: 关键决策口径（``carrier_or_spell`` / ``any`` / 逗号组合）
+    behavior_mix_when: str = "carrier_or_spell"
+    #: 每回合最多搜索几次（<=0 不限；默认 6，与 s17 的 t6 口径一致）
+    behavior_mix_max_per_turn: int = 6
+    #: 根候选数（π top-k 非 Move）
+    behavior_mix_topk: int = 8
+    #: 叶值 horizon（1 = 本回合末）
+    behavior_mix_turns: int = 1
+    #: 单次搜索墙钟上限 ms（0 = 不限）；超时回退按 π 采样
+    behavior_mix_max_ms: float = 500.0
+    #: 1=精确模式（每个关键决策都搜索 → logp_mu 在全部分支精确）；0=只在 ε 命中时搜索
+    behavior_mix_exact: int = 1
     step_penalty: float = 0.0      # 每决策小惩罚（进入 reward）
     #: 单座位单回合决策数上限（超过且 EndTurn 合法则强制结束回合；0=关闭）。
     #: 未训练网络容易陷入 Play/Cancel 循环，默认 40 保证采集/评测能走到终局。
@@ -1020,6 +1037,16 @@ class PPOConfig:
     value_coef: float = 0.5
     #: MCTS visit π 辅助交叉熵权重 alpha（0 = 关闭，退化为纯 PPO）
     pi_coef: float = 0.5
+    #: ── 搜索行为混合 μ=(1−ε)π+ε·π_search（只用于 stats 回显/诊断）──
+    #: 采集侧由 ``CollectConfig.behavior_mix_*`` 控制；这里只是把同一组值回显进
+    #: ``stats["config"]`` 并参与 ``stats["behavior_mix"]``（eps=0 时整组键会被移除）。
+    behavior_mix_eps: float = 0.0
+    behavior_mix_when: str = "carrier_or_spell"
+    behavior_mix_max_per_turn: int = 6
+    behavior_mix_topk: int = 8
+    behavior_mix_turns: int = 1
+    behavior_mix_max_ms: float = 500.0
+    behavior_mix_exact: int = 1
     #: 动作序列辅助任务权重（turn 内动作 multi-hot 的 BCEWithLogits）；
     #: **0 = 关闭（默认）**：不构建 seq 头、不算 seq loss、stats 里不出现 seq 字段。
     #: 需要模型带 seq 头（``build_net(..., seq_head=True)``）且 batch 有 ``seq_target``。
@@ -1296,7 +1323,9 @@ BATCH_FIELDS: Tuple[str, ...] = (
 
 #: 可选扩展字段（存在才写/读 npz）：动作序列辅助任务标签。
 BATCH_OPTIONAL_FIELDS: Tuple[str, ...] = (
-    SEQ_TARGET_KEY, "teacher_action", "process_target")
+    SEQ_TARGET_KEY, "teacher_action", "process_target",
+    #: 搜索行为混合（μ=(1−ε)π+ε·π_search）的 logprob：存在才写/读 npz。
+    "behavior_logprobs", "pi_logprobs")
 
 
 @dataclass
@@ -1339,6 +1368,11 @@ class PPOBatch:
     #: 过程价值目标 f32[n,3]（log1p：酒馆永久 buff / 施法数 / consume 数；
     #: 不可得行为 NaN）；None = 未启用（默认）
     process_target: Optional[np.ndarray] = None
+    #: 搜索行为策略 μ 的 logprob f32[n]（``log((1−ε)π+ε·π_search)``）。启用时 PPO 的
+    #: ratio 分母用它；None = 未启用（默认）= 用 ``old_logprobs``（π_old）。
+    behavior_logprobs: Optional[np.ndarray] = None
+    #: 同一动作在 π（采集策略）下的 logprob f32[n]；KL/approx_kl 口径用。None = 未启用。
+    pi_logprobs: Optional[np.ndarray] = None
     meta: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -1352,6 +1386,12 @@ class PPOBatch:
             self.teacher_action = np.asarray(self.teacher_action, dtype=np.int16).reshape(-1)
         if self.process_target is not None:
             self.process_target = np.asarray(self.process_target, dtype=np.float32)
+        if self.behavior_logprobs is not None:
+            self.behavior_logprobs = np.asarray(
+                self.behavior_logprobs, dtype=np.float32).reshape(-1)
+        if self.pi_logprobs is not None:
+            self.pi_logprobs = np.asarray(
+                self.pi_logprobs, dtype=np.float32).reshape(-1)
 
     def __len__(self) -> int:
         return int(self.actions.shape[0])
@@ -1417,6 +1457,18 @@ class PPOBatch:
                 errs.append(f"{int((~legal).sum())} 个动作不在合法掩码内")
         if not np.isfinite(self.old_logprobs).all():
             errs.append("old_logprobs 含 NaN/Inf")
+        if self.behavior_logprobs is not None:
+            bl = np.asarray(self.behavior_logprobs).reshape(-1)
+            if bl.size != n:
+                errs.append(f"behavior_logprobs: len {bl.size} != {n}")
+            elif not np.isfinite(bl).all():
+                errs.append("behavior_logprobs 含 NaN/Inf")
+        if self.pi_logprobs is not None:
+            pl = np.asarray(self.pi_logprobs).reshape(-1)
+            if pl.size != n:
+                errs.append(f"pi_logprobs: len {pl.size} != {n}")
+            elif not np.isfinite(pl).all():
+                errs.append("pi_logprobs 含 NaN/Inf")
         if not np.isfinite(self.features).all():
             errs.append("features 含 NaN/Inf")
         if not np.isfinite(self.rewards).all() or not np.isfinite(self.values).all():
@@ -1474,6 +1526,26 @@ class PPOBatch:
             st = np.asarray(self.seq_target)
             out["seq_target_rate"] = float((st.sum(axis=1) > 0).mean()) if st.size else 0.0
             out["seq_target_density"] = float(st.sum() / max(st.shape[0] * st.shape[1], 1))
+        if self.behavior_logprobs is not None:
+            # 搜索行为混合：IS 权重 r=π/μ 的分布（原始权重，不含 clip），报告 ESS
+            bl = np.asarray(self.behavior_logprobs, dtype=np.float64)
+            valid = ~np.asarray(self.forced, dtype=bool)
+            if valid.any():
+                lw = np.asarray(self.old_logprobs, dtype=np.float64)[valid] - bl[valid]
+                w = np.exp(np.clip(lw, -50.0, 50.0))
+                sw = float(w.sum())
+                out["behavior_mix"] = {
+                    "rate": float(valid.mean()),
+                    "logp_mu_mean": float(bl[valid].mean()),
+                    "logp_pi_mean": float(np.asarray(
+                        self.old_logprobs, dtype=np.float64)[valid].mean()),
+                    "weight_mean": sw / max(int(valid.sum()), 1),
+                    "weight_max": float(w.max()) if w.size else 0.0,
+                    "weight_p50": float(np.median(w)) if w.size else 0.0,
+                    "weight_p95": float(np.percentile(w, 95)) if w.size else 0.0,
+                    "ess_ratio": (sw * sw / max(float((w * w).sum()), 1e-12)
+                                  / max(int(valid.sum()), 1)),
+                }
         return out
 
     # ── 存储 ──
@@ -1659,6 +1731,15 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
                 rows.append([float(x) for x in np.asarray(pt, dtype=np.float32).reshape(3)])
         process_target = np.asarray(rows, dtype=np.float32)
         merged_meta["process_aux"] = True
+    # 搜索行为混合（μ=(1−ε)π+ε·π_search）：记录里有 logp_mu 才产出
+    behavior_logprobs = None
+    pi_logprobs = None
+    if any("logp_mu" in r for r in recs):
+        behavior_logprobs = np.asarray(
+            [float(r.get("logp_mu", r["old_logprob"])) for r in recs], dtype=np.float32)
+        pi_logprobs = np.asarray(
+            [float(r.get("logp_pi", r["old_logprob"])) for r in recs], dtype=np.float32)
+        merged_meta["behavior_mix"] = True
     return PPOBatch(
         features=features, cards=cards, masks=masks, actions=actions,
         old_logprobs=old_logprobs, values=values, rewards=rewards, dones=dones,
@@ -1666,6 +1747,7 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
         ranks=ranks, turns=turns, target_pi=target_pi, has_pi=has_pi,
         episode_ids=episode_ids, forced=forced, seq_target=seq_target,
         teacher_action=teacher_action, process_target=process_target,
+        behavior_logprobs=behavior_logprobs, pi_logprobs=pi_logprobs,
         meta=merged_meta)
 
 
@@ -2370,7 +2452,15 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         scalar_value = scalar_value.float()
     logp = masked_log_softmax_torch(logits, m)
     action_logp = logp.gather(1, actions.unsqueeze(1)).squeeze(1)
-    ratio = torch.exp(action_logp - old_logp)
+    # ── 行为策略是 μ=(1−ε)π+ε·π_search 时，ratio 的分母必须是 μ 的 logprob ──
+    # 用 π_old 作分母会得到 E_{a~μ}[(π/π_old)Â] ≠ E_{a~π}[Â]（docs/SEARCH_DISTILL_THEORY §4.5）。
+    # 默认 ``behavior_logprobs is None`` → 逐位等于旧路径（分母 = old_logprobs）。
+    behav_logp = old_logp
+    _bl = getattr(batch, "behavior_logprobs", None)
+    if _bl is not None:
+        behav_logp = torch.from_numpy(
+            np.ascontiguousarray(np.asarray(_bl)[idx].astype(np.float32))).to(dev)
+    ratio = torch.exp(action_logp - behav_logp)
     policy_loss, clip_frac = clipped_surrogate(ratio, adv, config.clip, weight=valid)
 
     probs = logp.exp()
@@ -2926,6 +3016,37 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                          if device.type == "cuda" else None),
         "config": to_jsonable(asdict(cfg)),
     }
+    # 搜索行为混合（μ=(1−ε)π+ε·π_search）：批次带 behavior_logprobs 时才出该键。
+    # ``w = exp(logp_pi − logp_mu)`` 就是「π 未更新时」的 IS 权重/ratio 起点：
+    # 未混合样本恒为 1（ratio 起点=1 的自检口径），搜索混合样本按 1/ε 上界放大。
+    _bl_all = getattr(batch, "behavior_logprobs", None)
+    if _bl_all is not None:
+        _forced = np.asarray(batch.forced, dtype=bool)
+        _valid = ~_forced
+        _bl = np.asarray(_bl_all, dtype=np.float64)
+        _olp = np.asarray(batch.old_logprobs, dtype=np.float64)
+        if _valid.any():
+            _lw = np.clip(_olp[_valid] - _bl[_valid], -50.0, 50.0)
+            _w = np.exp(_lw)
+            _sw = float(_w.sum())
+            _mixed = _bl[_valid] < (_olp[_valid] - 1e-9)
+            stats["behavior_mix"] = {
+                "rate": float(_valid.mean()),
+                "mixed_rate": float(_mixed.mean()) if _mixed.size else 0.0,
+                "logp_pi_mean": float(_olp[_valid].mean()),
+                "logp_mu_mean": float(_bl[_valid].mean()),
+                "mean_pi_minus_mu": float((_olp[_valid] - _bl[_valid]).mean()),
+                "weight_mean": _sw / max(int(_valid.sum()), 1),
+                "weight_p50": float(np.median(_w)),
+                "weight_p95": float(np.percentile(_w, 95)),
+                "weight_max": float(_w.max()),
+                "weight_min": float(_w.min()),
+                "ess_ratio": (_sw * _sw / max(float((_w * _w).sum()), 1e-12)
+                              / max(int(_valid.sum()), 1)),
+                "eps": float(getattr(cfg, "behavior_mix_eps", 0.0) or 0.0),
+                "when": str(getattr(cfg, "behavior_mix_when", "") or ""),
+                "max_per_turn": int(getattr(cfg, "behavior_mix_max_per_turn", 0) or 0),
+            }
     if train_forward is not None:
         # 编译诊断：是否真的走上编译图 / warmup 耗时 / 回退原因（无编译时不出该键）
         stats["compile"] = train_forward.describe()
@@ -3076,6 +3197,15 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         if isinstance(cfg_echo, dict):
             for key in ("process_value_coef",):
                 cfg_echo.pop(key, None)
+    # 搜索行为混合（默认 eps=0 时连 config 回显里的新键也去掉，保持旧结构）
+    if float(getattr(cfg, "behavior_mix_eps", 0.0) or 0.0) <= 0.0:
+        cfg_echo = stats.get("config")
+        if isinstance(cfg_echo, dict):
+            for key in ("behavior_mix_eps", "behavior_mix_when",
+                        "behavior_mix_max_per_turn", "behavior_mix_topk",
+                        "behavior_mix_turns", "behavior_mix_max_ms",
+                        "behavior_mix_exact"):
+                cfg_echo.pop(key, None)
     return stats
 
 
@@ -3120,11 +3250,14 @@ class PPOSelfPlayPolicy(Policy):
                  engine_backend: str = "auto", seed: int = 0,
                  norm_mean: Optional[np.ndarray] = None,
                  norm_std: Optional[np.ndarray] = None,
-                 move_model: bool = True) -> None:
+                 move_model: bool = True,
+                 behavior_mix: Any = None) -> None:
         self.torch = _torch()
         self.model = model
         self.device = self.torch.device(device)
         self.config = config or CollectConfig()
+        # 搜索作为行为策略的混合器（``BehaviorMixer``；None = 关闭，逐位等价旧路径）
+        self._mix = behavior_mix
         # 续训 CE checkpoint 时沿用其输入标准化统计（新训练模型为 None = 原始特征）
         self.norm_mean = None if norm_mean is None else np.asarray(norm_mean, np.float32)
         self.norm_std = None if norm_std is None else np.asarray(norm_std, np.float32)
@@ -3181,6 +3314,10 @@ class PPOSelfPlayPolicy(Policy):
     def move_guard_meta(self) -> Dict[str, Any]:
         """守卫统计（默认关闭 -> ``{}``，不新增 meta 键）。"""
         return {} if self._guard is None else self._guard.to_meta()
+
+    def behavior_mix_meta(self) -> Dict[str, Any]:
+        """搜索行为混合统计（未启用 -> ``{}``，不新增 meta 键）。"""
+        return {} if self._mix is None else self._mix.stats()
 
     def archetype_bias_meta(self) -> Dict[str, Any]:
         """流派偏置统计（默认关闭 -> ``{}``，不新增 meta 键）。"""
@@ -3259,14 +3396,34 @@ class PPOSelfPlayPolicy(Policy):
         mask = mask_from_bytes(game.legal_mask(int(seat)))
         return f, c, mask
 
+    def _turn_is_forced(self, game: Any, seat: int, mask: Any) -> bool:
+        """本次决策是否会被「回合动作数上限」强制 EndTurn（与 ``_finish`` 同一判据）。
+
+        搜索行为混合必须在**采样前**知道这件事：forced 决策不是行为分布采样，
+        不该消耗一次搜索（也不该被记成 μ 的样本）。
+        """
+        limit = int(getattr(self.config, "max_actions_per_turn", 0) or 0)
+        if limit <= 0 or not bool(mask[0]):
+            return False
+        key = (int(self.game_id), int(seat), int(getattr(game, "turn", -1)))
+        return bool(self._turn_counts.get(key, 0) + 1 > limit)
+
     def _finish(self, game: Any, seat: int, f: Any, c: Any, mask: Any, *,
                 action: int, logprob: float, value: float,
                 target_pi: Optional[np.ndarray], out_pi: Optional[np.ndarray],
-                guard_forced: bool = False) -> Decision:
+                guard_forced: bool = False,
+                logp_mu: Optional[float] = None,
+                logp_pi: Optional[float] = None,
+                action_source: str = "pi") -> Decision:
         """收尾：回合守卫 → 写 record → 构造 Decision（decide/decide_batch 共用）。
 
         ``guard_forced=True``：换位守卫把合法动作清空后回退到 EndTurn（``mask`` 此时
         只剩 EndTurn），与回合数守卫同样按「环境确定性约束」记 ``forced``/logprob=0。
+
+        ``logp_mu`` / ``logp_pi``：搜索行为混合（``behavior_mix``）专用。
+        ``logp_pi`` = log π(a)（该动作在 π 下的对数概率，PPO 用它算 KL/approx_kl），
+        ``logp_mu`` = log μ(a) = log((1−ε)π(a)+ε·π_search(a))（PPO 的 ratio 分母）。
+        只有启用混合时才写这两个 record 字段（默认关闭 → record 字段集合不变）。
         """
         seat = int(seat)
         turn = int(getattr(game, "turn", -1))
@@ -3296,7 +3453,7 @@ class PPOSelfPlayPolicy(Policy):
         if self._abias is not None:
             # 流派特征用的己方动作历史（只统计人类口径动作；机械动作不计）
             self._abias.note_action(action, game_id=self.game_id, seat=seat)
-        self.records.append({
+        rec: Dict[str, Any] = {
             "features": (f.astype(np.float32, copy=True)
                          if self.norm_mean is None else np.asarray(
                              (f - self.norm_mean) / (self.norm_std
@@ -3312,7 +3469,16 @@ class PPOSelfPlayPolicy(Policy):
             "turn": turn,
             "game_id": int(self.game_id),
             "forced": bool(forced),
-        })
+        }
+        if self._mix is not None and self._mix.enabled:
+            # 搜索行为混合：μ 的 logprob（ratio 分母）与 π 的 logprob（KL 口径）。
+            # 未混合/搜索失败的决策两者都等于按 π 采样的 logprob。
+            _lp_pi = float(logprob) if logp_pi is None else float(logp_pi)
+            _lp_mu = _lp_pi if logp_mu is None else float(logp_mu)
+            rec["logp_pi"] = _lp_pi
+            rec["logp_mu"] = _lp_mu
+            rec["action_source"] = ("forced" if forced else str(action_source))
+        self.records.append(rec)
         if out_pi is None:
             out_pi = (target_pi if target_pi is not None
                       else mask.astype(np.float32) / max(float(mask.sum()), 1.0))
@@ -3344,9 +3510,26 @@ class PPOSelfPlayPolicy(Policy):
                 a, lp, value = self.eval_fn.act(f, c, mask,
                                                 float(self.config.temperature), seed,
                                                 bias=abias)
-            return self._finish(game, seat, f, c, mask, action=int(a), logprob=float(lp),
+            # 搜索作为行为策略（默认关闭）：fast-act 路径同样在采样后混合
+            mix = None
+            if (self._mix is not None and self._mix.enabled and not guard_forced
+                    and bool(np.asarray(mask, dtype=bool).any())
+                    and not self._turn_is_forced(game, seat, mask)):
+                mix = self._mix.propose(
+                    game, seat, self.game_id, action=int(a), logprob=float(lp),
+                    f=f, c=c, mask=mask,
+                    temperature=float(self.config.temperature), rng=self._rng)
+            if mix is not None:
+                a, lp = int(mix.action), float(mix.logp_pi)
+            return self._finish(game, seat, f, c, mask, action=int(a),
+                                logprob=float(lp),
                                 value=float(value), target_pi=None, out_pi=None,
-                                guard_forced=guard_forced)
+                                guard_forced=guard_forced,
+                                logp_mu=(None if mix is None else mix.logp_mu),
+                                logp_pi=(None if mix is None else mix.logp_pi),
+                                action_source=(("search_mix" if mix.used_search
+                                                else "pi_mix") if mix is not None
+                                               else "pi"))
 
         logits, value = self._net_predict(f, c, mask, seat)
         if abias is not None:
@@ -3373,9 +3556,25 @@ class PPOSelfPlayPolicy(Policy):
             if not bool(mask[action]):  # 数值兜底：只在合法动作上取 max
                 action = int(legal[int(np.argmax(mu64[legal]))])
             logprob = float(math.log(max(float(mu64[action]), LOGPROB_FLOOR)))
+        # ── 搜索作为行为策略：以概率 ε 换成 μ=(1−ε)π+ε·π_search 采样 ──
+        mix = None
+        if (self._mix is not None and self._mix.enabled and not guard_forced
+                and legal.size > 0
+                and not self._turn_is_forced(game, seat, mask)):
+            mix = self._mix.propose(
+                game, seat, self.game_id, action=int(action),
+                logprob=float(logprob), f=f, c=c, mask=mask,
+                temperature=float(self.config.temperature), rng=self._rng)
+        if mix is not None:
+            action, logprob = int(mix.action), float(mix.logp_pi)
         return self._finish(game, seat, f, c, mask, action=action, logprob=logprob,
                             value=float(value), target_pi=target_pi, out_pi=mu,
-                            guard_forced=guard_forced)
+                            guard_forced=guard_forced,
+                            logp_mu=(None if mix is None else mix.logp_mu),
+                            logp_pi=(None if mix is None else mix.logp_pi),
+                            action_source=(("search_mix" if mix.used_search
+                                            else "pi_mix") if mix is not None
+                                           else "pi"))
 
     def decide_batch(self, pairs: Sequence[Any]) -> List[Decision]:
         """lock-step：对若干 ``(game, seat)`` 一次批量前向，再逐个收尾。"""
@@ -3431,10 +3630,26 @@ class PPOSelfPlayPolicy(Policy):
         for i, (g, s, gid, f, c, mask, gf, _ab) in enumerate(prepared):
             if gid is not None:
                 self.game_id = int(gid)
-            out.append(self._finish(g, s, f, c, mask, action=int(acts[i]),
-                                    logprob=float(lps[i]), value=float(vals[i]),
-                                    target_pi=None, out_pi=None,
-                                    guard_forced=gf))
+            a_i, lp_i = int(acts[i]), float(lps[i])
+            # 搜索作为行为策略（默认关闭）：只在非 forced 的关键决策上混合
+            mix = None
+            if (self._mix is not None and self._mix.enabled and not gf
+                    and not self._turn_is_forced(g, s, mask)):
+                mix = self._mix.propose(
+                    g, s, self.game_id, action=a_i, logprob=lp_i, f=f, c=c,
+                    mask=mask, temperature=float(self.config.temperature),
+                    rng=self._rng)
+            if mix is not None:
+                a_i, lp_i = int(mix.action), float(mix.logp_pi)
+            out.append(self._finish(g, s, f, c, mask, action=a_i,
+                                    logprob=float(lp_i),
+                                    value=float(vals[i]), target_pi=None, out_pi=None,
+                                    guard_forced=gf,
+                                    logp_mu=(None if mix is None else mix.logp_mu),
+                                    logp_pi=(None if mix is None else mix.logp_pi),
+                                    action_source=(("search_mix"
+                                                    if mix.used_search else "pi_mix")
+                                                   if mix is not None else "pi")))
         return out
 
 
@@ -3526,6 +3741,14 @@ def pack_records_arrays(records: Sequence[Dict[str, Any]],
             else:
                 rows.append([float(x) for x in np.asarray(pt, dtype=np.float32).reshape(3)])
         out["process_target"] = np.asarray(rows, dtype=np.float32)
+    if any("logp_mu" in r for r in records):
+        # 搜索行为混合（μ=(1−ε)π+ε·π_search）：ratio 分母 / KL 口径（默认关闭时不产出）
+        out["behavior_logprobs"] = np.asarray(
+            [float(r.get("logp_mu", r["old_logprob"])) for r in records],
+            dtype=np.float32)
+        out["pi_logprobs"] = np.asarray(
+            [float(r.get("logp_pi", r["old_logprob"])) for r in records],
+            dtype=np.float32)
     if seq_aux:
         # 动作序列辅助标签：同一 (game_id, seat, turn) 的动作集合（向量化一次算完）
         out[SEQ_TARGET_KEY] = seq_targets_from_records(records)
@@ -3649,6 +3872,20 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
             process_target = None
         else:
             merged_meta["process_aux"] = True
+    # 搜索行为混合：有则透传（缺字段/形状不符 -> None，ratio 退回 π_old）
+    _bl = t.pop("behavior_logprobs", None)
+    _pl = t.pop("pi_logprobs", None)
+    behavior_logprobs = None
+    pi_logprobs = None
+    if _bl is not None:
+        _a = np.asarray(_bl, dtype=np.float32).reshape(-1)
+        if _a.size == n:
+            behavior_logprobs = _a
+            merged_meta["behavior_mix"] = True
+    if _pl is not None:
+        _a = np.asarray(_pl, dtype=np.float32).reshape(-1)
+        if _a.size == n:
+            pi_logprobs = _a
     return PPOBatch(
         features=t["features"], cards=t["cards"], masks=t["masks"],
         actions=t["actions"], old_logprobs=t["old_logprobs"], values=values,
@@ -3661,6 +3898,7 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
                 else np.zeros(n, dtype=bool))(t.get("has_pi")),
         episode_ids=episode_ids, forced=t["forced"], seq_target=seq_target,
         teacher_action=teacher_action, process_target=process_target,
+        behavior_logprobs=behavior_logprobs, pi_logprobs=pi_logprobs,
         meta=merged_meta)
 
 

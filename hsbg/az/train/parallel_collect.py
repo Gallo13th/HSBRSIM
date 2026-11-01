@@ -317,6 +317,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                          human_board_fidelity: str = "board",
                          human_board_fast_inject: bool = False,
                          gamma: float = 1.0,
+                         behavior_mix: Any = None,
                          ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """lock-step 采集：N 局同步推进，每轮把所有待决策局拼成一个 batch 前向一次。
 
@@ -368,7 +369,8 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     policy = PPOSelfPlayPolicy(
         model, device=device, config=cfg, search_fn=None, search_config=None,
         eval_fn=eval_fn, engine_backend=engine_backend, seed=int(seed),
-        norm_mean=norm_mean, norm_std=norm_std, move_model=False)
+        norm_mean=norm_mean, norm_std=norm_std, move_model=False,
+        behavior_mix=behavior_mix)
     policy.reset()
     seat = int(cfg.learner_seat)
     max_steps = int(cfg.max_steps)
@@ -868,4 +870,8 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     meta.update(policy.move_guard_meta())
     # 流派软偏置统计（默认关闭 -> 空 dict，不新增键）。
     meta.update(policy.archetype_bias_meta())
+    # 搜索行为混合统计（默认关闭 -> 空 dict，不新增键；见 docs/BEHAVIOR_MIX_PPO.md）。
+    _bm = policy.behavior_mix_meta()
+    if _bm:
+        meta["behavior_mix"] = _bm
     return records, meta
