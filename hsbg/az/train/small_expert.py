@@ -491,8 +491,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--bc-steps", type=int, default=300_000)
     ap.add_argument("--init-checkpoint", default="runs/economy_sandbox/sb_small/model.pt",
                     help="课程起点小模型（空=from scratch + BC）")
-    ap.add_argument("--s1-steps", type=int, default=1_000_000)
-    ap.add_argument("--s1-max-steps", type=int, default=1_000_000)
+    ap.add_argument("--budget-steps", type=int, default=0,
+                    help="每档训练决策预算（覆盖 S2 的 chunk/max；0=用默认值）")
+    ap.add_argument("--s1-steps", type=int, default=250_000)
+    ap.add_argument("--s1-max-steps", type=int, default=250_000)
     ap.add_argument("--s2-chunk", type=int, default=250_000)
     ap.add_argument("--s2-max-steps", type=int, default=500_000)
     ap.add_argument("--s3-strength-coef", type=float, default=0.7)
@@ -510,7 +512,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         init_checkpoint=str(args.init_checkpoint),
         max_total_decisions=int(args.max_total_decisions),
         s1_steps=int(args.s1_steps), s1_max_steps=int(args.s1_max_steps),
-        s2_chunk=int(args.s2_chunk), s2_max_steps=int(args.s2_max_steps),
+        s2_chunk=int(args.budget_steps or args.s2_chunk),
+        s2_max_steps=int(args.budget_steps or args.s2_max_steps),
         s3_strength_coef=float(args.s3_strength_coef),
         s3_rank_coef=float(args.s3_rank_coef),
         s3_games=int(args.s3_games), s3_processes=int(args.s3_processes),

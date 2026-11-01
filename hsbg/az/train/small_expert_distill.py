@@ -82,6 +82,8 @@ class DistillConfig:
     eval_seed_base: int = 420000
     bootstrap: int = 20000
     skip_panels: int = 0
+    #: 1 = 复用已存在的 ckpt_before/ckpt_distilled，只跑验收面板
+    panels_only: int = 0
     quality_games: int = 48
 
     def as_dict(self) -> Dict[str, Any]:
@@ -129,6 +131,16 @@ def _masked_softmax_rows(logits: Any, mask: Any) -> np.ndarray:
     e = np.where(np.isfinite(e), e, 0.0)
     s = e.sum(axis=1, keepdims=True)
     return np.where(s > 0.0, e / np.maximum(s, 1e-12), 0.0)
+
+
+def _ranks_from_panel(panel: Dict[str, Any]) -> List[int]:
+    """从 human_panel_eval 的 panel dict 里按 seat 顺序拼出 rank 序列。"""
+    ps = (panel.get("details") or {}).get("per_seat") or {}
+    out: List[int] = []
+    for k in sorted(ps, key=lambda x: int(str(x).split("_")[1])):
+        seq = ((ps[k].get("model") or {}).get("rank_sequence") or [])
+        out.extend(int(r) for r in seq)
+    return out
 
 
 def _topk_union(pi_big: np.ndarray, pi_small: np.ndarray, mask: np.ndarray,
@@ -321,7 +333,6 @@ def run_panel(*, checkpoint: str, games: int, seats: int, seed_base: int,
            "--baseline-bot", "0", "--infer-search", "0",
            "--out", out]
     t0 = time.time()
-    from hsbg.az.train.search_exit import _ranks_from_panel  # 同一解析口径
     proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
     if log:
         os.makedirs(os.path.dirname(os.path.abspath(log)) or ".", exist_ok=True)
@@ -399,40 +410,55 @@ def run(cfg: DistillConfig) -> Dict[str, Any]:
     small_model, _smeta = load_checkpoint(cfg.small_checkpoint, device=cfg.device)
     small_eval = PPOEvaluator(small_model, device=cfg.device)
 
-    # 1) 采集（大模型行为 = 部署分布）
-    records, coll = collect_trajectories(big_model, big_eval, cfg)
-    report["collect"] = coll
-    print(f"[distill] collect records={coll['records']} games={coll['games']} "
-          f"{coll['seconds']}s", flush=True)
-
-    # 2) 标签（小专家）
-    samples, sstats = make_samples(records, big_eval, small_eval, cfg)
-    report["samples"] = sstats
-    print(f"[distill] samples={sstats['n_states']} filtered={sstats['filtered_non_key']} "
-          f"agree={sstats['teacher_base_agree']}", flush=True)
-    if not samples:
-        raise RuntimeError("没有可用蒸馏样本")
-
-    # 3) 蒸馏
-    t0 = time.time()
-    fit = train_distill(big_model, ref_model, samples, cfg)
-    report["fit"] = fit
-    report["fit_seconds"] = round(time.time() - t0, 1)
-    print(f"[distill] fit n={fit['n_train']} kl_ref={fit['after'].get('kl_to_ref_mean')} "
-          f"kl_max={fit['after'].get('kl_to_ref_max')} "
-          f"ent_ratio={fit['after'].get('entropy_ratio')} "
-          f"teacher_ag={fit['after'].get('teacher_top1_agree')} "
-          f"gate={bool(fit.get('gate'))} {report['fit_seconds']}s", flush=True)
-
     ckpt_after = os.path.join(cfg.out, "ckpt_distilled.pt")
-    meta_clean = {k: v for k, v in meta.items() if not isinstance(v, np.ndarray)}
-    save_checkpoint(big_model, ckpt_after, meta=meta_clean)
-    # 起点副本（KL ref 与 before 面板都用它）
     ckpt_before = os.path.join(cfg.out, "ckpt_before.pt")
     import shutil
     if not os.path.isfile(ckpt_before):
         shutil.copy2(cfg.big_checkpoint, ckpt_before)
     report["checkpoints"] = {"before": ckpt_before, "after": ckpt_after}
+    if not (int(cfg.panels_only) and os.path.isfile(ckpt_after)):
+        # 1) 采集（大模型行为 = 部署分布）
+        records, coll = collect_trajectories(big_model, big_eval, cfg)
+        report["collect"] = coll
+        print(f"[distill] collect records={coll['records']} games={coll['games']} "
+              f"{coll['seconds']}s", flush=True)
+
+        # 2) 标签（小专家）
+        samples, sstats = make_samples(records, big_eval, small_eval, cfg)
+        report["samples"] = sstats
+        print(f"[distill] samples={sstats['n_states']} "
+              f"filtered={sstats['filtered_non_key']} "
+              f"agree={sstats['teacher_base_agree']}", flush=True)
+        if not samples:
+            raise RuntimeError("没有可用蒸馏样本")
+
+        # 3) 蒸馏
+        t0 = time.time()
+        fit = train_distill(big_model, ref_model, samples, cfg)
+        report["fit"] = fit
+        report["fit_seconds"] = round(time.time() - t0, 1)
+        print(f"[distill] fit n={fit['n_train']} "
+              f"kl_ref={fit['after'].get('kl_to_ref_mean')} "
+              f"kl_max={fit['after'].get('kl_to_ref_max')} "
+              f"ent_ratio={fit['after'].get('entropy_ratio')} "
+              f"teacher_ag={fit['after'].get('teacher_top1_agree')} "
+              f"gate={bool(fit.get('gate'))} {report['fit_seconds']}s", flush=True)
+
+        meta_clean = {k: v for k, v in meta.items() if not isinstance(v, np.ndarray)}
+        save_checkpoint(big_model, ckpt_after, meta=meta_clean)
+    else:
+        report["reused_checkpoints"] = True
+        prev = os.path.join(cfg.out, "summary.json")
+        if os.path.isfile(prev):
+            try:
+                with open(prev, encoding="utf-8") as f:
+                    old = json.load(f)
+                for k in ("collect", "samples", "fit", "fit_seconds"):
+                    if k in old:
+                        report[k] = old[k]
+            except Exception:  # noqa: BLE001 - 旧 summary 损坏就只用 checkpoint
+                pass
+        print("[distill] --panels-only：复用已蒸馏 checkpoint，跳采集/训练", flush=True)
 
     if int(cfg.skip_panels):
         report["elapsed_s"] = round(time.time() - t_start, 1)
@@ -449,7 +475,6 @@ def run(cfg: DistillConfig) -> Dict[str, Any]:
             with open(p_before, encoding="utf-8") as f:
                 _pb = json.load(f)
             if str(_pb.get("checkpoint_sha256", "")) == sha_before:
-                from hsbg.az.train.search_exit import _ranks_from_panel
                 r_before = {"panel": (_pb.get("panels") or [{}])[0],
                             "ranks": _ranks_from_panel((_pb.get("panels") or [{}])[0]),
                             "seconds": 0.0, "path": p_before, "reused": True}
@@ -514,6 +539,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--bootstrap", type=int, default=20000)
     ap.add_argument("--quality-games", type=int, default=48)
     ap.add_argument("--skip-panels", type=int, default=0)
+    ap.add_argument("--panels-only", type=int, default=0,
+                    help="1 = 复用已存在的 ckpt_before/ckpt_distilled，只跑面板")
     args = ap.parse_args(argv)
     cfg = DistillConfig(
         big_checkpoint=str(args.big_checkpoint),
@@ -528,7 +555,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         kl_target=float(args.kl_target), eval_games=int(args.eval_games),
         eval_seats=int(args.eval_seats), bootstrap=int(args.bootstrap),
         quality_games=int(args.quality_games),
-        skip_panels=int(args.skip_panels))
+        skip_panels=int(args.skip_panels),
+        panels_only=int(args.panels_only))
     rep = run(cfg)
     print(json.dumps({k: rep.get(k) for k in
                       ("samples", "panel", "elapsed_s")}, ensure_ascii=False)[:2000])
