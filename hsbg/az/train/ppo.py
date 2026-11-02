@@ -443,6 +443,11 @@ class CollectConfig:
     #: 偏好表 / 分类器模型路径（空 = 默认 ``data/archetype/*``）。
     archetype_table: str = ""
     archetype_model: str = ""
+    #: ── 复利结构选牌先验（collect 侧，纯 obs；默认 0 = 不构造对象 ⇒ 逐位等价）──
+    #: Discover：pending 是三连奖励 3 选 1 时，对「选项含放大器/引擎卡」的 choose 位加该常数。
+    collect_discover_bias: float = 0.0
+    #: Triple：商店里能凑三连（已持 2 张）的 buy 位 +2×该值、能凑对子（1 张）+1×该值。
+    collect_triple_bias: float = 0.0
     #: ── 经济（金币）课程（默认 none + 1.0 = 逐位等价；见 docs/CURRICULUM_SCALING.md）──
     #: 阶段名（none/warmup/anneal）只用于 meta/history 记录；采集侧真正用的是
     #: ``curriculum_gold_mult``（训练入口按累计 decisions 求值后的**当前**倍数）。
@@ -1148,6 +1153,17 @@ class PPOConfig:
     #: 在线缩放教师 DAgger 的 CE 系数（0=关闭，默认）。>0 时需要采集侧产出
     #: ``teacher_action``（``CollectConfig.teacher_bc=True``），CE 只在有标签的样本上算。
     teacher_bc_coef: float = 0.0
+    #: 复利结构辅助 BC（0=关闭，默认）：在「Discover 选项含放大器/引擎卡」与
+    #: 「商店能凑三连/对子的 buy 位」上加辅助交叉熵；标签由训练入口写入 batch
+    #: （`discover_bc_idx/w`、`triple_bc_action/w`），**行为策略保持无偏**。
+    discover_bc_coef: float = 0.0
+    triple_bc_coef: float = 0.0
+    # epoch 内自适应辅助系数；0 关闭，scale 跨 update 保留且不影响 warmup。
+    bc_guard_ratio: float = 0.0
+    discover_bc_scale: float = 1.0
+    triple_bc_scale: float = 1.0
+    #: 辅助 BC 的 CE **归一化**（除以合法动作数的 log；默认 False = 原始 CE）
+    bc_ce_norm: bool = False
     #: 过程价值辅助头系数（0=关闭，默认）：预测 log1p(酒馆永久 buff 总和) /
     #: log1p(施法数) / log1p(consume 数)，只在目标可得的样本上算 MSE。
     process_value_coef: float = 0.0
@@ -2363,6 +2379,44 @@ def build_train_forward(model: Any, config: Any = None, *,
 # ══════════════════════════════════════════════════════════════════════════
 # 6. PPO loss / 训练
 # ══════════════════════════════════════════════════════════════════════════
+def replication_bc_ce(logp, mask, indices, weights, valid, *, normalize=False,
+                      row_weight=False):
+    """合法目标上的加权 -log p；可选除以 log(合法动作数)，均匀策略基线为 1。
+
+    不除以选项数：那会随动作空间增大任意缩小梯度。Discover 行内归一化目标价值，
+    triple 则保留行间 2:1 权重；非法/越界/forced 标签均不参与。
+    """
+    torch = _torch()
+    inside = (indices >= 0) & (indices < logp.shape[1])
+    safe = indices.clamp(0, logp.shape[1] - 1)
+    legal = inside & mask.gather(1, safe)
+    w = torch.where(legal & torch.isfinite(weights), weights.clamp_min(0),
+                    torch.zeros_like(weights))
+    mass = w.sum(dim=1)
+    rows = (mass > 0) & (valid > 0)
+    count = int(rows.sum().item())
+    if not count:
+        return logp.sum() * 0.0, 0
+    selected = logp.gather(1, safe)
+    per = -(selected * w).sum(dim=1) / mass.clamp_min(1e-8)
+    if normalize:
+        per = per / mask.sum(dim=1).clamp_min(2).to(logp.dtype).log()
+    rw = mass[rows] if row_weight else torch.ones_like(mass[rows])
+    return (per[rows] * rw).sum() / rw.sum(), count
+
+
+def replication_bc_guard(coef, bc_loss, policy_loss, *, ratio=0.3, eps=1e-8):
+    """每 epoch 调整一次；PPO surrogate 可为负，因此比较其绝对量级。"""
+    if coef <= 0 or ratio <= 0:
+        return float(coef), 0.0
+    r = float(coef) * max(0.0, float(bc_loss)) / max(abs(float(policy_loss)), eps)
+    if r > ratio:
+        coef = max(1e-6, coef * 0.5)
+    elif r < 0.05:
+        coef = min(1e-3, coef * 1.5)
+    return float(coef), r
+
+
 def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
                indices: Optional[np.ndarray] = None,
                anchor_logp: Any = None,
@@ -2510,6 +2564,10 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     teacher_bc_coef = float(getattr(config, "teacher_bc_coef", 0.0) or 0.0)
     teacher_loss = None
     teacher_n = 0
+    discover_bc_loss = None
+    discover_bc_n = 0
+    triple_bc_loss = None
+    triple_bc_n = 0
     if teacher_bc_coef > 0.0:
         ta_np = getattr(batch, "teacher_action", None)
         if ta_np is not None:
@@ -2520,6 +2578,36 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
             if teacher_n > 0:
                 teacher_loss = F.cross_entropy(logits[has_t], ta[has_t])
                 total = total + teacher_bc_coef * teacher_loss
+    # ── 复利结构辅助 BC（Discover 选牌 / 三连 buy；默认 0 = 整段不执行）─────────
+    # 标签由训练入口写入 batch（`discover_bc_idx/w`、`triple_bc_action/w`）：
+    # 行为策略保持无偏（on-policy 前提不破），只把"含放大器/引擎卡的 Discover 选项"与
+    # "能凑三连/对子的 buy 位"当教师，用交叉熵把这种选择**学进权重**。
+    _dbc = float(config.discover_bc_coef) * float(config.discover_bc_scale)
+    _tbc = float(config.triple_bc_coef) * float(config.triple_bc_scale)
+    # 使用 PPO 同一份 masked logp；即使外部标签损坏也不能给非法位梯度。
+    if _dbc > 0.0:
+        _di, _dw = getattr(batch, "discover_bc_idx", None), getattr(batch, "discover_bc_w", None)
+        if _di is not None and _dw is not None:
+            _i = torch.as_tensor(np.asarray(_di)[idx], dtype=torch.long, device=dev)
+            _w = torch.as_tensor(np.asarray(_dw)[idx], dtype=torch.float32, device=dev)
+            _ce, discover_bc_n = replication_bc_ce(logp, m, _i, _w, valid,
+                                                   normalize=config.bc_ce_norm)
+            if discover_bc_n:
+                total = total + _dbc * _ce
+                discover_bc_loss = _ce.detach()
+    if _tbc > 0.0:
+        _ta = getattr(batch, "triple_bc_action", None)
+        if _ta is not None:
+            _tv = torch.as_tensor(np.asarray(_ta)[idx], dtype=torch.long, device=dev)
+            _tw = getattr(batch, "triple_bc_w", None)
+            _tw = (torch.ones_like(_tv, dtype=torch.float32) if _tw is None else
+                   torch.as_tensor(np.asarray(_tw)[idx], dtype=torch.float32, device=dev))
+            _ce_t, triple_bc_n = replication_bc_ce(logp, m, _tv[:, None], _tw[:, None],
+                                                   valid, normalize=config.bc_ce_norm,
+                                                   row_weight=True)
+            if triple_bc_n:
+                total = total + _tbc * _ce_t
+                triple_bc_loss = _ce_t.detach()
     # ── 过程价值辅助头（默认 process_value_coef=0 时整段不执行）──────────────
     # 独立前向（forward_process），不改变策略/价值主干前向的输出；目标 NaN = 不可得，
     # 只在 (available & valid) 样本上算 MSE。梯度经辅助损失回传 trunk。
@@ -2701,6 +2789,15 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         result["teacher_bc_loss"] = teacher_loss.detach()
         result["teacher_bc_coef"] = torch.as_tensor(float(teacher_bc_coef), device=dev)
         result["teacher_samples"] = torch.as_tensor(float(teacher_n), device=dev)
+    # 复利结构辅助 BC：只有真的算了 CE 才出现（默认关闭 -> 结构不变）
+    if discover_bc_loss is not None:
+        result["discover_bc_loss"] = discover_bc_loss
+        result["discover_bc_coef"] = torch.as_tensor(float(_dbc), device=dev)
+        result["discover_bc_samples"] = torch.as_tensor(float(discover_bc_n), device=dev)
+    if triple_bc_loss is not None:
+        result["triple_bc_loss"] = triple_bc_loss
+        result["triple_bc_coef"] = torch.as_tensor(float(_tbc), device=dev)
+        result["triple_bc_samples"] = torch.as_tensor(float(triple_bc_n), device=dev)
     # 过程价值辅助头：只有真的算了 MSE 才出现（默认关闭 -> 结构不变）
     if process_stats:
         result.update(process_stats)
@@ -2955,6 +3052,27 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
             nb += 1
         rec: Dict[str, Any] = {"epoch": epoch + 1, "steps": nb}
         rec.update({k: float(np.mean(v)) for k, v in acc.items()})
+        # 当前 epoch 已用的有效系数与比率；调整只作用下一 epoch/update。
+        _ratios, _scales = [], []
+        for _side in ("discover", "triple"):
+            _key = _side + "_bc"
+            if _key + "_loss" not in rec:
+                continue
+            _base = float(getattr(cfg, _key + "_coef"))
+            _scale = float(getattr(cfg, _key + "_scale"))
+            _eff = _base * _scale
+            _new, _r = replication_bc_guard(_eff, rec[_key + "_loss"],
+                                            rec["policy_loss"], ratio=cfg.bc_guard_ratio)
+            rec[_key + "_scale"] = _scale
+            rec[_key + "_r"] = _r
+            rec[_key + "_next_coef"] = _new
+            _ratios.append(_r)
+            _scales.append(_scale)
+            if cfg.bc_guard_ratio > 0 and _base > 0:
+                setattr(cfg, _key + "_scale", _new / _base)
+        if _ratios:
+            rec["bc_scale"] = max(_scales)
+            rec["r"] = sum(_ratios)
         rec["elapsed_s"] = time.time() - t0
         rec["kl_early_stopped"] = bool(epoch_stopped)
         logs.append(rec)
@@ -2984,6 +3102,12 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         if "process_value_loss" in rec:
             prob_note += (f" proc={rec['process_value_loss']:.4f}"
                           f" proc_n={rec.get('process_samples', 0.0):.0f}")
+        if "discover_bc_loss" in rec:
+            prob_note += (f" dbc={rec['discover_bc_loss']:.4f}"
+                          f" dbc_n={rec.get('discover_bc_samples', 0.0):.0f}")
+        if "triple_bc_loss" in rec:
+            prob_note += (f" tbc={rec['triple_bc_loss']:.4f}"
+                          f" tbc_n={rec.get('triple_bc_samples', 0.0):.0f}")
         print(f"[ppo] epoch {epoch + 1}/{epochs} total={rec['total']:.4f} "
               f"(policy={rec['policy_loss']:.4f} value={rec['value_loss']:.4f} "
               f"aux_pi={rec['aux_pi_loss']:.4f} ent={rec['entropy']:.4f} "
@@ -3016,6 +3140,13 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
                          if device.type == "cuda" else None),
         "config": to_jsonable(asdict(cfg)),
     }
+    # 提升 epoch 指标，供训练入口/history 使用；缺标签的 epoch 不以 0 稀释。
+    for _key in ("policy_loss", "discover_bc_loss", "triple_bc_loss", "bc_scale", "r",
+                 "discover_bc_scale", "triple_bc_scale", "discover_bc_r", "triple_bc_r",
+                 "discover_bc_coef", "triple_bc_coef", "discover_bc_next_coef", "triple_bc_next_coef"):
+        _vals = [rec[_key] for rec in logs if _key in rec]
+        if _vals:
+            stats[_key] = float(np.mean(_vals))
     # 搜索行为混合（μ=(1−ε)π+ε·π_search）：批次带 behavior_logprobs 时才出该键。
     # ``w = exp(logp_pi − logp_mu)`` 就是「π 未更新时」的 IS 权重/ratio 起点：
     # 未混合样本恒为 1（ratio 起点=1 的自检口径），搜索混合样本按 1/ε 上界放大。
@@ -3229,6 +3360,127 @@ def _normalize_pi(result: Any, mask: np.ndarray) -> Optional[np.ndarray]:
     return masked_normalize(arr, np.asarray(mask, dtype=bool))
 
 
+#: 复利结构先验的目标卡（放大器 + 引擎卡；与 docs/CHAIN_FUNNEL.md §7 同口径）
+_REP_AMP_IDS = frozenset({
+    "BG25_354", "BG25_354_G", "BG26_ICC_901", "BG26_ICC_901_G",
+    "BG36_640", "BG36_640_G",
+})
+_REP_ENGINE_IDS = frozenset({
+    "BG36_762", "BG36_762_G", "BG28_633", "BG28_633_G",
+    "BG36_704", "BG36_704_G", "BG_LOE_077", "BG_LOE_077_G",
+})
+
+
+def _rep_card_flags() -> Dict[int, Tuple[int, int, int]]:
+    """``cid → (is_golden, tier, target_kind)，target_kind：0 非目标/1 引擎/2 放大器``（引擎 catalog 顺序；失败返回空表）。"""
+    try:
+        import json as _json
+        eng = load_engine()
+        cat = _json.loads(eng.catalog_json())
+    except BaseException:  # noqa: BLE001 - 引擎缺失时先验退化为空
+        return {}
+    out: Dict[int, Tuple[int, int, int]] = {}
+    for c in cat:
+        try:
+            cid = int(c["cid"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        sid = str(c.get("id") or "")
+        is_golden = 1 if sid.endswith("_G") else 0
+        tier = int(c.get("tier") or 0)
+        is_target = 2 if sid in _REP_AMP_IDS else (1 if sid in _REP_ENGINE_IDS else 0)
+        out[cid] = (is_golden, tier, is_target)
+    return out
+
+
+class _ReplicationBias:
+    """复利结构选牌先验（**collect 侧**，纯 obs ⇒ 零额外 I/O；默认不构造）。
+
+    - **Discover**：``cards[card_choices]`` 是三连奖励 3 选 1 的候选时，对「候选含放大器/
+      引擎卡」的 ``choose`` 位加 ``discover_w``（只加不减、只对合法位）；
+    - **Triple**：商店里能凑三连（已持 2 张同名非金）的 ``buy`` 位 +``2*triple_w``；
+      能凑对子（已持 1 张）+``triple_w``。
+
+    两个系数都 <=0 时**不构造对象** ⇒ 采样路径逐位等价。
+    """
+
+    def __init__(self, discover_w: float = 0.0, triple_w: float = 0.0) -> None:
+        from hsbg.env.action_space_std import (A_BUY as _A_BUY, A_CHOOSE as _A_CHOOSE,
+                                               N_CHOICE as _N_CHOICE, N_SHOP as _N_SHOP)
+        from hsbg.env.obs_std import (SLICE_CARD_BOARD, SLICE_CARD_CHOICES,
+                                      SLICE_CARD_HAND, SLICE_CARD_SHOP)
+        self.discover_w = float(discover_w)
+        self.triple_w = float(triple_w)
+        self._A_BUY = int(_A_BUY)
+        self._A_CHOOSE = int(_A_CHOOSE)
+        self._N_SHOP = int(_N_SHOP)
+        self._N_CHOICE = int(_N_CHOICE)
+        self._sl_board = SLICE_CARD_BOARD
+        self._sl_hand = SLICE_CARD_HAND
+        self._sl_shop = SLICE_CARD_SHOP
+        self._sl_choices = SLICE_CARD_CHOICES
+        self._flags = _rep_card_flags() if (self.discover_w > 0.0) else {}
+        self.stats = {"discover_biased": 0, "triple_biased": 0, "pair_biased": 0}
+
+    def _f(self, cid: int) -> Tuple[int, int, int]:
+        return self._flags.get(int(cid), (0, 0, 0))
+
+    def bias(self, features: Any, cards: Any, mask: Any, *,
+             game_id: Any = None, seat: Any = None) -> Optional[np.ndarray]:
+        m = np.asarray(mask, dtype=bool).reshape(-1)
+        if m.size != N_ACTIONS:
+            return None
+        cc = np.asarray(cards).reshape(-1)
+        v = None
+        if self.discover_w > 0.0 and bool(m[self._A_CHOOSE:self._A_CHOOSE + self._N_CHOICE].any()):
+            base = self._sl_choices.start
+            for i in range(self._N_CHOICE):
+                a = self._A_CHOOSE + i
+                if not m[a]:
+                    continue
+                idx = base + i
+                if idx >= cc.size:
+                    break
+                cid = int(cc[idx]) - 1
+                if cid < 0:
+                    continue
+                if self._f(cid)[2]:
+                    if v is None:
+                        v = np.zeros(N_ACTIONS, dtype=np.float32)
+                    v[a] += float(self.discover_w)
+                    self.stats["discover_biased"] += 1
+        if self.triple_w > 0.0 and bool(m[self._A_BUY:self._A_BUY + self._N_SHOP].any()):
+            own: Dict[int, int] = {}
+            for sl in (self._sl_board, self._sl_hand):
+                for j in range(sl.start, min(sl.stop, cc.size)):
+                    cid = int(cc[j]) - 1
+                    if cid >= 0 and not self._f(cid)[0]:
+                        own[cid] = own.get(cid, 0) + 1
+            base = self._sl_shop.start
+            for slot in range(self._N_SHOP):
+                a = self._A_BUY + slot
+                if not m[a]:
+                    continue
+                idx = base + slot
+                if idx >= cc.size:
+                    break
+                cid = int(cc[idx]) - 1
+                if cid < 0:
+                    continue
+                cnt = own.get(cid, 0)
+                if cnt >= 2:
+                    if v is None:
+                        v = np.zeros(N_ACTIONS, dtype=np.float32)
+                    v[a] += 2.0 * float(self.triple_w)
+                    self.stats["triple_biased"] += 1
+                elif cnt == 1:
+                    if v is None:
+                        v = np.zeros(N_ACTIONS, dtype=np.float32)
+                    v[a] += float(self.triple_w)
+                    self.stats["pair_biased"] += 1
+        return v
+
+
 class PPOSelfPlayPolicy(Policy):
     """PPO 采集策略：网络（+ 可选 MCTS）选动作，并记录训练所需的全部字段。
 
@@ -3295,6 +3547,11 @@ class PPOSelfPlayPolicy(Policy):
                 cache=bool(getattr(self.config, "archetype_cache", False)),
                 # 卡牌下标 → 卡 id（top_cards 分项用；引擎缺失时退化为不带卡牌分项）
                 card_index_of=engine_card_id_lookup())
+        # 复利结构选牌先验（默认 0 -> 不构造对象、零开销）
+        _rep_dw = float(getattr(self.config, "collect_discover_bias", 0.0) or 0.0)
+        _rep_tw = float(getattr(self.config, "collect_triple_bias", 0.0) or 0.0)
+        self._rep_bias = (_ReplicationBias(_rep_dw, _rep_tw)
+                          if (_rep_dw > 0.0 or _rep_tw > 0.0) else None)
         if move_model:
             self.model.to(self.device)
         self.model.eval()
@@ -3499,6 +3756,11 @@ class PPOSelfPlayPolicy(Policy):
         # 流派软偏置：先用可见观测 + 己方动作历史做检测，拿到 245 维非负 bias。
         abias = (self._abias.bias(f, c, mask, game_id=self.game_id, seat=seat)
                  if self._abias is not None else None)
+        # 复利结构先验（默认关闭 -> self._rep_bias 为 None -> 完全没这一支）
+        if self._rep_bias is not None:
+            _rb = self._rep_bias.bias(f, c, mask, game_id=self.game_id, seat=seat)
+            if _rb is not None:
+                abias = _rb if abias is None else (np.asarray(abias, np.float32) + _rb)
         if self._can_fast_act():
             # worker 侧采样：省掉 prior 回传 + 调用方 numpy softmax/采样
             seed = int(self._rng.integers(0, 2 ** 63 - 1))
@@ -3607,6 +3869,10 @@ class PPOSelfPlayPolicy(Policy):
                     turn=int(getattr(g, "turn", -1)))
             abias = (self._abias.bias(f, c, mask, game_id=self.game_id, seat=s)
                      if self._abias is not None else None)
+            if self._rep_bias is not None:
+                _rb = self._rep_bias.bias(f, c, mask, game_id=self.game_id, seat=s)
+                if _rb is not None:
+                    abias = _rb if abias is None else (np.asarray(abias, np.float32) + _rb)
             prepared.append((g, s, gid, f, c, mask, guard_forced, abias))
         F = np.stack([p[3] for p in prepared]).astype(np.float32, copy=False)
         C = np.stack([p[4] for p in prepared]).astype(np.int64, copy=False)

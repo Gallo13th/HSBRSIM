@@ -215,18 +215,136 @@ def _net_size_kwargs(args: Any) -> Dict[str, int]:
     return out
 
 
+_REWARD_CARD_META_CACHE: Optional[Dict[str, Any]] = None
+
+
+def _attach_replication_bc_labels(batch: Any) -> Dict[str, Any]:
+    """从 **obs 卡牌块**给 batch 写两条辅助 BC 标签（纯 numpy；不读 player_json）。
+
+    - ``discover_bc_idx/w``：``card_choices`` 里含放大器/引擎卡 ⇒ 这些 ``choose`` 位为教师，
+      多选项按 tier×放大器优先级加权（只标**合法**位）；
+    - ``triple_bc_action/w``：商店 slot 里的同名卡已持 2 张 ⇒ 该 ``buy`` 位权重 2.0；
+      已持 1 张 ⇒ 权重 1.0（只标合法位）。
+    """
+    from collections import Counter
+
+    from hsbg.az.train.ppo import _rep_card_flags  # 同一份卡牌元数据（金/星级/目标卡）
+    from hsbg.env.action_space_std import (A_BUY, A_CHOOSE, N_CHOICE, N_SHOP)
+    from hsbg.env.obs_std import (SLICE_CARD_BOARD, SLICE_CARD_CHOICES,
+                                  SLICE_CARD_HAND, SLICE_CARD_SHOP)
+    flags = _rep_card_flags()
+    carr = np.asarray(batch.cards)
+    if carr.ndim == 1:
+        carr = carr.reshape(-1, 124)
+    masks = np.asarray(batch.masks, dtype=bool)
+    n = int(carr.shape[0])
+    d_idx = np.full((n, int(N_CHOICE)), -1, dtype=np.int64)
+    d_w = np.zeros((n, int(N_CHOICE)), dtype=np.float32)
+    t_act = np.full(n, -1, dtype=np.int64)
+    t_w = np.zeros(n, dtype=np.float32)
+    n_disc = n_trip = n_pair = 0
+    for i in range(n):
+        row = carr[i]
+        mk = masks[i]
+        # Discover
+        ch = row[SLICE_CARD_CHOICES].astype(np.int64) - 1
+        hits = [j for j in range(int(N_CHOICE))
+                if ch[j] >= 0 and flags.get(int(ch[j]), (0, 0, 0))[2]
+                and bool(mk[int(A_CHOOSE) + j])]
+        if hits:
+            # 目标标志 2 表示放大器，1 表示引擎；按星级×放大器 2 倍估值。
+            values = {j: max(1, flags[int(ch[j])][1]) *
+                      (2.0 if flags[int(ch[j])][2] == 2 else 1.0) for j in hits}
+            denom = sum(values.values())
+            for j in hits:
+                d_idx[i, j] = int(A_CHOOSE) + j
+                d_w[i, j] = values[j] / denom
+            n_disc += 1
+        # Triple / pair
+        own: Counter = Counter()
+        for sl in (SLICE_CARD_BOARD, SLICE_CARD_HAND):
+            for j in range(sl.start, min(sl.stop, row.size)):
+                cid = int(row[j]) - 1
+                if cid >= 0 and not flags.get(cid, (0, 0, 0))[0]:
+                    own[cid] += 1
+        best: Optional[tuple] = None
+        for slot in range(int(N_SHOP)):
+            a = int(A_BUY) + slot
+            if not bool(mk[a]):
+                continue
+            cid = int(row[SLICE_CARD_SHOP.start + slot]) - 1
+            if cid < 0:
+                continue
+            cnt = own.get(cid, 0)
+            if cnt >= 2:
+                best = (a, 2.0)
+                break
+            if cnt == 1 and best is None:
+                best = (a, 1.0)
+        if best is not None:
+            t_act[i], t_w[i] = int(best[0]), float(best[1])
+            if float(best[1]) >= 2.0:
+                n_trip += 1
+            else:
+                n_pair += 1
+    batch.discover_bc_idx = d_idx
+    batch.discover_bc_w = d_w
+    batch.triple_bc_action = t_act
+    batch.triple_bc_w = t_w
+    return {"discover_states": n_disc, "triple_states": n_trip, "pair_states": n_pair}
+
+
+def _reward_card_meta() -> Dict[str, Any]:
+    """卡片元数据缓存：引擎 cid → 「金卡 / 金卡且 tier≥5 / 放大器 / 引擎卡」打分函数。"""
+    global _REWARD_CARD_META_CACHE
+    if _REWARD_CARD_META_CACHE is not None:
+        return _REWARD_CARD_META_CACHE
+    cards = json.load(open(os.path.join(ROOT, "data/p2/cards_37.json"), encoding="utf-8"))
+    if isinstance(cards, dict):
+        cards = cards.get("cards") or cards.get("data") or list(cards.values())
+    tier = {str(c.get("id")): int(c.get("tier") or 0)
+            for c in cards if isinstance(c, dict) and c.get("id")}
+    import hsbg_engine as _E  # noqa: PLC0415
+    cid2id = {int(c["cid"]): str(c["id"]) for c in json.loads(_E.catalog_json())}
+    amp = {"BG25_354", "BG25_354_G", "BG26_ICC_901", "BG26_ICC_901_G",
+           "BG36_640", "BG36_640_G"}
+    eng = {"BG36_762", "BG36_762_G", "BG28_633", "BG28_633_G",
+           "BG36_704", "BG36_704_G", "BG_LOE_077", "BG_LOE_077_G"}
+
+    def score(cid: int, kind: str) -> float:
+        sid = cid2id.get(int(cid), "")
+        if not sid:
+            return 0.0
+        golden = sid.endswith("_G")
+        if kind == "golden":
+            return 1.0 if golden else 0.0
+        if kind == "golden_t5":
+            return 1.0 if (golden and tier.get(sid, 0) >= 5) else 0.0
+        if kind == "amp":
+            return 1.0 if sid in amp else 0.0
+        if kind == "engine":
+            return 1.0 if sid in eng else 0.0
+        return 0.0
+
+    _REWARD_CARD_META_CACHE = {"score": score}
+    return _REWARD_CARD_META_CACHE
+
+
 def _apply_custom_rewards(batch: Any, *, upgrade_w: float = 0.0,
                           win_w: float = 0.0, strength_c: float = 0.0,
+                          golden_w: float = 0.0, golden_t5_w: float = 0.0,
+                          amp_board_w: float = 0.0, engine_board_w: float = 0.0,
+                          survive_t12_w: float = 0.0,
                           gamma: float, lam: float) -> Optional[Dict[str, Any]]:
-    """三个**默认关闭**的奖励改造，一次改 rewards 后**整批重算 GAE**。
+    """**默认全部关闭**的奖励改造；一次改 rewards 后**整批重算 GAE**。
 
-    1. ``upgrade_w``（`--upgrade-reward`）：``upgrade`` 动作（``A_UPGRADE=3``）即时 +w；
-       rank-only 下升本收益要 5–8 回合才兑现，GAE λ=0.995 会把它压没。
-    2. ``win_w``（`--win-only-reward`）：**终局只有第 1 名 +w**，其余 0；
-       用于"减弱名次奖励、只奖励夺冠"（配合 ``--rank-utility-coef 0``）。
-    3. ``strength_c``（`--strength-reward-coef`）：**每回合 ΔL(Σ) 密集项**
-       （``L = log1p(Σ)/log1p(30000)``，沙盒 telescope 同一曲线）；
-       回合末决策上加 ``strength_c × (L(Σ_t) − L(Σ_{t−1}))``，首回合以 0 为基准。
+    1. ``upgrade_w``：``upgrade`` 动作（A_UPGRADE=3）即时 +w。
+    2. ``win_w``：终局只有第 1 名 +w。
+    3. ``strength_c``：每回合 ΔL(Σ) 密集项（L = log1p(Σ)/log1p(30000)）。
+    4. ``golden_w`` / ``golden_t5_w``：**金卡数量**的密集增量（全部金卡 / 其中 tier≥5）；
+       观测量取自 obs 卡牌块（board 19:26 + hand 26:36，``cards[i]=cid+1``）。
+    5. ``amp_board_w`` / ``engine_board_w``：**放大器家族 / 引擎卡在场上**的数量增量。
+    6. ``survive_t12_w``：**活到 t12** 的终局奖励（该 episode 末回合 ≥12 才给）。
     全部为 0（默认）时**不调用** ⇒ 逐位等价旧路径。
     """
     from hsbg.az.train.ppo import compute_gae, log_strength_from_features  # noqa: PLC0415
@@ -266,7 +384,58 @@ def _apply_custom_rewards(batch: Any, *, upgrade_w: float = 0.0,
                 cur_L = float(L[te])
                 delta[te] += float(strength_c) * (cur_L - prev_L)
                 prev_L = cur_L
-    if not (n_up or n_win or float(strength_c) > 0.0):
+    # ── 金卡 / 放大器 / 引擎卡 / 存活到 t12（全部默认 0）─────────────────
+    n_gold = n_gold5 = n_ampb = n_engb = n_surv = 0
+    if (float(golden_w) > 0.0 or float(golden_t5_w) > 0.0
+            or float(amp_board_w) > 0.0 or float(engine_board_w) > 0.0):
+        try:
+            from hsbg.env.obs_std import SLICE_CARD_BOARD, SLICE_CARD_HAND
+            meta = _reward_card_meta()
+            carr = np.asarray(batch.cards)
+            if carr.ndim == 1:
+                carr = carr.reshape(-1, 124)
+            board_c = carr[:, SLICE_CARD_BOARD].astype(np.int64) - 1
+            hand_c = carr[:, SLICE_CARD_HAND].astype(np.int64) - 1
+            def _cnt(sel):
+                out = np.zeros(n, dtype=np.float64)
+                for j in range(sel.shape[1]):
+                    cid = sel[:, j]
+                    for i in np.flatnonzero(cid >= 0):
+                        out[i] += float(meta["score"](int(cid[i]), kind))
+                return out
+            for kind, w in (("golden", float(golden_w)), ("golden_t5", float(golden_t5_w)),
+                            ("amp", float(amp_board_w)), ("engine", float(engine_board_w))):
+                if w <= 0.0:
+                    continue
+                cnt = _cnt(board_c) + (_cnt(hand_c) if kind.startswith("golden") else 0.0)
+                eps = np.asarray(batch.episode_ids)
+                bounds = np.flatnonzero(np.diff(eps) != 0) + 1
+                starts = np.concatenate(([0], bounds))
+                ends = np.concatenate((bounds, [n]))
+                for s, e in zip(starts.tolist(), ends.tolist()):
+                    prev = 0.0
+                    for i in range(s, e):
+                        cur = float(cnt[i])
+                        delta[i] += w * (cur - prev)
+                        prev = cur
+                if kind == "golden":
+                    n_gold = int(cnt[[e - 1 for e in ends]].sum())
+                elif kind == "golden_t5":
+                    n_gold5 = int(cnt[[e - 1 for e in ends]].sum())
+                elif kind == "amp":
+                    n_ampb = int(cnt[[e - 1 for e in ends]].sum())
+                else:
+                    n_engb = int(cnt[[e - 1 for e in ends]].sum())
+        except BaseException:  # noqa: BLE001 - 奖励改造失败不能中断训练
+            pass
+    if float(survive_t12_w) > 0.0:
+        dones = np.asarray(batch.dones, dtype=np.float32) > 0.5
+        turns = np.asarray(batch.turns)
+        surv_hit = dones & (turns >= 12)
+        delta[surv_hit] += float(survive_t12_w)
+        n_surv = int(surv_hit.sum())
+    if not (n_up or n_win or n_gold or n_gold5 or n_ampb or n_engb or n_surv
+            or float(strength_c) > 0.0):
         return None
     rewards = (np.asarray(batch.rewards, dtype=np.float64) + delta)
     adv, ret = compute_gae(rewards, np.asarray(batch.values, dtype=np.float64),
@@ -278,6 +447,11 @@ def _apply_custom_rewards(batch: Any, *, upgrade_w: float = 0.0,
     return {"upgrade_w": float(upgrade_w), "upgrade_hits": n_up,
             "win_w": float(win_w), "win_episodes": n_win,
             "strength_c": float(strength_c),
+            "golden_w": float(golden_w), "goldens_total": n_gold,
+            "golden_t5_w": float(golden_t5_w), "goldens_t5_total": n_gold5,
+            "amp_board_w": float(amp_board_w), "amp_board_total": n_ampb,
+            "engine_board_w": float(engine_board_w), "engine_board_total": n_engb,
+            "survive_t12_w": float(survive_t12_w), "survive_t12_eps": n_surv,
             "reward_delta_sum": float(delta.sum()),
             "reward_delta_abs": float(np.abs(delta).sum())}
 
@@ -763,13 +937,12 @@ def main() -> int:
                     help="--gpu-free-check 阈值：已用显存 > 该值（MiB）视为被占用")
     ap.add_argument("--threads", type=int, default=16,
                     help="每个 actor 进程内的采集线程数（每轮 games 应 >= processes*threads）")
-    # ── records 数据通路（默认 auto/fp32：进程 pool 走 shm，features 仍 fp32 存储；
-    #    `--records-dtype fp16` 是可选省字节项，但**不保证逐位等价**。见 docs/TRAIN_THROUGHPUT.md）──
-    ap.add_argument("--records-dtype", default="fp32", choices=["fp32", "fp16"],
-                    help="records 存储精度：fp32（默认，逐位等价）；fp16 只把 features(=3227 "
-                         "floats, 占 88%% 字节) 降精度存，父进程读入后立刻还原 fp32。"
-                         "实测：小配置 12 iter 动作流 sha 全同，但 384 局/8 进程配置下第 3 iter "
-                         "起与 fp32 分歧 ⇒ 省 ~2-3%% 时间，不用于需要逐位一致的正式训练")
+    # ── records 数据通路（默认 auto/fp16：进程 pool 走 shm + features 半精度存储；
+    #    `--ipc-mode disk --records-dtype fp32` = 历史逐位等价路径。见 docs/TRAIN_THROUGHPUT.md）──
+    ap.add_argument("--records-dtype", default="fp16", choices=["fp32", "fp16"],
+                    help="records 存储精度：fp16（默认）只把 features(=3227 floats, 占 88%% 字节)"
+                         "降精度写盘/写 shm，父进程读入后立刻还原 fp32（12 iter 动作流 sha 逐位"
+                         "相同）；fp32=历史路径")
     ap.add_argument("--ipc-mode", default="auto", choices=["auto", "disk", "shm"],
                     help="worker→父进程的 records 通路：auto（默认）= 有进程 pool 且 /dev/shm "
                          "可用时走 shm，否则 disk；shm=/dev/shm 环形缓冲 + 父进程零拷贝映射"
@@ -853,6 +1026,35 @@ def main() -> int:
     ap.add_argument("--strength-reward-coef", type=float, default=0.0,
                     help="每回合 ΔL(Σ) 密集强度奖励系数（默认 0=关闭，逐位等价）："
                          "L=log1p(Σ)/log1p(30000)，回合末决策加 c×(L_t−L_{t−1})")
+    # ── 复利结构奖励（金卡/高星/放大器/引擎卡/存活；全部默认 0 = 逐位等价）──
+    ap.add_argument("--golden-reward", type=float, default=0.0,
+                    help="金卡数量密集增量奖励（board+hand 里 '_G' 卡，默认 0=关闭）")
+    ap.add_argument("--golden-t5-reward", type=float, default=0.0,
+                    help="金卡且 tier>=5 的密集增量奖励（默认 0=关闭）")
+    ap.add_argument("--amp-board-reward", type=float, default=0.0,
+                    help="放大器家族（Titus/Drakkari/Gatekeeper）在场数量增量（默认 0=关闭）")
+    ap.add_argument("--engine-board-reward", type=float, default=0.0,
+                    help="引擎卡（BG36_762/BG28_633/BG36_704/BG_LOE_077）在场数量增量（默认 0=关闭）")
+    ap.add_argument("--survive-t12-reward", type=float, default=0.0,
+                    help="活到 t12 的终局奖励（episode 末回合 >=12；默认 0=关闭）")
+    # ── 复利结构选牌先验（**collect 侧**，纯 obs；默认 0 = 不构造对象 ⇒ 逐位等价）──
+    ap.add_argument("--collect-discover-bias", type=float, default=0.0,
+                    help="训练采集侧 Discover 先验：三连奖励 3 选 1 里含放大器/引擎卡时，"
+                         "给对应 choose 位加该常数（默认 0=关闭，逐位等价）")
+    ap.add_argument("--collect-triple-bias", type=float, default=0.0,
+                    help="训练采集侧三连先验：能凑三连的 buy 位 +2W、能凑对子 +W（默认 0=关闭）")
+    # ── 复利结构**辅助 BC**（推荐路径：行为策略无偏、把结构选择学进权重）────────
+    ap.add_argument("--discover-bc-coef", type=float, default=0.0,
+                    help="Discover 辅助交叉熵系数（默认 0=关闭）：选项含放大器/引擎卡时，"
+                         "把这些 choose 位当教师（多选项 uniform 加权）")
+    ap.add_argument("--triple-bc-coef", type=float, default=0.0,
+                    help="三连辅助交叉熵系数（默认 0=关闭）：能凑三连的 buy 位权重 2×、对子 1×")
+    ap.add_argument("--bc-ce-norm", type=int, default=1, choices=[0, 1],
+                    help="辅助 BC 的 CE 归一化（减掉均匀基线 log k；默认 1=开）")
+    ap.add_argument("--bc-warmup-decisions", type=float, default=0.0,
+                    help="辅助 BC 系数的线性 warmup 决策数（默认 0=不 warmup，恒定系数）")
+    ap.add_argument("--bc-guard-ratio", type=float, default=0.0,
+                    help=">0 时启用 guard：若 coef*CE > ratio*policy_loss 则把系数减半（默认 0=关）")
     # ── 动态课程（默认 0 = 关闭，逐位等价）───────────────────────────────────
     # 规则（Lead 定）：起点 start 席 × p；**每当真实强度口径（5 席 p0.9 面板的 t15 Σ p50）
     # 比上一次评测提升 >= threshold，就回加一席**（上限 max）；回加后若比上一次评测
@@ -1650,6 +1852,11 @@ def main() -> int:
         # 缩放教师 DAgger / 过程价值（默认 0 = 逐位等价）
         teacher_bc_coef=float(args.teacher_bc_coef),
         process_value_coef=float(args.process_value_coef),
+        # 复利结构辅助 BC（默认 0 = 逐位等价；标签由 _attach_replication_bc_labels 写入 batch）
+        discover_bc_coef=float(args.discover_bc_coef),
+        triple_bc_coef=float(args.triple_bc_coef),
+        bc_ce_norm=bool(int(args.bc_ce_norm)),
+        bc_guard_ratio=float(args.bc_guard_ratio),
         # 搜索行为混合（默认 eps=0 -> PPO 侧只用于回显/统计，未启用时整组键被移除）
         behavior_mix_eps=float(args.behavior_mix_eps),
         behavior_mix_when=str(args.behavior_mix_when),
@@ -2136,6 +2343,8 @@ def main() -> int:
             archetype_cache=bool(int(args.archetype_cache)),
             archetype_table=str(args.archetype_table),
             archetype_model=str(args.archetype_model),
+            collect_discover_bias=float(args.collect_discover_bias),
+            collect_triple_bias=float(args.collect_triple_bias),
             move_repeat_limit=int(args.move_repeat_limit),
             library_pool=str(args.library_pool), library_p=float(args.library_p),
             trajectory_pool=str(args.trajectory_pool), trajectory_p=float(args.trajectory_p),
@@ -2312,12 +2521,31 @@ def main() -> int:
             # 必须放在 update 之前：改 rewards 后整批重算 advantages/returns。
             # 三者默认全 0 ⇒ 本块不执行 ⇒ 逐位等价旧路径。
             _rw: Optional[Dict[str, Any]] = None
+            # 复利结构辅助 BC 标签（默认两系数 0 -> 不写标签、不进 batch）
+            if float(args.discover_bc_coef) > 0.0 or float(args.triple_bc_coef) > 0.0:
+                try:
+                    _bc_stat = _attach_replication_bc_labels(batch)
+                    print(f"[rep-bc] labels: discover={_bc_stat['discover_states']} "
+                          f"triple={_bc_stat['triple_states']} pair={_bc_stat['pair_states']}",
+                          flush=True)
+                    _rw = _bc_stat
+                except BaseException as _exc:  # noqa: BLE001 - 标不出来也照常训练
+                    print(f"[rep-bc] 标签生成失败（跳过）: {_exc!r}", flush=True)
             if (float(args.upgrade_reward) > 0.0 or float(args.win_only_reward) > 0.0
-                    or float(args.strength_reward_coef) > 0.0):
+                    or float(args.strength_reward_coef) > 0.0
+                    or float(args.golden_reward) > 0.0 or float(args.golden_t5_reward) > 0.0
+                    or float(args.amp_board_reward) > 0.0
+                    or float(args.engine_board_reward) > 0.0
+                    or float(args.survive_t12_reward) > 0.0):
                 _rw = _apply_custom_rewards(
                     batch, upgrade_w=float(args.upgrade_reward),
                     win_w=float(args.win_only_reward),
                     strength_c=float(args.strength_reward_coef),
+                    golden_w=float(args.golden_reward),
+                    golden_t5_w=float(args.golden_t5_reward),
+                    amp_board_w=float(args.amp_board_reward),
+                    engine_board_w=float(args.engine_board_reward),
+                    survive_t12_w=float(args.survive_t12_reward),
                     gamma=float(args.gamma), lam=float(args.lam))
 
             batch_version = int(collect_meta.get("policy_version", -1))
@@ -2377,6 +2605,17 @@ def main() -> int:
                     lr=float(args.value_warmup_lr),
                     minibatch=int(args.value_warmup_minibatch),
                     seed=int(args.seed))
+            # 辅助 BC 系数 warmup（guard 在 PPO epoch 内；独立 scale 不被 warmup 重置）
+            _bc_base_d = float(args.discover_bc_coef)
+            _bc_base_t = float(args.triple_bc_coef)
+            if (_bc_base_d > 0.0 or _bc_base_t > 0.0):
+                _wu = float(getattr(args, "bc_warmup_decisions", 0.0) or 0.0)
+                _frac = 1.0 if _wu <= 0.0 else min(1.0, float(cum_decisions) / _wu)
+                trainer.config.discover_bc_coef = _bc_base_d * _frac
+                trainer.config.triple_bc_coef = _bc_base_t * _frac
+                if int(i) % 20 == 0:
+                    print(f"[bc-warmup] cum={int(cum_decisions)} frac={_frac:.3f} "
+                          f"coef={trainer.config.discover_bc_coef:.3g}", flush=True)
             _t_ppo = time.time()
             _tl["t_ppo_start"] = time.monotonic()
             stats = trainer.update(batch)
