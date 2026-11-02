@@ -381,6 +381,7 @@ impl Game {
         let turn = self.turn as i32;
         let base = (cfg.start_gold + cfg.gold_increment * (turn - 1)).min(cfg.gold_refill_cap);
         let discount = cfg.upgrade_discount_per_turn;
+        let gold_bonus = cfg.gold_bonus_at(turn as u32);
         let pl = &mut self.players[p];
         pl.ended_turn = false;
         pl.actions_this_turn = 0;
@@ -389,7 +390,7 @@ impl Game {
         pl.turn_data.clear();
         // Refill: the natural amount plus max-Gold bonuses, capped at 99; Gold gained on top at the
         // start of the turn has no cap.
-        pl.gold = (base + pl.max_gold_bonus).min(99) + pl.gold_next_turn;
+        pl.gold = (base + pl.max_gold_bonus).min(99) + gold_bonus + pl.gold_next_turn;
         pl.gold_next_turn = 0;
         pl.upgrade_cost = (pl.upgrade_cost - discount).max(0);
         for h in pl.powers.iter_mut() {

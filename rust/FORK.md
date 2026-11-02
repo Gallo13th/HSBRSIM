@@ -65,3 +65,23 @@ python -m pytest ../tests/test_rust_engine.py -q
 - 机制/数值以 `hsbg_engine` + 官方 37.0.0.255790 数据为准；AutoTavern 是第三方重建，不是官方服务端。
 - 任何机制修正必须：写失败测试 → 改 Rust → 跑全量 Rust 测试 → 记录到本文件（动机/证据/影响）。
 - 不保留其它引擎作为 fallback。
+
+## 2026-11-03 `tier_upgrade_discount`（A/B 关卡，默认 0 = 逐位等价）
+
+- `RulesConfig::tier_upgrade_discount: i32`（默认 0，`#[serde(default)]`）：`upgrade_price()` 返回
+  `(upgrade_cost + power_extra − discount).max(0)`。**只改升本费用计算**，收入/商店/其他规则一律不变。
+- **默认 0 逐位等价**：`tier_upgrade_discount_zero_is_default` 断言默认配置下 `upgrade_price(0) == 5`；
+  `tier_upgrade_discount_two` 断言折扣 2 下回合 1 升级价 5 → 3。
+- 传播路径：训练入口 `--tier-upgrade-discount N` → 环境变量 `HSBG_TIER_UPGRADE_DISCOUNT` →
+  `hsbg/az/train/game_rules.py::game_config_json()` → `E.Game(seed, config_json=...)`
+  （采集 worker / 评估 / collector 的全部创建点）。
+- 依据与 A/B 判据：`docs/ECONOMY_CEILING.md` §5①（s28 系列：升本与盘子零和；A2 判据 t9 tier p50≥5、
+  t9 Σ≥280、death≥11、human≤6.30）。
+
+## 2026-11-03 `gold_bonus_by_turn`（A/B 关卡，默认空 = 逐位等价）
+
+- `RulesConfig::gold_bonus_by_turn: Vec<(u32, i32)>`（默认空）：`start_turn_player` 时
+  `gold = min(base + max_gold_bonus, 99) + gold_bonus_at(turn) + gold_next_turn`；
+  **只加指定回合的额外金币**，其余规则不变。依据：Firestone 真实成功组 p90 收入差额 t5 +1 / t7 +1 / t9 +3。
+- **默认空逐位等价**：`gold_bonus_by_turn_zero_is_default` 断言默认无加成；`_applies` 断言 t2 base 4 + 1 = 5。
+- 传播：训练入口 `--gold-bonus-turn "5:1,7:1,9:3"` → `HSBG_GOLD_BONUS_TURNS` → `game_config_json()` → 全部 `E.Game(config_json=...)`。

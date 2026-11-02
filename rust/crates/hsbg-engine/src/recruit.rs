@@ -1646,7 +1646,12 @@ impl Game {
         } else {
             0
         };
-        (pl.upgrade_cost + extra).max(0)
+        let disc = if self.cfg.tier_upgrade_discount_scope == "tier5" {
+            if pl.tier + 1 == 5 { self.cfg.tier_upgrade_discount } else { 0 }
+        } else {
+            self.cfg.tier_upgrade_discount
+        };
+        (pl.upgrade_cost + extra - disc).max(0)
     }
     pub fn spell_price(&self, p: PlayerId, card: CardId) -> i32 {
         let pl = &self.players[p];

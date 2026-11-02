@@ -32,6 +32,16 @@ pub struct RulesConfig {
     /// Base upgrade cost to reach tier index+2 (tier 2..=7).
     pub upgrade_costs: [i32; 6],
     pub upgrade_discount_per_turn: i32,
+    /// A/B 用：所有升本费用再减这个固定值（默认 0 = 逐位不变）。只影响 `upgrade_price`，
+    /// 不改收入/其他规则；用于 docs/ECONOMY_CEILING.md 的「降升级费」对照实验。
+    #[serde(default)]
+    pub tier_upgrade_discount: i32,
+    /// 折扣作用范围：`"all"`（默认）或 `"tier5"`（只对「升到 tier5」这一档生效）。
+    #[serde(default = "default_discount_scope")]
+    pub tier_upgrade_discount_scope: String,
+    /// 指定回合的额外金币（A/B：`[[5,1],[7,1],[9,3]]`；默认空 = 逐位不变）。
+    #[serde(default)]
+    pub gold_bonus_by_turn: Vec<(u32, i32)>,
     pub max_regular_tier: u8,
 
     // --- Shop (the 3-slot start is a baseline, not a located server value) --------------
@@ -223,6 +233,21 @@ pub struct RulesConfig {
     pub record_log: bool,
 }
 
+fn default_discount_scope() -> String {
+    "all".to_string()
+}
+
+impl RulesConfig {
+    /// 指定回合的额外金币（未列出的回合 = 0）。
+    pub fn gold_bonus_at(&self, turn: u32) -> i32 {
+        self.gold_bonus_by_turn
+            .iter()
+            .find(|(t, _)| *t == turn)
+            .map(|(_, v)| *v)
+            .unwrap_or(0)
+    }
+}
+
 impl Default for RulesConfig {
     fn default() -> Self {
         RulesConfig {
@@ -236,6 +261,9 @@ impl Default for RulesConfig {
             refresh_cost: 1,
             upgrade_costs: [5, 7, 8, 11, 11, 10],
             upgrade_discount_per_turn: 1,
+            tier_upgrade_discount: 0,
+            tier_upgrade_discount_scope: default_discount_scope(),
+            gold_bonus_by_turn: vec![],
             max_regular_tier: 6,
             shop_minion_slots: [3, 4, 4, 5, 5, 6, 6],
             shop_spell_slots: 1,
