@@ -120,6 +120,64 @@ def test_validate_rejects_bad_gold_args():
             _cfg(**kw).validate()
 
 
+# ── 1b. --gold-cap 语义（0 = 不封顶 / 99 = 默认硬顶 / 中间值）──────────────
+# 契约见 docs/SANDBOX_ECON.md §3：**默认 99 不变**（逐位等价旧行为），
+# 0 必须**显式**传（`--gold-cap 0`）才表示无上限。
+
+
+def test_gold_cap_default_is_99_not_zero():
+    """默认是 99（不是 0）：改默认会改变行为，所以 0 只能显式传。"""
+    assert SandboxConfig().gold_cap == 99
+    assert _cfg().gold_cap == 99
+
+
+@pytest.mark.parametrize("cap", [0, 40, 99, 250])
+@pytest.mark.parametrize("mode,kw", [
+    ("fixed", {}),
+    ("add", {"gold_add": 8}),
+    ("growth", {"gold_growth_rate": 0.30}),
+])
+def test_gold_cap_clamps_injected_gold(cap, mode, kw):
+    """三档收入 × {0=无上限, 40, 99, 250}：``gold_start`` 逐回合 = 注入项的封顶结果，
+    ``0`` 表示不封顶（必须出现 > 99 的回合）。"""
+    cfg = _cfg(gold_mode=mode, income_scale=4.0, gold_cap=cap, **kw)
+    env, _ = _run(cfg)
+    ep = env.episode_summary()
+    injected = ep["gold_income_hist"]           # 不含引擎自然补币
+    started = ep["gold_start_hist"]
+    assert len(started) == 15
+    for i, (n, got) in enumerate(zip(injected, started)):
+        if mode == "fixed":
+            # fixed **覆写**引擎收入：gold_start = clamp(cap, n)
+            want = n if cap == 0 else min(cap, n)
+        else:
+            # add/growth **叠加**在引擎自然补币（3→10）之上
+            want = NATURAL[i] + n if cap == 0 else min(cap, NATURAL[i] + n)
+        assert got == want, f"{mode} cap={cap} t={i+1}: got {got}, want {want}"
+    if cap == 0:
+        assert max(started) > 99, f"cap=0 应不封顶，实际 max={max(started)}"
+    else:
+        assert max(started) <= cap
+
+
+def test_gold_cap_zero_changes_behaviour_vs_default():
+    """同一 seed：``gold_cap=0`` 的整局金币总和严格大于默认 99（证明 0 ≠ 默认）。"""
+    base = dict(gold_mode="growth", gold_growth_rate=0.30, income_scale=3.0)
+    ep99 = _run(_cfg(gold_cap=99, **base))[0].episode_summary()
+    ep0 = _run(_cfg(gold_cap=0, **base))[0].episode_summary()
+    assert ep0["gold_total_income"] > ep99["gold_total_income"]
+    assert max(ep99["gold_start_hist"]) <= 99 < max(ep0["gold_start_hist"])
+
+
+def test_gold_cap_zero_changes_behaviour_vs_default():
+    """同一 seed：``gold_cap=0`` 的整局金币总和严格大于默认 99（证明 0 ≠ 默认）。"""
+    base = dict(gold_mode="growth", gold_growth_rate=0.30, income_scale=3.0)
+    ep99 = _run(_cfg(gold_cap=99, **base))[0].episode_summary()
+    ep0 = _run(_cfg(gold_cap=0, **base))[0].episode_summary()
+    assert ep0["gold_total_income"] > ep99["gold_total_income"]
+    assert max(ep99["gold_start_hist"]) <= 99 < max(ep0["gold_start_hist"])
+
+
 # ── 2. 默认逐位等价 ─────────────────────────────────────────────────────────
 
 

@@ -1,0 +1,200 @@
+{
+ "name": "S3",
+ "label": "S1 + action_cap_per_gold 3 + tavern_buff x3",
+ "games_run": 120,
+ "games_kept": 81,
+ "keep_rate": 0.675,
+ "keep_sigma": 1400,
+ "decisions": 35053,
+ "decisions_per_game": 432.75308641975306,
+ "train_val_games": [
+  72,
+  9
+ ],
+ "amp_total_mean": 8.209876543209877,
+ "amp_any_rate": 0.9876543209876543,
+ "amp_by_card_mean": {
+  "Brann": 1.9012345679012346,
+  "Drakkari": 1.8271604938271604,
+  "Titus": 1.7160493827160495,
+  "Gatekeeper": 1.5061728395061729,
+  "Ashen": 1.2592592592592593
+ },
+ "goldens_mean": 1.308641975308642,
+ "spells_mean": 89.03703703703704,
+ "carriers_mean": 5.580246913580247,
+ "tavern_buff_mean": 25.358024691358025,
+ "t15_sigma": {
+  "n": 81,
+  "mean": 2792.740740740741,
+  "p50": 2301.0,
+  "p90": 4854.0,
+  "max": 7666.0
+ },
+ "t15_sigma_all_run": {
+  "n": 120,
+  "mean": 2209.3083333333334,
+  "p50": 1662.5,
+  "p90": 4024.300000000004,
+  "max": 7666.0
+ },
+ "r12_15": {
+  "n": 81,
+  "mean": 1.4631951708852509,
+  "p50": 1.426174521446228,
+  "p90": 2.0315513610839844,
+  "max": 2.8945233821868896
+ },
+ "gold_total_income_p50": 450.0,
+ "sigma15_per_gold_p50": 5.113333333333333,
+ "buff_spells_mean": 89.03703703703704,
+ "decisions_ge_10000": 0,
+ "action_kind": {
+  "other": 378,
+  "buy_amp": 665,
+  "buy_carrier": 605,
+  "buy_spell": 5507,
+  "buy_minion": 1947,
+  "play_spell": 7043,
+  "play_minion": 4682,
+  "sell": 3713,
+  "upgrade": 405,
+  "refresh": 3855,
+  "end_turn": 1215,
+  "pending": 5038
+ },
+ "feature_dtype": "float16",
+ "gold_cap": 99,
+ "config": {
+  "damage_caps": [
+   [
+    1,
+    0
+   ]
+  ],
+  "damage_cap_until_alive": 0,
+  "max_turns": 15,
+  "turn_action_caps": [
+   40,
+   40,
+   40,
+   40,
+   40,
+   40,
+   40,
+   40,
+   40,
+   40,
+   40,
+   40,
+   40,
+   40,
+   40,
+   40
+  ],
+  "max_actions_per_turn": 40,
+  "num_players": 8,
+  "lesser_trinket_turn": 6,
+  "greater_trinket_turn": 9,
+  "trinket_choices": 4
+ },
+ "seconds": 30.155567407608032,
+ "validation": {
+  "decisions": 35053,
+  "episodes": 81,
+  "legal_rate": 1.0,
+  "mask_legal_mean": 47.453170912618035
+ },
+ "path": "/home/data/users/gaoletian/projects/HSBRSIM/data/scaling/compound_bc/s3_growth_buff3_spellspam_fixed30.npz",
+ "bytes": 243978780,
+ "arrays": {
+  "features": [
+   35053,
+   3227
+  ],
+  "cards": [
+   35053,
+   124
+  ],
+  "mask": [
+   35053,
+   245
+  ],
+  "action": [
+   35053
+  ],
+  "turn": [
+   35053
+  ],
+  "tier": [
+   35053
+  ],
+  "gold": [
+   35053
+  ],
+  "episode_id": [
+   35053
+  ],
+  "action_kind": [
+   35053
+  ],
+  "is_amp_buy": [
+   35053
+  ],
+  "is_carrier_buy": [
+   35053
+  ],
+  "is_spell_action": [
+   35053
+  ],
+  "ep_seed": [
+   81
+  ],
+  "ep_sigma_t12": [
+   81
+  ],
+  "ep_sigma_t15": [
+   81
+  ],
+  "ep_r12_15": [
+   81
+  ],
+  "ep_amp_total": [
+   81
+  ],
+  "ep_amp_any": [
+   81
+  ],
+  "ep_goldens_t15": [
+   81
+  ],
+  "ep_carriers_t15": [
+   81
+  ],
+  "ep_spells_t15": [
+   81
+  ],
+  "ep_tavern_buff_t15": [
+   81
+  ],
+  "ep_gold_total_income": [
+   81
+  ],
+  "ep_decisions": [
+   81
+  ],
+  "ep_split": [
+   81
+  ]
+ },
+ "teacher_kind": "spell_spam",
+ "teacher": "scripts/spell_spam_probe.py::SpellSpamPolicy（spell_spam：金币优先买法术→立刻施放，优先对载体）",
+ "env": "base",
+ "expr": {
+  "out_name": "",
+  "tag": "spellspam_fixed30",
+  "gold_cap": 99,
+  "gold_growth_rate": 0.0,
+  "gold_per_carrier": 0
+ }
+}

@@ -39,6 +39,151 @@ from hsbg.az.train.model import load_checkpoint  # noqa: E402
 from hsbg.az.train.ppo import PPOEvaluator, PPOSelfPlayPolicy  # noqa: E402
 
 
+#: action aliases for --action-logit-bias (see hsbg/env/action_space_std.py)
+_ACTION_ALIASES = {"upgrade": 3, "end": 0, "refresh": 1, "freeze": 2}
+
+#: Discover / 选一 的动作段（`choose 0..15`）
+A_CHOOSE_ = 30
+N_CHOICE_ = 16
+try:  # 以引擎侧常量为准（保持与训练一致）
+    from hsbg.env.action_space_std import (A_BUY as _A_BUY, A_CHOOSE as A_CHOOSE_,
+                                           A_FREEZE as _A_FREEZE,
+                                           N_CHOICE as N_CHOICE_)
+except BaseException:  # noqa: BLE001
+    _A_BUY, _A_FREEZE = 4, 2
+A_BUY = int(_A_BUY)
+A_FREEZE = int(_A_FREEZE)
+A_CHOOSE = int(A_CHOOSE_)
+N_CHOICE = int(N_CHOICE_)
+
+#: 三连奖励 / Discover 目标卡（放大器 + 引擎卡，见 docs/CHAIN_FUNNEL.md §7）
+DISCOVER_TARGETS = {
+    # 放大器（Titus / Drakkari / Gatekeeper，含金色版）
+    "BG25_354", "BG25_354_G", "BG26_ICC_901", "BG26_ICC_901_G",
+    "BG36_640", "BG36_640_G",
+    # 引擎卡（用户指定：恶魔干扰者 / 邪能野猪人 / 巴琳达 / 铜须）
+    "BG36_762", "BG36_762_G", "BG28_633", "BG28_633_G",
+    "BG36_704", "BG36_704_G", "BG_LOE_077", "BG_LOE_077_G",
+}
+
+
+def _shop_card_id(raw, cid2id: dict) -> Optional[str]:
+    """商店 slot → 卡牌 id（Minion / Spell 两种 item 形态）。"""
+    item = (raw or {}).get("item") if isinstance(raw, dict) else None
+    if not isinstance(item, dict):
+        return None
+    m = item.get("Minion") if "Minion" in item else (item.get("Spell") if "Spell" in item else None)
+    if not isinstance(m, dict):
+        return None
+    return cid2id.get(int(m.get("card") or -1), "")
+
+
+def _triple_bias_map(pj_now: dict, cid2id: dict, w: float) -> dict:
+    """三连/对子先验：给「能凑成三连/对子」的商店 buy 位加 bias（只加不减、只对合法项）。
+
+    计数口径：board + hand 里**同名非金色**张数：``cnt>=2`` ⇒ 买第三张成三连（+2w）；
+    ``cnt==1`` ⇒ 凑对子（+w）。
+    """
+    if w <= 0.0:
+        return {}
+    from collections import Counter
+    own = Counter()
+    for key in ("board", "hand"):
+        for m in (pj_now.get(key) or []):
+            cid = cid2id.get(int(m.get("card") or -1), "")
+            if cid and not str(cid).endswith("_G"):
+                own[cid] += 1
+    out = {}
+    for slot, raw in enumerate(pj_now.get("shop") or []):
+        cid = _shop_card_id(raw, cid2id)
+        if not cid:
+            continue
+        cnt = own.get(cid, 0)
+        if cnt >= 2:
+            out[A_BUY + slot] = float(w) * 2.0
+        elif cnt == 1:
+            out[A_BUY + slot] = float(w)
+    return out
+
+
+def _card_of(x) -> Optional[str]:
+    """从 pending option（dict/nested dict/str）里尽力提取卡牌 id。"""
+    if isinstance(x, str):
+        return x
+    if isinstance(x, dict):
+        for k in ("card", "id", "card_id"):
+            if k in x and isinstance(x[k], str):
+                return x[k]
+        for v in x.values():
+            got = _card_of(v)
+            if got:
+                return got
+    return None
+
+
+def _parse_action_logit_bias(spec: str) -> dict:
+    """``"upgrade:0.25,3:0.5"`` -> ``{3: 0.25}`` (later wins). Empty -> {}."""
+    out: dict = {}
+    for part in str(spec or "").replace(";", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        key, _, val = part.partition(":")
+        idx = _ACTION_ALIASES.get(key.strip().lower())
+        if idx is None:
+            try:
+                idx = int(key.strip())
+            except ValueError as exc:
+                raise ValueError(f"--action-logit-bias bad action: {part!r}") from exc
+        out[int(idx)] = float(val)
+    return out
+
+
+class _LogitBiasEvaluator:
+    """Wrap a leaf evaluator with a **bounded logit bias** (eval only, legal actions only).
+
+    Equivalent to adding a constant to the masked logits before softmax:
+    ``prior' = softmax(log(prior) + b)`` (prior is already a masked softmax, so log inverts it).
+    ``act()`` forwards a ``bias=`` vector to the inner evaluator (same temperature/seed
+    semantics). Not wrapping this class = bit-identical to the old path.
+    """
+
+    def __init__(self, inner, bias_map: dict) -> None:
+        self._inner = inner
+        self._map = {int(k): float(v) for k, v in dict(bias_map).items()}
+        #: 动态偏置（逐决策设置；例如「Discover 选项里含目标卡」时只偏置那几个 choose 位）
+        self._dynamic: dict = {}
+
+    def set_dynamic_bias(self, bias_map: Optional[dict]) -> None:
+        """每次决策前由评测循环设置；``None``/空 = 清空。"""
+        self._dynamic = {} if not bias_map else {int(k): float(v)
+                                                 for k, v in dict(bias_map).items()}
+
+    def _vec(self, mask) -> np.ndarray:
+        m = np.asarray(mask, dtype=bool).reshape(-1)
+        v = np.zeros(m.size, dtype=np.float32)
+        for a, w in list(self._map.items()) + list(self._dynamic.items()):
+            if 0 <= a < m.size and bool(m[a]):
+                v[a] += float(w)
+        return v
+
+    def __call__(self, features, cards, mask, seat: int = 0):
+        prior, value = self._inner(features, cards, mask, seat)
+        m = np.asarray(mask, dtype=bool).reshape(-1)
+        if not (self._map or self._dynamic) or not m.any():
+            return prior, value
+        z = np.log(np.maximum(np.asarray(prior, dtype=np.float64).reshape(-1), 1e-12))
+        z = z + self._vec(m)
+        z = np.where(m, z, -np.inf)
+        z -= float(np.max(z[m]))
+        e = np.where(m, np.exp(z), 0.0)
+        s = float(e.sum())
+        return ((e / s) if s > 0 else np.asarray(prior, np.float32)), value
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
 def _board_stats(pj: dict) -> dict:
     board = pj.get("board") or []
     strength = 0
@@ -199,6 +344,14 @@ def _play(seed: int, policy, q: dict) -> dict | None:
 
     # ── 载体审计（docs/CARRIER_SCALING.md）：局级载体率 + 对载体施法 ──
     carrier_ids = set((q or {}).get("carrier_ids") or [])
+    #: Discover 选牌先验（--discover-bias）：只对选项里含目标卡的 choose 位加常数
+    q_discover_w = float((q or {}).get("discover_bias", 0.0) or 0.0)
+    q_discover_targets = set((q or {}).get("discover_targets") or ())
+    #: 三连/对子先验
+    q_triple_w = float((q or {}).get("triple_bias", 0.0) or 0.0)
+    q_pair_freeze = bool(int((q or {}).get("pair_freeze", 0) or 0))
+    q_cid2id = dict((q or {}).get("cid2id") or {})
+    _froze_turn = -1
     cid2id = dict((q or {}).get("cid2id") or {})
     casts_on_carrier = 0
     carrier_shop_seen = False
@@ -252,6 +405,39 @@ def _play(seed: int, policy, q: dict) -> dict | None:
                 m = mask_from_bytes(game.legal_mask(0))
                 if bool(m[196:245].any()):
                     turns[-1]["move_legal"] = True
+                # ── Discover 选牌先验（--discover-bias；默认关）──────────────────
+                # 只有出现 choose 合法位时才取一次 view，按选项卡 id 给对应 choose 位加 bias。
+                if q_discover_w and bool(m[A_CHOOSE:A_CHOOSE + N_CHOICE].any()):
+                    try:
+                        _view = json.loads(game.view(0))
+                        _pend = (_view.get("me") or {}).get("pending")
+                        _ents = _pend if isinstance(_pend, list) else ([_pend] if _pend else [])
+                        _bias = {}
+                        for _e in _ents:
+                            if not (isinstance(_e, dict) and str(_e.get("kind")) == "discover"):
+                                continue
+                            for _i, _opt in enumerate(_e.get("options") or []):
+                                _cid = _card_of(_opt)
+                                if _cid in q_discover_targets:
+                                    _bias[A_CHOOSE + _i] = float(q_discover_w)
+                            break
+                        _ev = getattr(policy, "eval_fn", None)
+                        if hasattr(_ev, "set_dynamic_bias"):
+                            _ev.set_dynamic_bias(_bias or None)
+                    except BaseException:  # noqa: BLE001 - 采集失败不影响对局
+                        pass
+                # ── 三连/对子先验（--triple-bias；默认关）──────────────────────
+                # 必须在 decide 之前设置；与 Discover bias 合并到同一个动态向量。
+                _triple_bias = {}
+                if (q_triple_w > 0.0) and q_cid2id and bool(m[A_BUY:A_BUY + 8].any()):
+                    try:
+                        _pj_now = json.loads(game.player_json(0))
+                        _triple_bias = _triple_bias_map(_pj_now, q_cid2id, q_triple_w)
+                        _ev_t = getattr(policy, "eval_fn", None)
+                        if _triple_bias and hasattr(_ev_t, "set_dynamic_bias"):
+                            _ev_t.set_dynamic_bias(_triple_bias)
+                    except BaseException:  # noqa: BLE001
+                        _triple_bias = {}
                 # 待选目标（施法打谁）：只有出现选择时才多取一次 view（约 0.17ms）
                 pend_eids = None
                 pend_carrier_eids = set()
@@ -267,6 +453,35 @@ def _play(seed: int, policy, q: dict) -> dict | None:
                     except BaseException:  # noqa: BLE001
                         pend_eids = None
                 a = int(policy.decide(game, 0).action)
+                _ev = getattr(policy, "eval_fn", None)
+                if hasattr(_ev, "set_dynamic_bias"):
+                    _ev.set_dynamic_bias(None)   # 用完即清，避免污染下一决策
+                # ── 三连/对子先验（--triple-bias）+ 差一张时冻结（--pair-freeze）──
+                if (q_triple_w > 0.0 or q_pair_freeze) and q_cid2id:
+                    try:
+                        _pj = json.loads(game.player_json(0))
+                        _tb = _triple_bias_map(_pj, q_cid2id, q_triple_w) if q_triple_w > 0.0 else {}
+                        if _tb and hasattr(_ev, "set_dynamic_bias"):
+                            pass  # 已过决策点：本轮 bias 需在 decide 前设置（见下）
+                        if q_pair_freeze and int(game.turn) != _froze_turn:
+                            _gold = int(_pj.get("gold") or 0)
+                            _need = False
+                            for _slot, _raw in enumerate(_pj.get("shop") or []):
+                                _cid = _shop_card_id(_raw, q_cid2id)
+                                if not _cid:
+                                    continue
+                                _own = sum(1 for k in ("board", "hand")
+                                           for m in (_pj.get(k) or [])
+                                           if q_cid2id.get(int(m.get("card") or -1), "") == _cid
+                                           and not str(_cid).endswith("_G"))
+                                if _own >= 2:
+                                    _need = True
+                                    break
+                            if _need and _gold < 3 and bool(m[A_FREEZE]):
+                                _froze_turn = int(game.turn)
+                                a = int(A_FREEZE)          # 本回合只冻一次
+                    except BaseException:  # noqa: BLE001
+                        pass
                 if not (0 <= a < 245 and bool(m[a])):
                     nz = np.flatnonzero(m)
                     a = int(nz[0]) if nz.size else 0
@@ -382,6 +597,20 @@ def main() -> int:
     ap.add_argument("--move-repeat-limit", type=int, default=2,
                     help="同一 (from,to) 本回合出现 >=N 次后屏蔽（默认 2）")
     ap.add_argument("--out", default="runs/quality/quality.json")
+    ap.add_argument("--action-logit-bias", default="",
+                    help="eval-only bounded logit bias, format `action:weight[,...]` "
+                         "(e.g. `upgrade:0.25` or `3:0.5`); alias: upgrade=3, "
+                         "end=0, refresh=1, freeze=2. Empty = no wrapper (bit-identical).")
+    ap.add_argument("--discover-bias", type=float, default=0.0,
+                    help="Discover 选牌先验（默认 0=关闭）：选项里含目标卡（放大器/引擎卡）时，"
+                         "给对应 choose 位加该常数（只加不减、只对合法项）")
+    ap.add_argument("--discover-targets", default="amp,engine",
+                    help="Discover 目标卡集合：amp / engine / all / 逗号分隔卡 id（默认 amp,engine）")
+    ap.add_argument("--triple-bias", type=float, default=0.0,
+                    help="三连/对子先验（默认 0=关闭）：商店里有能凑三连(+2W)/对子(+W)的同名牌时，"
+                         "给对应 buy 位加常数（只加不减、只对合法项）")
+    ap.add_argument("--pair-freeze", type=int, default=0, choices=[0, 1],
+                    help="1=有对子/差一张三连且买不起第三张时，本回合执行一次 freeze")
     ap.add_argument("--carriers", default="data/scaling/carriers.json",
                     help="载体清单（docs/CARRIER_SCALING.md）；缺失时自动构建")
     ap.add_argument("--carrier-audit", type=int, default=1, choices=[0, 1],
@@ -461,6 +690,12 @@ def main() -> int:
         model, meta = load_checkpoint(args.checkpoint, device=args.device)
         ev = PPOEvaluator(model, device=args.device,
                           norm_mean=meta.get("norm_mean"), norm_std=meta.get("norm_std"))
+        # bounded logit bias (eval only; empty -> no wrapper -> bit-identical to old path)
+        _bias_map = _parse_action_logit_bias(str(getattr(args, "action_logit_bias", "") or ""))
+        _disc_w = float(getattr(args, "discover_bias", 0.0) or 0.0)
+        if _bias_map or _disc_w:
+            ev = _LogitBiasEvaluator(ev, _bias_map)
+            print(f"[quality] action_logit_bias={_bias_map} discover_bias={_disc_w}", flush=True)
         from hsbg.az.train.ppo import CollectConfig
         cfg = CollectConfig(games=1, seed=int(args.seed_base), opponent="bot", behavior="net",
                             max_steps=int(args.max_steps),
@@ -500,10 +735,43 @@ def main() -> int:
               f"max/turn={search_cfg.max_searches_per_turn}", flush=True)
 
     rows = []
+    # Discover 选牌先验：把目标卡集合与 bias 写进 q（_play 逐决策使用）
+    _disc_w = float(getattr(args, "discover_bias", 0.0) or 0.0)
+    if _disc_w > 0.0:
+        cfg_dict = dict(cfg_dict or {})
+        _tg = str(getattr(args, "discover_targets", "") or "")
+        _set = set()
+        for _tok in [x.strip() for x in _tg.split(",") if x.strip()]:
+            if _tok == "amp":
+                _set |= {c for c in DISCOVER_TARGETS
+                         if c.startswith(("BG25_354", "BG26_ICC_901", "BG36_640"))}
+            elif _tok in ("engine", "engines"):
+                _set |= {c for c in DISCOVER_TARGETS
+                         if c.startswith(("BG36_762", "BG28_633", "BG36_704", "BG_LOE_077"))}
+            elif _tok == "all":
+                _set |= set(DISCOVER_TARGETS)
+            else:
+                _set.add(_tok)
+        cfg_dict["discover_bias"] = _disc_w
+        cfg_dict["discover_targets"] = sorted(_set)
+        print(f"[quality] discover_bias={_disc_w} targets={len(_set)}", flush=True)
     if carrier_ids:
         cfg_dict = dict(cfg_dict or {})
         cfg_dict["carrier_ids"] = sorted(carrier_ids)
         cfg_dict["cid2id"] = dict(cid2id)
+    # 三连/对子先验：把参数与 cid2id 写进 q
+    if float(getattr(args, "triple_bias", 0.0) or 0.0) > 0.0 or int(getattr(args, "pair_freeze", 0) or 0):
+        cfg_dict = dict(cfg_dict or {})
+        cfg_dict["triple_bias"] = float(args.triple_bias)
+        cfg_dict["pair_freeze"] = int(args.pair_freeze)
+        try:
+            import hsbg_engine as _E
+            cfg_dict["cid2id"] = {int(c["cid"]): str(c["id"])
+                                  for c in json.loads(_E.catalog_json())}
+        except BaseException:  # noqa: BLE001
+            pass
+        print(f"[quality] triple_bias={args.triple_bias} pair_freeze={args.pair_freeze}",
+              flush=True)
     # ── 人类战团注入（默认 --human-board-p 0 -> 旧行为不变）──────────────
     hb_pool = None
     if str(args.human_boards) and float(args.human_board_p) > 0.0:

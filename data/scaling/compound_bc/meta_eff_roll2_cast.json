@@ -1,0 +1,67 @@
+{
+ "kind": "compound_bc_dataset",
+ "version": 1,
+ "created": "2026-11-01 17:53:27",
+ "teacher": "scripts/compound_script.py::CompoundPolicy",
+ "sandbox": "hsbg.az.train.economy_sandbox（无对战 / 15 回合 / 无血量）",
+ "keep_sigma": 1500,
+ "gold_cap": 99,
+ "seed0": 880000,
+ "games_per_config": 120,
+ "feature_dtype": "float16",
+ "triple_first": 0,
+ "efficient": 1,
+ "tag": "eff_roll2_cast",
+ "configs": {
+  "s3_growth_buff3": {
+   "path": "/home/data/users/gaoletian/projects/HSBRSIM/data/scaling/compound_bc/s3_growth_buff3_eff_roll2_cast.npz",
+   "games_run": 120,
+   "games_kept": 68,
+   "decisions": 25498,
+   "amp_total_mean": 6.735294117647059,
+   "amp_any_rate": 0.9852941176470589,
+   "goldens_mean": 1.2647058823529411,
+   "decisions_ge_10000": 0,
+   "train_val_games": [
+    61,
+    7
+   ],
+   "bytes": 177475408
+  }
+ },
+ "fields": {
+  "features": "float16[N,3227]（obs_std 3227 floats；--feature-dtype float32 可换）",
+  "cards": "int16[N,124]（obs_std 124 cards）",
+  "mask": "bool[N,245]（引擎合法动作 mask，含沙盒 action_cap 掩码）",
+  "action": "uint8[N]（0..244，与训练动作段逐位一致）",
+  "turn": "uint8[N]（1..15）",
+  "tier": "uint8[N]（决策时玩家 tier）",
+  "gold": "int16[N]（决策时剩余金币）",
+  "episode_id": "int32[N]（→ ep_* 行号；同一局的所有决策共享）",
+  "action_kind": "uint8[N]（0=other,1=buy_amp,2=buy_carrier,3=buy_spell,4=buy_minion,5=play_spell,6=play_minion,7=sell,8=upgrade,9=refresh,10=end_turn,11=pending）",
+  "is_amp_buy": "bool[N]（该决策买的是放大器：Brann/Titus/Drakkari/Ashen/Gatekeeper 及其法术/饰品）",
+  "is_carrier_buy": "bool[N]（该决策买的是载体）",
+  "is_spell_action": "bool[N]（该决策买/打的是法术等非 minion）",
+  "ep_seed": "int64[E]（沙盒 seed）",
+  "ep_sigma_t12": "int32[E]（t12 战团 Σ=Σ(atk+hp)）",
+  "ep_sigma_t15": "int32[E]（t15 战团 Σ；教师筛选阈值 >= --keep-sigma）",
+  "ep_r12_15": "float32[E]（sigma_t15 / sigma_t12，复利形状）",
+  "ep_amp_total": "int16[E]（整局放大器购买数）",
+  "ep_amp_any": "bool[E]（>=1 张放大器）",
+  "ep_goldens_t15": "int16[E]（t15 场上金色随从数）",
+  "ep_carriers_t15": "int16[E]（t15 场上载体数）",
+  "ep_spells_t15": "int32[E]（t15 累计施法数）",
+  "ep_tavern_buff_t15": "int32[E]（t15 酒馆永久 buff 总量）",
+  "ep_gold_total_income": "int32[E]（整局金币收入，Σ/金 的分母）",
+  "ep_decisions": "int32[E]（该局样本数）",
+  "ep_split": "uint8[E]（0=train，1=val；合并后按 episode 顺序确定性留出 10%）"
+ },
+ "loading_example": "import numpy as np\nd = np.load('data/scaling/compound_bc/s3_growth_buff3.npz')\nf, c, m = d['features'], d['cards'], d['mask']          # [N,3227] [N,124] [N,245]\na = d['action'].astype(np.int64)                         # [N]\nep = d['episode_id']                                     # [N] -> 每局标签\ns15, r12 = d['ep_sigma_t15'][ep], d['ep_r12_15'][ep]      # [N] 逐决策可用\nis_val = d['ep_split'][ep] == 1\nw = (s15 / 1500.0).clip(max=8.0)                         # 可选：按终局 Σ 加权采样\n# masked CE: loss = CE(logits, a); 非法动作已在训练侧用 m 掩掉\n",
+ "notes": [
+  "obs 与训练同一套编码（3227+124），动作 245；BC 直接用 mask 做 masked CE。",
+  "只保留 sigma_t15 >= keep_sigma 的局；S0/S1 保留率约 5-6 成，S3 约 9 成。",
+  "ep_split=1 的局（合并后每 10 局取 1 局）留作验证集，不参与蒸馏训练。",
+  "教师对照：现有模型/脚本 0.375 张放大器/局、出现率 20.8%（runs/compound_script/amps_spell.json）。"
+ ],
+ "seconds": 31.814515829086304
+}

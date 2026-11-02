@@ -1,0 +1,188 @@
+{
+ "name": "S3",
+ "label": "S1 + action_cap_per_gold 3 + tavern_buff x3",
+ "games_run": 120,
+ "games_kept": 68,
+ "keep_rate": 0.5666666666666667,
+ "keep_sigma": 1500,
+ "decisions": 25498,
+ "decisions_per_game": 374.97058823529414,
+ "train_val_games": [
+  61,
+  7
+ ],
+ "amp_total_mean": 6.735294117647059,
+ "amp_any_rate": 0.9852941176470589,
+ "amp_by_card_mean": {
+  "Titus": 1.5588235294117647,
+  "Drakkari": 1.4852941176470589,
+  "Brann": 1.411764705882353,
+  "Gatekeeper": 1.2647058823529411,
+  "Ashen": 1.0147058823529411
+ },
+ "goldens_mean": 1.2647058823529411,
+ "spells_mean": 72.02941176470588,
+ "carriers_mean": 5.264705882352941,
+ "tavern_buff_mean": 16.41176470588235,
+ "t15_sigma": {
+  "n": 68,
+  "mean": 2653.073529411765,
+  "p50": 2205.0,
+  "p90": 3954.4000000000005,
+  "max": 8981.0
+ },
+ "t15_sigma_all_run": {
+  "n": 120,
+  "mean": 1936.825,
+  "p50": 1645.5,
+  "p90": 3357.3,
+  "max": 8981.0
+ },
+ "r12_15": {
+  "n": 68,
+  "mean": 1.6510608196258545,
+  "p50": 1.5494951009750366,
+  "p90": 2.3510206699371343,
+  "max": 3.8952133655548096
+ },
+ "gold_total_income_p50": 1185.0,
+ "decisions_ge_10000": 0,
+ "action_kind": {
+  "other": 359,
+  "buy_amp": 458,
+  "buy_carrier": 449,
+  "buy_spell": 3471,
+  "buy_minion": 1856,
+  "play_spell": 4816,
+  "play_minion": 4016,
+  "sell": 3221,
+  "upgrade": 340,
+  "refresh": 1905,
+  "end_turn": 1020,
+  "pending": 3587
+ },
+ "feature_dtype": "float16",
+ "gold_cap": 99,
+ "config": {
+  "damage_caps": [
+   [
+    1,
+    0
+   ]
+  ],
+  "damage_cap_until_alive": 0,
+  "max_turns": 15,
+  "turn_action_caps": [
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73
+  ],
+  "max_actions_per_turn": 73,
+  "num_players": 8,
+  "lesser_trinket_turn": 6,
+  "greater_trinket_turn": 9,
+  "trinket_choices": 4
+ },
+ "seconds": 31.70542550086975,
+ "validation": {
+  "decisions": 25498,
+  "episodes": 68,
+  "legal_rate": 1.0,
+  "mask_legal_mean": 46.7066828770884
+ },
+ "path": "/home/data/users/gaoletian/projects/HSBRSIM/data/scaling/compound_bc/s3_growth_buff3_eff_roll2_cast.npz",
+ "bytes": 177475408,
+ "arrays": {
+  "features": [
+   25498,
+   3227
+  ],
+  "cards": [
+   25498,
+   124
+  ],
+  "mask": [
+   25498,
+   245
+  ],
+  "action": [
+   25498
+  ],
+  "turn": [
+   25498
+  ],
+  "tier": [
+   25498
+  ],
+  "gold": [
+   25498
+  ],
+  "episode_id": [
+   25498
+  ],
+  "action_kind": [
+   25498
+  ],
+  "is_amp_buy": [
+   25498
+  ],
+  "is_carrier_buy": [
+   25498
+  ],
+  "is_spell_action": [
+   25498
+  ],
+  "ep_seed": [
+   68
+  ],
+  "ep_sigma_t12": [
+   68
+  ],
+  "ep_sigma_t15": [
+   68
+  ],
+  "ep_r12_15": [
+   68
+  ],
+  "ep_amp_total": [
+   68
+  ],
+  "ep_amp_any": [
+   68
+  ],
+  "ep_goldens_t15": [
+   68
+  ],
+  "ep_carriers_t15": [
+   68
+  ],
+  "ep_spells_t15": [
+   68
+  ],
+  "ep_tavern_buff_t15": [
+   68
+  ],
+  "ep_gold_total_income": [
+   68
+  ],
+  "ep_decisions": [
+   68
+  ],
+  "ep_split": [
+   68
+  ]
+ }
+}

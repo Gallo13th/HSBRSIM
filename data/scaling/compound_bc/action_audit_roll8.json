@@ -1,0 +1,368 @@
+{
+ "games": 40,
+ "decisions": 22238,
+ "autonomous": 18835,
+ "pending": 3403,
+ "pending_share": 0.15302635129058367,
+ "actions_per_game": 470.875,
+ "cap_per_game": 600,
+ "cap_usage": 0.7847916666666667,
+ "by_kind": {
+  "play_spell": {
+   "count": 4034,
+   "per_game": 100.85,
+   "share": 0.18140120514434752,
+   "gold_spent": 0,
+   "gold_gained": 222,
+   "gold_spent_mean": 0.0,
+   "delta_now_sum": 74943,
+   "delta_now_mean": 18.57783837382251,
+   "fwd3_mean": 1605.097174020823,
+   "fwd3_ratio_mean": 2.6158755763028365,
+   "turn_mean": 8.166336142786315
+  },
+  "refresh": {
+   "count": 3945,
+   "per_game": 98.625,
+   "share": 0.17739904667685943,
+   "gold_spent": 4007,
+   "gold_gained": 0,
+   "gold_spent_mean": 1.0157160963244614,
+   "delta_now_sum": 2468,
+   "delta_now_mean": 0.6256020278833967,
+   "fwd3_mean": 838.9171102661597,
+   "fwd3_ratio_mean": 2.4391827034528544,
+   "turn_mean": 8.946261089987326
+  },
+  "buy_spell": {
+   "count": 3330,
+   "per_game": 83.25,
+   "share": 0.14974368198579008,
+   "gold_spent": 7548,
+   "gold_gained": 0,
+   "gold_spent_mean": 2.2666666666666666,
+   "delta_now_sum": 1208,
+   "delta_now_mean": 0.36276276276276276,
+   "fwd3_mean": 1505.2684684684684,
+   "fwd3_ratio_mean": 2.9713996142504344,
+   "turn_mean": 7.978378378378379
+  },
+  "pending": {
+   "count": 2803,
+   "per_game": 70.075,
+   "share": 0.12604550768954043,
+   "gold_spent": 64,
+   "gold_gained": 130,
+   "gold_spent_mean": 0.022832679272208348,
+   "delta_now_sum": 90922,
+   "delta_now_mean": 32.43738851230824,
+   "fwd3_mean": 1549.7324295397789,
+   "fwd3_ratio_mean": 2.713996947150076,
+   "turn_mean": 8.168034249018909
+  },
+  "play_minion": {
+   "count": 2792,
+   "per_game": 69.8,
+   "share": 0.12555085889018797,
+   "gold_spent": 0,
+   "gold_gained": 0,
+   "gold_spent_mean": 0.0,
+   "delta_now_sum": 343606,
+   "delta_now_mean": 123.06805157593124,
+   "fwd3_mean": 1560.1830229226362,
+   "fwd3_ratio_mean": 4.853506188785964,
+   "turn_mean": 6.7990687679083095
+  },
+  "sell": {
+   "count": 2275,
+   "per_game": 56.875,
+   "share": 0.10230236532062235,
+   "gold_spent": 0,
+   "gold_gained": 2275,
+   "gold_spent_mean": 0.0,
+   "delta_now_sum": -313280,
+   "delta_now_mean": -137.7054945054945,
+   "fwd3_mean": 1675.488791208791,
+   "fwd3_ratio_mean": 3.0717883805255823,
+   "turn_mean": 7.283076923076923
+  },
+  "buy_minion": {
+   "count": 1212,
+   "per_game": 30.3,
+   "share": 0.05450130407410738,
+   "gold_spent": 3601,
+   "gold_gained": 0,
+   "gold_spent_mean": 2.971122112211221,
+   "delta_now_sum": -2985,
+   "delta_now_mean": -2.462871287128713,
+   "fwd3_mean": 1428.4859735973598,
+   "fwd3_ratio_mean": 7.039204208222515,
+   "turn_mean": 5.91996699669967
+  },
+  "end_turn": {
+   "count": 600,
+   "per_game": 15.0,
+   "share": 0.026980843601043258,
+   "gold_spent": 0,
+   "gold_gained": 0,
+   "gold_spent_mean": 0.0,
+   "delta_now_sum": 0,
+   "delta_now_mean": 0.0,
+   "fwd3_mean": 896.9683333333334,
+   "fwd3_ratio_mean": 5.206904913016511,
+   "turn_mean": 8.0
+  },
+  "buy_amp": {
+   "count": 456,
+   "per_game": 11.4,
+   "share": 0.02050544113679288,
+   "gold_spent": 1331,
+   "gold_gained": 0,
+   "gold_spent_mean": 2.918859649122807,
+   "delta_now_sum": -2405,
+   "delta_now_mean": -5.274122807017544,
+   "fwd3_mean": 1284.0701754385964,
+   "fwd3_ratio_mean": 2.6914260159780796,
+   "turn_mean": 7.984649122807017
+  },
+  "buy_carrier": {
+   "count": 377,
+   "per_game": 9.425,
+   "share": 0.016952963395988847,
+   "gold_spent": 1111,
+   "gold_gained": 0,
+   "gold_spent_mean": 2.946949602122016,
+   "delta_now_sum": -13869,
+   "delta_now_mean": -36.787798408488065,
+   "fwd3_mean": 1394.525198938992,
+   "fwd3_ratio_mean": 3.5334832546580803,
+   "turn_mean": 6.7851458885941645
+  },
+  "other": {
+   "count": 214,
+   "per_game": 5.35,
+   "share": 0.009623167551038762,
+   "gold_spent": 334,
+   "gold_gained": 25,
+   "gold_spent_mean": 1.560747663551402,
+   "delta_now_sum": 280,
+   "delta_now_mean": 1.308411214953271,
+   "fwd3_mean": 481.7196261682243,
+   "fwd3_ratio_mean": 4.372423260248226,
+   "turn_mean": 8.317757009345794
+  },
+  "upgrade": {
+   "count": 200,
+   "per_game": 5.0,
+   "share": 0.008993614533681086,
+   "gold_spent": 1644,
+   "gold_gained": 0,
+   "gold_spent_mean": 8.22,
+   "delta_now_sum": 0,
+   "delta_now_mean": 0.0,
+   "fwd3_mean": 581.565,
+   "fwd3_ratio_mean": 24.04123750632114,
+   "turn_mean": 1.44
+  }
+ },
+ "ordinal": {
+  "1": {
+   "count": 598,
+   "delta_now_mean": -0.7558528428093646,
+   "fwd3_mean": 899.6354515050167,
+   "gold_spent_mean": 1.0769230769230769
+  },
+  "2": {
+   "count": 598,
+   "delta_now_mean": 8.093645484949834,
+   "fwd3_mean": 899.6354515050167,
+   "gold_spent_mean": 1.6806020066889633
+  },
+  "3": {
+   "count": 598,
+   "delta_now_mean": -2.1471571906354514,
+   "fwd3_mean": 899.6354515050167,
+   "gold_spent_mean": 1.8227424749163879
+  },
+  "4": {
+   "count": 598,
+   "delta_now_mean": 2.7474916387959865,
+   "fwd3_mean": 899.6354515050167,
+   "gold_spent_mean": 1.6555183946488294
+  },
+  "5": {
+   "count": 598,
+   "delta_now_mean": 0.7123745819397993,
+   "fwd3_mean": 899.6354515050167,
+   "gold_spent_mean": 1.0769230769230769
+  },
+  "6": {
+   "count": 598,
+   "delta_now_mean": 7.842809364548495,
+   "fwd3_mean": 899.6354515050167,
+   "gold_spent_mean": 1.068561872909699
+  },
+  "7": {
+   "count": 598,
+   "delta_now_mean": -9.444816053511706,
+   "fwd3_mean": 899.6354515050167,
+   "gold_spent_mean": 1.145484949832776
+  },
+  "8": {
+   "count": 598,
+   "delta_now_mean": 14.535117056856187,
+   "fwd3_mean": 899.6354515050167,
+   "gold_spent_mean": 1.0066889632107023
+  },
+  "9": {
+   "count": 508,
+   "delta_now_mean": 4.6515748031496065,
+   "fwd3_mean": 1040.6515748031495,
+   "gold_spent_mean": 1.3011811023622046
+  },
+  "10": {
+   "count": 439,
+   "delta_now_mean": 10.644646924829157,
+   "fwd3_mean": 1192.7334851936218,
+   "gold_spent_mean": 0.9977220956719818
+  },
+  "11": {
+   "count": 412,
+   "delta_now_mean": 3.5849514563106797,
+   "fwd3_mean": 1253.009708737864,
+   "gold_spent_mean": 0.779126213592233
+  },
+  "12": {
+   "count": 393,
+   "delta_now_mean": -12.860050890585242,
+   "fwd3_mean": 1287.5776081424935,
+   "gold_spent_mean": 0.9872773536895675
+  },
+  "13": {
+   "count": 373,
+   "delta_now_mean": 16.021447721179623,
+   "fwd3_mean": 1321.5898123324396,
+   "gold_spent_mean": 0.9731903485254692
+  },
+  "14": {
+   "count": 358,
+   "delta_now_mean": 23.92737430167598,
+   "fwd3_mean": 1362.4720670391062,
+   "gold_spent_mean": 0.8854748603351955
+  },
+  "15": {
+   "count": 352,
+   "delta_now_mean": 0.36363636363636365,
+   "fwd3_mean": 1373.059659090909,
+   "gold_spent_mean": 0.8977272727272727
+  },
+  "16": {
+   "count": 346,
+   "delta_now_mean": 4.601156069364162,
+   "fwd3_mean": 1391.4855491329479,
+   "gold_spent_mean": 0.9450867052023122
+  },
+  "17": {
+   "count": 339,
+   "delta_now_mean": -0.528023598820059,
+   "fwd3_mean": 1408.0,
+   "gold_spent_mean": 0.8466076696165191
+  },
+  "18": {
+   "count": 335,
+   "delta_now_mean": -12.73731343283582,
+   "fwd3_mean": 1422.2059701492537,
+   "gold_spent_mean": 0.9552238805970149
+  },
+  "19": {
+   "count": 329,
+   "delta_now_mean": 3.1732522796352582,
+   "fwd3_mean": 1437.689969604863,
+   "gold_spent_mean": 1.0547112462006079
+  },
+  "20": {
+   "count": 328,
+   "delta_now_mean": 33.28658536585366,
+   "fwd3_mean": 1442.0121951219512,
+   "gold_spent_mean": 0.9176829268292683
+  },
+  "21": {
+   "count": 9539,
+   "delta_now_mean": 5.2229793479400355,
+   "fwd3_mean": 1656.6940979138274,
+   "gold_spent_mean": 0.9320683509801866
+  }
+ },
+ "waste": {
+  "turns": 600,
+  "rolls_mean": 98.625,
+  "rolls_per_game": 98.625,
+  "sells_per_game": 56.875,
+  "end_turn_gold_p50": 51.8,
+  "turns_gold_ge5_share": 0.8516666666666667,
+  "rolls_hist": {
+   "0": 33,
+   "1": 53,
+   "2": 10,
+   "3": 5,
+   "4": 7,
+   "5": 14,
+   "6": 14,
+   "7": 37,
+   "8": 427
+  },
+  "turns_at_roll_cap": 427,
+  "turns_at_roll_cap_share": 0.7116666666666667,
+  "refresh_no_followup_buy": 1582,
+  "refresh_no_followup_buy_share": 0.40101394169835236,
+  "raw_other": {
+   "hero_power": 214,
+   "refresh_no_followup_buy": 1582,
+   "turns_at_roll_cap": 427
+  }
+ },
+ "sigma_t15_p50": 2698.5,
+ "sigma_t15_mean": 4591.7,
+ "r12_15_p50": 1.0260950140620118,
+ "spells_mean": 102.2,
+ "goldens_mean": 1.45,
+ "sigma_per_autonomous_action": 8.664957444097292,
+ "config": {
+  "damage_caps": [
+   [
+    1,
+    0
+   ]
+  ],
+  "damage_cap_until_alive": 0,
+  "max_turns": 15,
+  "turn_action_caps": [
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   73
+  ],
+  "max_actions_per_turn": 73,
+  "num_players": 8,
+  "lesser_trinket_turn": 6,
+  "greater_trinket_turn": 9,
+  "trinket_choices": 4
+ },
+ "max_refresh": 8,
+ "seconds": 11.301112413406372,
+ "efficient": 0,
+ "triple_first": 0,
+ "gold_cap": 99
+}

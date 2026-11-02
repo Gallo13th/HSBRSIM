@@ -595,6 +595,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--gold-cap", type=int, default=99,
                     help="注入后的金币上限（0 = 不封顶）")
     ap.add_argument("--action-cap", type=int, default=40)
+    ap.add_argument("--action-cap-per-gold", dest="action_cap_per_gold", type=int,
+                    default=0,
+                    help="闸门 1（docs/GATE_ACTION_BUFF.md）：每回合有效动作上限 = "
+                         "--action-cap + floor(回合开始金币/K)。0 = 关（默认，逐位等价）；"
+                         "建议 3 = 每 3 金 +1 动作。只影响 learner 的动作上限。")
+    ap.add_argument("--tavern-buff-scale", dest="tavern_buff_scale", type=float,
+                    default=1.0,
+                    help="闸门 2（docs/GATE_ACTION_BUFF.md）：酒馆永久 buff 的增量整体缩放。"
+                         "1.0 = 引擎原样（默认，逐位等价）；>1 = 上界探针"
+                         "（Python 侧近似：酒馆随从的 buff 部分按 S 补足）")
     ap.add_argument("--num-players", type=int, default=8)
     ap.add_argument("--sandbox-reward", dest="reward", default="log_strength",
                     choices=["log_strength", "auc_strength", "final_strength",
@@ -603,6 +613,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--sandbox-trinkets", dest="sandbox_trinkets", type=int, default=-1,
                     help="饰品开关：-1 = 引擎默认（第 6/9 回合 4 选 1，与改动前逐位一致）；"
                          "1 = 显式开启（钉住 6/9 回合 + 4 选项）；0 = 关闭")
+    ap.add_argument("--sandbox-hand-slot-mode", dest="hand_slot_mode", default="strict",
+                    choices=["strict", "swap"],
+                    help="手牌位模式（docs/SANDBOX_ECON.md §3）：strict = 只用引擎 mask"
+                         "（默认，逐位等价）；swap = 棋盘 7+手牌 10 满时允许"
+                         "「卖最弱非核心 → 打出手牌随从 → 再买」，1 决策仍算 1 动作")
     ap.add_argument("--sandbox-growth-w-final", dest="growth_w_final", type=float, default=1.0,
                     help="exp_growth: 终局强度 L_T 的权重 w1")
     ap.add_argument("--sandbox-growth-w-super", dest="growth_w_super", type=float, default=0.2,
@@ -696,6 +711,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     cfg = SandboxConfig(
         turns=int(args.turns), gold_per_turn=int(args.gold_per_turn),
         gold_mode=str(args.gold_mode), action_cap=int(cap0),
+        action_cap_per_gold=int(args.action_cap_per_gold),
+        tavern_buff_scale=float(args.tavern_buff_scale),
         gold_add=int(args.gold_add),
         gold_growth_rate=float(args.gold_growth_rate),
         gold_per_carrier=int(args.gold_per_carrier),
@@ -707,6 +724,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         free_tier6=bool(int(args.sandbox_free_tier6)),
         trinkets=(None if int(args.sandbox_trinkets) < 0
                   else bool(int(args.sandbox_trinkets))),
+        hand_slot_mode=str(args.hand_slot_mode),
         growth_w_final=float(args.growth_w_final),
         growth_w_super=float(args.growth_w_super),
         growth_slope_base=float(args.growth_slope_base),
@@ -719,6 +737,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(f"[sandbox] gold ramp={ramp or '(无，固定 %d)' % int(args.gold_per_turn)} "
           f"start_gold={gold0} action-cap ramp={cap_ramp or '(无，固定 %d)' % int(args.action_cap)} "
           f"start_cap={cap0} free_tier6={bool(int(args.sandbox_free_tier6))} "
+          f"gate1(K)={int(args.action_cap_per_gold)} "
+          f"gate2(S)={float(args.tavern_buff_scale)} "
           f"dtype={args.dtype}", flush=True)
 
     if args.from_scratch:
@@ -903,6 +923,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
               f"curv={s.get('growth_curv_p50', 0):+.4f} "
               f"r12_15={s.get('growth_ratio_12_15_p50', 0):.2f} "
               f"exp_rate={s.get('exp_segment_rate', 0):.2f}"
+              + f" goldens={s.get('goldens_p50', 0):.0f}"
+              + (f" g1: act={s.get('actions_total_p50', 0):.0f}"
+                 f"/cap{s.get('action_cap_eff_mean', 0):.0f}"
+                 f"/bound{s.get('turns_cap_bound_mean', 0):.0f}"
+                 if "actions_total_p50" in s else "")
+              + (f" g2: tavS={s.get('tavern_buff_scaled_p50', 0):.0f}"
+                 f"/ex{s.get('tavern_extra_p50', 0):.0f}"
+                 if "tavern_extra_p50" in s else "")
               + f" | "
               f"greedy: t12={g['sigma_t12_p50']:.0f} t15={g['sigma_t15_p50']:.0f} "
               f"tier={g['tier_p50']:.0f} carrier={g['carrier_rate']:.2f} "

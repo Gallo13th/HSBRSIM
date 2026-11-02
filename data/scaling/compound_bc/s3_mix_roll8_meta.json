@@ -1,0 +1,104 @@
+{
+ "kind": "compound_bc_mix",
+ "version": 1,
+ "created": "2026-11-01 18:04:43",
+ "out": "/home/data/users/gaoletian/projects/HSBRSIM/data/scaling/compound_bc/s3_mix_roll8.npz",
+ "parts": [
+  {
+   "index": 0,
+   "path": "/home/data/users/gaoletian/projects/HSBRSIM/data/scaling/compound_bc/s3_growth_buff3.npz",
+   "name": "s3_formal",
+   "weight": 2.0,
+   "episodes_available": 170,
+   "episodes_taken": 170,
+   "decisions_taken": 80999,
+   "amp_total_mean": 9.135294117647058,
+   "sigma_t15_p50": 3027.0,
+   "r12_15_p50": 1.3034605979919434
+  },
+  {
+   "index": 1,
+   "path": "/home/data/users/gaoletian/projects/HSBRSIM/data/scaling/compound_bc/s3_growth_buff3_eff_roll8.npz",
+   "name": "s3_roll8",
+   "weight": 1.0,
+   "episodes_available": 94,
+   "episodes_taken": 85,
+   "decisions_taken": 52710,
+   "amp_total_mean": 13.647058823529411,
+   "sigma_t15_p50": 3687.0,
+   "r12_15_p50": 1.0137324333190918
+  }
+ ],
+ "by_source": {
+  "s3_formal": {
+   "path": "/home/data/users/gaoletian/projects/HSBRSIM/data/scaling/compound_bc/s3_growth_buff3.npz",
+   "weight": 2.0,
+   "episodes_available": 170,
+   "episodes_taken": 170,
+   "decisions_taken": 80999,
+   "mix_episodes": 170,
+   "mix_amp_total_mean": 9.135294117647058,
+   "mix_sigma_t15_p50": 3027.0
+  },
+  "s3_roll8": {
+   "path": "/home/data/users/gaoletian/projects/HSBRSIM/data/scaling/compound_bc/s3_growth_buff3_eff_roll8.npz",
+   "weight": 1.0,
+   "episodes_available": 94,
+   "episodes_taken": 85,
+   "decisions_taken": 52710,
+   "mix_episodes": 85,
+   "mix_amp_total_mean": 13.647058823529411,
+   "mix_sigma_t15_p50": 3687.0
+  }
+ },
+ "episodes": 255,
+ "decisions": 133709,
+ "total_episodes_available": 264,
+ "take_ratio": [
+  170,
+  85
+ ],
+ "amp_total_mean": 10.63921568627451,
+ "sigma_t15_p50": 3390.0,
+ "sigma_t15_mean": 5401.423529411764,
+ "r12_15_p50": 1.203751802444458,
+ "spells_mean": 96.90196078431373,
+ "goldens_mean": 1.5529411764705883,
+ "feature_dtype": "float16",
+ "val_games": 26,
+ "validation": {
+  "decisions": 133709,
+  "episodes": 255,
+  "legal_rate": 1.0,
+  "mask_legal_mean": 48.71507527541153
+ },
+ "fields": {
+  "features": "float16[N,3227]（obs_std 3227 floats；--feature-dtype float32 可换）",
+  "cards": "int16[N,124]（obs_std 124 cards）",
+  "mask": "bool[N,245]（引擎合法动作 mask，含沙盒 action_cap 掩码）",
+  "action": "uint8[N]（0..244，与训练动作段逐位一致）",
+  "turn": "uint8[N]（1..15）",
+  "tier": "uint8[N]（决策时玩家 tier）",
+  "gold": "int16[N]（决策时剩余金币）",
+  "episode_id": "int32[N]（→ ep_* 行号；同一局的所有决策共享）",
+  "action_kind": "uint8[N]（0=other,1=buy_amp,2=buy_carrier,3=buy_spell,4=buy_minion,5=play_spell,6=play_minion,7=sell,8=upgrade,9=refresh,10=end_turn,11=pending）",
+  "is_amp_buy": "bool[N]（该决策买的是放大器：Brann/Titus/Drakkari/Ashen/Gatekeeper 及其法术/饰品）",
+  "is_carrier_buy": "bool[N]（该决策买的是载体）",
+  "is_spell_action": "bool[N]（该决策买/打的是法术等非 minion）",
+  "ep_seed": "int64[E]（沙盒 seed）",
+  "ep_sigma_t12": "int32[E]（t12 战团 Σ=Σ(atk+hp)）",
+  "ep_sigma_t15": "int32[E]（t15 战团 Σ；教师筛选阈值 >= --keep-sigma）",
+  "ep_r12_15": "float32[E]（sigma_t15 / sigma_t12，复利形状）",
+  "ep_amp_total": "int16[E]（整局放大器购买数）",
+  "ep_amp_any": "bool[E]（>=1 张放大器）",
+  "ep_goldens_t15": "int16[E]（t15 场上金色随从数）",
+  "ep_carriers_t15": "int16[E]（t15 场上载体数）",
+  "ep_spells_t15": "int32[E]（t15 累计施法数）",
+  "ep_tavern_buff_t15": "int32[E]（t15 酒馆永久 buff 总量）",
+  "ep_gold_total_income": "int32[E]（整局金币收入，Σ/金 的分母）",
+  "ep_decisions": "int32[E]（该局样本数）",
+  "ep_split": "uint8[E]（0=train，1=val；合并后按 episode 顺序确定性留出 10%）",
+  "ep_source": "uint8[E]（0,1,… = --part 的输入下标；用于混采配比追溯）"
+ },
+ "seconds": 7.672544956207275
+}

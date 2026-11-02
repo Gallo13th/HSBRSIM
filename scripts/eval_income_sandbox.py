@@ -67,6 +67,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--sandbox-income-scale", dest="income_scale", type=float, default=1.0)
     ap.add_argument("--gold-cap", type=int, default=99)
     ap.add_argument("--action-cap", type=int, default=40)
+    ap.add_argument("--action-cap-per-gold", dest="action_cap_per_gold", type=int,
+                    default=0, help="闸门 1：动作上限 = action-cap + floor(金币/K)（0=关）")
+    ap.add_argument("--tavern-buff-scale", dest="tavern_buff_scale", type=float,
+                    default=1.0, help="闸门 2：酒馆永久 buff 的增量缩放（1.0=引擎原样）")
     ap.add_argument("--sandbox-trinkets", dest="trinkets", type=int, default=1)
     ap.add_argument("--comps-json", default="data/scaling/comps_top.json")
     ap.add_argument("--json-out", default="")
@@ -78,6 +82,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     cfg = SandboxConfig(
         turns=int(args.turns), gold_per_turn=int(args.gold_per_turn),
         gold_mode=str(args.gold_mode), action_cap=int(args.action_cap),
+        action_cap_per_gold=int(args.action_cap_per_gold),
+        tavern_buff_scale=float(args.tavern_buff_scale),
         gold_add=int(args.gold_add), gold_growth_rate=float(args.gold_growth_rate),
         gold_per_carrier=int(args.gold_per_carrier),
         income_scale=float(args.income_scale), gold_cap=int(args.gold_cap),
@@ -106,6 +112,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                                    "income_scale": cfg.income_scale,
                                    "gold_cap": cfg.gold_cap,
                                    "action_cap": cfg.action_cap,
+                                   "action_cap_per_gold": cfg.action_cap_per_gold,
+                                   "tavern_buff_scale": cfg.tavern_buff_scale,
                                    "trinkets": cfg.trinkets,
                                    "turns": cfg.turns},
                            "games": int(args.games)}
@@ -124,7 +132,13 @@ def main(argv: Optional[List[str]] = None) -> int:
               f"gold={rep.get('gold_total_income_p50', 0):.0f} "
               f"goldens={rep.get('goldens_p50', 0):.0f} spells={rep['spells_p50']:.0f} "
               f"core={rep.get('core_t15_p50', 0):.0f} "
-              f"trk={rep.get('trinkets_p50', 0):.0f}/{rep.get('trinket_hit_rate', 0):.2f}",
+              + (f"g1_act={rep.get('actions_total_p50', 0):.0f} "
+                 f"cap={rep.get('action_cap_eff_mean', 0):.0f} "
+                 if "actions_total_p50" in rep else "")
+              + (f"g2_tavS={rep.get('tavern_buff_scaled_p50', 0):.0f} "
+                 f"ex={rep.get('tavern_extra_p50', 0):.0f} "
+                 if "tavern_extra_p50" in rep else "")
+              + f"trk={rep.get('trinkets_p50', 0):.0f}/{rep.get('trinket_hit_rate', 0):.2f}",
               flush=True)
     if args.json_out:
         p = args.json_out if os.path.isabs(args.json_out) else os.path.join(ROOT, args.json_out)
