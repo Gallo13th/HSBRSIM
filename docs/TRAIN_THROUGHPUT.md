@@ -154,7 +154,39 @@ s22/dyn 配方（去掉 dyn-curriculum 与 eval）、`--pipeline 1 --lockstep 1 
 （|Δx| ≤ 5e-4，且 PPO 前向是 bf16 autocast），但 56k 决策/iter 的采样会让个别动作在近边界处翻转。
 ⇒ **fp16 只作为「省 2–3% 时间」的可选项**，正式训练（含 s23b）请保持 `--records-dtype fp32`。
 
-### 4.4 单元测试（`tests/test_train_throughput.py`，8 例全绿）
+### 4.4 生产事故与修复：父进程 fd 泄漏（2026-11-02，s23b 跑 17 iter 后崩）
+
+**现场**：`s23b`（24 进程 / `--games 384` / shm）第 17 个 iter 时 `torch.save` 报
+`OSError: [Errno 24] Too many open files`（`ulimit -n` 软限 **1024**）⇒ ≈**60 fd/iter** 累积。
+
+**根因（两个叠加）**：
+1. 父进程每轮对每个 worker 的段 `SharedMemory(attach)` 一次（24 fd/iter）；
+2. 关闭时只要有 numpy 视图还引用段内 buffer，`SharedMemory.close()` 抛 `BufferError`；旧版
+   `_close_shm` 遇到它就 **`break`** ⇒ 该轮**剩下的段全部不关**。而 `collect()` 里
+   `packed_all.clear()` 之后仍有 3 个局部引用活着：`_arrs`（最后一个分片）、`_seg`、
+   fallback 循环变量 `p`/`lb` ⇒ 必触发 BufferError ⇒ 24 fd/iter + 权重/日志 fd ⇒ 17 iter 撞 1024。
+
+**修复**（`hsbg/az/train/process_pool.py`）：
+1. `_close_shm()` **永不 break**：先尽力关全部，失败的重试 3 次（中间 `gc.collect()`），
+   仍失败的留到下一轮；失败数写进 `collect.shm_unclosed`（正常恒 0）；
+2. `collect()` 在 close 前显式清引用（`packed_all.clear()` + `_arrs = _seg = p = lb = None`）；
+3. worker 侧 `_shm_put()` 显式 `dst = None; del buf`，避免扩容时关不掉旧段；
+4. 启动期把 `RLIMIT_NOFILE` 软限 best-effort 抬到 `min(硬限, 16384)`（无需 root），生效值写进
+   `collect.fd_limit`——让长训练即使还有别的 fd 增长也不会撞 1024。
+
+**回归验证**（8 进程 × 96 局 × 10 iter，`--ipc-mode shm`）：
+
+| 检查 | 结果 |
+|---|---|
+| 父进程 `/proc/<pid>/fd` 计数（每 5 s 采样） | **稳定 129**（波动 129↔145 = torch/attr 临时文件，无单调增长） |
+| `collect.shm_unclosed` | **0/10 iter** |
+| `collect.fd_limit` | **16384**（启动期已抬限） |
+| `parent_read_s` | 0.004–0.011 s |
+
+**对 `ulimit -n`**：修复后**不再需要**手工 `ulimit -n 65536`（加了也无害，双保险）。
+判据：`history.collect.shm_unclosed` 恒 0 且 `/proc/<trainer_pid>/fd` 不随 iter 单调增长。
+
+### 4.5 单元测试（`tests/test_train_throughput.py`，10 例全绿）
 
 | 用例 | 断言 |
 |---|---|
@@ -165,6 +197,8 @@ s22/dyn 配方（去掉 dyn-curriculum 与 eval）、`--pipeline 1 --lockstep 1 
 | `test_shm_slot_reuse_grow_and_cleanup` | 同 slot 扩容、双 slot 独立、清理无残留 |
 | `test_purge_stale_shm_only_old_and_prefixed` | 只清本前缀且够旧的段 |
 | `test_purge_dead_owner_segments` | owner pid 已死 ⇒ 整族残留段被清 |
+| **`test_shm_parent_read_close_does_not_leak_fds`** | **50 轮 read→concat→close 后 fd 数不增长** |
+| **`test_close_shm_never_breaks_on_buffer_error`** | **某段有活视图时其余段仍必须全关**（旧版 break 回归） |
 | `test_pool_rejects_bad_ipc_flags` | 非法 ipc_mode/records_dtype 在 spawn 前 fail-fast |
 
 回归：`tests/test_parallel_collect.py` 4/4 通过（默认路径不变）。
@@ -216,3 +250,6 @@ python scripts/train_entity_sync.py ... --collect-sha 1
 * `--rust-collector` 路径同样经 `_emit_records`（未做端到端 A/B）；MCTS（`--sims>0`）不在主环，未测。
 * shm 段上限 32 MiB×2×workers；单轮 records 远超 64 MB/worker 时会按需扩容（不会静默截断），
   `/dev/shm` 不足时 `SharedMemory(create=True)` 直接抛错（fail-fast）。
+* **已修的生产事故**：`--ipc-mode shm` 早期版本每 iter 漏 ~24–60 fd（`_close_shm` 遇
+  BufferError 直接 break），17 iter 撞 `ulimit -n 1024`。现版本 `shm_unclosed` 恒 0、
+  fd 计数稳定，且启动期把软限抬到 16384（§4.4）。

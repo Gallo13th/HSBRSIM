@@ -249,13 +249,16 @@ def _shm_put(arrays: Dict[str, np.ndarray], *, slots: Dict[int, Any], slot_idx: 
     buf = seg.buf
     buf[:_SHM_HEADER] = bytes(_SHM_HEADER)      # 清掉上一轮 JSON 尾巴
     buf[:len(header)] = header
-    for it in items:
+    dst = None                                   # ⚠️ 必须显式放掉视图：否则 seg.close()
+    for it in items:                             # 会因 exported pointer 抛 BufferError
         a = contig[it["name"]]
         n = int(a.size)
         if n:
             dst = np.frombuffer(buf, dtype=a.dtype, count=n,
                                 offset=_SHM_HEADER + int(it["offset"]))
             dst[...] = a.reshape(-1)
+            dst = None
+    del buf                                      # 释放 memoryview（fd 由 seg 持有）
     return {"name": name, "size": int(seg.size), "header": int(_SHM_HEADER),
             "nbytes": int(off), "n_arrays": int(len(items)),
             "dtype": str(items[0]["dtype"]) if items else ""}
@@ -376,6 +379,27 @@ def _purge_stale_shm(max_age_s: float = _SHM_STALE_S) -> int:
         except OSError:
             pass
     return removed
+
+
+def _raise_fd_limit(min_soft: int = 16384) -> Optional[int]:
+    """把 RLIMIT_NOFILE 软限抬到 ``min(硬限, max(min_soft, 现状))``（失败则返回 None）。
+
+    为什么：``--ipc-mode shm`` 每 iter 父进程会 attach ``processes`` 个 /dev/shm 段
+    （正常路径每轮都 close，不会累积），但训练进程还有权重文件/日志/队列等 fd；
+    某些环境 soft limit 只有 1024，长训练容易被邻居的同期开销顶到 ``EMFILE``。
+    这里 best-effort 抬高软限（Linux 允许软限 ≤ 硬限，无需 root）。
+    """
+    try:
+        import resource  # noqa: PLC0415 - 仅 Linux
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        target = int(min_soft) if int(hard) == int(resource.RLIM_INFINITY) \
+            else int(min(int(min_soft), int(hard)))
+        if int(soft) != int(resource.RLIM_INFINITY) and int(soft) >= target:
+            return int(soft)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+        return int(resource.getrlimit(resource.RLIMIT_NOFILE)[0])
+    except BaseException:  # noqa: BLE001
+        return None
 
 
 def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
@@ -872,7 +896,12 @@ class ProcessActorPool:
         self._shm_names: set = set()
         #: 父进程当前仍 attach 的 segment（拼接完才能 close）
         self._shm_open: List[Any] = []
+        #: 上一轮没能 close 的段数（正常应恒为 0；非 0 会写进 collect meta 便于巡检）
+        self._shm_unclosed = 0
         self.shm_purged = _purge_stale_shm() if self.ipc_mode == "shm" else 0
+        # fd 预算：shm 每轮 attach processes 个段（正常每轮都 close），
+        # 但软限 1024 时仍可能被权重文件/日志/队列顶到 EMFILE ⇒ 启动期 best-effort 抬高。
+        self.fd_limit = _raise_fd_limit()
         if self.ipc_mode == "shm":
             try:
                 with open(_shm_owner_path(self.shm_tag), "w", encoding="utf-8") as f:
@@ -976,16 +1005,36 @@ class ProcessActorPool:
         return dead
 
     def _close_shm(self) -> None:
-        """释放父进程本轮 attach 的所有 shm 段（数组早已 concat 成独立内存）。"""
-        while self._shm_open:
-            seg = self._shm_open.pop()
-            try:
-                seg.close()
-            except BufferError:          # 还有视图在用：交给进程退出/下一轮
-                self._shm_open.append(seg)
-                break
-            except BaseException:        # noqa: BLE001
-                pass
+        """释放父进程本轮 attach 的所有 shm 段（数组早已 concat 成独立内存）。
+
+        ⚠️ fd 泄漏防线（2026-11-02 生产事故）：shm 段**必须每轮关掉**。只要有 numpy
+        视图还引用着段内 buffer，``SharedMemory.close()`` 会抛 ``BufferError``，
+        旧实现遇到它就 ``break``，导致该轮剩下的段全部不关 ⇒ 每 iter 漏 ~24 个 fd，
+        17 iter 就撞到 ``ulimit -n 1024``。现在：先尽力全关，失败的重试一次（带 gc），
+        仍失败的下轮再试；**绝不 break**。
+        """
+        if not self._shm_open:
+            return
+        pending = list(self._shm_open)
+        self._shm_open = []
+        for attempt in range(3):
+            still: List[Any] = []
+            for seg in pending:
+                try:
+                    seg.close()
+                except BufferError:
+                    still.append(seg)
+                except BaseException:  # noqa: BLE001
+                    pass
+            pending = still
+            if not pending:
+                self._shm_unclosed = 0
+                return
+            # 视图还活着（闭包/局部变量）：催一次 GC 后重试
+            import gc
+            gc.collect()
+        self._shm_open = pending
+        self._shm_unclosed = len(pending)
 
     def close(self) -> None:
         for q in self._task_qs:
@@ -1201,6 +1250,9 @@ class ProcessActorPool:
         agg.update({"reload_s": 0.0, "collect_s": 0.0, "save_s": 0.0})
         forward_s = batch_wait_s = 0.0
         t_read = records_bytes = shm_slabs = 0.0
+        #: 只为显式清引用（shm 视图必须在 close 段之前放掉，见 _close_shm 的 fd 泄漏注释）
+        _arrs: Any = None
+        _seg: Any = None
         timeline["t_read_start"] = time.monotonic()
         for i in sorted(results):
             msg = results[i]
@@ -1301,6 +1353,8 @@ class ProcessActorPool:
             "records_dtype": self.records_dtype,
             "shm_slots": int(self.shm_slots),
             "shm_slabs": int(shm_slabs),
+            "shm_unclosed": int(self._shm_unclosed),
+            "fd_limit": int(self.fd_limit or 0),
             "workers": profiles,
             "worker_meta": to_jsonable(metas),
             "elapsed_s": wall,
@@ -1421,6 +1475,9 @@ class ProcessActorPool:
         # 拼接/建批都是**拷贝**（np.concatenate / v[order]）；清掉 packed_all 里的 shm 视图
         # 之后再释放段，否则 numpy 视图还引用着 buf（close 会抛 BufferError）。
         packed_all.clear()
+        # 局部变量也可能还引用着最后一轮的视图（_arrs/_seg）或最后一份 shard 字典（p/lb）
+        _arrs = _seg = None
+        p = lb = None
         self._close_shm()
         # 动作流 sha：默认关闭（history 字段与旧版一致）；开启后写进 collect meta
         if self.collect_sha:

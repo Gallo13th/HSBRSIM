@@ -280,6 +280,63 @@ def test_purge_dead_owner_segments() -> None:
             os.unlink(owner)
 
 
+@pytest.mark.skipif(not _SHM_OK, reason="需要 /dev/shm")
+def test_shm_parent_read_close_does_not_leak_fds() -> None:
+    """父进程 50 轮 read→concat→close：fd 数不得增长（2026-11-02 生产 fd 泄漏回归）。"""
+    if not os.path.isdir("/proc/self/fd"):
+        pytest.skip("需要 /proc 查看 fd 数")
+    arrays = _make_arrays(16)
+    slots: dict = {}
+    name = f"{PP._SHM_PREFIX}unitfd_{uuid.uuid4().hex[:8]}"
+    try:
+        meta = PP._emit_records(arrays, ipc_mode="shm", records_dtype="fp32",
+                                shm_name=name, slots=slots, slot_idx=0)
+        base = len(os.listdir("/proc/self/fd"))
+        for _ in range(50):
+            got, seg = PP._shm_read(meta)
+            merged = {k: np.concatenate([np.asarray(v)], axis=0)
+                      for k, v in got.items()}
+            got.clear()
+            del got, merged
+            seg.close()                    # 视图已放掉 ⇒ 不应再抛 BufferError
+        now = len(os.listdir("/proc/self/fd"))
+        assert now <= base + 3, f"fd 从 {base} 涨到 {now}（每轮 attach 后必须 close）"
+    finally:
+        PP._shm_close_slot(slots, 0)
+
+
+@pytest.mark.skipif(not _SHM_OK, reason="需要 /dev/shm")
+def test_close_shm_never_breaks_on_buffer_error() -> None:
+    """即使某个段还有活视图，_close_shm 也必须把**其余**段全关掉（旧实现会 break）。"""
+    from multiprocessing import shared_memory
+
+    name = f"{PP._SHM_PREFIX}unitclose_{uuid.uuid4().hex[:8]}"
+    segs = [shared_memory.SharedMemory(name=f"{name}_s{i}", create=True, size=1 << 20)
+            for i in range(3)]
+    pool = object.__new__(PP.ProcessActorPool)      # 不 spawn worker
+    pool._shm_open = list(segs)
+    pool._shm_unclosed = 0
+    keep_view = np.frombuffer(segs[1].buf, dtype=np.float32, count=1024)
+    try:
+        pool._close_shm()
+        # s0/s2 关掉了；s1 因为视图活着被留到下轮（旧实现会 break，两个都不关）
+        assert pool._shm_unclosed == 1
+        del keep_view
+        pool._close_shm()
+        assert pool._shm_unclosed == 0
+    finally:
+        try:
+            del keep_view
+        except (NameError, UnboundLocalError):
+            pass
+        for seg in segs:
+            try:
+                seg.close()
+                seg.unlink()
+            except (BufferError, FileNotFoundError):
+                pass
+
+
 # ---------------------------------------------------------------------------
 # 5) 开关校验（非法值必须在 spawn worker 之前 fail-fast）
 # ---------------------------------------------------------------------------
