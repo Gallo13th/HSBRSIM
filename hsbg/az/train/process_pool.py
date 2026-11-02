@@ -32,6 +32,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import multiprocessing as mp
 import os
 import pickle
@@ -68,33 +70,312 @@ _OPP_CACHE: Dict[Any, Any] = {}
 _MIX_SEARCHERS: Dict[Any, Any] = {}
 
 
-def _save_built_batch(batch: Any, path: str) -> None:
-    """把已构建的 PPOBatch 写成 npz（episode_id 用全局唯一键 game_id*8+seat）。"""
-    extra = {}
+# ---------------------------------------------------------------------------
+# records 数据通路：npz（disk）/ 共享内存（shm）+ 存储精度（fp32/fp16）
+# ---------------------------------------------------------------------------
+#: 只有这些「大块 float32」字段会在 ``--records-dtype fp16`` 时降精度存储。
+#: ``cards`` 已是 int16（2 B/元素），转 fp16 既不省字节又丢索引精度，故不转。
+_RECORDS_FP16_KEYS: Tuple[str, ...] = ("features",)
+#: worker 侧 shm 段名前缀；清理只针对本前缀，不碰别人的 /dev/shm
+_SHM_PREFIX = "hsb_az_rec_"
+#: 每个 worker 的环形 slot 数：2 = 父进程读第 k 轮时 worker 可写第 k+1 轮
+_SHM_SLOTS = 2
+#: slot 容量向上取整粒度（32 MiB）
+_SHM_ROUND = 32 << 20
+#: shm 头部（JSON 元数据）预留字节数
+_SHM_HEADER = 64 << 10
+#: 清理「mtime 早于这么久」的残留段（秒）；崩溃进程留下的段不会永久占 /dev/shm
+_SHM_STALE_S = 6 * 3600
+#: worker 进程内的 shm 段缓存：{worker_index: {"slots": {slot: SharedMemory}, "seq": int}}
+_SHM_STATE: Dict[int, Any] = {}
+#: fp16 存储的上限（超过这个值 fp16 会变 inf；实测 features 已归一到 |x|<=2.3，
+#: 这里只是防注入/扩展位带来的极端值，保证「宁可夹住也不出 inf」）
+_FP16_MAX = 65504.0
+#: 可选的 torch 快速转换（CPU fp32↔fp16：实测 18 ms vs numpy astype 1.25 s / 322 MB）
+_TORCH: Any = None
+
+
+def _torch() -> Any:
+    """惰性导入 torch（没有 torch 时返回 None，回退 numpy astype）。"""
+    global _TORCH
+    if _TORCH is None:
+        try:
+            import torch as _t
+            _TORCH = _t
+        except BaseException:  # noqa: BLE001
+            _TORCH = False
+    return _TORCH or None
+
+
+def _cast_fp16(a: np.ndarray) -> np.ndarray:
+    """float32 → float16（先 clamp 到 ±65504；有 torch 时走向量化转换）。"""
+    a = np.ascontiguousarray(a)
+    t = _torch()
+    if t is not None and a.dtype == np.float32:
+        return t.from_numpy(a).clamp(-_FP16_MAX, _FP16_MAX).to(t.float16).numpy()
+    return np.clip(a, -_FP16_MAX, _FP16_MAX).astype(np.float16)
+
+
+def _cast_fp32(a: np.ndarray) -> np.ndarray:
+    """float16 → float32（父进程读入后立刻还原；有 torch 时走向量化转换）。"""
+    t = _torch()
+    if t is not None and a.dtype == np.float16:
+        return t.from_numpy(np.ascontiguousarray(a)).to(t.float32).numpy()
+    return np.asarray(a).astype(np.float32)
+
+
+def _batch_arrays(batch: Any) -> Dict[str, np.ndarray]:
+    """``PPOBatch`` → 落盘用的数组字典（与旧 ``_save_built_batch`` 字段集合逐位一致）。
+
+    ``episode_id`` 用全局唯一键 game_id*8+seat；可选字段（动作序列 / 教师 / 过程价值 /
+    行为混合）只在非 None 时写，保证默认关闭时字段集合与旧版本一致。
+    """
+    arrays: Dict[str, np.ndarray] = {
+        "features": batch.features, "cards": batch.cards, "masks": batch.masks,
+        "actions": batch.actions, "old_logprobs": batch.old_logprobs,
+        "values": batch.values, "rewards": batch.rewards, "dones": batch.dones,
+        "advantages": batch.advantages, "returns": batch.returns,
+        "seats": batch.seats, "game_ids": batch.game_ids, "ranks": batch.ranks,
+        "turns": batch.turns, "forced": batch.forced, "has_pi": batch.has_pi,
+        "episode_ids": (batch.game_ids * 8 + batch.seats).astype(np.int64),
+        "target_pi": (batch.target_pi if batch.target_pi is not None
+                      else np.zeros((len(batch.actions), 245), np.float32)),
+    }
     if getattr(batch, "seq_target", None) is not None:
-        # 动作序列辅助标签（默认关闭时不写，保持 npz 字段与旧版本一致）
-        extra["seq_target"] = batch.seq_target
+        arrays["seq_target"] = batch.seq_target
     if getattr(batch, "teacher_action", None) is not None:
-        # 在线缩放教师标签（默认关闭时不写）
-        extra["teacher_action"] = batch.teacher_action
+        arrays["teacher_action"] = batch.teacher_action
     if getattr(batch, "process_target", None) is not None:
-        # 过程价值目标（默认关闭时不写）
-        extra["process_target"] = batch.process_target
+        arrays["process_target"] = batch.process_target
     if getattr(batch, "behavior_logprobs", None) is not None:
-        # 搜索行为混合的 μ logprob / π logprob（默认关闭时不写）
-        extra["behavior_logprobs"] = batch.behavior_logprobs
+        arrays["behavior_logprobs"] = batch.behavior_logprobs
         if getattr(batch, "pi_logprobs", None) is not None:
-            extra["pi_logprobs"] = batch.pi_logprobs
-    np.savez(path, features=batch.features, cards=batch.cards, masks=batch.masks,
-             actions=batch.actions, old_logprobs=batch.old_logprobs,
-             values=batch.values, rewards=batch.rewards, dones=batch.dones,
-             advantages=batch.advantages, returns=batch.returns,
-             seats=batch.seats, game_ids=batch.game_ids, ranks=batch.ranks,
-             turns=batch.turns, forced=batch.forced, has_pi=batch.has_pi,
-             episode_ids=(batch.game_ids * 8 + batch.seats).astype(np.int64),
-             target_pi=(batch.target_pi if batch.target_pi is not None
-                        else np.zeros((len(batch.actions), 245), np.float32)),
-             **extra)
+            arrays["pi_logprobs"] = batch.pi_logprobs
+    return arrays
+
+
+def _cast_records_dtype(arrays: Dict[str, np.ndarray], dtype: str) -> Dict[str, Any]:
+    """按 ``--records-dtype`` 降低存储精度（默认 fp32 = 原样返回同一个对象）。"""
+    if str(dtype).strip().lower() != "fp16":
+        return arrays
+    out: Dict[str, Any] = dict(arrays)
+    for k in _RECORDS_FP16_KEYS:
+        v = out.get(k)
+        if v is None:
+            continue
+        a = np.asarray(v)
+        if a.dtype == np.float32:
+            out[k] = _cast_fp16(a)
+    return out
+
+
+def _upcast_records(arrays: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    """父进程读入后立刻把 fp16 还原成 fp32（下游只看到 fp32，与旧路径同 dtype）。
+
+    ⚠️ 返回的非 fp16 字段是**原数组本身**（shm 情形下是段内视图）；父进程必须在
+    ``np.concatenate``/``packed_all.clear()`` 之后才 close 段。
+    """
+    out: Dict[str, np.ndarray] = {}
+    for k, v in arrays.items():
+        a = np.asarray(v)
+        out[k] = _cast_fp32(a) if a.dtype == np.float16 else a
+    return out
+
+
+def _save_built_batch(batch: Any, path: str, *, dtype: str = "fp32") -> None:
+    """把已构建的 PPOBatch 写成 npz（兼容旧签名；``dtype`` 默认 fp32 = 逐位等价）。"""
+    np.savez(path, **_cast_records_dtype(_batch_arrays(batch), dtype))
+
+
+def _shm_close_slot(slots: Dict[int, Any], slot_idx: int) -> None:
+    """关闭并 unlink 一个 slot；父进程仍 attach 时 unlink 也安全（Linux 语义）。"""
+    seg = slots.pop(int(slot_idx), None)
+    if seg is None:
+        return
+    try:
+        seg.close()
+    except BufferError:            # 还有 numpy 视图/内存视图在用：交给进程退出回收
+        pass
+    except BaseException:          # noqa: BLE001
+        pass
+    try:
+        seg.unlink()
+    except BaseException:          # noqa: BLE001 - 别的进程已 unlink / 不存在
+        pass
+
+
+def _shm_state_cleanup(index: int) -> None:
+    """worker 退出（stop / 心跳失败）时释放自己所有 slot。"""
+    st = _SHM_STATE.pop(int(index), None)
+    if not st:
+        return
+    for slot in list((st.get("slots") or {}).keys()):
+        _shm_close_slot(st["slots"], slot)
+
+
+def _shm_put(arrays: Dict[str, np.ndarray], *, slots: Dict[int, Any], slot_idx: int,
+             name: str) -> Dict[str, Any]:
+    """把 ``arrays`` 写进 ``name`` 的 shm slot（按需创建/扩容），返回段元数据。
+
+    布局：``[0, _SHM_HEADER)`` = JSON 头部（字段名/dtype/shape/offset/nbytes），
+    ``[_SHM_HEADER, _SHM_HEADER+nbytes)`` = 各数组的原始字节（C 顺序）。
+    父进程用 ``np.frombuffer`` 直接映射，**零拷贝**（不再走 npz 的 zip 读写）。
+    """
+    from multiprocessing import shared_memory
+
+    items: List[Dict[str, Any]] = []
+    contig: Dict[str, np.ndarray] = {}
+    off = 0
+    for k in sorted(arrays):
+        a = np.ascontiguousarray(np.asarray(arrays[k]))
+        if a.dtype == object:
+            raise TypeError(f"shm 不支持 object 数组: {k}")
+        items.append({"name": k, "dtype": a.dtype.str, "shape": list(a.shape),
+                      "nbytes": int(a.nbytes), "offset": int(off)})
+        contig[k] = a
+        off += int(a.nbytes)
+    header = json.dumps({"keys": items}).encode("utf-8")
+    if len(header) > _SHM_HEADER:
+        raise RuntimeError(f"shm 头部超限：{len(header)} > {_SHM_HEADER}")
+    need = _SHM_HEADER + off
+    size = max(_SHM_ROUND, int((need + _SHM_ROUND - 1) // _SHM_ROUND) * _SHM_ROUND)
+    seg = slots.get(int(slot_idx))
+    if seg is not None and int(seg.size) < size:
+        _shm_close_slot(slots, int(slot_idx))
+        seg = None
+    if seg is None:
+        seg = shared_memory.SharedMemory(name=name, create=True, size=size)
+        slots[int(slot_idx)] = seg
+    buf = seg.buf
+    buf[:_SHM_HEADER] = bytes(_SHM_HEADER)      # 清掉上一轮 JSON 尾巴
+    buf[:len(header)] = header
+    for it in items:
+        a = contig[it["name"]]
+        n = int(a.size)
+        if n:
+            dst = np.frombuffer(buf, dtype=a.dtype, count=n,
+                                offset=_SHM_HEADER + int(it["offset"]))
+            dst[...] = a.reshape(-1)
+    return {"name": name, "size": int(seg.size), "header": int(_SHM_HEADER),
+            "nbytes": int(off), "n_arrays": int(len(items)),
+            "dtype": str(items[0]["dtype"]) if items else ""}
+
+
+def _shm_read(meta: Dict[str, Any]) -> Tuple[Dict[str, np.ndarray], Any]:
+    """父进程 attach 一个 shm slot，返回 ``(数组字典, segment)``。
+
+    返回的数组是 shm 的**视图**；调用方必须等 ``np.concatenate`` 之后才能 close，
+    否则会抛 ``BufferError``（这是刻意的护栏，不是错误）。
+    """
+    from multiprocessing import shared_memory
+
+    seg = shared_memory.SharedMemory(name=str(meta["name"]))
+    buf = seg.buf
+    hb = int(meta.get("header", _SHM_HEADER))
+    raw = bytes(buf[:hb]).rstrip(b"\x00")
+    if not raw:
+        raise RuntimeError(f"shm 头部为空: {meta.get('name')}")
+    header = json.loads(raw.decode("utf-8"))
+    out: Dict[str, np.ndarray] = {}
+    for it in header["keys"]:
+        dt = np.dtype(it["dtype"])
+        shape = tuple(int(x) for x in it["shape"])
+        count = 1
+        for x in shape:
+            count *= x
+        arr = np.frombuffer(buf, dtype=dt, count=count,
+                            offset=hb + int(it["offset"]))
+        out[str(it["name"])] = arr.reshape(shape) if shape else arr
+    return out, seg
+
+
+def _emit_records(arrays: Dict[str, np.ndarray], *, ipc_mode: str,
+                  records_dtype: str, records_file: Optional[str] = None,
+                  shm_name: Optional[str] = None,
+                  slots: Optional[Dict[int, Any]] = None,
+                  slot_idx: int = 0) -> Optional[Dict[str, Any]]:
+    """统一的 records 出口：``ipc_mode=shm`` → 共享内存；否则 → npz 落盘。
+
+    两条路径都先过 ``_cast_records_dtype``，保证 ``--records-dtype`` 对两种 IPC 同效。
+    """
+    arrays = _cast_records_dtype(arrays, records_dtype)
+    if str(ipc_mode).strip().lower() == "shm":
+        if not shm_name or slots is None:
+            raise RuntimeError("ipc_mode=shm 需要 shm_name 与 slots")
+        return _shm_put(arrays, slots=slots, slot_idx=slot_idx, name=shm_name)
+    if not records_file:
+        raise RuntimeError("ipc_mode=disk 需要 records_file")
+    np.savez(records_file, **arrays)
+    return None
+
+
+def _shm_owner_path(tag: str) -> str:
+    """pool 的「主人」标记文件：内容是父进程 pid（崩溃/被杀后靠它精确清理）。"""
+    return os.path.join("/dev/shm", f"{_SHM_PREFIX}{tag}.owner")
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except OSError:
+        return False
+
+
+def _purge_stale_shm(max_age_s: float = _SHM_STALE_S) -> int:
+    """清掉**主人已死**的 pool 的 shm 段；无 owner 的孤儿段按 mtime 兜底。
+
+    只碰 ``_SHM_PREFIX`` 前缀。trainer 被 SIGTERM/SIGKILL 杀掉时 worker 不会 unlink，
+    这里按 owner 文件里的 pid 存活与否判断，避免 6h 前一直占着 /dev/shm。
+    """
+    base = "/dev/shm"
+    if not os.path.isdir(base):
+        return 0
+    now = time.time()
+    removed = 0
+    try:
+        names = os.listdir(base)
+    except OSError:
+        return 0
+    # 1) owner 文件：主人已死 -> 整族删除（段名 = {prefix}{tag}_w{i}_s{slot}）
+    for name in names:
+        if not name.startswith(_SHM_PREFIX) or not name.endswith(".owner"):
+            continue
+        owner = os.path.join(base, name)
+        tag = name[len(_SHM_PREFIX):-len(".owner")]
+        try:
+            with open(owner, "r", encoding="utf-8") as f:
+                pid = int((f.read() or "0").strip() or 0)
+        except (OSError, ValueError):
+            pid = 0
+        if _pid_alive(pid):
+            continue
+        for nm in names:
+            if nm.startswith(f"{_SHM_PREFIX}{tag}_"):
+                try:
+                    os.unlink(os.path.join(base, nm))
+                    removed += 1
+                except OSError:
+                    pass
+        try:
+            os.unlink(owner)
+        except OSError:
+            pass
+    # 2) 没有 owner 的孤儿段：按 mtime 兜底（默认 6 小时）
+    for name in os.listdir(base):
+        if not name.startswith(_SHM_PREFIX) or name.endswith(".owner"):
+            continue
+        p = os.path.join(base, name)
+        try:
+            if now - os.path.getmtime(p) < float(max_age_s):
+                continue
+            os.unlink(p)
+            removed += 1
+        except OSError:
+            pass
+    return removed
 
 
 def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
@@ -109,6 +390,11 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
     torch.set_num_threads(1)
 
     index = int(payload["index"])
+    # records 数据通路（在 spawn payload 里钉死，采集任务不再逐个传）
+    ipc_mode = str(payload.get("ipc_mode", "disk")).strip().lower()
+    records_dtype = str(payload.get("records_dtype", "fp32"))
+    shm_slots = max(1, int(payload.get("shm_slots", _SHM_SLOTS)))
+    shm_tag = str(payload.get("shm_tag", "pool"))
     gpu = int(payload["gpu"])
     cuda = bool(torch.cuda.is_available())
     device = f"cuda:{gpu}" if cuda else "cpu"
@@ -437,16 +723,45 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     norm_mean=norm_mean, norm_std=norm_std, progress=False)
             _collect_s = time.time() - t0
             records_file = None
+            shm_meta = None
             n_records = int(len(records))
+            _ipc = ipc_mode
+            _dtype = records_dtype
+            _slots_state = _SHM_STATE.setdefault(index, {"slots": {}, "seq": 0})
             if bool(task.get("return_records", True)):
                 # L4：worker 内构建 batch（排序/过滤/GAE 并行化）；episode_id 用
                 # (game_id*8+seat) 作为全局唯一键，父进程直接拼接、无需重编号
-                records_file = os.path.join(
-                    task["tmpdir"], f"rec_{task_id}_w{index}.npz")
+                if _ipc == "shm":
+                    # 环形 slot：第 k 轮用 slot k%N，父进程读第 k 轮时 worker 可写第 k+1 轮
+                    _n_slots = max(1, int(shm_slots))
+                    _slot_idx = int(_slots_state["seq"]) % _n_slots
+                    _slots_state["seq"] = int(_slots_state["seq"]) + 1
+                    _shm_name = (f"{_SHM_PREFIX}{shm_tag}"
+                                 f"_w{index}_s{_slot_idx}")
+                else:
+                    _slot_idx = 0
+                    _shm_name = None
+                    records_file = os.path.join(
+                        task["tmpdir"], f"rec_{task_id}_w{index}.npz")
                 if bool(task.get("rust_collector", False)) and search_fn is None:
-                    _save_built_batch(
-                        build_batch_from_arrays(
-                            arr, gamma=float(task.get("gamma", 1.0)),
+                    _arrays = _batch_arrays(build_batch_from_arrays(
+                        arr, gamma=float(task.get("gamma", 1.0)),
+                        lam=float(task.get("lam", 0.95)),
+                        adv_estimator=str(task.get("adv_estimator", "gae")),
+                        power_alpha=float(task.get("power_alpha", 0.5)),
+                        power_kappa=float(task.get("power_kappa", 3.0)),
+                        power_normalize=bool(task.get("power_normalize", True)),
+                        power_cutoff=int(task.get("power_cutoff", 0)),
+                        credit_timebase=str(task.get("credit_timebase", "decision")),
+                        rank_utility_coef=float(task.get("rank_utility_coef", 1.0)),
+                        terminal_strength_coef=float(
+                            task.get("terminal_strength_coef", 0.0))))
+                else:
+                    packed = pack_records_arrays(
+                        records, seq_aux=bool(getattr(cfg, "seq_aux", False)))
+                    try:
+                        _arrays = _batch_arrays(build_batch_from_arrays(
+                            packed, gamma=float(task.get("gamma", 1.0)),
                             lam=float(task.get("lam", 0.95)),
                             adv_estimator=str(task.get("adv_estimator", "gae")),
                             power_alpha=float(task.get("power_alpha", 0.5)),
@@ -456,28 +771,13 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                             credit_timebase=str(task.get("credit_timebase", "decision")),
                             rank_utility_coef=float(task.get("rank_utility_coef", 1.0)),
                             terminal_strength_coef=float(
-                                task.get("terminal_strength_coef", 0.0))),
-                        records_file)
-                else:
-                    packed = pack_records_arrays(
-                        records, seq_aux=bool(getattr(cfg, "seq_aux", False)))
-                    try:
-                        _save_built_batch(
-                            build_batch_from_arrays(
-                                packed, gamma=float(task.get("gamma", 1.0)),
-                                lam=float(task.get("lam", 0.95)),
-                                adv_estimator=str(task.get("adv_estimator", "gae")),
-                                power_alpha=float(task.get("power_alpha", 0.5)),
-                                power_kappa=float(task.get("power_kappa", 3.0)),
-                                power_normalize=bool(task.get("power_normalize", True)),
-                                power_cutoff=int(task.get("power_cutoff", 0)),
-                                credit_timebase=str(task.get("credit_timebase", "decision")),
-                            rank_utility_coef=float(task.get("rank_utility_coef", 1.0)),
-                            terminal_strength_coef=float(
-                                task.get("terminal_strength_coef", 0.0))),
-                            records_file)
+                                task.get("terminal_strength_coef", 0.0))))
                     except BaseException:  # noqa: BLE001 - 回退到父进程构建
-                        np.savez(records_file, **packed)
+                        _arrays = dict(packed)
+                shm_meta = _emit_records(
+                    _arrays, ipc_mode=_ipc, records_dtype=_dtype,
+                    records_file=records_file, shm_name=_shm_name,
+                    slots=_slots_state["slots"], slot_idx=_slot_idx)
             _save_s = time.time() - t0 - _collect_s
             profile = dict(server.profile())
             profile.update({"reload_s": float(_reload_s),
@@ -490,7 +790,9 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                 "reload_s": float(_reload_s), "collect_s": float(_collect_s),
                 "save_s": float(_save_s),
                 "t_start": _t_start, "t_end": time.monotonic(),
-                "records_file": records_file, "records": n_records,
+                "records_file": records_file, "records_shm": shm_meta,
+                "records_dtype": _dtype, "ipc_mode": _ipc,
+                "records": n_records,
                 "meta": to_jsonable(cmeta),
                 "profile": to_jsonable(profile),
                 "leafs": int(stats.get("leafs", 0)),
@@ -508,6 +810,11 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
         server.close()
     except BaseException:  # noqa: BLE001
         pass
+    # 释放本 worker 的 shm 段（父进程若还在读，unlink 不影响其已 attach 的映射）
+    try:
+        _shm_state_cleanup(index)
+    except BaseException:  # noqa: BLE001
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -522,7 +829,11 @@ class ProcessActorPool:
                  threads: int = 8, batch_size: int = 64,
                  max_wait_ms: float = 2.0, queue_size: int = 8192,
                  tmpdir: Optional[str] = None,
-                 python: Optional[str] = None) -> None:
+                 python: Optional[str] = None,
+                 ipc_mode: Optional[str] = None,
+                 records_dtype: Optional[str] = None,
+                 shm_slots: int = 0,
+                 collect_sha: bool = False) -> None:
         self.processes = max(1, int(processes))
         self.gpus = [int(g) for g in (gpus or [0])]
         self.checkpoint = str(checkpoint)
@@ -534,9 +845,40 @@ class ProcessActorPool:
         self.batch_size = max(1, int(batch_size))
         self.max_wait_ms = float(max_wait_ms)
         self.queue_size = int(queue_size)
+        # 环境变量兜底：不（或还没）接 CLI 开关的调用方也能开；默认值 = 历史行为。
+        _env_ipc = os.environ.get("HSBRSIM_IPC_MODE", "").strip().lower()
+        _env_dtype = os.environ.get("HSBRSIM_RECORDS_DTYPE", "").strip().lower()
+        _env_slots = os.environ.get("HSBRSIM_IPC_SHM_SLOTS", "").strip()
+        #: records 数据通路：disk=npz 落盘（默认，历史路径）；shm=/dev/shm 环形 buff
+        self.ipc_mode = str(ipc_mode or _env_ipc or "disk").strip().lower()
+        if self.ipc_mode not in ("disk", "shm"):
+            raise ValueError(f"ipc_mode 必须是 disk/shm，收到 {ipc_mode!r}")
+        #: records 存储精度：fp32=原样（默认，逐位等价）；fp16=只把 features 降精度
+        self.records_dtype = str(records_dtype or _env_dtype or "fp32").strip().lower()
+        if self.records_dtype not in ("fp32", "fp16"):
+            raise ValueError(f"records_dtype 必须是 fp32/fp16，收到 {records_dtype!r}")
+        self.shm_slots = max(1, int(shm_slots or (int(_env_slots) if _env_slots else _SHM_SLOTS)))
+        #: 1=把每个 iteration 采集批次的动作流 sha256 写进 collect meta（默认 0）
+        self.collect_sha = bool(collect_sha) or \
+            os.environ.get("HSBRSIM_COLLECT_SHA", "0").strip() == "1"
+        if self.ipc_mode == "shm" and not os.path.isdir("/dev/shm"):
+            raise RuntimeError("--ipc-mode shm 需要 /dev/shm（本机不存在）")
         self.tmpdir = str(tmpdir or os.path.join(
             os.path.dirname(os.path.abspath(checkpoint)) or ".", "_proc_pool"))
         os.makedirs(self.tmpdir, exist_ok=True)
+        #: 本 pool 实例的 shm 段名后缀（多 pool/多 run 并存时互不覆盖）
+        self.shm_tag = uuid.uuid4().hex[:8]
+        #: 父进程见过/attach 过的 shm 段名（close 时兜底 unlink）
+        self._shm_names: set = set()
+        #: 父进程当前仍 attach 的 segment（拼接完才能 close）
+        self._shm_open: List[Any] = []
+        self.shm_purged = _purge_stale_shm() if self.ipc_mode == "shm" else 0
+        if self.ipc_mode == "shm":
+            try:
+                with open(_shm_owner_path(self.shm_tag), "w", encoding="utf-8") as f:
+                    f.write(str(os.getpid()))
+            except OSError:
+                pass
         self.ctx = mp.get_context("spawn")
         self.restarts = 0
         self._procs: List[Any] = []
@@ -586,6 +928,8 @@ class ProcessActorPool:
             "seed": self.seed, "threads": self.threads,
             "batch_size": self.batch_size, "max_wait_ms": self.max_wait_ms,
             "queue_size": self.queue_size,
+            "ipc_mode": self.ipc_mode, "records_dtype": self.records_dtype,
+            "shm_slots": self.shm_slots, "shm_tag": self.shm_tag,
         }
         p = self.ctx.Process(target=_worker_main, args=(payload, q, self._result_q),
                              name=f"actor-{i}", daemon=True)
@@ -631,6 +975,18 @@ class ProcessActorPool:
             self._spawn_one(i)
         return dead
 
+    def _close_shm(self) -> None:
+        """释放父进程本轮 attach 的所有 shm 段（数组早已 concat 成独立内存）。"""
+        while self._shm_open:
+            seg = self._shm_open.pop()
+            try:
+                seg.close()
+            except BufferError:          # 还有视图在用：交给进程退出/下一轮
+                self._shm_open.append(seg)
+                break
+            except BaseException:        # noqa: BLE001
+                pass
+
     def close(self) -> None:
         for q in self._task_qs:
             try:
@@ -646,6 +1002,20 @@ class ProcessActorPool:
                 p.join(timeout=2.0)
             except BaseException:  # noqa: BLE001
                 pass
+        self._close_shm()
+        # 兜底：worker 正常退出会自己 unlink；崩溃/被 terminate 的由父进程按名字清理
+        for name in list(self._shm_names):
+            try:
+                from multiprocessing import shared_memory
+                shared_memory.SharedMemory(name=name).unlink()
+            except BaseException:  # noqa: BLE001
+                pass
+        self._shm_names.clear()
+        # 最后删 owner 标记（之后即使本进程被杀，也不会有人把它当成活 pool）
+        try:
+            os.unlink(_shm_owner_path(self.shm_tag))
+        except OSError:
+            pass
 
     def __enter__(self) -> "ProcessActorPool":
         return self
@@ -830,7 +1200,7 @@ class ProcessActorPool:
                               "forced", "errors")}
         agg.update({"reload_s": 0.0, "collect_s": 0.0, "save_s": 0.0})
         forward_s = batch_wait_s = 0.0
-        t_read = records_bytes = 0.0
+        t_read = records_bytes = shm_slabs = 0.0
         timeline["t_read_start"] = time.monotonic()
         for i in sorted(results):
             msg = results[i]
@@ -861,11 +1231,22 @@ class ProcessActorPool:
             forward_s += float(msg.get("forward_s", 0.0))
             batch_wait_s += float(msg.get("batch_wait_s", 0.0))
             f = msg.get("records_file")
-            if f:
+            shm = msg.get("records_shm")
+            if shm:
+                # shm 通路：attach + 零拷贝视图；读入后立刻 upcast 成 fp32（下游 dtype 不变）
+                t_r0 = time.time()
+                _arrs, _seg = _shm_read(shm)
+                packed_all.append(_upcast_records(_arrs))
+                self._shm_open.append(_seg)
+                self._shm_names.add(str(shm.get("name")))
+                t_read += time.time() - t_r0
+                records_bytes += float(shm.get("nbytes", 0) or 0)
+                shm_slabs += float(shm.get("size", 0) or 0)
+            elif f:
                 t_r0 = time.time()
                 if f.endswith(".npz"):
                     with np.load(f) as z:
-                        packed_all.append({k: z[k] for k in z.files})
+                        packed_all.append(_upcast_records({k: z[k] for k in z.files}))
                 else:
                     with open(f, "rb") as fh:
                         records.extend(pickle.load(fh))
@@ -916,6 +1297,10 @@ class ProcessActorPool:
             "batch_wait_s": batch_wait_s,
             "restarts": self.restarts,
             "policy_version": weights_version,
+            "ipc_mode": self.ipc_mode,
+            "records_dtype": self.records_dtype,
+            "shm_slots": int(self.shm_slots),
+            "shm_slabs": int(shm_slabs),
             "workers": profiles,
             "worker_meta": to_jsonable(metas),
             "elapsed_s": wall,
@@ -954,6 +1339,7 @@ class ProcessActorPool:
                 int(m.get("process_labels", 0) or 0) for m in metas))
         if not records and not packed_all:
             # 采集侧没有有效记录（全部截断/非法），保持与单进程一致的报错语义
+            self._close_shm()
             raise RuntimeError(
                 f"process pool 无有效轨迹（truncated={agg['truncated']}, "
                 f"invalid={agg['invalid']}, decisions={agg['decisions']}）")
@@ -1032,6 +1418,16 @@ class ProcessActorPool:
                 rank_utility_coef=float(rank_utility_coef),
                 terminal_strength_coef=float(terminal_strength_coef))
         build_batch_s = time.time() - t_b0
+        # 拼接/建批都是**拷贝**（np.concatenate / v[order]）；清掉 packed_all 里的 shm 视图
+        # 之后再释放段，否则 numpy 视图还引用着 buf（close 会抛 BufferError）。
+        packed_all.clear()
+        self._close_shm()
+        # 动作流 sha：默认关闭（history 字段与旧版一致）；开启后写进 collect meta
+        if self.collect_sha:
+            _h = hashlib.sha256()
+            for _arr in (batch.actions, batch.turns, batch.game_ids, batch.seats):
+                _h.update(np.ascontiguousarray(_arr).tobytes())
+            meta["action_sha"] = _h.hexdigest()[:16]
         if str(adv_estimator).strip().lower() != "gae":
             # 默认 gae 不新增键；启用时记录核参数（逐 shard diagnostics 已在
             # worker build 时用 compact_diagnostics 摘要，这里只回传有效配置）。
@@ -1057,6 +1453,9 @@ class ProcessActorPool:
                 "threads_per_process": self.threads, "sims": self.sims,
                 "determinizations": self.determinizations,
                 "checkpoint": self.checkpoint, "tmpdir": self.tmpdir,
+                "ipc_mode": self.ipc_mode, "records_dtype": self.records_dtype,
+                "shm_slots": int(self.shm_slots), "shm_tag": self.shm_tag,
+                "shm_purged": int(self.shm_purged), "collect_sha": bool(self.collect_sha),
                 "restarts": self.restarts, "workers": self._info}
 
 

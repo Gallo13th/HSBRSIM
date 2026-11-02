@@ -75,6 +75,7 @@ from hsbg.az.train.ppo import (  # noqa: E402
     ramp_progress_metrics,
     split_model_outputs,
     torch_available,
+    value_from_rank_logits_torch,
 )
 from hsbg.az.train.ppo_trainer import PPOTrainer  # noqa: E402
 from hsbg.az.train.batch_eval import BatchLeafServer, BatchPPOEvaluator  # noqa: E402
@@ -199,6 +200,194 @@ def _atomic_torch_save(obj: Any, path: str) -> None:
     os.replace(tmp, path)
 
 
+def _net_size_kwargs(args: Any) -> Dict[str, int]:
+    """entity 尺寸参数（值为 0 = 未指定）。只用于**从零构建**；checkpoint 路径以 meta 为准。
+
+    默认全 0 ⇒ 返回空 dict ⇒ ``build_net`` 行为与历史完全相同（逐位等价）。
+    """
+    if str(getattr(args, "arch", "")) not in ("entity", "entity18m"):
+        return {}
+    out: Dict[str, int] = {}
+    for key in ("d_model", "n_layers", "n_heads"):
+        val = int(getattr(args, key, 0) or 0)
+        if val > 0:
+            out[key] = val
+    return out
+
+
+def _apply_custom_rewards(batch: Any, *, upgrade_w: float = 0.0,
+                          win_w: float = 0.0, strength_c: float = 0.0,
+                          gamma: float, lam: float) -> Optional[Dict[str, Any]]:
+    """三个**默认关闭**的奖励改造，一次改 rewards 后**整批重算 GAE**。
+
+    1. ``upgrade_w``（`--upgrade-reward`）：``upgrade`` 动作（``A_UPGRADE=3``）即时 +w；
+       rank-only 下升本收益要 5–8 回合才兑现，GAE λ=0.995 会把它压没。
+    2. ``win_w``（`--win-only-reward`）：**终局只有第 1 名 +w**，其余 0；
+       用于"减弱名次奖励、只奖励夺冠"（配合 ``--rank-utility-coef 0``）。
+    3. ``strength_c``（`--strength-reward-coef`）：**每回合 ΔL(Σ) 密集项**
+       （``L = log1p(Σ)/log1p(30000)``，沙盒 telescope 同一曲线）；
+       回合末决策上加 ``strength_c × (L(Σ_t) − L(Σ_{t−1}))``，首回合以 0 为基准。
+    全部为 0（默认）时**不调用** ⇒ 逐位等价旧路径。
+    """
+    from hsbg.az.train.ppo import compute_gae, log_strength_from_features  # noqa: PLC0415
+    n = len(batch.actions)
+    if n <= 0:
+        return None
+    delta = np.zeros(n, dtype=np.float64)
+    n_up = n_win = 0
+    if float(upgrade_w) > 0.0:
+        a_upgrade = 3  # hsbg/env/action_space_std.py: A_UPGRADE
+        hit = (np.asarray(batch.actions) == a_upgrade) & (~np.asarray(batch.forced, dtype=bool))
+        delta[hit] += float(upgrade_w)
+        n_up = int(hit.sum())
+    if float(win_w) > 0.0:
+        dones = np.asarray(batch.dones, dtype=np.float32) > 0.5
+        ranks = np.asarray(batch.ranks)
+        win_hit = dones & (ranks == 1)
+        delta[win_hit] += float(win_w)
+        n_win = int(win_hit.sum())
+    if float(strength_c) > 0.0:
+        L = np.asarray(log_strength_from_features(batch.features), dtype=np.float64)
+        turns = np.asarray(batch.turns)
+        eps = np.asarray(batch.episode_ids)
+        # episode 连续（collect 侧保证），逐 episode 找「每回合最后一个决策」
+        bounds = np.flatnonzero(np.diff(eps) != 0) + 1
+        starts = np.concatenate(([0], bounds))
+        ends = np.concatenate((bounds, [n]))
+        for s, e in zip(starts.tolist(), ends.tolist()):
+            t = turns[s:e]
+            if t.size == 0:
+                continue
+            change = np.flatnonzero(np.diff(t) != 0) + s + 1  # 每回合第一个决策
+            turn_starts = np.concatenate(([s], change))
+            turn_ends = np.concatenate((change - 1, [e - 1]))
+            prev_L = 0.0
+            for ts, te in zip(turn_starts.tolist(), turn_ends.tolist()):
+                cur_L = float(L[te])
+                delta[te] += float(strength_c) * (cur_L - prev_L)
+                prev_L = cur_L
+    if not (n_up or n_win or float(strength_c) > 0.0):
+        return None
+    rewards = (np.asarray(batch.rewards, dtype=np.float64) + delta)
+    adv, ret = compute_gae(rewards, np.asarray(batch.values, dtype=np.float64),
+                           np.asarray(batch.dones, dtype=np.float64),
+                           gamma=float(gamma), lam=float(lam))
+    batch.rewards = rewards.astype(np.float32)
+    batch.advantages = adv
+    batch.returns = ret
+    return {"upgrade_w": float(upgrade_w), "upgrade_hits": n_up,
+            "win_w": float(win_w), "win_episodes": n_win,
+            "strength_c": float(strength_c),
+            "reward_delta_sum": float(delta.sum()),
+            "reward_delta_abs": float(np.abs(delta).sum())}
+
+
+def _critic_param_names(model: Any, *, use_value_head: bool) -> List[str]:
+    """默认 critic 路径 = ``rank_head``（8 名次 CE）；``value_head`` 只在 coef>0 时加入。"""
+    names = [n for n, _ in model.named_parameters() if n.startswith("rank_head")]
+    if use_value_head:
+        names += [n for n, _ in model.named_parameters() if n.startswith("value_head")]
+    return names
+
+
+def _value_warmup(trainer: Any, batch: Any, *, iters: int, lr: float,
+                  minibatch: int, seed: int) -> Optional[Dict[str, Any]]:
+    """critic 预热：只训 critic 头（rank 头[+标量 value 头]）``iters`` 遍。
+
+    为什么必须有：BC 只训策略 ⇒ critic 头仍是**随机初始化**。此时 GAE 的 advantage 与真实
+    优势近似无关（沙盒实测符号一致率 52.8% ≈ 抛硬币），PPO 第一个 iteration 就会把策略
+    推歪。这里先在**第一个 iteration 的真实轨迹**上把 critic 头校准到「能预测真实名次」。
+
+    为什么只训头：entity 的 critic 与策略**共享 trunk**，整网回传会改变策略 logits
+    （沙盒踩过：anchor_kl 首行 0.205、130k 后 Σ 1646→524）。冻结除 critic 头以外的全部
+    参数 ⇒ 策略漂移**严格为 0**（由构造保证，不是经验值）。
+
+    默认 ``iters=0`` 时本函数不会被调用 ⇒ 默认路径逐位等价于旧行为。
+    """
+    import torch  # noqa: PLC0415 - 延迟导入：tiny 路径不保证有 torch
+    model = trainer.model
+    cfg = trainer.config
+    dev = torch.device(trainer.device)
+    use_vh = float(getattr(cfg, "value_head_coef", 0.0) or 0.0) > 0.0
+    names = _critic_param_names(model, use_value_head=use_vh)
+    if not names:
+        print("[value-warmup] 模型没有 rank_head/value_head，跳过预热", flush=True)
+        return None
+    name_set = set(names)
+    params = [p for n, p in model.named_parameters() if n in name_set]
+    n_params = int(sum(p.numel() for p in params))
+    model.eval()
+
+    n = len(batch)
+    if n <= 0:
+        print("[value-warmup] 批次为空，跳过预热", flush=True)
+        return None
+    mb = max(1, min(int(minibatch or 1024), int(n)))
+    rng = np.random.default_rng([int(seed), 0x5A1])
+    ranks_np = np.asarray(batch.ranks, dtype=np.int64)
+    rets_np = np.asarray(batch.returns, dtype=np.float32)
+    rank_mode = str(getattr(cfg, "value_loss", "rank")).strip().lower() == "rank"
+    amp_bf16 = (str(getattr(cfg, "amp", "off")).strip().lower() in ("bf16", "bfloat16")
+                and dev.type == "cuda")
+    F = torch.nn.functional
+    hist: List[float] = []
+    for p in model.parameters():
+        p.requires_grad_(False)
+    for p in params:
+        p.requires_grad_(True)
+    opt = torch.optim.Adam(params, lr=float(lr))
+    try:
+        for _w in range(max(1, int(iters))):
+            order = rng.permutation(int(n))
+            tot, cnt = 0.0, 0
+            for s0 in range(0, int(n), mb):
+                idx = order[s0:s0 + mb]
+                x = torch.from_numpy(np.ascontiguousarray(batch.features[idx])).to(dev)
+                c = torch.from_numpy(
+                    np.ascontiguousarray(batch.cards[idx].astype(np.int64))).to(dev)
+                m = torch.from_numpy(
+                    np.ascontiguousarray(batch.masks[idx].astype(bool))).to(dev)
+                if amp_bf16:
+                    with torch.autocast("cuda", dtype=torch.bfloat16):
+                        _lg, rank_logits, scalar_value = forward_model(model, x, c, m)
+                else:
+                    _lg, rank_logits, scalar_value = forward_model(model, x, c, m)
+                rl = rank_logits.float()
+                if rank_mode:
+                    tgt = torch.from_numpy(np.ascontiguousarray(
+                        (ranks_np[idx] - 1).clip(0, rl.shape[-1] - 1))).to(dev)
+                    loss = F.cross_entropy(rl, tgt)
+                else:
+                    tgt = torch.from_numpy(
+                        np.ascontiguousarray(rets_np[idx])).to(dev)
+                    loss = F.mse_loss(value_from_rank_logits_torch(rl), tgt)
+                if use_vh and scalar_value is not None:
+                    loss = loss + float(cfg.value_head_coef) * F.mse_loss(
+                        scalar_value.float().reshape(-1), tgt)
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                opt.step()
+                tot += float(loss.detach()) * int(len(idx))
+                cnt += int(len(idx))
+            hist.append(tot / max(1, cnt))
+    finally:
+        for p in model.parameters():
+            p.requires_grad_(True)
+        model.zero_grad(set_to_none=True)
+        model.eval()
+    out = {"iters": int(iters), "critic_params": n_params,
+           "critic_param_names": names, "lr": float(lr), "minibatch": mb,
+           "loss_mode": "rank_ce" if rank_mode else "mse",
+           "loss_first": float(hist[0]) if hist else None,
+           "loss_last": float(hist[-1]) if hist else None,
+           "n_samples": int(n), "policy_drift_by_construction": 0.0}
+    print(f"[value-warmup] critic={names} params={n_params:,} iters={iters} "
+          f"lr={lr:g} mb={mb} mode={out['loss_mode']} "
+          f"loss {out['loss_first']:.4f} -> {out['loss_last']:.4f} "
+          f"(n={n}; 策略/trunk 冻结 ⇒ 策略漂移=0)", flush=True)
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Entity PPO（持久 trainer + 进程 pool + 流水线）")
     ap.add_argument("--minutes", type=float, default=30.0)
@@ -207,6 +396,15 @@ def main() -> int:
     ap.add_argument("--iterations", type=int, default=0)
     ap.add_argument("--games", type=int, default=4)
     ap.add_argument("--arch", default="entity", choices=["tiny", "entity", "entity18m"])
+    # ── entity 尺寸（只影响**从零构建**；带 --checkpoint/--trainer-state 时以 checkpoint
+    #    meta 为准，本组只做一致性校验）。默认 0 = build_net 的历史默认（384/8/8），
+    #    因此不传时与原路径逐位等价。0.667M = --d-model 128 --n-layers 2 --n-heads 4。
+    ap.add_argument("--d-model", type=int, default=0,
+                    help="entity 宽度（0=默认 384）；从零构建时生效")
+    ap.add_argument("--n-layers", type=int, default=0,
+                    help="entity Transformer 层数（0=默认 8）；从零构建时生效")
+    ap.add_argument("--n-heads", type=int, default=0,
+                    help="entity 注意力头数（0=默认 8）；从零构建时生效")
     ap.add_argument("--move-head-split", type=int, default=0, choices=[0, 1],
                     help="1=Move 段（196..244）用有向双投影（move_from/move_to），"
                          "方向差不再只由 move_bias 决定；旧 checkpoint 自动只初始化新投影。"
@@ -565,6 +763,23 @@ def main() -> int:
                     help="--gpu-free-check 阈值：已用显存 > 该值（MiB）视为被占用")
     ap.add_argument("--threads", type=int, default=16,
                     help="每个 actor 进程内的采集线程数（每轮 games 应 >= processes*threads）")
+    # ── records 数据通路（默认 auto/fp32：进程 pool 走 shm，features 仍 fp32 存储；
+    #    `--records-dtype fp16` 是可选省字节项，但**不保证逐位等价**。见 docs/TRAIN_THROUGHPUT.md）──
+    ap.add_argument("--records-dtype", default="fp32", choices=["fp32", "fp16"],
+                    help="records 存储精度：fp32（默认，逐位等价）；fp16 只把 features(=3227 "
+                         "floats, 占 88%% 字节) 降精度存，父进程读入后立刻还原 fp32。"
+                         "实测：小配置 12 iter 动作流 sha 全同，但 384 局/8 进程配置下第 3 iter "
+                         "起与 fp32 分歧 ⇒ 省 ~2-3%% 时间，不用于需要逐位一致的正式训练")
+    ap.add_argument("--ipc-mode", default="auto", choices=["auto", "disk", "shm"],
+                    help="worker→父进程的 records 通路：auto（默认）= 有进程 pool 且 /dev/shm "
+                         "可用时走 shm，否则 disk；shm=/dev/shm 环形缓冲 + 父进程零拷贝映射"
+                         "（省掉 335-438 MB/iter 写盘+读盘）；disk=npz 落盘再读回（历史路径）")
+    ap.add_argument("--ipc-shm-slots", type=int, default=2,
+                    help="--ipc-mode shm 时每个 worker 的环形 slot 数（>=2 让父进程读上一轮时"
+                         " worker 能写下一轮；容量按 32 MiB 向上取整）")
+    ap.add_argument("--collect-sha", type=int, default=0, choices=[0, 1],
+                    help="1=把每个 iteration 采集批次的「动作流 sha256」写进 history（actions/"
+                         "turns/game_ids/seats 拼接后哈希）；默认 0=不写，字段与旧版一致")
     ap.add_argument("--pipeline", type=int, default=0,
                     help="1=double-buffer：collect(k+1) 与 update(k) 并行（需 --processes>1）")
     ap.add_argument("--pipeline-guard", default="warn", choices=["warn", "abort"],
@@ -612,6 +827,50 @@ def main() -> int:
                          "省一半 wall；TRIGGER/早停只看 bot 面板）")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--checkpoint", default="")
+    # ── critic（价值/名次头）预热：BC 只训策略 ⇒ critic 头仍是随机初始化，此时 GAE 的
+    #    advantage 与真实优势近似无关，PPO 第一个 iteration 就会把策略推歪
+    #    （沙盒实测 anchor_kl 首行 0.205、130k 后 Σ 1646→524）。iters>0 时在**第一个
+    #    iteration 的 update 之前**只训 critic 头（冻结策略与 trunk，策略漂移由构造为 0）。
+    #    默认 0 = 关闭，逐位等价旧路径。
+    ap.add_argument("--value-warmup-iters", type=int, default=0,
+                    help="critic 预热遍数：只训 rank 头（--value-head-coef>0 时含标量 "
+                         "value 头），冻结策略/trunk；0=关闭（默认）")
+    ap.add_argument("--value-warmup-lr", type=float, default=1e-3,
+                    help="critic 预热的 Adam lr（默认 1e-3；仅 --value-warmup-iters>0 生效）")
+    ap.add_argument("--value-warmup-minibatch", type=int, default=1024,
+                    help="critic 预热的 minibatch 行数（默认 1024；仅 iters>0 生效）")
+    ap.add_argument("--value-warmup-every", type=int, default=0,
+                    help="周期性重热 critic 的周期（按 iteration；0=只在第一个 iteration 预热）。"
+                         "预热的效果会被后续 PPO 的 trunk 漂移抹掉，长训练建议 50–100 重热一次")
+    ap.add_argument("--upgrade-reward", type=float, default=0.0,
+                    help="给 **upgrade 动作（action_space_std.A_UPGRADE=3）** 的即时奖励 w"
+                         "（默认 0=关闭，逐位等价）。rank-only 下升本收益要 5–8 回合后才兑现，"
+                         "在 GAE λ=0.995 下被压没；这个'局部可行'信号直接解决'升本动作没有"
+                         "正收益'。实现：加在 reward 上并**重算 GAE**（advantages/returns）")
+    ap.add_argument("--win-only-reward", type=float, default=0.0,
+                    help="终局**只有第 1 名** +w、其余 0（默认 0=关闭，逐位等价）。"
+                         "用于「减弱名次奖励、只奖励夺冠」，通常配 --rank-utility-coef 0")
+    ap.add_argument("--strength-reward-coef", type=float, default=0.0,
+                    help="每回合 ΔL(Σ) 密集强度奖励系数（默认 0=关闭，逐位等价）："
+                         "L=log1p(Σ)/log1p(30000)，回合末决策加 c×(L_t−L_{t−1})")
+    # ── 动态课程（默认 0 = 关闭，逐位等价）───────────────────────────────────
+    # 规则（Lead 定）：起点 start 席 × p；**每当真实强度口径（5 席 p0.9 面板的 t15 Σ p50）
+    # 比上一次评测提升 >= threshold，就回加一席**（上限 max）；回加后若比上一次评测
+    # 回退 > threshold，则退回一档并保持 hold-decisions。训练剂量只作参考，主判据用真实口径。
+    ap.add_argument("--dyn-curriculum", type=int, default=0, choices=[0, 1],
+                    help="1=启用动态对手强度课程（按真实强度口径 t15 Σ 自动加/减席）")
+    ap.add_argument("--dyn-start-seats", type=int, default=2,
+                    help="动态课程起始人类战团席数（默认 2）")
+    ap.add_argument("--dyn-max-seats", type=int, default=5,
+                    help="席数上限（默认 5）")
+    ap.add_argument("--dyn-p", type=float, default=0.75,
+                    help="动态课程使用的注入概率 p（默认 0.75）")
+    ap.add_argument("--dyn-threshold", type=float, default=0.10,
+                    help="加/减席的判定阈值（相对上一次评测的 t15 Σ 变化；默认 0.10=10%%）")
+    ap.add_argument("--dyn-hold-decisions", type=float, default=10000000.0,
+                    help="减席后至少保持多少 decisions 再考虑加席（默认 10M）")
+    ap.add_argument("--dyn-quality-games", type=int, default=96,
+                    help="真实强度口径面板局数（5 席 p0.9，默认 96）")
     ap.add_argument("--trainer-state", default="")
     ap.add_argument("--out", default="runs/az_entity_sync")
     args = ap.parse_args()
@@ -811,6 +1070,26 @@ def main() -> int:
         if not int(args.lockstep):
             print("[info] 非 lockstep 路径：塑形在逐局采集（collect_ppo_records_parallel）"
                   "内生效", flush=True)
+
+    # ---- records 数据通路（默认 auto/fp16；`--ipc-mode disk --records-dtype fp32` = 历史路径。
+    #      见 docs/TRAIN_THROUGHPUT.md：shm 省掉 335-438 MB/iter 写盘+读盘，fp16 再减半字节）----
+    _ipc_requested = str(args.ipc_mode).strip().lower()
+    if _ipc_requested == "auto":
+        args.ipc_mode = ("shm" if (int(args.processes) >= 2 and os.path.isdir("/dev/shm"))
+                         else "disk")
+    if str(args.ipc_mode) == "shm":
+        if int(args.processes) < 2:
+            print("[error] --ipc-mode shm 需要 --processes >= 2（只有进程 pool 才走 IPC）",
+                  file=sys.stderr)
+            return 2
+        if not os.path.isdir("/dev/shm"):
+            print("[error] --ipc-mode shm 需要 /dev/shm（本机不存在）", file=sys.stderr)
+            return 2
+        print(f"[ipc] shm 环形缓冲: slots={int(args.ipc_shm_slots)}（每 slot 按 32 MiB 取整），"
+              f"records_dtype={args.records_dtype}", flush=True)
+    else:
+        print(f"[ipc] disk 通路（ipc_mode={_ipc_requested}->disk），"
+              f"records_dtype={args.records_dtype}", flush=True)
 
     # ---- 换位去抖守卫（默认关闭；--move-guard 0 时零影响）----
     if int(args.move_cap) < 0:
@@ -1074,6 +1353,18 @@ def main() -> int:
         model, meta = load_checkpoint(args.checkpoint, device=args.device)
         arch = str(meta.get("arch", args.arch))
         norm_mean, norm_std = meta.get("norm_mean"), meta.get("norm_std")
+        # --d-model/--n-layers/--n-heads 只对「从零构建」生效；这里只做一致性提示，
+        # 避免「以为建了 0.667M，其实加载了 checkpoint 的 384×8」这类静默错配。
+        _size_want = _net_size_kwargs(args)
+        _size_have = {k: int(meta.get(k, 0) or 0) for k in _size_want}
+        _size_mismatch = {k: (v, _size_have[k]) for k, v in _size_want.items()
+                          if _size_have[k] != v}
+        if _size_mismatch:
+            print(f"[warn] --d-model/--n-layers/--n-heads 与 checkpoint meta 不一致"
+                  f"（以 meta 为准）：{_size_mismatch}", flush=True)
+        print(f"[net] checkpoint meta 尺寸="
+              f"{ {k: meta.get(k) for k in ('d_model','n_layers','n_heads')} }",
+              flush=True)
         print(f"[net] checkpoint={args.checkpoint} arch={arch}", flush=True)
         # 有向 Move 头：旧 ckpt 没有 move_from/move_to 时，只追加两个投影并继承其余权重
         _move_split_loaded = bool(getattr(model, "move_head_split", False))
@@ -1109,20 +1400,29 @@ def main() -> int:
     elif args.trainer_state and os.path.isfile(args.trainer_state):
         # trainer.pt 的 model state 是 strict 加载：老 state 没有 card_head 时不能
         # 在加载前追加（会 unexpected key），因此 trainer-state 路径要求 state 已含该头。
+        # 尺寸必须与 state 一致：--d-model/--n-layers/--n-heads 在这里**必须**生效
+        # （否则会按默认 384×8 建网，667k 的 state 直接 size mismatch 报错）。
+        _size = _net_size_kwargs(args)
         model = build_net(arch=args.arch, seq_head=seq_enabled,
-                          bc_card_head=False)
+                          bc_card_head=False, **_size)
+        if _size:
+            print(f"[net] trainer-state 重建 {args.arch} {_size}", flush=True)
         if int(args.move_head_split):
             print("[warn] --trainer-state 路径按 state 的架构加载；--move-head-split 1 "
                   "只对 --checkpoint（model.pt）生效，本次忽略", flush=True)
-        meta = {"arch": args.arch}
+        meta = {"arch": args.arch, **_size}
         arch = args.arch
         print(f"[net] empty model for trainer-state={args.trainer_state}", flush=True)
     else:
+        _size = _net_size_kwargs(args)
         model = build_net(arch=args.arch, seq_head=seq_enabled,
                           bc_card_head=bc_card_head,
-                          move_head_split=bool(int(args.move_head_split)))
-        meta = {"arch": args.arch}
+                          move_head_split=bool(int(args.move_head_split)),
+                          **_size)
+        meta = {"arch": args.arch, **_size}
         arch = args.arch
+        if _size:
+            print(f"[net] 从零构建 {args.arch} {_size}", flush=True)
     if bc_enabled and bc_card_head and getattr(model, "card_head", None) is None:
         print("[warn] 模型没有 card_head（trainer-state/旧 ckpt）：本次只用类型级 BC "
               "(bc_card_weight=0)", flush=True)
@@ -1471,6 +1771,71 @@ def main() -> int:
                         norm_mean=norm_mean, norm_std=norm_std)
         return tag, ckpt
 
+    def _dyn_step(decisions_done: int) -> Optional[Dict[str, Any]]:
+        """动态课程一步：跑**真实强度口径**面板（5 席 × p0.9，96 局），按 t15 Σ 加减席。
+
+        规则（Lead 定，可配置）：起点 `--dyn-start-seats` 席 × `--dyn-p`；
+        - 若 `S15 >= last_S15 × (1 + +threshold)` 且 `seats < --dyn-max-seats` ⇒ **加一席**；
+        - 若 `seats > start` 且 `S15 < last_S15 × (1 - threshold)` ⇒ **退一席**，
+          并保持 `--dyn-hold-decisions` 不再加席；
+        - 主判据用真实口径，训练剂量只作参考。
+        结果写 `out/dynamic_curriculum.json`，并进 `history.jsonl` 的 `ppo.dyn_curriculum`。
+        """
+        tag, ckpt = _save_eval_ckpt(decisions_done)
+        out_json = os.path.join(eval_dir, f"dyn_quality_{tag}.json")
+        cmd = [sys.executable, os.path.join(ROOT, "scripts", "quality_monitor.py"),
+               "--checkpoint", str(ckpt), "--arch", str(arch),
+               "--device", str(args.eval_device or args.device),
+               "--games", str(int(args.dyn_quality_games)), "--seed-base", "520000",
+               "--human-boards", str(args.human_boards),
+               "--human-board-p", "0.9", "--human-board-seats", "5",
+               "--human-board-fidelity", "full", "--human-board-sample", "auto",
+               "--human-board-set-tier", "1", "--human-board-fast-inject", "1",
+               "--move-guard", "1", "--move-cap", "3", "--move-repeat-limit", "2",
+               "--out", str(out_json)]
+        try:
+            _t = time.time()
+            subprocess.run(cmd, check=False, timeout=1800)
+            with open(out_json, encoding="utf-8") as f:
+                q = json.load(f)
+            s15 = float((q.get("infer_search") or {}).get("strength_t15_p50") or 0.0)
+        except BaseException as exc:  # noqa: BLE001 - 质量面板失败不能中断训练
+            print(f"[dyn] 真实强度面板失败（本点跳过）：{exc!r}", flush=True)
+            return None
+        last = _dyn["last_s15"]
+        act = "hold"
+        thr = float(args.dyn_threshold)
+        if last is not None and s15 >= last * (1.0 + thr) \
+                and _dyn["seats"] < int(args.dyn_max_seats) \
+                and cum_decisions >= _dyn["hold_until"]:
+            _dyn["seats"] += 1
+            act = "up"
+        elif last is not None and s15 < last * (1.0 - thr) \
+                and _dyn["seats"] > int(args.dyn_start_seats):
+            _dyn["seats"] -= 1
+            _dyn["hold_until"] = cum_decisions + float(args.dyn_hold_decisions)
+            act = "down"
+        rec = {"decisions": int(decisions_done), "s15_real": s15,
+               "last_s15_real": last, "seats": int(_dyn["seats"]),
+               "action": act, "seconds": round(time.time() - _t, 1),
+               "quality_json": out_json,
+               "tier_t15": q.get("tier_p50_t15"),
+               "death_turn_p50": q.get("death_turn_p50"),
+               "survive_t12": q.get("survive_t12_ratio"),
+               "mean_rank": q.get("mean_rank")}
+        _dyn["last_s15"] = s15
+        _dyn["history"].append(rec)
+        try:
+            write_json_atomic(os.path.join(args.out, "dynamic_curriculum.json"),
+                              {"seats": int(_dyn["seats"]), "p": float(args.dyn_p),
+                               "history": _dyn["history"]})
+        except BaseException:  # noqa: BLE001
+            pass
+        print(f"[dyn] dec={decisions_done} S15_real={s15:.0f} (last={last}) "
+              f"seats={_dyn['seats']} action={act} tier_t15={rec['tier_t15']} "
+              f"death={rec['death_turn_p50']}", flush=True)
+        return rec
+
     def _post_eval(rec: Dict[str, Any]) -> None:
         """评测结果后处理（同步/异步共用，异步时在 monitor 线程执行）。"""
         panel = str(rec.get("panel") or "bot")
@@ -1664,7 +2029,11 @@ def main() -> int:
             seed=int(args.seed), threads=int(args.threads),
             batch_size=int(args.batch_size),
             max_wait_ms=float(args.leaf_wait_ms),
-            tmpdir=os.path.join(args.out, "_proc_tmp"))
+            tmpdir=os.path.join(args.out, "_proc_tmp"),
+            ipc_mode=str(args.ipc_mode),
+            records_dtype=str(args.records_dtype),
+            shm_slots=int(args.ipc_shm_slots),
+            collect_sha=bool(int(args.collect_sha)))
         print(f"[pool] {json.dumps(pool.describe(), ensure_ascii=False)}", flush=True)
         if eval_async and str(eval_device).startswith("cuda"):
             try:
@@ -1700,8 +2069,15 @@ def main() -> int:
         os.replace(tmp, path)
         published["version"], published["path"] = int(version), path
         keep = max(2, int(args.keep_versions))
-        olds = sorted(glob.glob(os.path.join(weights_dir, "w_*.pt")))
+        # 按**写入时间**裁剪，而不是按版本号字符串排序：续训时 trainer.updates 会**回落到
+        # checkpoint 里的版本**（如 501），而目录里已有更高版本（536–538）；按名字排序会把
+        # 刚写出的 w_000501.pt 当成"最旧"删掉 ⇒ 第一个 iteration 采集直接
+        # FileNotFoundError（本 run 踩过）。刚发布的文件永不删。
+        olds = sorted(glob.glob(os.path.join(weights_dir, "w_*.pt")),
+                      key=lambda p: os.path.getmtime(p))
         for old in olds[:-keep]:
+            if os.path.abspath(old) == os.path.abspath(path):
+                continue
             try:
                 os.remove(old)
             except OSError:
@@ -1742,6 +2118,11 @@ def main() -> int:
         # 对手强度课程：按**已累计 learner decisions** 求本 iteration 生效的
         # seats/p/sample（空 spec -> 原样返回 CLI 值，逐位等价）。
         _hb_state = board_ramp.state(cum_decisions)
+        # 动态课程（--dyn-curriculum 1）覆盖阶段式的 seats/p；其余（sample/quantile）不变。
+        _hb_seats, _hb_p = int(_hb_state.seats), float(_hb_state.p)
+        if int(args.dyn_curriculum) > 0:
+            _hb_seats = int(_dyn["seats"])
+            _hb_p = float(args.dyn_p)
         c_cfg = CollectConfig(
             games=int(args.games), seed=int(args.seed) + idx * 1000,
             opponent=str(args.opponent), behavior=str(args.behavior),
@@ -1763,8 +2144,8 @@ def main() -> int:
             mirror_p_ramp=str(args.mirror_p_ramp),
             mirror_seat_random=bool(int(args.mirror_seat_random)),
             human_boards=str(args.human_boards),
-            human_board_p=float(_hb_state.p),
-            human_board_seats=int(_hb_state.seats),
+            human_board_p=_hb_p,
+            human_board_seats=_hb_seats,
             human_board_sample=str(_hb_state.sample),
             human_board_set_tier=bool(int(args.human_board_set_tier)),
             human_board_fidelity=str(args.human_board_fidelity),
@@ -1880,6 +2261,12 @@ def main() -> int:
     last_len = 0.0
     executor = ThreadPoolExecutor(max_workers=1) if pipeline_on else None
     pending = None
+    #: critic 预热只在**第一个 iteration** 做一次（--value-warmup-iters>0 时）
+    _value_warmed = False
+    #: 动态课程状态（--dyn-curriculum 1 时生效；默认 seats=0 表示不覆盖）
+    _dyn: Dict[str, Any] = {"seats": int(args.dyn_start_seats) if int(args.dyn_curriculum) > 0 else 0,
+                            "last_s15": None, "hold_until": 0.0, "history": []}
+    _vwarm: Optional[Dict[str, Any]] = None
     if executor is not None:
         pending = executor.submit(_collect_for, i, published["version"], published["path"])
         print(f"[pipeline] on：collect(k+1) 与 update(k) 并行；"
@@ -1921,6 +2308,18 @@ def main() -> int:
                 print(f"[error] batch invalid: {errs}", file=sys.stderr)
                 return 3
 
+            # ── 自定义奖励（--upgrade-reward / --win-only-reward / --strength-reward-coef）
+            # 必须放在 update 之前：改 rewards 后整批重算 advantages/returns。
+            # 三者默认全 0 ⇒ 本块不执行 ⇒ 逐位等价旧路径。
+            _rw: Optional[Dict[str, Any]] = None
+            if (float(args.upgrade_reward) > 0.0 or float(args.win_only_reward) > 0.0
+                    or float(args.strength_reward_coef) > 0.0):
+                _rw = _apply_custom_rewards(
+                    batch, upgrade_w=float(args.upgrade_reward),
+                    win_w=float(args.win_only_reward),
+                    strength_c=float(args.strength_reward_coef),
+                    gamma=float(args.gamma), lam=float(args.lam))
+
             batch_version = int(collect_meta.get("policy_version", -1))
             if batch_version < 0:  # 非 pool 路径
                 batch_version = int(trainer.updates)
@@ -1958,9 +2357,34 @@ def main() -> int:
             if bc_enabled:
                 # BC 系数 ramp：与 seq 同一进度口径（累计 decisions）
                 trainer.config.bc_coef = float(bc_schedule.coef(cum_decisions))
+            # ── critic 预热（--value-warmup-iters>0；默认 0 完全跳过）─────────────
+            # 放在**第一个 iteration 的 update 之前**：此时批次来自（预热的）策略、还没被
+            # 随机 critic 的噪声梯度动过，用它校准 critic 头最干净。
+            # `--value-warmup-every N>0` 时每 N 个 iteration 再重热一次：实测一次预热的效果
+            # 会被后续 PPO 的 trunk 漂移抹掉（rank-CE 0.90→2.4），长训练需要周期性重热。
+            _vw_due = False
+            if int(args.value_warmup_iters) > 0:
+                if not _value_warmed:
+                    _value_warmed = True
+                    _vw_due = True
+                elif (int(args.value_warmup_every) > 0 and i > int(start_i)
+                      and (i % int(args.value_warmup_every)) == 0):
+                    _vw_due = True
+            if _vw_due:
+                _vwarm = _value_warmup(
+                    trainer, batch,
+                    iters=int(args.value_warmup_iters),
+                    lr=float(args.value_warmup_lr),
+                    minibatch=int(args.value_warmup_minibatch),
+                    seed=int(args.seed))
             _t_ppo = time.time()
             _tl["t_ppo_start"] = time.monotonic()
             stats = trainer.update(batch)
+            if _rw is not None:
+                stats["custom_rewards"] = dict(_rw)
+            if _vwarm is not None:
+                stats["value_warmup"] = dict(_vwarm)
+                _vwarm = None
             # 塑形可观测性：history.jsonl 的 ppo 段带系数与实际 shaping 奖励均值。
             _cmeta = collect_meta.get("collect") if isinstance(collect_meta, dict) else None
             if not isinstance(_cmeta, dict):
@@ -2158,6 +2582,10 @@ def main() -> int:
                         _submit_eval(cum_decisions)
                 else:
                     _run_eval(cum_decisions)
+                # 动态课程：在主循环里**同步**跑一次真实强度口径面板（5 席 p0.9，~2–3 min），
+                # 按 t15 Σ 变化加/减席；结果写 out/dynamic_curriculum.json（默认关闭时不执行）。
+                if int(args.dyn_curriculum) > 0:
+                    _dyn_step(cum_decisions)
                 while next_eval <= cum_decisions:
                     next_eval += int(args.eval_every_decisions)
             last_len = time.time() - iter_start
