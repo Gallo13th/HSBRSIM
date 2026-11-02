@@ -218,7 +218,8 @@ def _net_size_kwargs(args: Any) -> Dict[str, int]:
 _REWARD_CARD_META_CACHE: Optional[Dict[str, Any]] = None
 
 
-def _attach_replication_bc_labels(batch: Any) -> Dict[str, Any]:
+def _attach_replication_bc_labels(batch: Any, *, want_upgrade: bool = False,
+                                  upgrade_turns: str = "2,5,7,9") -> Dict[str, Any]:
     """从 **obs 卡牌块**给 batch 写两条辅助 BC 标签（纯 numpy；不读 player_json）。
 
     - ``discover_bc_idx/w``：``card_choices`` 里含放大器/引擎卡 ⇒ 这些 ``choose`` 位为教师，
@@ -238,6 +239,14 @@ def _attach_replication_bc_labels(batch: Any) -> Dict[str, Any]:
         carr = carr.reshape(-1, 124)
     masks = np.asarray(batch.masks, dtype=bool)
     n = int(carr.shape[0])
+    feat = np.asarray(batch.features, dtype=np.float32)
+    _turns = np.asarray(batch.turns, dtype=np.float64)
+    _tier_p = feat[:, 10] * 6.0
+    _gold_p = feat[:, 7] * 10.0
+    _price_p = feat[:, 11] * 10.0
+    u_act = np.full(n, -1, dtype=np.int64)
+    u_w = np.zeros(n, dtype=np.float32)
+    n_up = 0
     d_idx = np.full((n, int(N_CHOICE)), -1, dtype=np.int64)
     d_w = np.zeros((n, int(N_CHOICE)), dtype=np.float32)
     t_act = np.full(n, -1, dtype=np.int64)
@@ -287,11 +296,116 @@ def _attach_replication_bc_labels(batch: Any) -> Dict[str, Any]:
                 n_trip += 1
             else:
                 n_pair += 1
+        # 升级曲线 BC（教师=脚本曲线）：t∈{2,5,7,9}、tier<curve、金币够、upgrade 合法
+        _tt = float(_turns[i])
+        _turns_set = {float(x) for x in str(upgrade_turns).split(",") if x.strip()}
+        if want_upgrade and _tt in _turns_set and bool(mk[3]) \
+                and float(_gold_p[i]) >= float(_price_p[i]):
+            _tg = {2.0: 2.0, 5.0: 3.0, 7.0: 4.0, 9.0: 5.0}[_tt]
+            if float(_tier_p[i]) < _tg - 1e-6:
+                u_act[i] = 3
+                u_w[i] = 1.0
+                n_up += 1
     batch.discover_bc_idx = d_idx
     batch.discover_bc_w = d_w
     batch.triple_bc_action = t_act
     batch.triple_bc_w = t_w
-    return {"discover_states": n_disc, "triple_states": n_trip, "pair_states": n_pair}
+    batch.upgrade_bc_action = u_act
+    batch.upgrade_bc_w = u_w
+    return {"discover_states": n_disc, "triple_states": n_trip, "pair_states": n_pair,
+            "upgrade_states": n_up}
+
+
+_COMP_FIT_CACHE: Dict[str, Any] = {}
+
+
+def _comp_fit_tables() -> Dict[str, Any]:
+    """T1 阵容适配度表：26 套可实现的 core/enabler/trinkets/type_min（懒加载）。"""
+    if _COMP_FIT_CACHE:
+        return _COMP_FIT_CACHE
+    import hsbg.env.obs_std as O  # noqa: PLC0415
+    roles_path = os.path.join(ROOT, "runs/comp_scripts/roles.json")
+    comps = []
+    if os.path.isfile(roles_path):
+        raw = json.load(open(roles_path, encoding="utf-8")).get("comps") or []
+        comps = [c for c in raw if c.get("implementable")]
+    # 供给可达性：core_appear>=5% 的套才进 T1 候选（runs/comp_scripts/supply.json）
+    _supply = os.path.join(ROOT, "runs/comp_scripts/supply.json")
+    if os.path.isfile(_supply) and comps:
+        try:
+            _reach = set(int(x) for x in json.load(
+                open(_supply, encoding="utf-8")).get("reachable") or [])
+            _sel = [c for c in comps if int(c.get("idx", -1)) in _reach]
+            if _sel:
+                comps = _sel
+        except BaseException:  # noqa: BLE001
+            pass
+    type_min_map: Dict[str, int] = {}
+    try:
+        import importlib.util as _iu  # noqa: PLC0415
+        _spec = _iu.spec_from_file_location(
+            "comp_scripts_t1", os.path.join(ROOT, "scripts", "comp_scripts.py"))
+        _cs = _iu.module_from_spec(_spec)
+        _spec.loader.exec_module(_cs)  # type: ignore[union-attr]
+        type_min_map = {str(sp.name): int(sp.type_min) for sp in _cs.COMPS.values()}
+    except BaseException:  # noqa: BLE001
+        type_min_map = {}
+    cards = json.load(open(os.path.join(ROOT, "data/p2/cards_37.json"), encoding="utf-8"))
+    if isinstance(cards, dict):
+        cards = cards.get("cards") or cards.get("data") or list(cards.values())
+    by_id = {str(c["id"]): c for c in cards if isinstance(c, dict) and c.get("id")}
+    import hsbg_engine as _E  # noqa: PLC0415
+    cid2id = {int(c["cid"]): str(c["id"]) for c in json.loads(_E.catalog_json())}
+    id2cid = {v: k for k, v in cid2id.items()}
+
+    def _cid_set(items) -> np.ndarray:
+        out = set()
+        for x in items or []:
+            if isinstance(x, (list, tuple)) and x:
+                x = x[0]
+            if not isinstance(x, str):
+                continue
+            for cand in (x, x[:-2] if x.endswith("_G") else x + "_G"):
+                c = id2cid.get(cand)
+                if c is not None:
+                    out.add(int(c))
+        return np.asarray(sorted(out), dtype=np.int64)
+
+    races = list(O.RACE_NAMES)
+    race_bit = {r: (1 << i) for i, r in enumerate(races)}
+    max_cid = max(cid2id) + 2 if cid2id else 0
+    race_lut = np.zeros(max_cid + 1, dtype=np.int64)
+    for cid, sid in cid2id.items():
+        c = by_id.get(sid) or {}
+        rr = c.get("races") or []
+        m = 0
+        if isinstance(rr, list):
+            for r in rr:
+                m |= race_bit.get(str(r), 0)
+        race_lut[int(cid)] = m
+    pop = np.zeros(64, dtype=np.int64)
+    for i in range(64):
+        pop[i] = i
+    pc = np.array([bin(int(v)).count("1") for v in range(1 << len(races))], dtype=np.int64)
+    _COMP_FIT_CACHE.update({
+        "comps": [{
+            "name": str(c.get("name")),
+            "core": _cid_set(c.get("core")),
+            "enabler": _cid_set(c.get("enabler")),
+            "trinkets": set(str(t) for t in (c.get("trinkets") or [])),
+            "type_min": max(1, int(type_min_map.get(str(c.get("name")), 4))),
+        } for c in comps],
+        "race_lut": race_lut,
+        "pc": pc,
+        "trinket_kind": int(O.PENDING_KIND_NAMES.index("trinket")),
+        "slice_pending": int(O.SLICE_PENDING.start),
+        "slice_card_choices": O.SLICE_CARD_CHOICES,
+        "exp_tier": np.asarray([max([k for k, t0 in
+                                     ((1, 1), (2, 3), (3, 5), (4, 6), (5, 8), (6, 10))
+                                     if t >= t0] or [1]) for t in range(0, 30)],
+                               dtype=np.float64),
+    })
+    return _COMP_FIT_CACHE
 
 
 def _reward_card_meta() -> Dict[str, Any]:
@@ -326,7 +440,15 @@ def _reward_card_meta() -> Dict[str, Any]:
             return 1.0 if sid in eng else 0.0
         return 0.0
 
-    _REWARD_CARD_META_CACHE = {"score": score}
+    _base_stats = {}
+    for c in cards:
+        if isinstance(c, dict) and c.get("id") and c.get("atk") is not None:
+            _base_stats[str(c["id"])] = (float(c["atk"]), float(c["hp"]))
+    _REWARD_CARD_META_CACHE = {
+        "score": score,
+        "tier_of": lambda cid: int(tier.get(cid2id.get(int(cid), ""), 0)),
+        "base_of": lambda cid: _base_stats.get(cid2id.get(int(cid), ""), (0.0, 0.0)),
+    }
     return _REWARD_CARD_META_CACHE
 
 
@@ -335,6 +457,17 @@ def _apply_custom_rewards(batch: Any, *, upgrade_w: float = 0.0,
                           golden_w: float = 0.0, golden_t5_w: float = 0.0,
                           amp_board_w: float = 0.0, engine_board_w: float = 0.0,
                           survive_t12_w: float = 0.0,
+                          t5plus_stat_w: float = 0.0,
+                          tier_timing_w: float = 0.0,
+                          cheap_buy_p: float = 0.0,
+                          t5plus_buff_w: float = 0.0,
+                          tier_mix_w: float = 0.0,
+                          lowtier_stat_p: float = 0.0,
+                          comp_fit_c: float = 0.0,
+                          comp_fit_t9_bonus: float = 0.0,
+                          comp_trinket_c: float = 0.0,
+                          t1p_coef: float = 0.0,
+                          t1s_coef: float = 0.0,
                           gamma: float, lam: float) -> Optional[Dict[str, Any]]:
     """**默认全部关闭**的奖励改造；一次改 rewards 后**整批重算 GAE**。
 
@@ -434,8 +567,429 @@ def _apply_custom_rewards(batch: Any, *, upgrade_w: float = 0.0,
         surv_hit = dones & (turns >= 12)
         delta[surv_hit] += float(survive_t12_w)
         n_surv = int(surv_hit.sum())
+    # 终局「t5+ 身材占比」直接奖励（默认 0）：obs board 块 tier/6 编码，atk/hp ×10 还原
+    n_t5stat = 0
+    _t5_share_mean = 0.0
+    if float(t5plus_stat_w) > 0.0:
+        try:
+            arr = np.asarray(batch.features, dtype=np.float32)
+            b = arr[:, 68:285].reshape(arr.shape[0], 7, 31)
+            present = b[:, :, 0] > 0.5
+            val = np.where(present, b[:, :, 1] + b[:, :, 2], 0.0) * 10.0
+            tot = val.sum(axis=1)
+            t5val = np.where(present & (b[:, :, 4] * 6.0 >= 5.0 - 1e-4), val, 0.0).sum(axis=1)
+            share = np.where(tot > 1e-6, t5val / np.maximum(tot, 1e-6), 0.0)
+            dones = np.asarray(batch.dones, dtype=np.float32) > 0.5
+            delta[dones] += float(t5plus_stat_w) * share[dones]
+            n_t5stat = int(dones.sum())
+            if n_t5stat:
+                _t5_share_mean = float(np.mean(share[dones]))
+        except BaseException:  # noqa: BLE001
+            pass
+    # 升星时点奖励（默认 0）：t<=10 首次达到 tier>=5、t<=12 首次达到 tier>=6，按回合折扣
+    n_t5tim = n_t6tim = 0
+    if float(tier_timing_w) > 0.0:
+        try:
+            arr = np.asarray(batch.features, dtype=np.float32)
+            tier_raw = arr[:, 10] * 6.0          # global['tier'] = tier/6
+            turns_arr = np.asarray(batch.turns, dtype=np.float64)
+            eps = np.asarray(batch.episode_ids)
+            bounds = np.flatnonzero(np.diff(eps) != 0) + 1
+            starts = np.concatenate(([0], bounds))
+            ends = np.concatenate((bounds, [n]))
+            for s_, e_ in zip(starts.tolist(), ends.tolist()):
+                t = turns_arr[s_:e_]
+                for thr, tmax in ((5.0, 10.0), (6.0, 12.0)):
+                    hit = np.flatnonzero((tier_raw[s_:e_] >= thr - 0.01) & (t <= tmax))
+                    if hit.size:
+                        i0 = s_ + int(hit[0])
+                        tt = float(turns_arr[i0])
+                        disc = max(0.20, 1.0 - (tt - 1.0) / 15.0)
+                        delta[i0] += float(tier_timing_w) * disc
+                        if thr < 5.5:
+                            n_t5tim += 1
+                        else:
+                            n_t6tim += 1
+        except BaseException:  # noqa: BLE001
+            pass
+    # 便宜牌惩罚（默认 0）：buy tier<=3 随从时 -P
+    n_cheap = 0
+    if float(cheap_buy_p) > 0.0:
+        try:
+            acts = np.asarray(batch.actions, dtype=np.int64)
+            carr2 = np.asarray(batch.cards)
+            if carr2.ndim == 1:
+                carr2 = carr2.reshape(-1, 124)
+            shop_cid = carr2[:, 36:44].astype(np.int64) - 1
+            meta2 = _reward_card_meta()
+            buy = (acts >= 8) & (acts < 16)
+            for i in np.flatnonzero(buy):
+                slot = int(acts[i]) - 8
+                if 0 <= slot < shop_cid.shape[1]:
+                    cid = int(shop_cid[i, slot])
+                    if cid >= 0 and meta2["tier_of"](cid) <= 3:
+                        delta[i] -= float(cheap_buy_p)
+                        n_cheap += 1
+        except BaseException:  # noqa: BLE001
+            pass
+    # 终局「落在 tier>=5 随从身上的永久 buff 量」奖励（默认 0）：
+    # buff = Σ(实际 atk+hp − 卡面基础 atk/hp)，仅统计 present 且 tier>=5 的随从；
+    # 归一化 buff/200（clamp 3.0）后 × W，只在 episode 末决策给。
+    n_t5buff = 0
+    _t5buff_mean = 0.0
+    if float(t5plus_buff_w) > 0.0:
+        try:
+            from hsbg.env.obs_std import SLICE_CARD_BOARD  # noqa: PLC0415
+            arr2 = np.asarray(batch.features, dtype=np.float32)
+            b2 = arr2[:, 68:285].reshape(arr2.shape[0], 7, 31)
+            carr3 = np.asarray(batch.cards, dtype=np.int64)
+            if carr3.ndim == 1:
+                carr3 = carr3.reshape(-1, 124)
+            bcids = carr3[:, SLICE_CARD_BOARD] - 1
+            meta3 = _reward_card_meta()
+            dones = np.asarray(batch.dones, dtype=np.float32) > 0.5
+            _bufs = []
+            for i in np.flatnonzero(dones):
+                s_buf = 0.0
+                for j in range(b2.shape[1]):
+                    if b2[i, j, 0] <= 0.5:           # not present
+                        continue
+                    if b2[i, j, 4] * 6.0 < 5.0 - 1e-4:  # tier < 5
+                        continue
+                    cid = int(bcids[i, j])
+                    if cid < 0:
+                        continue
+                    ba, bh = meta3["base_of"](cid)
+                    s_buf += (b2[i, j, 1] * 10.0 - ba) + (b2[i, j, 2] * 10.0 - bh)
+                norm = min(max(s_buf, 0.0) / 200.0, 3.0)
+                if s_buf > 0.0:
+                    delta[i] += float(t5plus_buff_w) * norm
+                    n_t5buff += 1
+                _bufs.append(s_buf)
+            if _bufs:
+                _t5buff_mean = float(np.mean(_bufs))
+        except BaseException:  # noqa: BLE001
+            pass
+    # 盘面构成奖励（默认 0）：终局 tier>=5 占 7 槽位比例 ×W；tier<=3 身材占比 ×P 扣分
+    n_mix = n_lowstat = 0
+    _mix_mean = 0.0
+    _lowstat_mean = 0.0
+    if float(tier_mix_w) > 0.0 or float(lowtier_stat_p) > 0.0:
+        try:
+            arr4 = np.asarray(batch.features, dtype=np.float32)
+            b4 = arr4[:, 68:285].reshape(arr4.shape[0], 7, 31)
+            dones4 = np.asarray(batch.dones, dtype=np.float32) > 0.5
+            mixes = []
+            lows = []
+            for i in np.flatnonzero(dones4):
+                present = b4[i, :, 0] > 0.5
+                tiers = b4[i, :, 4] * 6.0
+                stats = np.where(present, (b4[i, :, 1] + b4[i, :, 2]) * 10.0, 0.0)
+                n_t5 = int(np.sum(present & (tiers >= 5.0 - 1e-4)))
+                tot = float(stats.sum())
+                low = float(np.where(present & (tiers <= 3.0 + 1e-4), stats, 0.0).sum())
+                mix = n_t5 / 7.0
+                lowshare = low / max(tot, 1e-9)
+                if float(tier_mix_w) > 0.0:
+                    delta[i] += float(tier_mix_w) * mix
+                    n_mix += 1
+                if float(lowtier_stat_p) > 0.0:
+                    delta[i] -= float(lowtier_stat_p) * lowshare
+                    n_lowstat += 1
+                mixes.append(mix); lows.append(lowshare)
+            if mixes:
+                _mix_mean = float(np.mean(mixes))
+            if lows:
+                _lowstat_mean = float(np.mean(lows))
+        except BaseException:  # noqa: BLE001
+            pass
+    # T1：阵容适配度（comp_fit）。默认 0 = 不计算、逐位等价。
+    n_cf = 0
+    _cf_fit9_mean = 0.0
+    _cf_trinket_hits = 0
+    if float(comp_fit_c) > 0.0 or float(comp_fit_t9_bonus) > 0.0 or float(comp_trinket_c) > 0.0:
+        try:
+            import hsbg.env.obs_std as _O  # noqa: PLC0415
+            _T = _comp_fit_tables()
+            _feat = np.asarray(batch.features, dtype=np.float32)
+            _n = _feat.shape[0]
+            _carr = np.asarray(batch.cards, dtype=np.int64)
+            if _carr.ndim == 1:
+                _carr = _carr.reshape(-1, 124)
+            _board = np.maximum(_carr[:, _O.SLICE_CARD_BOARD] - 1, -1)
+            _hand = np.maximum(_carr[:, _O.SLICE_CARD_HAND] - 1, -1)
+            _tier = _feat[:, _O.GLOBAL_FIELD_INDEX["tier"]] * 6.0
+            _turns = np.asarray(batch.turns, dtype=np.float64)
+            _eps = np.asarray(batch.episode_ids)
+            _lut = _T["race_lut"]
+            _bm = _lut[np.clip(_board, 0, len(_lut) - 1)]
+            _bm = np.where(_board >= 0, _bm, 0)
+            _race_or = np.bitwise_or.reduce(_bm, axis=1)
+            _nraces = _T["pc"][np.clip(_race_or, 0, len(_T["pc"]) - 1)]
+            _exp_t = _T["exp_tier"][np.clip(_turns.astype(np.int64), 0, len(_T["exp_tier"]) - 1)]
+            _fit = np.zeros((_n, len(_T["comps"])), dtype=np.float64)
+            for _ci, _c in enumerate(_T["comps"]):
+                _nc = np.isin(_board, _c["core"]).sum(1) + np.isin(_hand, _c["core"]).sum(1)
+                _ne = np.isin(_board, _c["enabler"]).sum(1) + np.isin(_hand, _c["enabler"]).sum(1)
+                _fit[:, _ci] = (0.30 * np.minimum(1.0, _nc)
+                                + 0.25 * np.minimum(1.0, _ne / 2.0)
+                                + 0.20 * np.minimum(1.0, _nraces / float(_c["type_min"]))
+                                + 0.25 * (_tier >= _exp_t))
+            _fitmax = _fit.max(axis=1)
+            _best = _fit.argmax(axis=1)
+            # 逐 episode：t<=9 的 Δfit 密集项 + t9 终局项
+            _bounds = np.flatnonzero(np.diff(_eps) != 0) + 1
+            _starts = np.concatenate(([0], _bounds))
+            _ends = np.concatenate((_bounds, [_n]))
+            for _s, _e in zip(_starts.tolist(), _ends.tolist()):
+                _prev = 0.0
+                _last_le9 = None
+                for _i in range(_s, _e):
+                    if _turns[_i] <= 9.0:
+                        if float(comp_fit_c) > 0.0:
+                            delta[_i] += float(comp_fit_c) * (float(_fitmax[_i]) - _prev)
+                        _prev = float(_fitmax[_i])
+                        _last_le9 = _i
+                if float(comp_fit_t9_bonus) > 0.0 and _last_le9 is not None:
+                    delta[_last_le9] += float(comp_fit_t9_bonus) * float(_fitmax[_last_le9])
+                    n_cf += 1
+                    _cf_fit9_mean += float(_fitmax[_last_le9])
+            # 饰品项：t6/t9 的 trinket pending 里，选中项 ∈ 当时 best-fit 套的关键饰品
+            if float(comp_trinket_c) > 0.0:
+                _acts = np.asarray(batch.actions, dtype=np.int64)
+                _pend = _feat[:, _T["slice_pending"] + _T["trinket_kind"]]
+                _ch = _carr[:, _T["slice_card_choices"]]
+                for _i in np.flatnonzero((_pend > 0.5) & (_acts >= 30) & (_acts < 46)):
+                    _idx = int(_acts[_i]) - 30
+                    if 0 <= _idx < _ch.shape[1]:
+                        _cid = int(_ch[_i, _idx]) - 1
+                        from hsbg_engine import catalog_json as _cj  # noqa: PLC0415
+                        _key = _T["comps"][int(_best[_i])]["trinkets"]
+                        # cid -> id 用懒映射（只在这条分支上做）
+                        _m = _COMP_FIT_CACHE.get("cid2id")
+                        if _m is None:
+                            _m = {int(c["cid"]): str(c["id"])
+                                  for c in json.loads(_cj())}
+                            _COMP_FIT_CACHE["cid2id"] = _m
+                        _sid = _m.get(_cid)
+                        if _sid is not None and _sid in _key:
+                            delta[_i] += float(comp_trinket_c)
+                            _cf_trinket_hits += 1
+            if n_cf:
+                _cf_fit9_mean /= float(n_cf)
+        except BaseException:  # noqa: BLE001 - 奖励改造失败不能中断训练
+            pass
+    # T1s：每回合密集 shaping（tier 曲线 0.30 / 金币>=3 0.10 / 种族收敛 0.10 / t>=10 存活 0.20）
+    n_t1s = 0
+    _t1s = {"tier_ok": 0, "gold_ok": 0, "races_ok": 0, "alive_late": 0,
+            "t9_tier": [], "t9_sig": [], "death": [], "upg_elig": 0, "upg_hit": 0,
+            "upg_games": 0, "upg_per_game": 0.0, "buy_per_game": 0.0,
+            "t9_gold_mean": None, "gold_after_upg_mean": None,
+            "buys_upg_turn_mean": None}
+    if float(t1s_coef) > 0.0:
+        try:
+            import hsbg.env.obs_std as _O3  # noqa: PLC0415
+            _f3 = np.asarray(batch.features, dtype=np.float32)
+            _n3 = _f3.shape[0]
+            _bb3 = _f3[:, _O3.SLICE_BOARD].reshape(_n3, _O3.N_BOARD, _O3.MINION_F)
+            _pres3 = _bb3[:, :, _O3.MINION_PRESENT] > 0.5
+            _sig3 = np.where(_pres3, (_bb3[:, :, _O3.MINION_ATK]
+                                      + _bb3[:, :, _O3.MINION_HP]) * 10.0, 0.0).sum(axis=1)
+            _tier3 = _f3[:, _O3.GLOBAL_FIELD_INDEX["tier"]] * 6.0
+            _gold3 = _f3[:, _O3.GLOBAL_FIELD_INDEX["gold"]] * 10.0
+            _alive3 = _f3[:, _O3.GLOBAL_FIELD_INDEX["alive"]] * 8.0 >= 1.0
+            _race_start = int(_O3.MINION_RACES)
+            _races_bits = np.where(_pres3[:, :, None],
+                                   _bb3[:, :, _race_start:_race_start + 11] > 0.5, False)
+            _race_or = np.zeros((_n3, 11), dtype=bool)
+            for _k in range(11):
+                _race_or[:, _k] = _races_bits[:, :, _k].any(axis=1)
+            _nraces3 = _race_or.sum(axis=1)
+            _turns3 = np.asarray(batch.turns, dtype=np.float64)
+            _eps3 = np.asarray(batch.episode_ids)
+            _b3 = np.flatnonzero(np.diff(_eps3) != 0) + 1
+            _s3 = np.concatenate(([0], _b3))
+            _e3 = np.concatenate((_b3, [_n3]))
+            _curve3 = np.asarray([1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 5, 6], dtype=np.float64)
+            _acts3 = np.asarray(batch.actions, dtype=np.int64)
+            _mask3 = np.asarray(batch.masks, dtype=bool)
+            _price_g = _gold3 * 0.0 + _f3[:, _O3.GLOBAL_FIELD_INDEX["upgrade_price"]] * 10.0
+
+            def _tgt(ti: float) -> float:
+                k = int(min(max(int(ti), 0), len(_curve3) - 1))
+                return float(_curve3[k])
+            for _st, _en in zip(_s3.tolist(), _e3.tolist()):
+                _prev_races = None
+                _last = _en - 1
+                for _tt in sorted({int(x) for x in _turns3[_st:_en].tolist()}):
+                    _idxs = np.flatnonzero(_turns3[_st:_en] == float(_tt))
+                    if not _idxs.size:
+                        continue
+                    _ix = _st + int(_idxs[-1])
+                    _rew = 0.0
+                    if float(_tier3[_ix]) >= _tgt(_tt) - 1e-6:
+                        _rew += 0.30
+                        _t1s["tier_ok"] += 1
+                    if float(_gold3[_ix]) >= 3.0:
+                        _rew += 0.10
+                        _t1s["gold_ok"] += 1
+                    if _prev_races is not None and int(_nraces3[_ix]) <= int(_prev_races):
+                        _rew += 0.10
+                        _t1s["races_ok"] += 1
+                    if bool(_alive3[_ix]) and _tt >= 10:
+                        _rew += 0.20
+                        _t1s["alive_late"] += 1
+                    if _rew:
+                        delta[_ix] += float(t1s_coef) * _rew
+                    _prev_races = int(_nraces3[_ix])
+                    if _tt == 9:
+                        _t1s["t9_tier"].append(float(_tier3[_ix]))
+                        _t1s["t9_sig"].append(float(_sig3[_ix]))
+                _t1s["death"].append(float(_turns3[_last]))
+                n_t1s += 1
+            _tgt_all = _curve3[np.clip(_turns3.astype(np.int64), 0, len(_curve3) - 1)]
+            _elig = np.isin(_turns3, (2.0, 5.0, 7.0, 9.0)) & _mask3[:, 3] \
+                & (_gold3 >= _price_g) & (_tier3 < _tgt_all - 1e-6)
+            _t1s["upg_elig"] = int(_elig.sum())
+            _t1s["upg_hit"] = int((_elig & (_acts3 == 3)).sum())
+            # 分支 2 观测：每局升级数/买牌数、t9 gold、升级后金币、升级回合买牌数
+            _upg_mask = (_acts3 == 3)
+            _buy_mask = (_acts3 >= 8) & (_acts3 < 16)
+            _gold_after, _buys_upg_turn, _t9golds = [], [], []
+            _upg_counts, _buy_counts = [], []
+            for _st, _en in zip(_s3.tolist(), _e3.tolist()):
+                _upg_counts.append(int(_upg_mask[_st:_en].sum()))
+                _buy_counts.append(int(_buy_mask[_st:_en].sum()))
+                _t9g = None
+                _idxs9 = np.flatnonzero(_turns3[_st:_en] == 9.0)
+                if _idxs9.size:
+                    _t9g = float(_gold3[_st + int(_idxs9[-1])])
+                    _t9golds.append(_t9g)
+                for _iu in np.flatnonzero(_upg_mask[_st:_en]):
+                    _gi = _st + int(_iu)
+                    if _gi + 1 < _en and float(_turns3[_gi + 1]) == float(_turns3[_gi]):
+                        _gold_after.append(float(_gold3[_gi + 1]))
+                    _same = _buy_mask[_st:_en] & (_turns3[_st:_en] == float(_turns3[_gi]))
+                    _buys_upg_turn.append(int(_same.sum()))
+            _t1s["upg_games"] = int(sum(1 for x in _upg_counts if x > 0))
+            _t1s["upg_per_game"] = float(np.mean(_upg_counts)) if _upg_counts else 0.0
+            _t1s["buy_per_game"] = float(np.mean(_buy_counts)) if _buy_counts else 0.0
+            _t1s["t9_gold_mean"] = float(np.mean(_t9golds)) if _t9golds else None
+            _t1s["gold_after_upg_mean"] = float(np.mean(_gold_after)) if _gold_after else None
+            _t1s["buys_upg_turn_mean"] = float(np.mean(_buys_upg_turn)) if _buys_upg_turn else None
+        except BaseException:  # noqa: BLE001
+            pass
+    # T1'：t1-9 经济与存活里程碑（二值 +1/-1，权重 tier .4 / sigma .3 / survive .2 / races .1）
+    n_t1p = 0
+    _t1p = {"tier8": 0, "tier9": 0, "sig7": 0, "sig9": 0, "surv": 0, "races": 0,
+            "t9_tier": [], "t9_sig": [], "death": [], "races9": []}
+    if float(t1p_coef) > 0.0:
+        try:
+            import hsbg.env.obs_std as _O2  # noqa: PLC0415
+            _f = np.asarray(batch.features, dtype=np.float32)
+            _n2 = _f.shape[0]
+            _bb = _f[:, _O2.SLICE_BOARD].reshape(_n2, _O2.N_BOARD, _O2.MINION_F)
+            _present = _bb[:, :, _O2.MINION_PRESENT] > 0.5
+            _sig = np.where(_present, (_bb[:, :, _O2.MINION_ATK]
+                                       + _bb[:, :, _O2.MINION_HP]) * 10.0, 0.0).sum(axis=1)
+            _tier_p = _f[:, _O2.GLOBAL_FIELD_INDEX["tier"]] * 6.0
+            _carr2 = np.asarray(batch.cards, dtype=np.int64)
+            if _carr2.ndim == 1:
+                _carr2 = _carr2.reshape(-1, 124)
+            _bcids = _carr2[:, _O2.SLICE_CARD_BOARD]
+            _T2 = _comp_fit_tables()
+            _cid2id2 = _COMP_FIT_CACHE.get("cid2id")
+            if _cid2id2 is None:
+                import hsbg_engine as _E2  # noqa: PLC0415
+                _cid2id2 = {int(c["cid"]): str(c["id"]) for c in json.loads(_E2.catalog_json())}
+                _COMP_FIT_CACHE["cid2id"] = _cid2id2
+            _cards2 = json.load(open(os.path.join(ROOT, "data/p2/cards_37.json"), encoding="utf-8"))
+            if isinstance(_cards2, dict):
+                _cards2 = _cards2.get("cards") or _cards2.get("data") or list(_cards2.values())
+            _by2 = {str(c["id"]): c for c in _cards2 if isinstance(c, dict) and c.get("id")}
+            _turns2 = np.asarray(batch.turns, dtype=np.float64)
+            _eps2 = np.asarray(batch.episode_ids)
+            _b2 = np.flatnonzero(np.diff(_eps2) != 0) + 1
+            _s2 = np.concatenate(([0], _b2))
+            _e2 = np.concatenate((_b2, [_n2]))
+            _w = {"tier": 0.4, "sig": 0.3, "surv": 0.2, "races": 0.1}
+            for _st, _en in zip(_s2.tolist(), _e2.tolist()):
+                _last = _en - 1
+                _lt = float(_turns2[_last])
+                _hit = {}
+                for _tt in (7, 8, 9):
+                    _idxs = np.flatnonzero(_turns2[_st:_en] == float(_tt))
+                    _hit[_tt] = (_st + int(_idxs[-1])) if _idxs.size else None
+                # 种族数（t9 或末回合）
+                _race_cnt = {}
+                for _tt, _idx in _hit.items():
+                    if _idx is None:
+                        continue
+                    _rr = set()
+                    for _c in _bcids[_idx]:
+                        _cid = int(_c) - 1
+                        if _cid < 0:
+                            continue
+                        _c_obj = _by2.get(_cid2id2.get(_cid, "")) or {}
+                        for _r in (_c_obj.get("races") or []):
+                            _rr.add(str(_r))
+                    _race_cnt[_tt] = len(_rr)
+                # t7 Σ>=200
+                if _hit[7] is not None:
+                    ok = float(_sig[_hit[7]]) >= 200.0
+                    delta[_hit[7]] += _w["sig"] * (1.0 if ok else -1.0)
+                    if ok:
+                        _t1p["sig7"] += 1
+                else:
+                    delta[_last] -= _w["sig"]
+                # t8 tier>=4
+                if _hit[8] is not None:
+                    ok = float(_tier_p[_hit[8]]) >= 4.0 - 1e-6
+                    delta[_hit[8]] += _w["tier"] * (1.0 if ok else -1.0)
+                    if ok:
+                        _t1p["tier8"] += 1
+                else:
+                    delta[_last] -= _w["tier"]
+                # t9: tier>=5 / Σ>=400 / races<=3
+                if _hit[9] is not None:
+                    _i9 = _hit[9]
+                    ok_t = float(_tier_p[_i9]) >= 5.0 - 1e-6
+                    delta[_i9] += _w["tier"] * (1.0 if ok_t else -1.0)
+                    if ok_t:
+                        _t1p["tier9"] += 1
+                    ok_s = float(_sig[_i9]) >= 400.0
+                    delta[_i9] += _w["sig"] * (1.0 if ok_s else -1.0)
+                    if ok_s:
+                        _t1p["sig9"] += 1
+                    _rc = int(_race_cnt.get(9, 99))
+                    ok_r = _rc <= 3
+                    delta[_i9] += _w["races"] * (1.0 if ok_r else -1.0)
+                    if ok_r:
+                        _t1p["races"] += 1
+                    _t1p["t9_tier"].append(float(_tier_p[_i9]))
+                    _t1p["t9_sig"].append(float(_sig[_i9]))
+                    _t1p["races9"].append(_rc)
+                else:
+                    delta[_last] -= (_w["tier"] + _w["sig"] + _w["races"])
+                # 存活：death/末回合 >=12
+                ok_d = _lt >= 12.0
+                delta[_last] += _w["surv"] * (1.0 if ok_d else -1.0)
+                if ok_d:
+                    _t1p["surv"] += 1
+                _t1p["death"].append(_lt)
+                n_t1p += 1
+        except BaseException:  # noqa: BLE001
+            pass
     if not (n_up or n_win or n_gold or n_gold5 or n_ampb or n_engb or n_surv
-            or float(strength_c) > 0.0):
+            or n_t5tim or n_t6tim or n_cheap or n_t5buff or n_mix or n_lowstat
+            or n_cf
+            or float(strength_c) > 0.0 or float(t5plus_stat_w) > 0.0
+            or float(tier_timing_w) > 0.0 or float(cheap_buy_p) > 0.0
+            or float(t5plus_buff_w) > 0.0 or float(tier_mix_w) > 0.0
+            or float(tier_mix_w) > 0.0 or float(lowtier_stat_p) > 0.0
+            or float(comp_fit_c) > 0.0 or float(comp_fit_t9_bonus) > 0.0
+            or float(comp_trinket_c) > 0.0 or float(t1p_coef) > 0.0
+            or float(t1s_coef) > 0.0):
         return None
     rewards = (np.asarray(batch.rewards, dtype=np.float64) + delta)
     adv, ret = compute_gae(rewards, np.asarray(batch.values, dtype=np.float64),
@@ -452,6 +1006,43 @@ def _apply_custom_rewards(batch: Any, *, upgrade_w: float = 0.0,
             "amp_board_w": float(amp_board_w), "amp_board_total": n_ampb,
             "engine_board_w": float(engine_board_w), "engine_board_total": n_engb,
             "survive_t12_w": float(survive_t12_w), "survive_t12_eps": n_surv,
+            "t5plus_stat_w": float(t5plus_stat_w), "t5plus_stat_eps": n_t5stat,
+            "t5plus_stat_share_mean": float(_t5_share_mean),
+            "tier_timing_w": float(tier_timing_w),
+            "tier5_timing_eps": n_t5tim, "tier6_timing_eps": n_t6tim,
+            "cheap_buy_p": float(cheap_buy_p), "cheap_buys": n_cheap,
+            "t5plus_buff_w": float(t5plus_buff_w), "t5plus_buff_eps": n_t5buff,
+            "t5plus_buff_sum_mean": float(_t5buff_mean),
+            "tier_mix_w": float(tier_mix_w), "tier_mix_eps": n_mix,
+            "tier_mix_mean": float(_mix_mean),
+            "lowtier_stat_p": float(lowtier_stat_p), "lowtier_stat_eps": n_lowstat,
+            "lowtier_stat_mean": float(_lowstat_mean),
+            "comp_fit_c": float(comp_fit_c), "comp_fit_eps": n_cf,
+            "comp_fit9_mean": float(_cf_fit9_mean),
+            "comp_fit_t9_bonus": float(comp_fit_t9_bonus),
+            "comp_trinket_c": float(comp_trinket_c),
+            "comp_trinket_hits": _cf_trinket_hits,
+            "t1p_coef": float(t1p_coef), "t1p_eps": n_t1p,
+            "t1p_tier8": _t1p["tier8"], "t1p_tier9": _t1p["tier9"],
+            "t1p_sig7": _t1p["sig7"], "t1p_sig9": _t1p["sig9"],
+            "t1p_surv": _t1p["surv"], "t1p_races": _t1p["races"],
+            "t1p_t9_tier_mean": (float(np.mean(_t1p["t9_tier"])) if _t1p["t9_tier"] else None),
+            "t1p_t9_sig_mean": (float(np.mean(_t1p["t9_sig"])) if _t1p["t9_sig"] else None),
+            "t1p_death_mean": (float(np.mean(_t1p["death"])) if _t1p["death"] else None),
+            "t1p_races9_mean": (float(np.mean(_t1p["races9"])) if _t1p["races9"] else None),
+            "t1s_coef": float(t1s_coef), "t1s_eps": n_t1s,
+            "t1s_tier_ok": _t1s["tier_ok"], "t1s_gold_ok": _t1s["gold_ok"],
+            "t1s_races_ok": _t1s["races_ok"], "t1s_alive_late": _t1s["alive_late"],
+            "t1s_t9_tier_mean": (float(np.mean(_t1s["t9_tier"])) if _t1s["t9_tier"] else None),
+            "t1s_t9_sig_mean": (float(np.mean(_t1s["t9_sig"])) if _t1s["t9_sig"] else None),
+            "t1s_death_mean": (float(np.mean(_t1s["death"])) if _t1s["death"] else None),
+            "t1s_upg_elig": _t1s["upg_elig"], "t1s_upg_hit": _t1s["upg_hit"],
+            "t1s_upg_games": _t1s.get("upg_games", 0),
+            "t1s_upg_per_game": _t1s.get("upg_per_game"),
+            "t1s_buy_per_game": _t1s.get("buy_per_game"),
+            "t1s_t9_gold_mean": _t1s.get("t9_gold_mean"),
+            "t1s_gold_after_upg_mean": _t1s.get("gold_after_upg_mean"),
+            "t1s_buys_upg_turn_mean": _t1s.get("buys_upg_turn_mean"),
             "reward_delta_sum": float(delta.sum()),
             "reward_delta_abs": float(np.abs(delta).sum())}
 
@@ -1037,13 +1628,51 @@ def main() -> int:
                     help="引擎卡（BG36_762/BG28_633/BG36_704/BG_LOE_077）在场数量增量（默认 0=关闭）")
     ap.add_argument("--survive-t12-reward", type=float, default=0.0,
                     help="活到 t12 的终局奖励（episode 末回合 >=12；默认 0=关闭）")
+    ap.add_argument("--t5plus-stat-reward", type=float, default=0.0,
+                    help="终局 (tier>=5 随从身材 / 全体身材) × W（默认 0=关闭）；"
+                         "tier 取自 obs 的 tier/6 编码")
+    ap.add_argument("--tier-timing-reward", type=float, default=0.0,
+                    help="升星时点奖励（默认 0=关闭）：t<=10 首次到 tier>=5、t<=12 首次到 "
+                         "tier>=6 各给 W×折扣（折扣 = max(0.2, 1-(turn-1)/15)）")
+    ap.add_argument("--cheap-buy-penalty", type=float, default=0.0,
+                    help="便宜牌惩罚（默认 0=关闭）：buy 一个 tier<=3 随从扣 P")
+    ap.add_argument("--t5plus-buff-reward", type=float, default=0.0,
+                    help="终局 tier>=5 随从的永久 buff 量奖励（默认 0=关闭）："
+                         "Σ(atk+hp − 卡面基础) 归一化 (/200, clamp 3) 后 × W")
+    ap.add_argument("--tier-mix-reward", type=float, default=0.0,
+                    help="终局 tier>=5 随从占 7 槽位比例 × W（默认 0=关闭，直接改盘面构成）")
+    ap.add_argument("--lowtier-stat-penalty", type=float, default=0.0,
+                    help="终局 tier<=3 随从身材占比 × P 扣分（默认 0=关闭，镜像项）")
+    ap.add_argument("--t1s-coef", type=float, default=0.0,
+                    help="T1s 密集 shaping：每回合 tier>=curve 0.30 + 金币>=3 0.10 + "
+                         "种族收敛 0.10 + t>=10 存活 0.20（默认 0=关）")
+    ap.add_argument("--t1p-coef", type=float, default=0.0,
+                    help="T1' 里程碑：t8 tier>=4 / t9 tier>=5 / t7 Σ>=200 / t9 Σ>=400 / "
+                         "death>=12 / t9 种族<=3，二值 +1/-1（权重 .4/.3/.2/.1；默认 0=关）")
+    ap.add_argument("--comp-fit-coef", type=float, default=0.0,
+                    help="T1：t1-9 每回合 Δcomp_fit × c（默认 0=关闭；comp_fit=对 26 套取 max）")
+    ap.add_argument("--comp-fit-t9-bonus", type=float, default=0.0,
+                    help="T1：t9（或末回合）终局 comp_fit × bonus（默认 0=关闭）")
+    ap.add_argument("--comp-trinket-coef", "--trinket-fit-reward", dest="comp_trinket_coef",
+                    type=float, default=0.0,
+                    help="饰品契合：t6/t9 trinket 选择命中 best-fit 套关键饰品 × w（默认 0=关闭）")
     # ── 复利结构选牌先验（**collect 侧**，纯 obs；默认 0 = 不构造对象 ⇒ 逐位等价）──
     ap.add_argument("--collect-discover-bias", type=float, default=0.0,
                     help="训练采集侧 Discover 先验：三连奖励 3 选 1 里含放大器/引擎卡时，"
                          "给对应 choose 位加该常数（默认 0=关闭，逐位等价）")
     ap.add_argument("--collect-triple-bias", type=float, default=0.0,
                     help="训练采集侧三连先验：能凑三连的 buy 位 +2W、能凑对子 +W（默认 0=关闭）")
+    ap.add_argument("--record-logp-mu", type=int, default=0,
+                    help="1=采集侧记录 logp_mu/logp_pi（配合 --collect-*-bias）：PPO ratio 分母"
+                         "用行为 μ(a)、KL/approx_kl 口径用无偏 π(a)；默认 0=不写（逐位等价）")
     # ── 复利结构**辅助 BC**（推荐路径：行为策略无偏、把结构选择学进权重）────────
+    ap.add_argument("--upgrade-curve-bc-turns", default="2,5,7,9",
+                    help="upgrade BC 生效回合（逗号分隔；默认 2,5,7,9；s28c 用 2,5,7）")
+    ap.add_argument("--upgrade-curve-bc-guard-ratio", type=float, default=-1.0,
+                    help="upgrade BC 单独 guard ratio（<0=沿用 --bc-guard-ratio；0=不走 guard 固定系数）")
+    ap.add_argument("--upgrade-curve-bc-coef", type=float, default=0.0,
+                    help="升级曲线辅助 BC（默认 0=关）：t∈{2,5,7,9} 且 tier<曲线且金币够时，"
+                         "对 upgrade(动作3) 加辅助 CE（自适应 guard 与 discover/triple 相同）")
     ap.add_argument("--discover-bc-coef", type=float, default=0.0,
                     help="Discover 辅助交叉熵系数（默认 0=关闭）：选项含放大器/引擎卡时，"
                          "把这些 choose 位当教师（多选项 uniform 加权）")
@@ -1855,6 +2484,10 @@ def main() -> int:
         # 复利结构辅助 BC（默认 0 = 逐位等价；标签由 _attach_replication_bc_labels 写入 batch）
         discover_bc_coef=float(args.discover_bc_coef),
         triple_bc_coef=float(args.triple_bc_coef),
+        upgrade_bc_coef=float(getattr(args, "upgrade_curve_bc_coef", 0.0) or 0.0),
+        upgrade_bc_guard_ratio=(-1.0 if getattr(
+            args, "upgrade_curve_bc_guard_ratio", -1.0) is None else float(
+            getattr(args, "upgrade_curve_bc_guard_ratio", -1.0))),
         bc_ce_norm=bool(int(args.bc_ce_norm)),
         bc_guard_ratio=float(args.bc_guard_ratio),
         # 搜索行为混合（默认 eps=0 -> PPO 侧只用于回显/统计，未启用时整组键被移除）
@@ -2345,6 +2978,7 @@ def main() -> int:
             archetype_model=str(args.archetype_model),
             collect_discover_bias=float(args.collect_discover_bias),
             collect_triple_bias=float(args.collect_triple_bias),
+            record_logp_mu=int(args.record_logp_mu),
             move_repeat_limit=int(args.move_repeat_limit),
             library_pool=str(args.library_pool), library_p=float(args.library_p),
             trajectory_pool=str(args.trajectory_pool), trajectory_p=float(args.trajectory_p),
@@ -2511,32 +3145,53 @@ def main() -> int:
             else:
                 batch, collect_meta, c_cfg, _collect_s, _hb_state = _collect_for(i)
             _tl["t_collect_done"] = time.monotonic()
+            # 阶段计时（仅 HSBG_PROF_STAGES=1 时打印；默认零输出、零语义影响）
+            _st = {"t0": _tl["t_collect_done"]}
 
             errs = batch.validate()
             if errs:
                 print(f"[error] batch invalid: {errs}", file=sys.stderr)
                 return 3
+            _st["validate"] = time.monotonic()
 
             # ── 自定义奖励（--upgrade-reward / --win-only-reward / --strength-reward-coef）
             # 必须放在 update 之前：改 rewards 后整批重算 advantages/returns。
             # 三者默认全 0 ⇒ 本块不执行 ⇒ 逐位等价旧路径。
             _rw: Optional[Dict[str, Any]] = None
             # 复利结构辅助 BC 标签（默认两系数 0 -> 不写标签、不进 batch）
-            if float(args.discover_bc_coef) > 0.0 or float(args.triple_bc_coef) > 0.0:
+            if (float(args.discover_bc_coef) > 0.0 or float(args.triple_bc_coef) > 0.0
+                    or float(getattr(args, "upgrade_curve_bc_coef", 0.0) or 0.0) > 0.0):
                 try:
-                    _bc_stat = _attach_replication_bc_labels(batch)
+                    _bc_stat = _attach_replication_bc_labels(
+                        batch,
+                        want_upgrade=(float(getattr(args, "upgrade_curve_bc_coef", 0.0)
+                                            or 0.0) > 0.0),
+                        upgrade_turns=str(getattr(args, "upgrade_curve_bc_turns",
+                                                  "2,5,7,9") or "2,5,7,9"))
                     print(f"[rep-bc] labels: discover={_bc_stat['discover_states']} "
-                          f"triple={_bc_stat['triple_states']} pair={_bc_stat['pair_states']}",
-                          flush=True)
+                          f"triple={_bc_stat['triple_states']} pair={_bc_stat['pair_states']} "
+                          f"upgrade={_bc_stat.get('upgrade_states', 0)}", flush=True)
                     _rw = _bc_stat
                 except BaseException as _exc:  # noqa: BLE001 - 标不出来也照常训练
                     print(f"[rep-bc] 标签生成失败（跳过）: {_exc!r}", flush=True)
+                _st["rep_bc"] = time.monotonic()
             if (float(args.upgrade_reward) > 0.0 or float(args.win_only_reward) > 0.0
                     or float(args.strength_reward_coef) > 0.0
                     or float(args.golden_reward) > 0.0 or float(args.golden_t5_reward) > 0.0
                     or float(args.amp_board_reward) > 0.0
                     or float(args.engine_board_reward) > 0.0
-                    or float(args.survive_t12_reward) > 0.0):
+                    or float(args.survive_t12_reward) > 0.0
+                    or float(args.t5plus_stat_reward) > 0.0
+                    or float(args.tier_timing_reward) > 0.0
+                    or float(args.cheap_buy_penalty) > 0.0
+                    or float(args.t5plus_buff_reward) > 0.0
+                    or float(args.tier_mix_reward) > 0.0
+                    or float(args.lowtier_stat_penalty) > 0.0
+                    or float(args.comp_fit_coef) > 0.0
+                    or float(args.comp_fit_t9_bonus) > 0.0
+                    or float(args.comp_trinket_coef) > 0.0
+                    or float(args.t1p_coef) > 0.0
+                    or float(args.t1s_coef) > 0.0):
                 _rw = _apply_custom_rewards(
                     batch, upgrade_w=float(args.upgrade_reward),
                     win_w=float(args.win_only_reward),
@@ -2546,7 +3201,19 @@ def main() -> int:
                     amp_board_w=float(args.amp_board_reward),
                     engine_board_w=float(args.engine_board_reward),
                     survive_t12_w=float(args.survive_t12_reward),
+                    t5plus_stat_w=float(args.t5plus_stat_reward),
+                    tier_timing_w=float(args.tier_timing_reward),
+                    cheap_buy_p=float(args.cheap_buy_penalty),
+                    t5plus_buff_w=float(args.t5plus_buff_reward),
+                    tier_mix_w=float(args.tier_mix_reward),
+                    lowtier_stat_p=float(args.lowtier_stat_penalty),
+                    comp_fit_c=float(args.comp_fit_coef),
+                    comp_fit_t9_bonus=float(args.comp_fit_t9_bonus),
+                    comp_trinket_c=float(args.comp_trinket_coef),
+                    t1p_coef=float(args.t1p_coef),
+                    t1s_coef=float(args.t1s_coef),
                     gamma=float(args.gamma), lam=float(args.lam))
+                _st["rewards"] = time.monotonic()
 
             batch_version = int(collect_meta.get("policy_version", -1))
             if batch_version < 0:  # 非 pool 路径
@@ -2562,6 +3229,7 @@ def main() -> int:
                     and (deadline - time.time()) > 60.0:
                 pending = executor.submit(_collect_for, i + 1,
                                           published["version"], published["path"])
+            _st["issue"] = time.monotonic()
 
             pre_ratio = 1.0
             guard_tripped = False
@@ -2618,6 +3286,16 @@ def main() -> int:
                           f"coef={trainer.config.discover_bc_coef:.3g}", flush=True)
             _t_ppo = time.time()
             _tl["t_ppo_start"] = time.monotonic()
+            if os.environ.get("HSBG_PROF_STAGES"):
+                _keys = [k for k in ("validate", "rep_bc", "rewards", "issue")
+                         if k in _st]
+                _prev = _st["t0"]
+                _parts = []
+                for _k in _keys:
+                    _parts.append(f"{_k}={_st[_k] - _prev:.3f}")
+                    _prev = _st[_k]
+                _parts.append(f"pre_update={_tl['t_ppo_start'] - _prev:.3f}")
+                print(f"[stages] iter {i} " + " ".join(_parts), flush=True)
             stats = trainer.update(batch)
             if _rw is not None:
                 stats["custom_rewards"] = dict(_rw)

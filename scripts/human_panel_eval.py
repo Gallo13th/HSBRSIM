@@ -149,6 +149,7 @@ def _panel(seed_base: int, games: int, seats: int, per_seat: int, *,
            pool: Optional[HumanBoardPool], quantile: str,
            baseline_bot: bool, require_protocol: bool,
            search_cfg: Optional[InferSearchConfig] = None,
+           handover_spec: str = "",
            tag: str) -> Dict[str, Any]:
     """跑一个 seed 面板：learner（seat 逐座位轮换）+ 可选 bot 基线，同人类战团注入。
 
@@ -164,6 +165,11 @@ def _panel(seed_base: int, games: int, seats: int, per_seat: int, *,
     s_cfg = search_cfg or InferSearchConfig(enabled=0)
     policy = InferSearchPolicy(net, evaluator=evaluator, config=s_cfg,
                                device=device)
+    if str(handover_spec):
+        from policy_hybrid import HybridPolicy, ScriptAdapter
+        policy = HybridPolicy(policy, ScriptAdapter("auto", seed=int(seed_base)),
+                              str(handover_spec))
+        print(f"[human] handover_spec={handover_spec}", flush=True)
     bot = make_policy("bot") if baseline_bot else None
     model_ranks: List[int] = []
     bot_ranks: List[int] = []
@@ -359,6 +365,8 @@ def main() -> int:
                     help="1=同 seed/seat 再跑 bot 基线（配对 Δ/CI；默认 1）")
     ap.add_argument("--set-tier", type=int, default=1,
                     help="1=注入时同时写入按 turn 派生的 tier（人类数据无 tier）")
+    ap.add_argument("--handover-spec", default="",
+                    help="混合策略：t0-8:model,t9-15:script（默认空=纯模型）")
     ap.add_argument("--smoke", action="store_true",
                     help="开发自检：小样本、单面板，不产生晋级结论")
     # ── 推理期搜索（rollout 叶值 + π_search；默认关，只影响评测路径）────────
@@ -465,6 +473,7 @@ def main() -> int:
                 pool=pool, quantile=str(args.quantile),
                 baseline_bot=bool(int(args.baseline_bot)),
                 require_protocol=require_protocol, search_cfg=search_cfg,
+                handover_spec=str(getattr(args, "handover_spec", "") or ""),
                 tag=f"panel{k}"))
     except Exception as exc:  # noqa: BLE001
         import traceback

@@ -184,6 +184,21 @@ class _LogitBiasEvaluator:
         return getattr(self._inner, name)
 
 
+_CARD_BASE: dict = {}
+
+
+def _card_base() -> dict:
+    global _CARD_BASE
+    if not _CARD_BASE:
+        import json as _j
+        cards = _j.load(open(os.path.join(ROOT, "data/p2/cards_37.json"), encoding="utf-8"))
+        if isinstance(cards, dict):
+            cards = cards.get("cards") or cards.get("data") or list(cards.values())
+        _CARD_BASE = {str(c["id"]): (int(c.get("atk") or 0), int(c.get("hp") or 0))
+                      for c in cards if isinstance(c, dict) and c.get("id")}
+    return _CARD_BASE
+
+
 def _board_stats(pj: dict) -> dict:
     board = pj.get("board") or []
     strength = 0
@@ -349,6 +364,10 @@ def _play(seed: int, policy, q: dict) -> dict | None:
     q_discover_targets = set((q or {}).get("discover_targets") or ())
     #: 三连/对子先验
     q_triple_w = float((q or {}).get("triple_bias", 0.0) or 0.0)
+    q_buy_core_w = float((q or {}).get("buy_core_bias", 0.0) or 0.0)
+    q_tgt_w = float((q or {}).get("carrier_target_bias", 0.0) or 0.0)
+    q_core_ids = set((q or {}).get("core_ids") or ())
+    q_bias_carriers = set((q or {}).get("bias_carrier_ids") or ())
     q_pair_freeze = bool(int((q or {}).get("pair_freeze", 0) or 0))
     q_cid2id = dict((q or {}).get("cid2id") or {})
     _froze_turn = -1
@@ -452,6 +471,36 @@ def _play(seed: int, policy, q: dict) -> dict | None:
                             if str(x.get("id")) in carrier_ids}
                     except BaseException:  # noqa: BLE001
                         pend_eids = None
+                # ── 模型+定向层（评测侧；默认 0 = 无偏置、逐位等价）──────────
+                _dyn = dict(_triple_bias)
+                if q_buy_core_w > 0.0:
+                    try:
+                        _pj3 = json.loads(game.player_json(0))
+                        for _slot, _raw in enumerate((_pj3.get("shop") or [])[:8]):
+                            _cid3 = _shop_card_id(_raw, q_cid2id)
+                            if _cid3 in q_core_ids and bool(m[A_BUY + _slot]):
+                                _dyn[A_BUY + _slot] = _dyn.get(A_BUY + _slot, 0.0) + q_buy_core_w
+                    except BaseException:  # noqa: BLE001
+                        pass
+                if q_tgt_w > 0.0 and bool(m[A_CHOOSE:A_CHOOSE + N_CHOICE].any()):
+                    try:
+                        _v3 = json.loads(game.view(0))
+                        _me3 = _v3.get("me") or {}
+                        _o3 = _pending_target_eids(_me3.get("pending") or {})
+                        _car3 = {int(x.get("eid")) for x in (_me3.get("board") or [])
+                                 if str(x.get("id")) in q_bias_carriers}
+                        if _o3 and _car3:
+                            for _i, _tg in enumerate(_o3):
+                                if (isinstance(_tg, int) and _tg in _car3
+                                        and bool(m[A_CHOOSE + _i])):
+                                    _dyn[A_CHOOSE + _i] = (_dyn.get(A_CHOOSE + _i, 0.0)
+                                                           + q_tgt_w)
+                    except BaseException:  # noqa: BLE001
+                        pass
+                if _dyn:
+                    _evp = getattr(policy, "eval_fn", None)
+                    if hasattr(_evp, "set_dynamic_bias"):
+                        _evp.set_dynamic_bias(_dyn)
                 a = int(policy.decide(game, 0).action)
                 _ev = getattr(policy, "eval_fn", None)
                 if hasattr(_ev, "set_dynamic_bias"):
@@ -515,8 +564,28 @@ def _play(seed: int, policy, q: dict) -> dict | None:
                 pick = row
                 break
         death_turn, death_strength = pick["turn"], pick["strength"]
+    _cb = _tb = 0.0
+    try:
+        _v4 = json.loads(game.view(0))
+        _fb = (_v4.get("me") or {}).get("board") or []
+        _base4 = _card_base()
+        for _m4 in _fb:
+            _cid4 = str(_m4.get("id") or "")
+            _b4 = _base4.get(_cid4)
+            if _b4 is None:
+                continue
+            _mult = 2 if _m4.get("golden") else 1
+            _buf = max(0.0, (int(_m4.get("atk") or 0) - _mult * _b4[0])
+                       + (int(_m4.get("hp") or 0) - _mult * _b4[1]))
+            _tb += _buf
+            if _cid4 in q_bias_carriers or _cid4 in carrier_ids:
+                _cb += _buf
+    except BaseException:  # noqa: BLE001
+        pass
     return {"placement": int(placements[0]), "death_turn": death_turn,
             "death_strength": death_strength, "turns": turns,
+            "carrier_buff": float(_cb), "total_buff": float(_tb),
+            "carrier_buff_share": (float(_cb / _tb) if _tb > 0 else None),
             "carrier_turns": int(carrier_turns),
             "carrier_ever_on_board": bool(carrier_turns > 0),
             "carrier_shop_seen": bool(carrier_shop_seen),
@@ -637,7 +706,18 @@ def main() -> int:
                          "（需要准完整库）")
     ap.add_argument("--human-board-fast-inject", type=int, default=0, choices=[0, 1],
                     help="1=快速注入路径（与默认路径逐位等价，默认 0）")
+    # ── 模型+定向层（评测侧；默认 0 = 无偏置）──────────────────────────────
+    ap.add_argument("--buy-core-bias", type=float, default=0.0,
+                    help="商店出现核心卡时对应 buy 位 +W（默认 0=关；只对合法位生效）")
+    ap.add_argument("--carrier-target-bias", type=float, default=0.0,
+                    help="目标选择里选中载体时对应 choose 位 +W（默认 0=关）")
+    ap.add_argument("--core-cards", default="BG35_883,BG36_640,BG36_762,BG28_633,BG32_873",
+                    help="核心卡 id 逗号分隔（默认 巴琳达/守门/干扰者/野猪人/灰烬腐蚀者）")
+    ap.add_argument("--bias-carrier-cards", default="BG36_640,BG36_762,BG28_633",
+                    help="载体卡 id 逗号分隔（默认 守门/干扰者/野猪人）")
     # ── 推理期搜索（rollout 叶值 + π_search；默认关，只包评测策略）──────────
+    ap.add_argument("--handover-spec", default="",
+                    help="混合策略：t0-8:model,t9-15:script（默认空=纯模型）")
     ap.add_argument("--infer-search", type=int, default=0, choices=[0, 1],
                     help="1=关键决策上用推理期搜索覆盖动作（默认 0 = 纯 π_base）")
     ap.add_argument("--infer-search-turns", type=int, default=1, choices=[1, 3],
@@ -693,9 +773,12 @@ def main() -> int:
         # bounded logit bias (eval only; empty -> no wrapper -> bit-identical to old path)
         _bias_map = _parse_action_logit_bias(str(getattr(args, "action_logit_bias", "") or ""))
         _disc_w = float(getattr(args, "discover_bias", 0.0) or 0.0)
-        if _bias_map or _disc_w:
+        _buy_w = float(getattr(args, "buy_core_bias", 0.0) or 0.0)
+        _tgt_w = float(getattr(args, "carrier_target_bias", 0.0) or 0.0)
+        if _bias_map or _disc_w or _buy_w > 0.0 or _tgt_w > 0.0:
             ev = _LogitBiasEvaluator(ev, _bias_map)
-            print(f"[quality] action_logit_bias={_bias_map} discover_bias={_disc_w}", flush=True)
+            print(f"[quality] action_logit_bias={_bias_map} discover_bias={_disc_w} "
+                  f"buy_core_bias={_buy_w} carrier_target_bias={_tgt_w}", flush=True)
         from hsbg.az.train.ppo import CollectConfig
         cfg = CollectConfig(games=1, seed=int(args.seed_base), opponent="bot", behavior="net",
                             max_steps=int(args.max_steps),
@@ -734,6 +817,12 @@ def main() -> int:
               f"when={search_cfg.search_when} action={search_cfg.action} "
               f"max/turn={search_cfg.max_searches_per_turn}", flush=True)
 
+    if str(getattr(args, "handover_spec", "") or ""):
+        from policy_hybrid import HybridPolicy, ScriptAdapter
+        policy = HybridPolicy(policy, ScriptAdapter("auto", seed=int(args.seed_base)),
+                              str(args.handover_spec))
+        print(f"[quality] handover_spec={args.handover_spec}", flush=True)
+
     rows = []
     # Discover 选牌先验：把目标卡集合与 bias 写进 q（_play 逐决策使用）
     _disc_w = float(getattr(args, "discover_bias", 0.0) or 0.0)
@@ -755,6 +844,14 @@ def main() -> int:
         cfg_dict["discover_bias"] = _disc_w
         cfg_dict["discover_targets"] = sorted(_set)
         print(f"[quality] discover_bias={_disc_w} targets={len(_set)}", flush=True)
+    _core_ids = [x.strip() for x in str(getattr(args, "core_cards", "") or "").split(",")
+                 if x.strip()]
+    _bias_carriers = [x.strip() for x in
+                      str(getattr(args, "bias_carrier_cards", "") or "").split(",") if x.strip()]
+    cfg_dict = dict(cfg_dict or {})
+    cfg_dict.update({"buy_core_bias": float(getattr(args, "buy_core_bias", 0.0) or 0.0),
+                     "carrier_target_bias": float(getattr(args, "carrier_target_bias", 0.0) or 0.0),
+                     "core_ids": _core_ids, "bias_carrier_ids": _bias_carriers})
     if carrier_ids:
         cfg_dict = dict(cfg_dict or {})
         cfg_dict["carrier_ids"] = sorted(carrier_ids)
@@ -975,6 +1072,14 @@ def main() -> int:
                              if game_turns else None),
            "turns_alive_total": n_turns,
            "human_board": human_board_out}
+    _cbs = [r.get("carrier_buff_share") for r in rows
+            if r.get("carrier_buff_share") is not None]
+    out["carrier_buff_share_mean"] = float(np.mean(_cbs)) if _cbs else None
+    out["carrier_buff_share_p50"] = float(np.percentile(_cbs, 50)) if _cbs else None
+    out["carrier_buff_p50"] = (float(np.percentile([r.get("carrier_buff") or 0
+                                                    for r in rows], 50)) if rows else None)
+    out["buy_core_bias"] = float(getattr(args, "buy_core_bias", 0.0) or 0.0)
+    out["carrier_target_bias"] = float(getattr(args, "carrier_target_bias", 0.0) or 0.0)
     out.update(_carrier_panel(rows, carrier_ids))
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     json.dump(out, open(args.out, "w"), ensure_ascii=False, indent=2)
