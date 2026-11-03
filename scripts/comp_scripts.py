@@ -61,6 +61,15 @@ TRIBE_ZH = {"BEAST": "野兽", "MECHANICAL": "机械", "UNDEAD": "亡灵", "DEMO
 #: 每级 tier 的最早回合（经济可行性；早于它不升本）
 EARLIEST_TIER = {1: 1, 2: 3, 3: 5, 4: 6, 5: 8, 6: 10}
 
+# ── V2 决策树门槛（docs/COMP_SCRIPTS_V2.md §5；对**所有**阵容生效）──────────
+#: 核心窗口：t≥窗口仍无任何核心 → 退出阵容（spec=None，回落通用/bot）。
+#: 6 本核心最早 t10 才可能出现在酒馆，故有效窗口 = max(该值, EARLIEST_TIER[核心最高 tier])。
+V2_CORE_WINDOW = 8
+#: 血量阈值：hp ≤ 该值 → 停 roll、不做 t8+ 转本（保名次）。
+V2_HP_MIN = 20
+#: 升本/刷新后必须保留的金币（「升后余三金」）。
+V2_TAIL_GOLD = 3
+
 
 # ── 卡表 ───────────────────────────────────────────────────────────────────
 def _catalog() -> Dict[str, dict]:
@@ -274,8 +283,182 @@ _reg(CompSpec(
     curve=CURVE_MID,
     note="永恒召唤者亡语召唤永恒骑士，骑士按本局死亡数成长（招募期只能攒组件）"))
 
-#: 不可实现（理由写进 docs/COMP_SCRIPTS.md §5）
-UNIMPLEMENTABLE: Dict[str, str] = {
+# ── roles.json 的 26 套 implementable：补齐余下 13 套（V2 完整实现）──────────
+# 字段口径（见 docs/COMP_SCRIPTS_FULL.md §1）：
+#   core / enabler / trinkets ← runs/comp_scripts/roles.json（原样，保持顺序）
+#   carrier ← roles.json 的 carrier；为空时取 core[0]（该套的「收益承受者」）
+#   cast_on = carrier（法术只打载体）；curve = CURVE_MID（V2 的 2/3/5/6 曲线）
+# 这 13 套原先挂在 ``UNIMPLEMENTABLE`` 里（收益发生在战斗内 / 需要特殊触发器），
+# 现在按「招募期可执行的部分」实现：只做**组件收集 + 载体保护 + 类型补全**，
+# 战斗内结算的收益仍由引擎负责。它们的脚本强度预期低于 A–N（见 docs 实测表）。
+
+# roles idx1 Undead APM
+_reg(CompSpec(
+    "undead_apm", "Undead APM", "undead_apm", "UNDEAD",
+    core=("BG33_823", "BG33_825", "BG34_692", "BG36_515"),
+    carrier=("BG33_823",), cast_on=("BG33_823",),
+    type_min=2,
+    trinkets=("BG30_MagicItem_301", "BG32_MagicItem_360",
+              "BG36_MagicItem_217", "BG36_MagicItem_216"),
+    curve=CURVE_MID,
+    enabler=("BG25_010", "BG36_511", "BG32_340", "BG28_303", "BG36_369"),
+    note="roles idx1：bounty 战斗中生成，招募期只攒核心（上将罗杰斯/私掠者）+ 亡灵密度"))
+
+# roles idx2 Murloc Scam
+_reg(CompSpec(
+    "murloc_scam", "Murloc Scam", "murloc_scam", "MURLOC",
+    core=("BG34_140", "BG36_700", "BG33_318"),
+    carrier=("BG34_140",), cast_on=("BG34_140",),
+    type_min=3,
+    trinkets=("BG30_MagicItem_914", "BG32_MagicItem_925",
+              "BG35_MagicItem_754", "BG32_MagicItem_301"),
+    curve=CURVE_MID,
+    enabler=("BG34_140", "BGS_131", "BG34_604", "BG27_556"),
+    note="roles idx2：Sewer Escapee/Bile Spitter 靠 Activate，招募期只保证鱼人密度"))
+
+# roles idx3 Aberration Discard
+_reg(CompSpec(
+    "aberration_discard", "Aberration Discard", "aberration_discard", "ABERRATION",
+    core=("BGFYM_005", "BG36_320"),
+    carrier=("BGFYM_005",), cast_on=("BGFYM_005",),
+    type_min=2,
+    trinkets=("BG36_MagicItem_430", "BG36_MagicItem_418",
+              "BG36_MagicItem_852", "BG36_MagicItem_307"),
+    curve=CURVE_MID,
+    enabler=("BG36_115",),
+    note="roles idx3：弃牌链在招募期（K'Thir 弃 Sludge Corrosion），只做组件收集"))
+
+# roles idx4 Dragon Shield
+_reg(CompSpec(
+    "dragon_shield", "Dragon Shield", "dragon_shield", "DRAGON",
+    core=("BG29_813", "BG36_364", "BG36_849", "BGS_040"),
+    carrier=("BG29_813",), cast_on=("BG29_813",),
+    type_min=2,
+    trinkets=("BG30_MagicItem_902", "BG30_MagicItem_995",
+              "BG30_MagicItem_433", "BG30_MagicItem_433t"),
+    curve=CURVE_MID,
+    enabler=("BG29_813", "BGS_034"),
+    note="roles idx4：圣盾重置链在战斗内结算；招募期保诗心龙 + 龙密度"))
+
+# roles idx8 Undead Butcher
+_reg(CompSpec(
+    "undead_butcher", "Undead Butcher", "undead_butcher", "UNDEAD",
+    core=("BG32_324", "BG36_515"),
+    carrier=("BG32_324",), cast_on=("BG32_324",),
+    type_min=2,
+    trinkets=("BG30_MagicItem_435", "BG30_MagicItem_301",
+              "BG30_MagicItem_547t", "BG32_MagicItem_270t"),
+    curve=CURVE_MID,
+    enabler=("BG32_880", "BG28_309", "BG36_511", "BG25_010", "BG_DEEP_015"),
+    note="roles idx8：Butchering 是战斗内亡语链；招募期只保核心 + 亡灵密度"))
+
+# roles idx9 Quilboar Choose One
+_reg(CompSpec(
+    "quilboar_choose_one", "Quilboar Choose One", "quilboar_choose_one", "QUILBOAR",
+    core=("BG31_323", "BG36_331"),
+    carrier=("BG31_323",), cast_on=("BG31_323",),
+    type_min=3,
+    trinkets=("BG36_MagicItem_308", "BG30_MagicItem_442",
+              "BG32_MagicItem_808t", "BG30_MagicItem_943"),
+    curve=CURVE_MID,
+    enabler=("BG36_331", "BG31_326", "BG31_327", "BG31_320",
+             "BG28_698", "BG36_330", "BG36_332"),
+    note="roles idx9：抉择牌循环靠 discover 打分；招募期攒抉择源 + 野猪密度"))
+
+# roles idx13 Beast Lobster
+_reg(CompSpec(
+    "beast_lobster", "Beast Lobster", "beast_lobster", "BEAST",
+    core=("BG36_202", "BG25_354", "BG36_208", "BG36_204"),
+    carrier=("BG36_202",), cast_on=("BG36_202",),
+    type_min=3,
+    trinkets=("BG30_MagicItem_435", "BG36_MagicItem_450",
+              "BG35_MagicItem_872", "BG30_MagicItem_540"),
+    curve=CURVE_MID,
+    enabler=("BG36_202", "BG36_204", "BG36_210", "BG25_016",
+             "BG36_201", "BG36_206", "BG27_084"),
+    note="roles idx13：Tasty Lobster 亡语 + Deathstrider 左端链在战斗内；招募期攒召唤源"))
+
+# roles idx15 Aberration Deathrattle
+_reg(CompSpec(
+    "aberration_deathrattle", "Aberration Deathrattle", "aberration_deathrattle",
+    "ABERRATION",
+    core=("BG36_318", "BG25_354"),
+    carrier=("BG36_318",), cast_on=("BG36_318",),
+    type_min=2,
+    trinkets=("BG30_MagicItem_435", "BG36_MagicItem_430",
+              "BG36_MagicItem_307", "BG36_MagicItem_831"),
+    curve=CURVE_MID,
+    enabler=("BG36_101", "BG36_115"),
+    note="roles idx15：Faceless Converter 亡语给 Deity，成长全在战斗；只保核心"))
+
+# roles idx16 Pirate Discover
+_reg(CompSpec(
+    "pirate_discover", "Pirate Discover", "pirate_discover", "PIRATE",
+    core=("BG36_344", "BG36_523"),
+    carrier=("BG36_344",), cast_on=("BG36_344",),
+    type_min=3,
+    trinkets=("BG30_MagicItem_439", "BG32_MagicItem_801t",
+              "BG36_MagicItem_363", "BG35_MagicItem_711"),
+    curve=CURVE_MID,
+    enabler=("BG36_521", "BG36_524", "BG26_817", "BG36_342",
+             "BG24_715", "BG36_369"),
+    note="roles idx16：Hooktusk 收益来自 Discover 循环；discover 打分已按 core/carrier 优先"))
+
+# roles idx17 Demon Self Damage
+_reg(CompSpec(
+    "demon_self_damage", "Demon Self Damage", "demon_self_damage", "DEMON",
+    core=("BGS_004", "BG32_873", "BG26_174", "BG36_733", "BG36_762", "BG_LOE_077"),
+    carrier=("BG36_762", "BG28_633"), cast_on=("BG36_762", "BG28_633"),
+    type_min=4,
+    trinkets=("BG30_MagicItem_868", "BG30_MagicItem_998",
+              "BG36_MagicItem_831", "BG32_MagicItem_821"),
+    curve=CURVE_MID,
+    enabler=("BG32_873", "BG26_174", "BG26_524", "BG36_362", "BG26_525"),
+    note="roles idx17：掉血触发器在战斗内；招募期攒恶魔 + 干扰者酒馆引擎，法术只打载体"))
+
+# roles idx18 Elemental Tempest
+_reg(CompSpec(
+    "elemental_tempest", "Elemental Tempest", "elemental_tempest", "ELEMENTAL",
+    core=("BG_LOE_077", "BG36_352", "BG34_858"),
+    carrier=("BG_LOE_077",), cast_on=("BG_LOE_077",),
+    type_min=3,
+    trinkets=("BG35_MagicItem_862", "BG36_MagicItem_300",
+              "BG30_MagicItem_431", "BG35_MagicItem_861"),
+    curve=CURVE_MID,
+    enabler=("BG36_701", "BGS_123", "BG34_865", "BG31_812", "BGS_115"),
+    note="roles idx18：Unbound Tempest 靠战吼反复触发；招募期攒元素生成链 + 布莱恩"))
+
+# roles idx22 Dragon Kalecgos
+_reg(CompSpec(
+    "dragon_kalecgos", "Dragon Kalecgos", "dragon_kalecgos", "DRAGON",
+    core=("BGS_041", "BG_LOE_077"),
+    carrier=("BGS_041",), cast_on=("BGS_041",),
+    type_min=2,
+    trinkets=("BG30_MagicItem_995", "BG30_MagicItem_542",
+              "BG30_MagicItem_902", "BG30_MagicItem_433"),
+    curve=CURVE_MID,
+    enabler=("BG29_813", "BG36_242", "BG36_243", "BG24_500", "BG36_701"),
+    note="roles idx22：Kalecgos 战吼循环收益在战吼密度；招募期保核心 + 龙/战吼源"))
+
+# roles idx26 Pirate Bounty
+_reg(CompSpec(
+    "pirate_bounty", "Pirate Bounty", "pirate_bounty", "PIRATE",
+    core=("BG33_823", "BG33_825"),
+    carrier=("BG33_823",), cast_on=("BG33_823",),
+    type_min=3,
+    trinkets=("BG32_MagicItem_801t", "BG35_MagicItem_710",
+              "BG30_MagicItem_439", "BG36_MagicItem_363"),
+    curve=CURVE_MID,
+    enabler=("BG26_817", "BG36_369", "BG32_860", "BG33_830"),
+    note="roles idx26：Selfish Bounty 战斗内结算；招募期只保海盗核心 + 类型"))
+
+
+#: 兼容旧接口：roles.json 的 26 套已全部注册，故「不可实现」集合为空。
+UNIMPLEMENTABLE: Dict[str, str] = {}
+
+#: 历史口径（docs/COMP_SCRIPTS.md §5 的 13 条「不可实现理由」）：保留作追溯，
+#: 这些套现在按「招募期可执行部分」实现，不在本表 = 未注册。
+LEGACY_GAPS: Dict[str, str] = {
     "murloc_scam": "Sewer Escapee/Bile Spitter 全靠 Activate + 战斗进击，招募期无法结算",
     "aberration_discard": "需要弃牌链（Mysterious K'Thir 弃 Sludge Corrosion）+ Deity 目标",
     "undead_apm": "bounty 只在战斗中生成，招募期无 bounty 密度",
@@ -290,6 +473,16 @@ UNIMPLEMENTABLE: Dict[str, str] = {
     "pirate_bounty": "Selfish Bounty 战斗内结算",
     "dragon_kalecgos": "Kalecgos 战吼循环收益在战吼密度，无战斗无法测",
 }
+
+
+def comp_keys() -> List[str]:
+    """稳定排序的全部阵容 key（训练侧 / 探针 / 测试共用）。"""
+    return sorted(COMPS.keys())
+
+
+def view_of(game: Any, seat: int = 0) -> dict:
+    """``game.view(seat)`` 的 JSON 解码（训练侧复用，等价 ``json.loads``）。"""
+    return json.loads(game.view(int(seat)))
 
 
 # ── 通用工具 ───────────────────────────────────────────────────────────────
@@ -318,12 +511,18 @@ class CompPolicy:
     """核心卡 + 载体的显式优先级脚本；``act(view, mask)`` 只返回 mask 内动作。"""
 
     def __init__(self, spec: Optional[CompSpec], *, auto: bool = False, seed: int = 0,
-                 max_refresh: int = 4, exit_turn: int = 10):
+                 max_refresh: int = 4, exit_turn: int = 10,
+                 core_window: int = V2_CORE_WINDOW,
+                 core_window_from_tier: bool = True,
+                 exit_on_miss: bool = True):
         self.spec0 = spec
         self.spec = spec
         self.auto = bool(auto)
         self.max_refresh = int(max_refresh)
         self.exit_turn = int(exit_turn)
+        self.core_window = int(core_window)
+        self.core_window_from_tier = bool(core_window_from_tier)
+        self.exit_on_miss = bool(exit_on_miss)
         self.rng = np.random.default_rng(int(seed))
         self.turn = -1
         self.refreshes = 0
@@ -339,6 +538,26 @@ class CompPolicy:
         self.carrier_turn = -1
         self.snaps: List[dict] = []
         self.trinket_ids: List[str] = []
+        self.upgraded_turn = -1
+
+    def reset(self) -> None:
+        """把策略复位到「同一 ``spec0`` 的起点」（同 seed 重放/训练侧复用）。"""
+        self.spec = self.spec0
+        self.exited = False
+        self.turn = -1
+        self.refreshes = 0
+        self.actions = 0
+        self.replaced = 0
+        self.illegal = 0
+        self.casts_target = 0
+        self.casts_on_aim = 0
+        self.casts_on_carrier = 0
+        self.spells = 0
+        self.core_seen = {}
+        self.carrier_turn = -1
+        self.snaps = []
+        self.trinket_ids = []
+        self.upgraded_turn = -1
 
     # -- 规格集合 -----------------------------------------------------------
     @property
@@ -403,6 +622,8 @@ class CompPolicy:
     def _auto_pick(self, me: dict) -> None:
         if self.spec is not None and not self.exited:
             return
+        if self.exited and self.spec is None:      # V2：退出后不再重新锁定
+            return
         t = int(self.turn)
         board_ids = {str(m.get("id")) for m in (me.get("board") or [])}
         hand_ids = {str(m.get("id")) for m in (me.get("hand") or [])}
@@ -458,6 +679,98 @@ class CompPolicy:
         up = int(me.get("upgrade_price") or 99)
         gold = int(me.get("gold") or 0)
         return self._f_core_count(me) >= 1 and gold >= up + 3
+
+    # -- V2 决策树（所有阵容通用；见 docs/COMP_SCRIPTS_V2.md §3–§5）----------
+    def _v2_core_window(self) -> int:
+        """核心窗口：t≥窗口仍无核心 → 退出。按核心最高 tier 抬高下限（t10 前无 6 本卡）。"""
+        win = int(self.core_window)
+        if self.core_window_from_tier and self.spec is not None and self.spec.core:
+            top = max(tier_of(str(c)) for c in self.spec.core)
+            win = max(win, int(EARLIEST_TIER.get(min(max(top, 1), 6), win)))
+        return win
+
+    def _v2_has_core(self, me: dict) -> bool:
+        return self._core_owned(me)
+
+    def _v2_maybe_exit(self, me: dict) -> bool:
+        """t≥核心窗口仍无核心 → 退出阵容（``spec=None``，回落通用/bot）。
+
+        ``exit_on_miss=False`` 时只关闭退出（老「固定模式不退出」口径，供 A/B 对照）。
+        """
+        if self.spec is None or not self.exit_on_miss:
+            return False
+        if int(self.turn) < self._v2_core_window():
+            return False
+        if self._v2_has_core(me):
+            return False
+        self.exited, self.spec = True, None
+        return True
+
+    def _v2_can_roll(self, me: dict) -> bool:
+        """通用滚动门槛：hp>20；有核心或 t≤7；gold ≥ 升后余 3 金；t≥11 仅核心在手。
+
+        ``t≥8 且无核心`` 时返回 False（此时应走 ``_v2_maybe_exit`` 退出阵容）。
+        """
+        hp = int(me.get("health") or 0)
+        if hp <= V2_HP_MIN:
+            return False
+        gold = int(me.get("gold") or 0)
+        up = int(me.get("upgrade_price") or 99)
+        if gold < up + V2_TAIL_GOLD:
+            return False
+        turn = int(self.turn)
+        has_core = self._v2_has_core(me)
+        if turn <= 7:
+            return True
+        if turn >= 11:
+            return has_core
+        return has_core
+
+    def _v2_can_upgrade(self, me: dict, board_n: int) -> bool:
+        """升级门槛：t2 必升；t3–7 按 curve + 最早 tier 回合；t8+ 须核心在手/血量/余 3 金。"""
+        gold = int(me.get("gold") or 0)
+        up = int(me.get("upgrade_price") or 99)
+        if gold < up:
+            return False
+        turn = int(self.turn)
+        tier = int(me.get("tier") or 1)
+        if turn <= 2:
+            return True
+        if tier >= self._curve_tier(turn):
+            return False
+        if turn <= 7:
+            return board_n >= 4 and turn >= EARLIEST_TIER.get(min(tier + 1, 6), 99)
+        hp = int(me.get("health") or 0)
+        return (self._v2_has_core(me) and hp > V2_HP_MIN
+                and gold >= up + V2_TAIL_GOLD)
+
+    def _v2_protected(self) -> set:
+        """永不卖：核心 + 载体 + 使能（enabler 是链卡）。"""
+        prot = self.core_ids | self.carrier_ids
+        if self.spec is not None:
+            prot |= expand(self.spec.enabler)
+        return prot
+
+    def _v2_econ_sell(self, me: dict, mask) -> Optional[int]:
+        """t13+ 撤「纯经济位」（文本含 gold/coin 且非核心/载体/使能）。"""
+        if self.turn < 13 or self.spec is None or self.replaced >= 2:
+            return None
+        prot = self._v2_protected()
+        econ: List[Tuple[int, int]] = []
+        for j, m in enumerate(me.get("board") or []):
+            cid = str(m.get("id"))
+            if cid in prot:
+                continue
+            a = A_SELL + j
+            if not (0 <= a < 245 and bool(mask[a])):
+                continue
+            txt = str((CATALOG.get(cid) or {}).get("text") or "").lower()
+            if any(w in txt for w in ("gold", "coin")):
+                econ.append((strength_of(m), j))
+        if not econ:
+            return None
+        self.replaced += 1
+        return A_SELL + min(econ)[1]
 
     # -- 回合快照 -----------------------------------------------------------
     def _snapshot(self, v: dict) -> None:
@@ -596,6 +909,7 @@ class CompPolicy:
             return self._pending(v, me, me["pending"])
         if v.get("phase") != "recruit":
             return None
+        self._v2_maybe_exit(me)                 # t≥窗口无核心 → 退出，交给 bot
         spec = self.spec
         if spec is None:
             return None
@@ -639,6 +953,11 @@ class CompPolicy:
                 if gold >= price_of(it):
                     return A_BUY + i
 
+        # ③.5 t13+ 撤无成长价值的经济位（V2 §3；核心/载体/使能不动）
+        econ = self._v2_econ_sell(me, mask)
+        if econ is not None:
+            return econ
+
         # ④ 优先买「未拥有的种族类型」（有空位时才占用金币）
         board_races = set()
         for m in board:
@@ -655,28 +974,22 @@ class CompPolicy:
         return None
 
     def _recruit_f(self, v: dict, me: dict, mask) -> int:
-        """F V2 分阶段经济：核心/伴生链优先，刷新与转本均有硬门槛。"""
+        """F V2 分阶段经济：核心/伴生链优先，刷新与转本均有硬门槛（其余门槛走通用 V2）。"""
         legal = lambda a: 0 <= a < 245 and bool(mask[a])
         board, hand, shop = (me.get(k) or [] for k in ("board", "hand", "shop"))
         turn, gold = self.turn, int(me.get("gold") or 0)
         tier, hp = int(me.get("tier") or 1), int(me.get("health") or 0)
         up = int(me.get("upgrade_price", 99))
+        self._v2_maybe_exit(me)
         spec = self.spec
-        if turn >= 8 and not self._f_core_count(me):
-            self.exited, self.spec = True, None
-            spec = None
         core = self.core_ids
         own = [str(x.get("id")) for x in board + hand]
         enabler = expand(spec.enabler) if spec else set()
-        protected = core | enabler
+        protected = core | enabler | self.carrier_ids
         buys = [(i, x) for i, x in enumerate(shop[:N_SHOP])
                 if legal(A_BUY + i) and gold >= price_of(x)]
-        # t2 升本；t3–7 常规曲线；t8+ 转本须核心在手、血量安全且剩三金。
-        due = tier < (self._curve_tier(turn) if spec else 6)
-        can_upgrade = (turn == 2 or (turn >= 3 and due and len(board) >= 4))
-        if turn >= 8:
-            can_upgrade = can_upgrade and bool(core & set(own)) and hp > 20 and gold >= up + 3
-        if legal(A_UPGRADE) and gold >= up and can_upgrade:
+        # t2 必升；t3–7 按 curve；t8+ 转本须核心在手、血量安全且剩三金（通用 V2 门槛）。
+        if legal(A_UPGRADE) and self._v2_can_upgrade(me, len(board)):
             self.upgraded_turn = turn
             return A_UPGRADE
         # 升本回合不追重复牌/三连；优先铺手牌，避免刷新前空场。
@@ -727,7 +1040,7 @@ class CompPolicy:
             if spells and len(hand) < N_HAND - 1:
                 return A_BUY + min(spells, key=lambda kv: price_of(kv[1]))[0]
         # 转通用后仍执行安全刷新门槛；不让退出状态绕过生命/经济约束。
-        can_roll = self._f_can_roll(me) if spec else (hp > 20 and gold >= up + 3)
+        can_roll = self._v2_can_roll(me) if spec else (hp > V2_HP_MIN and gold >= up + V2_TAIL_GOLD)
         if legal(A_REFRESH) and can_roll and self.refreshes < self.max_refresh:
             self.refreshes += 1
             return A_REFRESH
@@ -740,6 +1053,8 @@ class CompPolicy:
         def legal(a: int) -> bool:
             return 0 <= a < 245 and bool(mask[a])
 
+        # ── V2 决策树：核心窗口退出（t≥窗口仍无核心 → 通用铺场）──────────
+        self._v2_maybe_exit(me)
         gold = int(me.get("gold") or 0)
         tier = int(me.get("tier") or 1)
         turn = int(self.turn)
@@ -771,12 +1086,14 @@ class CompPolicy:
         room = N_BOARD - len(board)                        # 棋盘空位
         missing_core = bool(spec) and not (self.core_ids & (set(board_ids) | hand_ids))
 
+        worst = self._sellable(board) if len(board) >= N_BOARD else None
+
         def better(a: dict, b: dict) -> bool:
-            """a 是否明显强于 b：高一级 tier，或身材多 15 以上。"""
+            """a 是否明显强于 b：tavern_buy 阵容看身材，其余看 tier / 身材差 15。"""
+            if spec is not None and spec.tavern_buy:
+                return strength_of(a) > strength_of(b) + 5
             ta, tb = tier_of(str(a.get("id"))), tier_of(str(b.get("id")))
             return ta > tb or strength_of(a) > strength_of(b) + 15
-
-        worst = self._sellable(board) if len(board) >= N_BOARD else None
 
         def shop_key(it: dict) -> float:
             """酒馆买牌打分：tavern_buy 阵容看身材（已被 this-game 酒馆 buff 养肥），
@@ -787,13 +1104,6 @@ class CompPolicy:
 
         best_shop = max(((i, it) for i, it in buys if is_minion(it)),
                         key=lambda kv: shop_key(kv[1]), default=None)
-
-        def better(a: dict, b: dict) -> bool:
-            """a 是否明显强于 b：高一级 tier，或身材多 15 以上。"""
-            if spec is not None and spec.tavern_buy:
-                return strength_of(a) > strength_of(b) + 5
-            ta, tb = tier_of(str(a.get("id"))), tier_of(str(b.get("id")))
-            return ta > tb or strength_of(a) > strength_of(b) + 15
 
         def buyable(it: dict) -> bool:
             """值得买：空位多（铺场）或明显强于最弱可卖位（置换）。"""
@@ -807,12 +1117,15 @@ class CompPolicy:
         #    必须有明确的接替者（商店核心/载体或明显更强的牌），且每回合最多换 2 张，
         #    否则会把金币全烧在「卖了又买」的横向上，永远升不到 5/6 本。
         up = int(me.get("upgrade_price") or 99)
-        want_tier = self._curve_tier(turn)
-        on_schedule = turn >= EARLIEST_TIER.get(min(tier + 1, 6), 99)
-        # 升本优先于横向置换：4→5 要 8 金、5→6 要 10 金，漏掉这个回合就再也升不上去。
-        if (legal(A_UPGRADE) and tier < want_tier and on_schedule
-                and gold >= up and len(board) >= 4):
+        # 升本优先于横向置换（V2 门槛：t2 必升；t3–7 按 curve；t8+ 须核心/血量/余 3 金）
+        if legal(A_UPGRADE) and self._v2_can_upgrade(me, len(board)):
+            self.upgraded_turn = turn
             return A_UPGRADE
+
+        # t13+ 撤无成长价值的经济位（V2 §3）
+        econ = self._v2_econ_sell(me, mask)
+        if econ is not None:
+            return econ
 
         if worst is not None and self.replaced < 2:
             want_shop = [(i, it) for i, it in buys
@@ -905,7 +1218,7 @@ class CompPolicy:
         else:
             budget = self.max_refresh
         if (self.refreshes < budget and legal(A_REFRESH) and gold >= rp + 2
-                and self._f_can_roll(me)):
+                and self._v2_can_roll(me)):
             self.refreshes += 1
             return A_REFRESH
 
@@ -920,11 +1233,12 @@ class CompPolicy:
         return int(curve[min(max(turn - 1, 0), len(curve) - 1)])
 
     def _sellable(self, board: Sequence[dict]) -> Optional[int]:
-        """卖「无类型 / 无 buff 价值」的最弱一个：核心/载体永不卖。"""
+        """卖「无类型 / 无 buff 价值」的最弱一个：核心/载体/使能永不卖。"""
+        prot = self._v2_protected()
         cands = []
         for i, m in enumerate(board):
             cid = str(m.get("id"))
-            if cid in self.core_ids or cid in self.carrier_ids:
+            if cid in prot:
                 continue
             cands.append((1 if races_of(m) else 0, strength_of(m), i))
         if not cands:
@@ -948,10 +1262,12 @@ def _config_json(spec: Optional[CompSpec], seed: int) -> Optional[str]:
 def play_one(seed: int, spec: Optional[CompSpec], *, auto: bool = False,
              human_pool: Any = None, human_seats: int = 0, human_p: float = 0.0,
              human_fidelity: str = "full", max_steps: int = 4000,
-             bot_seat0: bool = False, hybrid: bool = True) -> Optional[dict]:
+             bot_seat0: bool = False, hybrid: bool = True,
+             exit_on_miss: bool = True) -> Optional[dict]:
     game = E.Game(int(seed), _config_json(spec, seed))
     EA.finish_hero_select(game)
-    pol = CompPolicy(spec, auto=auto, seed=int(seed) % 100000)
+    pol = CompPolicy(spec, auto=auto, seed=int(seed) % 100000,
+                     exit_on_miss=bool(exit_on_miss))
     rng = random.Random(int(seed) * 1000003 + 17)
     stats = None
     if human_pool is not None and human_p > 0 and human_seats > 0:
@@ -959,6 +1275,7 @@ def play_one(seed: int, spec: Optional[CompSpec], *, auto: bool = False,
         stats = HumanBoardStats(fidelity=human_fidelity)
     last_turn = -1
     steps = 0
+    decisions = 0
     illegal = 0
     while not game.is_over() and steps < max_steps:
         t = int(game.turn)
@@ -986,7 +1303,8 @@ def play_one(seed: int, spec: Optional[CompSpec], *, auto: bool = False,
                 a = int(game.bot_action(0))
             else:
                 mask = mask_from_bytes(game.legal_mask(0))
-                v = json.loads(game.view(0))
+                v = view_of(game, 0)
+                decisions += 1
                 if hybrid and not (pol.spec0 and pol.spec0.key == "f_dragon"):
                     # 混合：阵容动作优先，其余交给引擎 bot（经济/升本/站位兜底）
                     pol.observe(v, mask)
@@ -1050,6 +1368,8 @@ def play_one(seed: int, spec: Optional[CompSpec], *, auto: bool = False,
         "exited": bool(pol.exited),
         "trinkets": list(pol.trinket_ids),
         "illegal": int(illegal),
+        "decisions": int(decisions),
+        "mode": "hybrid" if hybrid else "pure",
         "survival": len(pol.snaps),
         "turns": [{"t": s["turn"], "sigma": s["strength"], "tier": s["tier"],
                    "types": s["types"], "carrier": s["carrier"]} for s in pol.snaps],
@@ -1070,6 +1390,8 @@ def summarize(eps: Sequence[dict]) -> dict:
     s15 = [e["sigma_t15"] for e in eps]
     ratios = [e["r12_15"] for e in eps]
     core_turns = [e["core_turn"] for e in eps if e["core_turn"] > 0]
+    decisions = int(sum(int(e.get("decisions") or 0) for e in eps))
+    illegal = int(sum(e["illegal"] for e in eps))
     return {
         "games": len(eps),
         "sigma_t12_p50": _pct(s12, 50), "sigma_t12_p90": _pct(s12, 90),
@@ -1087,8 +1409,11 @@ def summarize(eps: Sequence[dict]) -> dict:
         "tier_p50": _pct([e["tier_t15"] for e in eps], 50),
         "types_p50": _pct([e["types_t15"] for e in eps], 50),
         "placement_mean": _mean([e["placement"] for e in eps]),
+        "placement_p50": _pct([e["placement"] for e in eps], 50),
         "top4_rate": _mean([1.0 if 0 < e["placement"] <= 4 else 0.0 for e in eps]),
-        "illegal": int(sum(e["illegal"] for e in eps)),
+        "illegal": illegal,
+        "decisions": decisions,
+        "legal_rate": (1.0 - illegal / decisions) if decisions else 1.0,
         "exited_rate": _mean([1.0 if e["exited"] else 0.0 for e in eps]),
     }
 
@@ -1117,7 +1442,8 @@ def _worker(job: dict) -> List[dict]:
                      human_p=float(_G.get("human_p", 0.0)),
                      human_fidelity=str(_G.get("human_fidelity", "full")),
                      bot_seat0=(job["comp"] == "BOT"),
-                     hybrid=bool(_G.get("hybrid", True)))
+                     hybrid=bool(_G.get("hybrid", True)),
+                     exit_on_miss=bool(_G.get("exit_on_miss", True)))
         if r is not None:
             out.append(r)
     return out
@@ -1125,7 +1451,8 @@ def _worker(job: dict) -> List[dict]:
 
 def run_comp(comp_key: Optional[str], games: int, workers: int, seed0: int,
              human_boards: str, human_seats: int, human_p: float,
-             human_fidelity: str, auto: bool, hybrid: bool = True) -> List[dict]:
+             human_fidelity: str, auto: bool, hybrid: bool = True,
+             exit_on_miss: bool = True) -> List[dict]:
     import multiprocessing as mp
     n = max(1, min(int(workers), games))
     chunks = [(games + i) // n for i in range(n)]
@@ -1133,7 +1460,7 @@ def run_comp(comp_key: Optional[str], games: int, workers: int, seed0: int,
             for i, c in enumerate(chunks) if c > 0]
     payload = {"human_boards": human_boards, "human_seats": human_seats,
                "human_p": human_p, "human_fidelity": human_fidelity,
-               "hybrid": hybrid}
+               "hybrid": hybrid, "exit_on_miss": exit_on_miss}
     with mp.get_context("fork").Pool(len(jobs), initializer=_init_worker,
                                      initargs=(payload,)) as pool:
         outs = pool.map(_worker, jobs)
@@ -1161,6 +1488,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--json-out", default="")
     ap.add_argument("--pure", action="store_true",
                     help="纯手写经济脚本（不用引擎 bot 兜底；默认是混合模式）")
+    ap.add_argument("--no-exit-on-miss", action="store_true",
+                    help="关闭 V2 核心窗口退出（老「固定模式不退出」口径，A/B 对照用）")
     ap.add_argument("--list", action="store_true")
     return ap
 
@@ -1185,14 +1514,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     cfgs = [c.strip() for c in args.configs.split(",") if c.strip()]
     out: Dict[str, Any] = {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                            "games": int(args.games), "configs": {}, "specs": {},
-                           "unimplementable": UNIMPLEMENTABLE, "seconds": 0.0}
+                           "comp_keys": comp_keys(),
+                           "unimplementable": UNIMPLEMENTABLE,
+                           "legacy_gaps": LEGACY_GAPS, "seconds": 0.0}
     for k in sorted(COMPS):
         s = COMPS[k]
         out["specs"][k] = {"name": s.name, "archetype": s.archetype, "tribe": s.tribe,
                            "core": list(s.core), "carrier": list(s.carrier),
                            "cast_on": list(s.cast_on), "type_min": s.type_min,
                            "trinkets": list(s.trinkets), "curve": list(s.curve),
-                           "note": s.note}
+                           "enabler": list(s.enabler), "note": s.note}
     t0 = time.time()
     for cfg_name in cfgs:
         human = cfg_name == "human"
@@ -1204,7 +1535,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                            int(args.human_seats) if human else 0,
                            float(args.human_p) if human else 0.0,
                            str(args.human_fidelity), auto=(key is None),
-                           hybrid=not bool(args.pure))
+                           hybrid=not bool(args.pure),
+                           exit_on_miss=not bool(args.no_exit_on_miss))
             rep = summarize(eps)
             rep["label"] = label
             out["configs"][cfg_name][label] = {
@@ -1214,7 +1546,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                   f"core_t={rep['core_turn_p50']:5.1f} cast={rep['cast_share']:.2f} "
                   f"body={rep['body_share']:.2f} spells={rep['spells_mean']:5.1f} "
                   f"r12_15={rep['r12_15_p50']:.2f} place={rep['placement_mean']:.2f} "
-                  f"exc={rep['exited_rate']:.2f} ill={rep['illegal']}", flush=True)
+                  f"exc={rep['exited_rate']:.2f} ill={rep['illegal']} "
+                  f"legal={rep['legal_rate']:.4f}", flush=True)
     out["seconds"] = time.time() - t0
     if args.json_out:
         os.makedirs(os.path.dirname(os.path.abspath(args.json_out)) or ".", exist_ok=True)
