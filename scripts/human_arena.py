@@ -344,6 +344,164 @@ def _card_brief(it: Optional[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 # ══════════════════════════════════════════════════════════════════════
+# 拖拽 -> 标准动作（纯函数；前端 JS 与单测共用同一映射契约）
+# ══════════════════════════════════════════════════════════════════════
+
+#: 拖拽源/目标类型（与 HTML ``data-drag-kind`` / ``data-drop`` 一致）
+DRAG_SHOP = "shop"
+DRAG_HAND = "hand"
+DRAG_BOARD = "board"
+DRAG_BUY = "buy"
+DRAG_SELL = "sell"
+DRAG_ACTIVATE = "activate"
+
+
+def _drag_result(ok: bool, action: Optional[int] = None, reason: str = "",
+                 label: str = "", toast: str = "", note: str = "") -> Dict[str, Any]:
+    """统一的拖拽结果：``action=None`` 表示**不调用 /act**，只提示并回滚。"""
+    return {
+        "ok": bool(ok),
+        "action": int(action) if action is not None else None,
+        "reason": reason,
+        "label": label,
+        "toast": toast,
+        "note": note,
+    }
+
+
+def drag_action(st: Any, src_kind: Any, src_index: Any,
+                dst_kind: Any, dst_index: Any = None) -> Dict[str, Any]:
+    """把一次拖拽映射成 245 维标准动作（动作 id 与 ``hsbg/env/action_space_std.py`` 同源）。
+
+    映射表（对应 ``docs/HUMAN_ARENA_UI_SPEC_V2.md`` 第 3 节）：
+
+    - 商店 i -> 战场/购买区：``Buy == 8+i``；**只购买**，卡进手牌并提示“已购买”。
+      “买完自动打出”需要新增端点，本版不做。
+    - 手牌 h -> 战场空槽 p：``Play == 46+h*8+p``。
+    - 手牌 h（磁力）-> 战场随从 b：``Magnetize == 126+h*7+b``。
+    - 战场 from -> 战场 to：``Move == 196+from*7+to``（from != to）。
+    - 战场 b -> 出售区：``Sell == 16+b``；战场 b -> 发动区：``Activate == 23+b``。
+
+    非法拖拽返回 ``ok=False`` + 可读 ``reason``，前端据此**回滚且不提交**。
+    所有合法动作还会再核对当前 ``state.mask``，避免用过期 UI 发非法动作。
+    """
+    st = st if isinstance(st, dict) else {}
+    if st.get("over"):
+        return _drag_result(False, reason="对局已结束，不能再操作")
+    if st.get("pending"):
+        return _drag_result(False, reason="选择面板打开时先完成选择/取消，拖拽已暂停")
+    if st.get("busy"):
+        return _drag_result(False, reason="请求处理中，请稍候")
+
+    def _int(v: Any) -> Optional[int]:
+        try:
+            return int(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _allowed(a: Optional[int]) -> bool:
+        if a is None or not 0 <= int(a) < N_ACTIONS:
+            return False
+        mask = st.get("mask")
+        return bool(mask[int(a)]) if isinstance(mask, list) and mask else True
+
+    def _bad(reason: str) -> Dict[str, Any]:
+        return _drag_result(False, reason=reason)
+
+    src = str(src_kind or "")
+    dst = str(dst_kind or "")
+    si, di = _int(src_index), _int(dst_index)
+
+    if src == DRAG_SHOP:
+        shop = st.get("shop") or []
+        if dst not in (DRAG_BOARD, DRAG_HAND, DRAG_BUY):
+            return _bad("商店卡只能拖到购买区/战场：只触发 Buy，购买后进入手牌")
+        if si is None or not 0 <= si < len(shop):
+            return _bad("该酒馆槽位为空，不能购买")
+        c = shop[si] or {}
+        a = _int(c.get("buy"))
+        if a is None or not _allowed(a):
+            return _bad(str(c.get("buy_reason") or "该酒馆槽位当前不能购买"))
+        name = c.get("name_zh") or c.get("name") or "?"
+        return _drag_result(
+            True, a,
+            label="购买 %s -> Buy(%d) = %d" % (name, si, a),
+            toast="已购买：%s，已进入手牌；请从手牌拖到战场打出" % name,
+            note="只触发 Buy；买完自动打出需要新端点，本版不做",
+        )
+
+    if src == DRAG_HAND:
+        if dst != DRAG_BOARD:
+            return _bad("手牌只能拖到我方战场槽位（Play 或 Magnetize）")
+        hand = st.get("hand") or []
+        if si is None or not 0 <= si < len(hand):
+            return _bad("该手牌槽位为空")
+        c = hand[si] or {}
+        if di is None or not 0 <= di < N_POS:
+            return _bad("战场位置越界（0..%d）" % (N_POS - 1))
+        board = st.get("board") or []
+        name = c.get("name_zh") or c.get("name") or "?"
+        if di < len(board):
+            # 已有随从：优先解释为磁力吸附目标（空槽才是 Play）。
+            mag = next((m for m in (c.get("magnetize") or [])
+                        if _int(m.get("board")) == di), None)
+            a = _int((mag or {}).get("action"))
+            if mag is not None and _allowed(a):
+                target = (board[di] or {}).get("name_zh") or (board[di] or {}).get("name") or "?"
+                return _drag_result(
+                    True, a,
+                    label="%s 磁力 -> %s：Magnetize(%d,%d) = %d" % (name, target, si, di, a),
+                    toast="已磁力吸附：%s -> %s" % (name, target),
+                )
+            return _bad(str(c.get("magnetize_reason") or "该牌不能磁力吸附到这个随从"))
+        p = next((x for x in (c.get("play") or []) if _int(x.get("pos")) == di), None)
+        a = _int((p or {}).get("action"))
+        if p is not None and _allowed(a):
+            return _drag_result(
+                True, a,
+                label="%s 打出到 %d 号位：Play(%d,%d) = %d" % (name, di + 1, si, di, a),
+                toast="已打出：%s" % name,
+            )
+        return _bad(str(c.get("play_reason") or "现在不能打出到这个位置"))
+
+    if src == DRAG_BOARD:
+        board = st.get("board") or []
+        if si is None or not 0 <= si < len(board):
+            return _bad("该战场槽位为空")
+        b = board[si] or {}
+        name = b.get("name_zh") or b.get("name") or "?"
+        if dst == DRAG_BOARD:
+            if di is None or not 0 <= di < N_BOARD:
+                return _bad("战场位置越界（0..%d）" % (N_BOARD - 1))
+            if di == si:
+                return _bad("随从已在原位，未提交")
+            mv = next((m for m in (b.get("move") or []) if _int(m.get("to")) == di), None)
+            a = _int((mv or {}).get("action"))
+            if mv is not None and _allowed(a):
+                return _drag_result(
+                    True, a,
+                    label="移动 %s：%d -> %d = Move %d" % (name, si, di, a),
+                    toast="已移动：%s 到 %d 号位" % (name, di + 1),
+                )
+            return _bad("该位置不能移动（以引擎 move 掩码为准）")
+        if dst == DRAG_SELL:
+            a = _int(b.get("sell"))
+            if a is None or not _allowed(a):
+                return _bad(str(b.get("sell_reason") or "当前不能出售"))
+            return _drag_result(True, a, label="出售 %s = Sell %d" % (name, a),
+                                toast="已出售：%s" % name)
+        if dst == DRAG_ACTIVATE:
+            a = _int(b.get("activate"))
+            if a is None or not _allowed(a):
+                return _bad(str(b.get("activate_reason") or "该随从没有可发动技能"))
+            return _drag_result(True, a, label="发动 %s = Activate %d" % (name, a),
+                                toast="已发动：%s" % name)
+        return _bad("战场随从只能拖到战场槽位/出售区/发动区")
+
+    return _bad("未知拖拽源：%s" % (src or "?"))
+
+
+# ══════════════════════════════════════════════════════════════════════
 # 神明（Deity）：名字 + atk/hp + 金卡/复生 + 效果全文 + 结构化触发要求
 # ══════════════════════════════════════════════════════════════════════
 
@@ -1711,200 +1869,265 @@ INDEX_HTML = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HSBRSIM 人类对战</title>
+<title>HSBRSIM 人类对战 · 官方酒馆布局 V2</title>
 <style>
-:root{--bg:#12141c;--panel:#1b1f2c;--line:#2c3245;--fg:#e8ecf5;--dim:#93a0bd;
-      --gold:#f2c14e;--hp:#e05a5a;--good:#5ad18a;--bad:#e07070;--spell:#8f7ff0;}
+:root{--bg:#0f1118;--panel:#191d29;--panel2:#202636;--line:#2c3245;--fg:#e8ecf5;--dim:#93a0bd;
+      --gold:#f2c14e;--hp:#e05a5a;--good:#5ad18a;--bad:#e07070;--spell:#8f7ff0;--drop:#5ad18a}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
-header{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line);background:#171a25;position:sticky;top:0;z-index:5}
+html,body{margin:0;background:var(--bg);color:var(--fg)}
+body{font:14px/1.45 "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+body.dragging{cursor:grabbing}
+body.pointer-dragging{touch-action:none;overscroll-behavior:none}
+body.busy .card,body.busy button,body.busy .slot{pointer-events:none;opacity:.72}
+header{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line);
+       background:#151923;position:sticky;top:0;z-index:20}
 header .hero{font-size:18px;font-weight:700;color:var(--gold)}
-header .pill{background:#232838;border:1px solid var(--line);border-radius:999px;padding:3px 10px}
+header .pill{background:#232838;border:1px solid var(--line);border-radius:999px;padding:3px 10px;white-space:nowrap}
 header .hp{color:var(--hp);font-weight:700}
 header .gold{color:var(--gold);font-weight:700}
 header .dim{color:var(--dim)}
-main{display:grid;grid-template-columns:minmax(420px,1.25fr) minmax(360px,1fr) minmax(300px,.9fr);gap:12px;padding:12px}
-section{display:flex;flex-direction:column;gap:12px;min-width:0}
+main.arena{display:flex;flex-direction:column;gap:10px;padding:12px;max-width:1680px;margin:0 auto}
+.arena-row{min-width:0}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
-.ptitle{display:flex;justify-content:space-between;align-items:center;color:var(--dim);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px}
-.card{position:relative;background:#202636;border:1px solid var(--line);border-radius:8px;padding:7px;min-height:110px;cursor:default;transition:border-color .1s,transform .1s}
+.ptitle{display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--dim);
+        font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px}
+.ptitle b{color:var(--fg);letter-spacing:0}
+.mini{color:var(--dim);font-size:11px;margin-top:2px}
+.dim{color:var(--dim)}
+.good{color:var(--good)}.bad{color:var(--bad)}
+.slots{min-width:0}
+.shopgrid{display:grid;grid-template-columns:repeat(8,minmax(112px,1fr));gap:7px;overflow-x:auto;padding-bottom:4px}
+.boardgrid{display:grid;grid-template-columns:repeat(7,minmax(126px,1fr));gap:8px;overflow-x:auto;padding-bottom:4px}
+.handgrid{display:grid;grid-template-columns:repeat(10,minmax(104px,1fr));gap:6px;overflow-x:auto;padding-bottom:4px}
+.slot{position:relative;min-height:132px;border:1px dashed #333b52;border-radius:8px;padding:4px;
+      transition:border-color .1s,background .1s;background:#151924}
+.slot.empty{display:flex;align-items:center;justify-content:center;color:#4b5674;font-size:11px}
+.slot.dragover{border-color:var(--drop);background:#1c2a22;box-shadow:0 0 0 1px var(--drop) inset}
+.slot.dragover-bad{border-color:var(--bad);background:#2a1b1b;box-shadow:0 0 0 1px var(--bad) inset}
+.slot.sell{border-color:#8a4242;background:#2a1717}
+.card{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px;
+      min-height:124px;cursor:grab;transition:border-color .1s,transform .1s,box-shadow .1s;user-select:none;touch-action:manipulation}
+.card:active{cursor:grabbing}
 .card.clickable{cursor:pointer}
 .card.clickable:hover{border-color:var(--gold);transform:translateY(-1px)}
-.card.legal{border-color:#3d5a8a}
 .card.golden{border-color:#b8860b;box-shadow:0 0 0 1px #b8860b inset}
-.card .cname{font-weight:700;font-size:13px;line-height:1.25;margin-bottom:4px}
-.card .cmeta{display:flex;justify-content:space-between;align-items:center;color:var(--dim);font-size:11px}
-.card .stats{color:var(--fg);font-weight:700}
-.card .stats .a{color:#f0b95a}.card .stats .h{color:var(--hp)}
-.card .ctext{color:var(--dim);font-size:11px;line-height:1.3;margin-top:5px;max-height:52px;overflow:hidden}
-.card .badge{position:absolute;right:6px;bottom:5px;background:#2c3245;border-radius:6px;padding:1px 6px;font-size:11px;color:var(--gold)}
-.card .spell{color:var(--spell);font-size:11px}
-.card .frozen{position:absolute;left:6px;top:5px;color:#7fd1ff;font-size:11px}
-.handrow{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
-.handrow .card{min-width:128px;max-width:150px}
-.board{display:flex;gap:8px;flex-wrap:wrap;min-height:132px}
-.board .card{width:132px;min-height:124px}
-.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;position:relative;z-index:2}
-.chip{background:#2c3245;border:1px solid #3a4258;color:var(--fg);border-radius:6px;padding:2px 7px;font-size:11px;cursor:pointer}
+.card.dragging{opacity:.45;transform:scale(.97)}
+.card.shake{animation:shake .38s linear}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}40%{transform:translateX(5px)}
+  60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+.dragghost{position:fixed;z-index:80;pointer-events:none;width:132px;opacity:.88;
+           box-shadow:0 12px 30px rgba(0,0,0,.55);transform:translate(-50%,-50%) rotate(1deg)}
+.art{position:relative;height:52px;background:#171b26;border:1px solid var(--line);border-radius:6px;
+     margin:0 0 5px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.art img{position:absolute;inset:0;margin:auto;max-height:100%;max-width:100%;object-fit:contain}
+.artph{color:#46506b;font-size:15px;font-weight:700;letter-spacing:.06em;user-select:none}
+.card .tier-badge{position:absolute;left:7px;top:7px;background:#1a1e2b;border:1px solid #4a5470;
+     border-radius:6px;padding:0 5px;font-size:10px;color:var(--gold);z-index:3}
+.card .cname{font-weight:700;font-size:13px;line-height:1.25;margin-bottom:2px}
+.card .raceline{color:#9fb0d6;font-size:10px;margin:1px 0}
+.card .cmeta{display:flex;justify-content:space-between;align-items:center;color:var(--dim);font-size:10px}
+.card .atk-hp{font-weight:700;font-size:13px}
+.card .atk-hp .a{color:#f0b95a}.card .atk-hp .h{color:var(--hp)}
+.card .spell{color:var(--spell);font-size:10px}
+.kwchips{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+.kw{background:#2a3550;border:1px solid #3d4c6e;border-radius:5px;padding:0 5px;font-size:10px;color:#bcd0ff}
+.kw.card-kw{background:#3a2f4e;border-color:#5a4478;color:#d8c4ff}
+.kw.golden-kw{background:#4a3a12;border-color:#8a6d20;color:var(--gold)}
+details{margin-top:4px}
+details>summary{list-style:none;cursor:pointer;color:#8fc1ff;font-size:10px;line-height:1.35}
+details>summary::-webkit-details-marker{display:none}
+details>summary::before{content:"▸ ";color:var(--dim)}
+details[open]>summary::before{content:"▾ "}
+details.fx .quote{color:#8d99b5;font-size:11px;line-height:1.32;max-height:86px;overflow:auto;margin-top:3px}
+details.attach>summary{color:#d8c4ff}
+.attachlist{display:flex;flex-direction:column;gap:4px;margin-top:3px}
+.attachitem{border-left:2px solid #5a4478;padding-left:5px;font-size:10px;color:#c8d2e8}
+.attachitem .src{color:#8d99b5}
+details.bd>summary{color:#9fb0d6}
+.card .badge{position:absolute;right:6px;bottom:5px;background:#2c3245;border-radius:6px;padding:1px 6px;font-size:10px;color:var(--gold)}
+.card .frozen{position:absolute;left:7px;top:5px;color:#7fd1ff;font-size:11px;z-index:4}
+.card .reason{color:#e0a06a;font-size:10px;margin-top:3px;line-height:1.25}
+.chips{display:flex;flex-wrap:wrap;gap:3px;margin-top:5px;position:relative;z-index:2}
+.chip{background:#2c3245;border:1px solid #3a4258;color:var(--fg);border-radius:6px;padding:1px 6px;
+      font-size:10px;cursor:pointer;line-height:1.5}
 .chip:hover{border-color:var(--gold)}
 .chip.on{background:#3b4a25;border-color:#7bb43f}
-.btns{display:flex;flex-wrap:wrap;gap:8px}
-button{background:#2a3146;color:var(--fg);border:1px solid #3a4258;border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer}
+.taverninfo{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:7px}
+.taverninfo .pill{background:#232838;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:12px}
+.btns{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.btns .bwrap{display:flex;flex-direction:column;gap:2px}
+.btns .bwrap .reason{color:#e0a06a;font-size:10px;max-width:220px}
+button{background:#2a3146;color:var(--fg);border:1px solid #3a4258;border-radius:8px;padding:6px 11px;font-size:13px;cursor:pointer}
 button:hover:not(:disabled){border-color:var(--gold)}
 button:disabled{opacity:.35;cursor:not-allowed}
 button.primary{background:#3b4a25;border-color:#6f9c3c}
 button.end{background:#5a2b2b;border-color:#8a4242}
 button.new{background:#2b3d5a;border-color:#45608a}
-.opp{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow:auto}
+.droprow{display:flex;gap:8px;margin-top:6px}
+.dropzone{border:1px dashed #4a5470;border-radius:8px;padding:8px 10px;color:var(--dim);font-size:12px;min-height:38px;
+          display:flex;align-items:center;justify-content:center;flex:1}
+.dropzone.dragover{border-color:var(--drop);background:#1c2a22;color:var(--good)}
+.dropzone.dragover-bad{border-color:var(--bad);background:#2a1b1b;color:var(--bad)}
+.sellzone{border:1px solid #8a4242;background:#2a1717;border-radius:10px;padding:10px 14px;color:#ffb3b3;
+          text-align:center;font-size:13px;min-height:44px;display:flex;align-items:center;justify-content:center;gap:8px}
+.sellzone.dragover{border-color:var(--drop);background:#1c2a22;color:var(--good)}
+.sellzone.dragover-bad{border-color:var(--bad);background:#2a1b1b}
+.lower{display:grid;grid-template-columns:minmax(320px,.9fr) minmax(360px,1.25fr);gap:10px;align-items:start}
+.sidebar,.bottom{display:flex;flex-direction:column;gap:10px;min-width:0}
+.opp{display:flex;flex-direction:column;gap:5px;max-height:360px;overflow:auto}
 .opprow{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 8px;border-bottom:1px dashed var(--line);padding:4px 0;font-size:12px}
 .opprow>span{white-space:nowrap}
 .opprow.dead{opacity:.45;text-decoration:line-through}
-.mini{color:var(--dim);font-size:11px;margin-top:2px}
-#overlay{position:fixed;inset:0;background:rgba(8,10,16,.78);display:flex;align-items:center;justify-content:center;z-index:50}
-#overlay.hidden{display:none}
-.pbox{background:var(--panel);border:1px solid #4a5470;border-radius:14px;padding:18px;max-width:min(860px,92vw);max-height:86vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-.pbox h2{margin:0 0 4px;font-size:20px}
-.pbox .sub{color:var(--dim);margin-bottom:12px}
-.popts{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin:10px 0}
-.popts .card{min-height:120px}
-#toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#5a2b2b;border:1px solid #8a4242;color:#fff;padding:8px 16px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60}
-#toast.show{opacity:1}
-#newgame{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
-#newgame input{width:110px;background:#202636;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px}
-#newgame a{color:#8fc1ff;font-size:12px}
-details{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
-summary{color:var(--dim);cursor:pointer;font-size:12px}
-#legal{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;max-height:180px;overflow:auto}
-#legal span{background:#202636;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:11px;color:var(--dim)}
-.good{color:var(--good)}.bad{color:var(--bad)}
-/* ── 卡图与卡面信息 ── */
-.art{position:relative;height:56px;background:#171b26;border:1px solid var(--line);border-radius:6px;
-     margin:0 0 5px;overflow:hidden;display:flex;align-items:center;justify-content:center}
-.art img{position:absolute;inset:0;margin:auto;max-height:100%;max-width:100%;object-fit:contain}
-.artph{color:#46506b;font-size:15px;font-weight:700;letter-spacing:.06em;user-select:none}
-.card .tier-badge{position:absolute;left:7px;top:7px;background:#1a1e2b;border:1px solid #4a5470;
-     border-radius:6px;padding:0 5px;font-size:11px;color:var(--gold);z-index:3}
-.card .raceline{color:#9fb0d6;font-size:11px;margin:1px 0}
-.card .kwchips{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
-.kw{background:#2a3550;border:1px solid #3d4c6e;border-radius:5px;padding:0 5px;font-size:10px;color:#bcd0ff}
-.kw.card-kw{background:#3a2f4e;border-color:#5a4478;color:#d8c4ff}
-.kw.golden-kw{background:#4a3a12;border-color:#8a6d20;color:var(--gold)}
-.card .atk-hp{font-weight:700;font-size:13px}
-.card .atk-hp .a{color:#f0b95a}.card .atk-hp .h{color:var(--hp)}
-.card .quote{color:#8d99b5;font-size:11px;line-height:1.3;margin-top:4px;max-height:44px;overflow:hidden}
-.card details,.card .attach{margin-top:4px;font-size:10px;color:#93a0bd}
-.card details summary{font-size:10px;color:#8fc1ff}
-.card .reason{color:#e0a06a;font-size:10px;margin-top:3px}
-.btns .bwrap{display:flex;flex-direction:column;gap:2px}
-.btns .bwrap .reason{color:#e0a06a;font-size:10px;max-width:220px}
 .trinket{display:flex;flex-direction:column;gap:2px;border-bottom:1px dashed var(--line);padding:4px 0}
 .trinket .tname{font-weight:700;font-size:12px}
-.dg{display:flex;flex-direction:column;gap:4px;border:1px solid #4a3d6b;border-radius:8px;padding:8px;background:#241f33}
+.dg{display:flex;flex-direction:column;gap:5px;border:1px solid #4a3d6b;border-radius:8px;padding:8px;background:#241f33}
 .dg .dgline{font-size:12px}
 .dg .reason{color:#e0a06a;font-size:11px}
 .deity{border:1px solid #5a4478;border-radius:8px;padding:8px;background:#241f33;display:flex;flex-direction:column;gap:5px}
 .deity .dname{font-size:15px}
 .deity .dmeta{color:#93a0bd;font-size:11px}
-.deity .dtext{color:#c8d2e8;font-size:12px;line-height:1.4}
-.deity .dtrig{font-size:12px;line-height:1.4}
+.deity .dtrig{font-size:12px;line-height:1.4;margin-top:3px}
 .deity .dtrig b{color:var(--gold)}
 .deity .src{color:#8d99b5;font-size:10px}
-.deity .dnumline{display:flex;flex-wrap:wrap;gap:6px;font-size:11px;color:#c8d2e8}
+.deity .dnumline{display:flex;flex-wrap:wrap;gap:5px;font-size:11px;color:#c8d2e8}
 .deity .dnum{background:#2c3245;border:1px solid #3a4258;border-radius:6px;padding:1px 6px}
 .deity .dempty{color:#93a0bd;font-size:12px}
 .mycombat{border-left:3px solid var(--line);padding-left:8px;margin-bottom:4px}
-.mycombat.win{border-color:var(--good)}.mycombat.loss{border-color:var(--bad)}
-.mycombat.tie{border-color:var(--gold)}
-.frames{max-height:200px;overflow:auto;font-size:11px}
+.mycombat.win{border-color:var(--good)}.mycombat.loss{border-color:var(--bad)}.mycombat.tie{border-color:var(--gold)}
+.frames{max-height:220px;overflow:auto;font-size:11px}
 .frames .fr{border-bottom:1px dashed var(--line);padding:3px 0}
-#statetext{white-space:pre-wrap;font-size:11px;line-height:1.35;color:#c8d2e8;max-height:340px;overflow:auto;margin:0}
+.eventline{font-size:12px;border-bottom:1px dashed var(--line);padding:2px 0}
+#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#3a2222;border:1px solid #8a4242;
+       color:#fff;padding:9px 18px;border-radius:9px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:100;max-width:88vw}
+#toast.show{opacity:1}
+#toast.ok{background:#1d3325;border-color:#3f7a52}
+#loading{position:fixed;top:12px;right:14px;background:#2b3d5a;border:1px solid #45608a;color:#dce9ff;
+         border-radius:8px;padding:6px 12px;font-size:12px;z-index:90;display:none}
+body.busy #loading{display:block}
+#newgame{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+#newgame input{width:110px;background:#202636;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px}
+#newgame a{color:#8fc1ff;font-size:12px}
+#legal{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;max-height:190px;overflow:auto}
+#legal span{background:#202636;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:11px;color:var(--dim)}
+#statetext{white-space:pre-wrap;font-size:11px;line-height:1.35;color:#c8d2e8;max-height:360px;overflow:auto;margin:0}
+#overlay{position:fixed;inset:0;background:rgba(8,10,16,.8);display:flex;align-items:center;justify-content:center;z-index:60}
+#overlay.hidden{display:none}
+.pbox{background:var(--panel);border:1px solid #4a5470;border-radius:14px;padding:18px;max-width:min(920px,94vw);max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.55)}
+.pbox h2{margin:0 0 4px;font-size:20px}
+.pbox .sub{color:var(--dim);margin-bottom:10px}
+.popts{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin:10px 0}
+.popts .card{min-height:124px}
+#menubox{position:fixed;inset:0;background:rgba(8,10,16,.72);display:flex;align-items:center;justify-content:center;z-index:70}
+#menubox.hidden{display:none}
+.menu{background:var(--panel);border:1px solid #4a5470;border-radius:12px;padding:14px;max-width:min(520px,92vw);max-height:80vh;overflow:auto}
+.menu h3{margin:0 0 8px;font-size:16px}
+.menu .mbtn{display:block;width:100%;text-align:left;margin:5px 0}
+@media (max-width:980px){
+  main.arena{padding:8px;gap:8px}
+  .lower{grid-template-columns:1fr}
+  .shopgrid{grid-template-columns:repeat(8,118px)}
+  .boardgrid{grid-template-columns:repeat(7,136px)}
+  .handgrid{grid-template-columns:repeat(10,112px)}
+  header{padding:8px 10px;gap:6px}
+}
 </style>
 </head>
 <body>
 <header id="hud"><span class="dim">加载中…</span></header>
-<main>
-  <section>
-    <div class="panel">
-      <div class="ptitle"><span>酒馆</span><span id="tavernhint" class="mini"></span></div>
-      <div id="shop" class="grid"></div>
-    </div>
-    <div class="panel">
-      <div class="ptitle"><span>手牌</span><span id="handhint" class="mini"></span></div>
-      <div id="hand" class="handrow"></div>
+<main class="arena">
+  <section id="shoprow" class="arena-row panel">
+    <div class="ptitle"><span><b>第一行 · 鲍勃酒馆</b>（8 槽）</span><span id="tavernhint" class="mini"></span></div>
+    <div id="taverninfo" class="taverninfo"></div>
+    <div id="shop" class="shopgrid slots" aria-label="鲍勃酒馆"></div>
+    <div id="buttons" class="btns"></div>
+    <div class="mini dim">拖动商店卡到战场/购买区 = Buy（只购买，卡进入手牌并提示“已购买”，需再拖手牌打出）</div>
+  </section>
+  <section id="boardrow" class="arena-row panel">
+    <div class="ptitle"><span><b>第二行 · 我方战场</b>（7 槽，拖动排序）</span><span id="boardhint" class="mini"></span></div>
+    <div id="board" class="boardgrid slots" aria-label="我方战场"></div>
+    <div class="droprow">
+      <div id="activatezone" class="dropzone activatezone" data-drop="activate">拖到此处发动技能/效果（Activate = 23+槽位）</div>
     </div>
   </section>
-  <section>
-    <div class="panel">
-      <div class="ptitle"><span>我的战场</span><span id="boardhint" class="mini"></span></div>
-      <div id="board" class="board"></div>
-    </div>
-    <div class="panel">
-      <div class="ptitle"><span>神明（Deity，独立于赐福）</span><span id="deityhint" class="mini"></span></div>
-      <div id="deity"></div>
-    </div>
-    <div class="panel">
-      <div class="ptitle"><span>饰品 / 黑暗之赐</span><span id="trinkethint" class="mini"></span></div>
-      <div id="trinkets" class="mini"></div>
-      <div id="darkgift" style="margin-top:8px"></div>
-      <div id="effects" class="mini" style="margin-top:6px"></div>
-    </div>
-    <div class="panel">
-      <div class="ptitle"><span>操作</span><span class="mini">按钮 = 动作名 + 价格 + [引擎动作下标]</span></div>
-      <div id="buttons" class="btns"></div>
-      <div id="newgame">
-        <input id="seed" type="number" placeholder="seed" title="留空 = 当前 seed">
-        <button id="newbtn" class="new">新开一局</button>
-        <a id="replaylink" href="/replay">下载 replay</a>
-        <span id="replaymeta" class="mini"></span>
+  <section id="handrow" class="arena-row panel">
+    <div class="ptitle"><span><b>第三行 · 手牌</b>（10 格）</span><span id="handhint" class="mini"></span></div>
+    <div id="hand" class="handgrid slots" aria-label="手牌"></div>
+    <div class="mini dim">拖到战场空槽 = Play；拖到已有机械/随从 = Magnetize；点卡片上的快捷按钮或按 Enter 也可操作</div>
+  </section>
+  <section id="sellrow" class="arena-row">
+    <div id="sellzone" class="sellzone" data-drop="sell"><b>出售区</b> 拖到此处出售（Sell = 16+槽位）</div>
+  </section>
+  <div class="lower">
+    <aside class="sidebar">
+      <div class="panel">
+        <div class="ptitle"><span>对手（公开信息）</span><span id="opphint" class="mini"></span></div>
+        <div id="opp" class="opp"></div>
       </div>
-    </div>
-  </section>
-  <section>
-    <div class="panel">
-      <div class="ptitle"><span>对手（公开信息）</span><span id="opphint" class="mini"></span></div>
-      <div id="opp" class="opp"></div>
-    </div>
-    <div class="panel">
-      <div class="ptitle"><span>我的上轮战果</span><span id="combathint" class="mini"></span></div>
-      <div id="mycombat"></div>
-      <details style="margin-top:6px"><summary>最近战斗（全部座位）</summary><div id="combats" class="mini"></div></details>
-    </div>
-    <div class="panel">
-      <div class="ptitle"><span>本回合事件</span></div>
-      <div id="events" class="mini"></div>
-    </div>
-    <details>
-      <summary>合法动作掩码（点击展开）</summary>
-      <div id="legal"></div>
-    </details>
-    <details>
-      <summary>中局状态文本（/snapshot.txt）</summary>
-      <!--SNAPSHOT_TEXT-->
-    </details>
-  </section>
+      <div class="panel">
+        <div class="ptitle"><span>饰品 / 黑暗之赐 / 持续效果</span><span id="trinkethint" class="mini"></span></div>
+        <div id="trinkets" class="mini"></div>
+        <div id="darkgift" style="margin-top:8px"></div>
+        <div id="effects" class="mini" style="margin-top:6px"></div>
+      </div>
+      <div class="panel">
+        <div class="ptitle"><span>神明（Deity，独立于赐福）</span><span id="deityhint" class="mini"></span></div>
+        <div id="deity"></div>
+      </div>
+    </aside>
+    <section class="bottom">
+      <div class="panel">
+        <div class="ptitle"><span>我的上轮战果</span><span id="combathint" class="mini"></span></div>
+        <div id="mycombat"></div>
+        <details data-key="all-combats"><summary>最近战斗（全部座位）▸</summary><div id="combats" class="mini"></div></details>
+      </div>
+      <div class="panel">
+        <div class="ptitle"><span>日志 / 本回合事件</span></div>
+        <div id="events" class="mini"></div>
+      </div>
+      <div class="panel">
+        <div class="ptitle"><span>对局 / 连接 / 新开一局</span></div>
+        <div id="newgame">
+          <input id="seed" type="number" placeholder="seed" title="留空 = 当前 seed">
+          <button id="newbtn" class="new">新开一局</button>
+          <a id="replaylink" href="/replay">下载 replay</a>
+          <span id="replaymeta" class="mini"></span>
+        </div>
+        <div class="mini" id="connhint">/state 真源 · /act 唯一提交入口 · 拖拽失败会回滚且不提交</div>
+      </div>
+      <details data-key="legal"><summary>合法动作掩码（点击展开）▸</summary><div id="legal"></div></details>
+      <details data-key="snapshot"><summary>中局状态文本（/snapshot.txt）▸</summary>
+        <!--SNAPSHOT_TEXT-->
+      </details>
+    </section>
+  </div>
 </main>
 <div id="overlay" class="hidden"></div>
+<div id="menubox" class="hidden"></div>
 <div id="toast"></div>
+<div id="loading">处理中…</div>
 <script>
 "use strict";
 let S = /*STATE_JSON*/null;
 let toastTimer = 0;
 let BUSY = false;   /* 请求中锁定提交，避免双击产生第二次（非法）动作 */
+const DRAG = {payload:null, sourceEl:null, ghost:null, targetEl:null, snapshot:null,
+              timer:0, pointer:null, suppressClick:false};
 
 const $ = (id) => document.getElementById(id);
 function esc(s) {
   return String(s === null || s === undefined ? "" : s).replace(/[&<>"']/g, (c) => (
     {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 }
-function toast(msg) {
+function evText(e) { return typeof e === "string" ? e : JSON.stringify(e); }
+function toast(msg, ok) {
   const t = $("toast");
   t.textContent = msg;
+  t.classList.toggle("ok", !!ok);
   t.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2800);
 }
-async function api(path, body) {
+async function api(path, body, label) {
   const opt = body === undefined ? {} : {
     method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)
   };
@@ -1912,42 +2135,55 @@ async function api(path, body) {
   try {
     res = await fetch(path, opt);
   } catch (e) {
-    toast("网络错误：" + e);
+    toast("连接失败，未确认提交：" + e);
     return null;
   }
   try { data = await res.json(); } catch (e) { data = {error: "响应不是 JSON"}; }
-  if (!res.ok) { toast(data.error || ("HTTP " + res.status)); return null; }
+  if (!res.ok) {
+    toast((label ? label + "：" : "") + (data.error || ("HTTP " + res.status)));
+    return null;
+  }
   return data;
 }
 async function refresh() {
   const data = await api("/state");
   if (data) { S = data; render(); }
 }
-async function act(action) {
+async function act(action, okMsg) {
   if (action === null || action === undefined) { toast("该操作当前不可用"); return; }
   if (!S || BUSY) { if (BUSY) toast("请求处理中，请稍候"); return; }
   BUSY = true;
+  document.body.classList.add("busy");
   try {
-    const data = await api("/act", {action: action});
-    if (data) { S = data; render(); } else { await refresh(); }
+    const data = await api("/act", {action: action}, "动作 " + action);
+    if (data) {
+      S = data; render();
+      if (okMsg) toast(okMsg, true);
+    } else {
+      /* HTTP 400/断网都视为未确认状态：先 GET /state 校正，不自动重试 */
+      await refresh();
+    }
   } finally {
     BUSY = false;
+    document.body.classList.remove("busy");
   }
 }
 async function newGame() {
   if (BUSY) { toast("请求处理中，请稍候"); return; }
   BUSY = true;
+  document.body.classList.add("busy");
   try {
     const raw = $("seed").value.trim();
     const body = raw === "" ? {} : {seed: Number(raw)};
-    const data = await api("/new", body);
-    if (data) { S = data; render(); toast("新开一局：seed " + data.seed); }
+    const data = await api("/new", body, "新开一局");
+    if (data) { S = data; render(); toast("新开一局：seed " + data.seed, true); }
   } finally {
     BUSY = false;
+    document.body.classList.remove("busy");
   }
 }
 
-/* ── 渲染 ─────────────────────────────────────────────────────── */
+/* ── 渲染基础 ─────────────────────────────────────────────────── */
 function heroName(h) { return h ? (h.name_zh || h.name) : "选择英雄"; }
 function artHTML(c) {
   const name = c.name_zh || c.name || "?";
@@ -1973,8 +2209,22 @@ function statsHTML(c) {
   }
   return s;
 }
-function cardHTML(c, extra) {
+function attachedHTML(items, key) {
+  const n = (items || []).length;
+  if (!n) return "";
+  const rows = items.map((a) =>
+    '<div class="attachitem"><b>' + esc(a.name_zh || a.name || "?") + '</b> ' +
+    '<span class="kw">' + esc(a.kind_label || "附件") + '</span>' +
+    (a.text ? '<div class="mini">' + esc(a.text) + '</div>' : "") +
+    '<div class="src">来源 ' + esc(a.card_id || "未知") +
+    (a.cost !== null && a.cost !== undefined ? ' · 费用 ' + esc(a.cost) : "") + '</div></div>').join("");
+  return '<details class="attach" data-key="attach-' + esc(key || "x") + '">' +
+    '<summary>+' + n + ' 附件 ▸</summary><div class="attachlist">' + rows + '</div></details>';
+}
+/* 卡面效果/属性来源默认折叠；动态关键词仍常驻标签。 */
+function cardHTML(c, extra, key) {
   const name = c.name_zh || c.name || "?";
+  const k = key || c.card_id || name;
   const parts = [];
   parts.push(artHTML(c));
   parts.push('<div class="tier-badge">' + esc(c.tier_label || ("★" + (c.tier || 0))) + '</div>');
@@ -1986,59 +2236,304 @@ function cardHTML(c, extra) {
     (c.activate_cost !== null && c.activate_cost !== undefined ? '发动 ' + c.activate_cost + ' 金' : '') +
     '</span></div>');
   parts.push(kwHTML(c));
-  if (c.text) parts.push('<div class="quote">[卡面] ' + esc(c.text) + '</div>');
-  if (c.attached && c.attached.length) {
-    parts.push('<div class="attach">附件：' + c.attached.map((a) =>
-      esc(a.name_zh || a.name || "?") + '（' + esc(a.kind_label || "附件") +
-      (a.text ? '：' + esc(a.text) : '') + '）').join('；') + '</div>');
+  if (c.text) {
+    parts.push('<details class="fx" data-key="fx-' + esc(k) + '"><summary>卡面效果 ▸</summary>' +
+      '<div class="quote">[卡面] ' + esc(c.text) + '</div></details>');
   }
+  if (c.golden_text) {
+    parts.push('<details class="fx" data-key="gfx-' + esc(k) + '"><summary>金卡效果 ▸</summary>' +
+      '<div class="quote">[金卡卡面] ' + esc(c.golden_text) + '</div></details>');
+  }
+  if (c.attached && c.attached.length) parts.push(attachedHTML(c.attached, k));
   if (c.breakdown_text) {
-    parts.push('<details><summary>数值拆解</summary><div>' + esc(c.breakdown_text) + '</div></details>');
+    parts.push('<details class="bd" data-key="bd-' + esc(k) + '"><summary>属性来源 ▸</summary>' +
+      '<div class="mini">' + esc(c.breakdown_text) + '</div></details>');
   }
   return parts.join("") + (extra || "");
 }
-function shopCard(c) {
+
+/* ── 拖拽：HTML5 DnD + Pointer Events，复用同一 dispatchDrop ───── */
+function canDrag() { return !!(S && !S.over && !BUSY && !S.pending); }
+function num(v) { return (v === null || v === undefined || Number.isNaN(Number(v))) ? null : Number(v); }
+function planDrop(src, dst) {
+  const mk = (ok, action, reason, label, okMsg) => ({ok, action, reason, label, toast: okMsg});
+  if (!S) return mk(false, null, "状态尚未加载");
+  if (S.over) return mk(false, null, "对局已结束，不能再操作");
+  if (S.pending) return mk(false, null, "选择面板打开时先完成选择/取消，拖拽已暂停");
+  if (BUSY) return mk(false, null, "请求处理中，请稍候");
+  if (!src || !dst) return mk(false, null, "没有识别到拖拽源/目标");
+  const sk = src.kind, si = num(src.index), dk = dst.kind, di = num(dst.index);
+  if (sk === "shop") {
+    if (dk !== "hand" && dk !== "board" && dk !== "buy") {
+      return mk(false, null, "商店卡只能拖到购买区/战场：只触发 Buy，购买后进入手牌");
+    }
+    const c = (S.shop || [])[si];
+    if (!c) return mk(false, null, "该酒馆槽位为空，不能购买");
+    const a = num(c.buy);
+    if (a === null) return mk(false, null, c.buy_reason || "该酒馆槽位当前不能购买");
+    return mk(true, a, "", "购买 " + (c.name_zh || c.name) + " -> Buy(" + si + ") = " + a,
+      "已购买：" + (c.name_zh || c.name) + "，已进入手牌；请从手牌拖到战场打出");
+  }
+  if (sk === "hand") {
+    if (dk !== "board") return mk(false, null, "手牌只能拖到我方战场槽位（Play 或 Magnetize）");
+    const c = (S.hand || [])[si];
+    if (!c) return mk(false, null, "该手牌槽位为空");
+    const npos = (S.action_space && S.action_space.N_POS) || 8;
+    if (di === null || di < 0 || di >= npos) return mk(false, null, "战场位置越界");
+    const board = S.board || [];
+    if (di < board.length) {
+      const mag = (c.magnetize || []).find((m) => num(m.board) === di);
+      if (mag) {
+        return mk(true, mag.action, "",
+          "磁力 " + (c.name_zh || c.name) + " -> 随从 " + (di + 1) + "：Magnetize = " + mag.action,
+          "已磁力吸附：" + (c.name_zh || c.name));
+      }
+      return mk(false, null, c.magnetize_reason || "该牌不能磁力吸附到这个随从");
+    }
+    const play = (c.play || []).find((p) => num(p.pos) === di);
+    if (play) {
+      return mk(true, play.action, "",
+        "打出 " + (c.name_zh || c.name) + " 到 " + (di + 1) + " 号位：Play = " + play.action,
+        "已打出：" + (c.name_zh || c.name));
+    }
+    return mk(false, null, c.play_reason || "现在不能打出到这个位置");
+  }
+  if (sk === "board") {
+    const b = (S.board || [])[si];
+    if (!b) return mk(false, null, "该战场槽位为空");
+    if (dk === "board") {
+      if (di === si) return mk(false, null, "随从已在原位，未提交");
+      const mv = (b.move || []).find((m) => num(m.to) === di);
+      if (mv) return mk(true, mv.action, "",
+        "移动 " + si + " -> " + di + "：Move = " + mv.action,
+        "已移动：" + (b.name_zh || b.name) + " 到 " + (di + 1) + " 号位");
+      return mk(false, null, "该位置不能移动（以引擎 move 掩码为准）");
+    }
+    if (dk === "sell") {
+      const a = num(b.sell);
+      if (a === null) return mk(false, null, b.sell_reason || "当前不能出售");
+      return mk(true, a, "", "出售 " + (b.name_zh || b.name) + "：Sell = " + a,
+        "已出售：" + (b.name_zh || b.name));
+    }
+    if (dk === "activate") {
+      const a = num(b.activate);
+      if (a === null) return mk(false, null, b.activate_reason || "该随从没有可发动技能");
+      return mk(true, a, "", "发动 " + (b.name_zh || b.name) + "：Activate = " + a,
+        "已发动：" + (b.name_zh || b.name));
+    }
+    return mk(false, null, "战场随从只能拖到战场槽位/出售区/发动区");
+  }
+  return mk(false, null, "未知拖拽源");
+}
+function clearTarget() {
+  if (DRAG.targetEl) {
+    DRAG.targetEl.classList.remove("dragover", "dragover-bad");
+    DRAG.targetEl = null;
+  }
+}
+function setTarget(z) {
+  clearTarget();
+  if (!z) return;
+  const plan = planDrop(DRAG.payload || {}, z);
+  z.el.classList.add(plan.ok ? "dragover" : "dragover-bad");
+  DRAG.targetEl = z.el;
+}
+function dropTargetAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  if (!el) return null;
+  const z = el.closest("[data-drop]");
+  if (!z) return null;
+  return {kind: z.dataset.drop, index: z.dataset.index === "" ? undefined : Number(z.dataset.index), el: z};
+}
+function beginDrag(payload, el, ev) {
+  DRAG.payload = payload;
+  DRAG.sourceEl = el;
+  DRAG.snapshot = el.cloneNode(true);
+  el.classList.add("dragging");
+  el.setAttribute("aria-grabbed", "true");
+  document.body.classList.add("dragging");
+  if (ev && ev.dataTransfer) {
+    ev.dataTransfer.effectAllowed = "move";
+    try { ev.dataTransfer.setData("text/plain", JSON.stringify(payload)); } catch (e) { /* 兼容旧浏览器 */ }
+  }
+}
+function endDrag() {
+  if (DRAG.sourceEl && DRAG.sourceEl.isConnected) {
+    DRAG.sourceEl.classList.remove("dragging");
+    DRAG.sourceEl.setAttribute("aria-grabbed", "false");
+  }
+  if (DRAG.ghost) { DRAG.ghost.remove(); DRAG.ghost = null; }
+  clearTarget();
+  DRAG.payload = null;
+  DRAG.sourceEl = null;
+  DRAG.snapshot = null;
+  document.body.classList.remove("dragging");
+}
+function rollbackDrag(reason, sourceEl) {
+  const el = sourceEl || DRAG.sourceEl;
+  toast(reason || "该操作不合法，已回滚");
+  if (el) {
+    el.classList.remove("dragging");
+    el.classList.add("shake");
+    setTimeout(() => el.classList.remove("shake"), 450);
+  }
+  /* 拖拽期间从不修改数组/DOM；源卡保持原位。快照只用于异常兜底。 */
+  if (DRAG.snapshot && el && el.parentNode && !el.parentNode.contains(DRAG.snapshot)) {
+    /* 不替换正常节点，避免破坏 keyed 槽位；仅保留快照语义 */
+  }
+  endDrag();
+}
+function dispatchDrop(dst, payload, srcEl) {
+  const plan = planDrop(payload, dst);
+  if (!plan.ok) { rollbackDrag(plan.reason || plan.label, srcEl); return; }
+  endDrag();
+  act(plan.action, plan.toast || plan.label);
+}
+function makeGhost(el, x, y) {
+  if (DRAG.ghost) DRAG.ghost.remove();
+  const g = el.cloneNode(true);
+  g.classList.add("dragghost");
+  g.classList.remove("dragging", "shake");
+  g.querySelectorAll("[id]").forEach((n) => n.removeAttribute("id"));
+  g.style.left = x + "px";
+  g.style.top = y + "px";
+  document.body.appendChild(g);
+  DRAG.ghost = g;
+}
+function moveGhost(x, y) {
+  if (!DRAG.ghost) return;
+  DRAG.ghost.style.left = x + "px";
+  DRAG.ghost.style.top = y + "px";
+}
+function startPointerDrag(ev, el, payload) {
+  if (ev.pointerType === "mouse") return;  /* 桌面走 HTML5 DnD */
+  if (!canDrag()) return;
+  if (ev.target.closest("button,.chip,summary,a,input,select,textarea")) return;
+  const sx = ev.clientX, sy = ev.clientY;
+  const timer = setTimeout(() => {
+    if (!canDrag() || !DRAG.pointer) return;
+    DRAG.pointer.active = true;
+    beginDrag(payload, el, null);
+    makeGhost(el, sx, sy);
+    document.body.classList.add("pointer-dragging");
+  }, 150);
+  DRAG.timer = timer;
+  DRAG.pointer = {el: el, payload: payload, active: false};
+  function cleanup() {
+    clearTimeout(timer);
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", finish);
+    document.removeEventListener("pointercancel", cancel);
+    DRAG.pointer = null;
+    document.body.classList.remove("pointer-dragging");
+  }
+  function move(e) {
+    if (!DRAG.pointer) return;
+    if (!DRAG.pointer.active) {
+      if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 16) cleanup();
+      return;
+    }
+    e.preventDefault();
+    moveGhost(e.clientX, e.clientY);
+    setTarget(dropTargetAt(e.clientX, e.clientY));
+  }
+  function finish(e) {
+    if (DRAG.pointer && DRAG.pointer.active) {
+      e.preventDefault();
+      DRAG.suppressClick = true;
+      const z = dropTargetAt(e.clientX, e.clientY);
+      const pl = DRAG.pointer.payload, src = DRAG.pointer.el;
+      cleanup();
+      if (z) dispatchDrop(z, pl, src);
+      else rollbackDrag("拖到了无效区域，已回滚", src);
+      return;
+    }
+    cleanup();
+  }
+  function cancel() {
+    const p = DRAG.pointer;
+    cleanup();
+    if (p && p.active) rollbackDrag("拖拽取消，已回滚", p.el);
+  }
+  document.addEventListener("pointermove", move, {passive: false});
+  document.addEventListener("pointerup", finish);
+  document.addEventListener("pointercancel", cancel);
+}
+function bindCard(el, payload) {
+  el.dataset.kind = payload.kind;
+  el.dataset.index = String(payload.index);
+  el.dataset.dragKind = payload.kind;
+  el.dataset.dragIndex = String(payload.index);
+  el.dataset.dragName = payload.name || "";
+  el.setAttribute("draggable", "true");
+  el.setAttribute("aria-grabbed", "false");
+  el.tabIndex = 0;
+  el.addEventListener("dragstart", (ev) => {
+    if (!canDrag()) { ev.preventDefault(); return; }
+    DRAG.suppressClick = false;
+    beginDrag(payload, el, ev);
+  });
+  el.addEventListener("dragend", () => endDrag());
+  el.addEventListener("pointerdown", (ev) => startPointerDrag(ev, el, payload));
+  el.addEventListener("keydown", (ev) => {
+    if ((ev.key === "Enter" || ev.key === " ") &&
+        !ev.target.closest("button,summary,a,input,select,textarea")) {
+      ev.preventDefault();
+      showActionMenu(payload);
+    }
+  });
+}
+
+/* ── 卡牌工厂 ─────────────────────────────────────────────────── */
+function makeCardEl(c, cls, key, extra) {
   const el = document.createElement("div");
-  const buyable = c.buy !== null && c.buy !== undefined;
-  el.className = "card" + (buyable ? " clickable legal" : "") + (c.golden ? " golden" : "");
-  el.innerHTML = cardHTML(c,
-    '<div class="badge">' + esc(c.price_label || "价格未知") + '</div>' +
-    (c.frozen ? '<div class="frozen">❄</div>' : '') +
-    (c.owned ? '<div class="mini">已持有 ' + c.owned + (c.triple_need ? '/' + c.triple_need : '') + '</div>' : '') +
-    (buyable ? '' : '<div class="reason">不可购买：' + esc(c.buy_reason || "") + '</div>'));
-  if (buyable) el.onclick = () => act(c.buy);
-  el.title = (c.card_id || "") + (buyable
-    ? ("  购买 = Buy(" + c.slot + ") = action " + c.buy + "，价格 " + (c.price_label || ""))
-    : ("  不可购买：" + (c.buy_reason || "")));
+  el.className = "card " + (cls || "") + (c.golden ? " golden" : "");
+  el.innerHTML = cardHTML(c, extra, key);
+  el.querySelectorAll(".chip").forEach((ch) => {
+    ch.onclick = (e) => { e.stopPropagation(); act(Number(ch.dataset.a)); };
+  });
+  el.querySelectorAll("details").forEach((d) => d.addEventListener("click", (e) => e.stopPropagation()));
   return el;
 }
-function handCard(c) {
-  const el = document.createElement("div");
+function shopCard(c, i) {
+  const buyable = c.buy !== null && c.buy !== undefined;
+  const el = makeCardEl(c, (buyable ? "clickable" : ""), "shop-" + i,
+    '<div class="badge">' + esc(c.price_label || "价格未知") + '</div>' +
+    (c.frozen ? '<div class="frozen">❄</div>' : '') +
+    (c.owned ? '<div class="mini">已持有 ' + esc(c.owned) + (c.triple_need ? '/' + esc(c.triple_need) : '') + '</div>' : '') +
+    (buyable ? '' : '<div class="reason">不可购买：' + esc(c.buy_reason || "") + '</div>'));
+  bindCard(el, {kind: "shop", index: i, name: c.name_zh || c.name || ""});
+  if (buyable) {
+    el.addEventListener("click", (ev) => {
+      if (ev.target.closest("details,summary,button,a,input")) return;
+      if (DRAG.suppressClick) { DRAG.suppressClick = false; return; }
+      act(c.buy, "已购买：" + (c.name_zh || c.name) + "，已进入手牌；请从手牌拖到战场打出");
+    });
+  }
+  el.title = (c.card_id || "") + (buyable
+    ? ("  拖动/点击购买 = Buy(" + c.slot + ") = action " + c.buy + "，价格 " + (c.price_label || ""))
+    : ("  不可购买：" + (c.buy_reason || ""))) + "  （拖到战场也只触发购买，不会自动打出）";
+  return el;
+}
+function handCard(c, i) {
   const ok = (c.play && c.play.length) || (c.magnetize && c.magnetize.length);
-  el.className = "card" + (ok ? " legal" : "");
   const chips = [];
-  if (c.play && c.play.length === 1) {
-    chips.push('<span class="chip" data-a="' + c.play[0].action + '">打出（' + (c.play_cost ?? 0) + '金）· [' + c.play[0].action + ']</span>');
-  } else {
-    for (const p of (c.play || [])) {
-      chips.push('<span class="chip" data-a="' + p.action + '">打出到 ' + p.pos + ' 号位（' + (c.play_cost ?? 0) + '金）· [' + p.action + ']</span>');
-    }
+  for (const p of (c.play || [])) {
+    chips.push('<span class="chip" data-a="' + p.action + '">打出到 ' + (p.pos + 1) + ' 号位 · [' + p.action + ']</span>');
   }
   for (const m of (c.magnetize || [])) {
-    chips.push('<span class="chip" data-a="' + m.action + '">磁力→随从' + m.board + ' · [' + m.action + ']</span>');
+    chips.push('<span class="chip" data-a="' + m.action + '">磁力→随从' + (m.board + 1) + ' · [' + m.action + ']</span>');
   }
-  el.innerHTML = cardHTML(c,
+  const el = makeCardEl(c, (ok ? "legal" : ""), "hand-" + i,
     '<div class="mini">' + esc(c.play_cost_label || "") + (c.locked_label ? ' · ' + esc(c.locked_label) : '') +
     (c.temporary ? ' · 临时牌' : '') + '</div>' +
     '<div class="chips">' + chips.join("") + '</div>' +
     (!ok ? '<div class="reason">' + esc(c.play_reason || "当前不能打出") + '</div>' : ''));
-  el.querySelectorAll(".chip").forEach((ch) => { ch.onclick = (e) => { e.stopPropagation(); act(Number(ch.dataset.a)); }; });
-  el.title = (c.card_id || "") + "  手牌 #" + c.index + "（点击按钮打出，不是整卡点击）";
+  bindCard(el, {kind: "hand", index: i, name: c.name_zh || c.name || ""});
+  el.title = (c.card_id || "") + "  手牌 #" + i + "（拖到战场空槽=Play，拖到已有随从=Magnetize）";
   return el;
 }
-function boardCard(c) {
-  const el = document.createElement("div");
-  el.className = "card" + (c.golden ? " golden" : "");
+function boardCard(c, i) {
   const chips = [];
   if (c.sell !== null && c.sell !== undefined) chips.push('<span class="chip" data-a="' + c.sell + '">出售 · [' + c.sell + ']</span>');
   if (c.activate !== null && c.activate !== undefined) {
@@ -2046,20 +2541,96 @@ function boardCard(c) {
       (c.activate_cost !== null && c.activate_cost !== undefined ? '（' + c.activate_cost + '金）' : '') +
       ' · [' + c.activate + ']</span>');
   }
-  for (const m of (c.move || [])) chips.push('<span class="chip" data-a="' + m.action + '">移到 ' + m.to + ' · [' + m.action + ']</span>');
+  const moves = (c.move || []).map((m) =>
+    '<span class="chip" data-a="' + m.action + '">移到 ' + (m.to + 1) + ' 号位 · [' + m.action + ']</span>').join("");
   let reason = "";
   if (c.sell === null || c.sell === undefined) reason = c.sell_reason || "当前不能出售";
   else if ((c.activate === null || c.activate === undefined) && c.activate_reason) reason = c.activate_reason;
-  el.innerHTML = cardHTML(c, '<div class="chips">' + chips.join("") + '</div>' +
+  const el = makeCardEl(c, "", "board-" + (c.eid !== null && c.eid !== undefined ? c.eid : i),
+    '<div class="chips">' + chips.join("") + '</div>' +
+    (moves ? '<details data-key="moves-' + esc(i) + '"><summary>移动到 ▸</summary><div class="chips">' + moves + '</div></details>' : "") +
     (reason ? '<div class="reason">' + esc(reason) + '</div>' : ''));
-  el.querySelectorAll(".chip").forEach((ch) => { ch.onclick = (e) => { e.stopPropagation(); act(Number(ch.dataset.a)); }; });
-  el.title = (c.card_id || "") + "  " + (c.position_label || "") + "（顺序即左右位置）";
+  bindCard(el, {kind: "board", index: i, name: c.name_zh || c.name || ""});
+  el.title = (c.card_id || "") + "  " + (c.position_label || "") + "（左右拖动排序；拖到出售区=出售）";
   return el;
 }
-function trinketHTML(t) {
+
+/* ── 各面板渲染 ───────────────────────────────────────────────── */
+function renderShop() {
+  const n = (S.action_space && S.action_space.N_SHOP) || 8;
+  const box = $("shop");
+  box.innerHTML = "";
+  for (let i = 0; i < n; i++) {
+    const slot = document.createElement("div");
+    slot.className = "slot shop-slot";
+    slot.dataset.drop = "shop";
+    slot.dataset.index = String(i);
+    const c = (S.shop || [])[i];
+    if (c) slot.appendChild(shopCard(c, i));
+    else { slot.classList.add("empty"); slot.textContent = "空槽"; }
+    box.appendChild(slot);
+  }
+}
+function renderHand() {
+  const n = (S.action_space && S.action_space.N_HAND) || 10;
+  const box = $("hand");
+  box.innerHTML = "";
+  for (let i = 0; i < n; i++) {
+    const slot = document.createElement("div");
+    slot.className = "slot hand-slot";
+    slot.dataset.drop = "hand";
+    slot.dataset.index = String(i);
+    const c = (S.hand || [])[i];
+    if (c) slot.appendChild(handCard(c, i));
+    else { slot.classList.add("empty"); slot.textContent = "空手牌位"; }
+    box.appendChild(slot);
+  }
+}
+function renderBoard() {
+  const n = (S.action_space && S.action_space.N_BOARD) || 7;
+  const box = $("board");
+  box.innerHTML = "";
+  for (let i = 0; i < n; i++) {
+    const slot = document.createElement("div");
+    slot.className = "slot board-slot";
+    slot.dataset.drop = "board";
+    slot.dataset.index = String(i);
+    const c = (S.board || [])[i];
+    if (c) slot.appendChild(boardCard(c, i));
+    else { slot.classList.add("empty"); slot.textContent = (i + 1) + " 号空位"; }
+    box.appendChild(slot);
+  }
+}
+function renderButtons() {
+  const box = $("buttons");
+  box.innerHTML = "";
+  for (const b of (S.buttons || [])) {
+    const wrap = document.createElement("div");
+    wrap.className = "bwrap";
+    const el = document.createElement("button");
+    el.innerHTML = '<b>' + esc(b.label) + '</b>' +
+      (b.price ? ' <span class="gold">' + b.price + ' 金</span>' : '') +
+      (b.action !== null ? ' <span class="dim">[' + b.action + ']</span>' : '');
+    el.disabled = !b.enabled || S.over;
+    el.onclick = () => act(b.action);
+    el.title = (b.key || "") + " = action " + b.action +
+      (b.hint ? " · " + b.hint : "") + (b.reason ? " · 不可用：" + b.reason : "");
+    if (b.key === "end") el.classList.add("end");
+    wrap.appendChild(el);
+    if (!b.enabled && b.reason) {
+      const r = document.createElement("span");
+      r.className = "reason";
+      r.textContent = b.reason;
+      wrap.appendChild(r);
+    }
+    box.appendChild(wrap);
+  }
+}
+function trinketHTML(t, i) {
   return '<div class="trinket"><span class="tname">[' + esc(t.slot_tag || t.kind_label || "饰品") + '] ' +
     esc(t.name_zh || t.name) + '</span>' +
-    (t.text ? '<span>' + esc(t.text) + '</span>' : '') +
+    (t.text ? '<details class="fx" data-key="trinket-' + i + '"><summary>效果 ▸</summary>' +
+      '<span>' + esc(t.text) + '</span></details>' : '') +
     (t.tier ? '<span class="mini">T' + t.tier + '</span>' : '') + '</div>';
 }
 function renderTrinkets() {
@@ -2111,9 +2682,12 @@ function deityHTML(d) {
     '<span class="h">' + (d.hp ?? "") + '</span></span> ' + badges.join(" ") + '</div>' +
     '<div class="dmeta">' + esc(d.tier_label || "") + ' · ' + esc(d.race_text || "") +
     ' · ' + esc(d.card_id || "") + '</div>' +
-    (d.text ? '<div class="dtext">[' + esc(d.text_note || "卡面") + '] ' + esc(d.text) + '</div>' : '') +
-    '<div class="dtrig"><span class="src">触发要求（结构化）</span>' + trigs + '</div>' +
-    (nums ? '<div class="dnumline">' + nums + '</div>' : '');
+    (d.text ? '<details class="fx" data-key="deity-text"><summary>卡面效果 ▸</summary>' +
+      '<div class="dtext">[' + esc(d.text_note || "卡面") + '] ' + esc(d.text) + '</div></details>' : '') +
+    '<details class="deitytrig" data-key="deity-triggers"><summary>神明触发：' +
+      (d.triggers || []).length + ' 条 ▸</summary>' + trigs + '</details>' +
+    (nums ? '<details data-key="deity-nums"><summary>数值与来源 ▸</summary><div class="dnumline">' + nums + '</div></details>' : '') +
+    (d.hint ? '<div class="mini">' + esc(d.hint) + '</div>' : '');
 }
 function renderDeity() {
   const d = (S.hud || {}).deity || {};
@@ -2121,9 +2695,78 @@ function renderDeity() {
     : "本局大厅无畸变怪";
   $("deity").innerHTML = deityHTML(d);
 }
+function renderOpponents() {
+  $("opphint").textContent = "存活 " + (S.alive ?? "?") + "/8";
+  $("opp").innerHTML = (S.opponents || []).map((o) => {
+    const oh = o.hero || {};
+    const head = '<div class="opprow' + (o.alive ? '' : ' dead') + '">' +
+      '<span>' + (o.is_next ? '▶ ' : '') + esc(oh.name_zh || oh.name || "未知英雄") + '</span>' +
+      '<span>' + (o.alive
+        ? ('生命 <b class="hp">' + o.health + '</b> · 护甲 ' + (o.armor ?? 0) + ' · T' + o.tier +
+           (o.win_streak ? ' · 连胜 ' + o.win_streak : ''))
+        : ('淘汰 #' + (o.placement || "?"))) + '</span></div>';
+    let seen;
+    if (o.seen_board && o.seen_board.length) {
+      seen = '<details data-key="seen-' + esc(o.id) + '"><summary>' + esc(o.seen_label || "上次所见") +
+        ' · ' + o.seen_board.length + ' 随从 ▸</summary><div class="mini">' +
+        o.seen_board.map((m) => esc(m.name_zh || m.name) + ' ' + (m.atk ?? '') + '/' + (m.hp ?? '') +
+          (m.golden ? '★' : '') + (m.race_text ? '[' + esc(m.race_text) + ']' : '')).join('、') +
+        '</div></details>';
+    } else {
+      seen = '<div class="mini dim">' + esc(o.seen_label || "从未交战（未知阵容）") + '</div>';
+    }
+    const tr = (o.trinket_names && o.trinket_names.length)
+      ? '<div class="mini">饰品：' + esc(o.trinket_names.join('、')) + '</div>' : '';
+    return head + seen + tr;
+  }).join("");
+}
+function renderCombat() {
+  const mc = S.my_combat || {};
+  $("combathint").textContent = mc.mine ? ((mc.result_label || "") + " · 伤害 " + mc.damage) : "尚未交战";
+  $("mycombat").innerHTML = '<div class="mycombat ' + (mc.result || '') + '">' +
+    '<div>' + esc(mc.summary || "本局还没有自己的战斗记录") + '</div>' +
+    ((mc.cached) ? '<div class="mini dim">缓存：本局最后一次见到的己方战斗</div>' : '') +
+    ((mc.truncated) ? '<div class="mini bad">战斗被截断</div>' : '') +
+    ((mc.frames && mc.frames.length)
+      ? '<details data-key="combat-frames"><summary>战斗帧 ' + mc.frames.length + '/' + (mc.frame_count || mc.frames.length) + ' ▸</summary>' +
+        '<div class="frames">' + mc.frames.map((f, i) =>
+          '<div class="fr"><b>帧 ' + (i + 1) + '</b> ' + esc((f.log || []).join('；')) +
+          ((f.boards && f.boards.length)
+            ? '<div class="mini">场面：' + f.boards.map((bd) => bd.map((m) =>
+                (m.name_zh || m.name) + ' ' + (m.atk ?? '') + '/' + (m.hp ?? '')).join('、')).join('  ⚔  ') + '</div>'
+            : '') + '</div>').join('') + '</div></details>'
+      : '<div class="mini dim">无战斗帧（引擎未记录 frames）</div>') +
+    '</div>';
+  $("combats").innerHTML = (S.combats || []).length
+    ? S.combats.map((c) => {
+        const bName = c.b === null || c.b === undefined ? '幽灵' : ('座位 ' + c.b);
+        const win = c.winner === 0 ? ('座位 ' + c.a + ' 胜')
+          : (c.winner === 1 ? (bName + ' 胜') : '平');
+        return (c.mine ? '▶ ' : '') + 'T' + c.turn + '：座位 ' + c.a + ' vs ' + bName + ' → ' + win +
+          '，伤害 ' + c.damage + (c.truncated ? '（截断）' : '');
+      }).join('<br>')
+    : '<span class="dim">暂无</span>';
+}
+function renderEvents() {
+  const evs = S.events || [];
+  if (!evs.length) { $("events").innerHTML = '<span class="dim">暂无</span>'; return; }
+  const latest = evText(evs[evs.length - 1]);
+  const rest = evs.slice(0, -1).reverse().map((e) => '<div class="eventline">' + esc(evText(e)) + '</div>').join("");
+  $("events").innerHTML = '<div class="eventline">' + esc(latest) + '</div>' +
+    (rest ? '<details data-key="events-more"><summary>更多日志 ▸</summary>' + rest + '</details>' : "");
+}
+function collectOpen() {
+  const m = {};
+  document.querySelectorAll("details[data-key]").forEach((d) => { m[d.dataset.key] = d.open; });
+  return m;
+}
+function restoreOpen(m) {
+  document.querySelectorAll("details[data-key]").forEach((d) => { if (m[d.dataset.key]) d.open = true; });
+}
 function render() {
   if (!S) return;
-  const h = S.hud;
+  const open = collectOpen();
+  const h = S.hud || {};
   const races = (h.lobby_races_zh && h.lobby_races_zh.length ? h.lobby_races_zh : h.lobby_races) || [];
   $("hud").innerHTML =
     '<span class="hero">' + esc(heroName(h.hero)) + '</span>' +
@@ -2144,101 +2787,36 @@ function render() {
     (h.free_refreshes ? "（免费 " + h.free_refreshes + "）" : "") +
     " · 升级 " + h.upgrade_price + " 金 → T" + ((h.tier || 0) + 1) +
     " · 冻结 " + (h.frozen ? "开" : "关");
-  $("shop").innerHTML = "";
-  for (const c of S.shop) $("shop").appendChild(shopCard(c));
-  if (!S.shop.length) $("shop").innerHTML = '<span class="dim">酒馆为空（先选英雄 / 点刷新）</span>';
+  $("taverninfo").innerHTML =
+    '<span class="pill">金币 <b class="gold">' + (h.gold ?? "?") + '</b>/' + (h.max_gold ?? "?") + '</span>' +
+    '<span class="pill">等级 <b>T' + (h.tier ?? "?") + '</b></span>' +
+    '<span class="pill">酒馆槽位 ' + (S.shop || []).length + '/8</span>' +
+    '<span class="pill">冻结 <b>' + (h.frozen ? "是" : "否") + '</b></span>' +
+    '<span class="pill">刷新 ' + (h.refresh_price ?? "?") + ' 金</span>' +
+    '<span class="pill">升本 ' + (h.upgrade_price ?? "?") + ' 金</span>';
 
-  $("handhint").textContent = S.hand.length + " / " + (h.hand_limit ?? 10) +
+  renderShop();
+  renderHand();
+  renderBoard();
+  $("boardhint").textContent = (S.board || []).length + " / 7 个随从（左右拖动排序）";
+  $("handhint").textContent = (S.hand || []).length + " / " + (h.hand_limit ?? 10) +
     (h.hand_queue_len ? " · 队列 " + h.hand_queue_len : "");
-  $("hand").innerHTML = "";
-  for (const c of S.hand) $("hand").appendChild(handCard(c));
-  if (!S.hand.length) $("hand").innerHTML = '<span class="dim">手牌为空</span>';
-
-  $("boardhint").textContent = S.board.length + " 个随从";
-  $("board").innerHTML = "";
-  for (const c of S.board) $("board").appendChild(boardCard(c));
-  if (!S.board.length) $("board").innerHTML = '<span class="dim">场上没有随从</span>';
-
+  renderButtons();
   renderTrinkets();
   renderDeity();
-
-  $("buttons").innerHTML = "";
-  for (const b of S.buttons) {
-    const wrap = document.createElement("div");
-    wrap.className = "bwrap";
-    const el = document.createElement("button");
-    el.innerHTML = '<b>' + esc(b.label) + '</b>' +
-      (b.price ? ' <span class="gold">' + b.price + ' 金</span>' : '') +
-      (b.action !== null ? ' <span class="dim">[' + b.action + ']</span>' : '');
-    el.disabled = !b.enabled || S.over;
-    el.onclick = () => act(b.action);
-    el.title = (b.key || "") + " = action " + b.action +
-      (b.hint ? " · " + b.hint : "") + (b.reason ? " · 不可用：" + b.reason : "");
-    if (b.key === "end") el.classList.add("end");
-    wrap.appendChild(el);
-    if (!b.enabled && b.reason) {
-      const r = document.createElement("span");
-      r.className = "reason";
-      r.textContent = b.reason;
-      wrap.appendChild(r);
-    }
-    $("buttons").appendChild(wrap);
+  renderOpponents();
+  renderCombat();
+  renderEvents();
+  $("legal").innerHTML = (S.legal || []).map((a, i) => '<span>' + a + ' ' + esc((S.legal_names || [])[i]) + '</span>').join("");
+  if (S.replay) {
+    $("replaymeta").textContent = (S.replay.bytes / 1024).toFixed(1) + " KB · " + String(S.replay.path || "").split("/").pop();
+    $("replaylink").href = "/replay?ts=" + Date.now();
   }
-
-  $("opphint").textContent = "存活 " + (S.alive ?? "?") + "/8";
-  $("opp").innerHTML = S.opponents.map((o) => {
-    const oh = o.hero || {};
-    const head = '<div class="opprow' + (o.alive ? '' : ' dead') + '">' +
-      '<span>' + (o.is_next ? '▶ ' : '') + esc(oh.name_zh || oh.name || "未知英雄") + '</span>' +
-      '<span>' + (o.alive
-        ? ('生命 <b class="hp">' + o.health + '</b> · 护甲 ' + (o.armor ?? 0) + ' · T' + o.tier +
-           (o.win_streak ? ' · 连胜 ' + o.win_streak : ''))
-        : ('淘汰 #' + (o.placement || "?"))) + '</span></div>';
-    const seen = (o.seen_board && o.seen_board.length)
-      ? '<div class="mini">' + esc(o.seen_label || "上次所见") + '：' +
-        o.seen_board.map((m) => esc(m.name_zh || m.name) + ' ' + (m.atk ?? '') + '/' + (m.hp ?? '') +
-          (m.golden ? '★' : '') + (m.race_text ? '[' + esc(m.race_text) + ']' : '')).join('、') + '</div>'
-      : '<div class="mini dim">' + esc(o.seen_label || "从未交战（未知阵容）") + '</div>';
-    const tr = (o.trinket_names && o.trinket_names.length)
-      ? '<div class="mini">饰品：' + esc(o.trinket_names.join('、')) + '</div>' : '';
-    return head + seen + tr;
-  }).join("");
-
-  const mc = S.my_combat || {};
-  $("combathint").textContent = mc.mine ? (mc.result_label + " · 伤害 " + mc.damage) : "尚未交战";
-  let combatHTML = '<div class="mycombat ' + (mc.result || '') + '">' +
-    '<div>' + esc(mc.summary || "本局还没有自己的战斗记录") + '</div>' +
-    ((mc.cached) ? '<div class="mini dim">缓存：本局最后一次见到的己方战斗</div>' : '') +
-    ((mc.truncated) ? '<div class="mini bad">战斗被截断</div>' : '') +
-    ((mc.frames && mc.frames.length)
-      ? '<details><summary>战斗帧 ' + mc.frames.length + '/' + (mc.frame_count || mc.frames.length) + '（点击展开）</summary>' +
-        '<div class="frames">' + mc.frames.map((f, i) =>
-          '<div class="fr"><b>帧 ' + (i + 1) + '</b> ' + esc((f.log || []).join('；')) +
-          ((f.boards && f.boards.length)
-            ? '<div class="mini">场面：' + f.boards.map((bd) => bd.map((m) =>
-                (m.name_zh || m.name) + ' ' + (m.atk ?? '') + '/' + (m.hp ?? '')).join('、')).join('  ⚔  ') + '</div>'
-            : '') + '</div>').join('') + '</div></details>'
-      : '<div class="mini dim">无战斗帧（引擎未记录 frames）</div>') +
-    '</div>';
-  $("mycombat").innerHTML = combatHTML;
-
-  $("combats").innerHTML = S.combats.length
-    ? S.combats.map((c) => {
-        const bName = c.b === null || c.b === undefined ? '幽灵' : ('座位 ' + c.b);
-        const win = c.winner === 0 ? ('座位 ' + c.a + ' 胜')
-          : (c.winner === 1 ? (bName + ' 胜') : '平');
-        return (c.mine ? '▶ ' : '') + 'T' + c.turn + '：座位 ' + c.a + ' vs ' + bName + ' → ' + win +
-          '，伤害 ' + c.damage + (c.truncated ? '（截断）' : '');
-      }).join('<br>')
-    : '<span class="dim">暂无</span>';
-  $("events").innerHTML = S.events.length ? S.events.map((e) => '<div>' + esc(typeof e === "string" ? e : JSON.stringify(e)) + '</div>').join("") : '<span class="dim">暂无</span>';
-
-  $("legal").innerHTML = S.legal.map((a, i) => '<span>' + a + ' ' + esc(S.legal_names[i]) + '</span>').join("");
-  $("replaymeta").textContent = (S.replay.bytes / 1024).toFixed(1) + " KB · " + S.replay.path.split("/").pop();
-  $("replaylink").href = "/replay?ts=" + Date.now();
-
+  restoreOpen(open);
   renderOverlay();
 }
+
+/* ── 选择面板 / 键盘菜单 ───────────────────────────────────────── */
 function pendingTitle(kind) {
   return {hero: "选择英雄", discover: "发现（Discover）", trinket: "选择饰品", choose_one: "抉择",
           target: "选择目标", hero_power: "选择英雄技能", timewarp: "时空扭曲酒馆", quest: "选择任务"}[kind] || ("选择：" + kind);
@@ -2261,14 +2839,28 @@ function renderOverlay() {
   ov.classList.remove("hidden");
   const parts = [];
   parts.push('<div class="pbox"><h2>' + esc(p.kind_label || pendingTitle(p.kind)) + '</h2>');
-  if (p.hint) parts.push('<div class="sub">' + esc(p.hint) + '</div>');
-  if (p.source && (p.source.name_zh || p.source.name)) {
-    parts.push('<div class="sub">来源：' + esc(p.source.name_zh || p.source.name) +
-      (p.source.text ? ' — [卡面] ' + esc(p.source.text) : '') + '</div>');
+  /* Discover/抉择说明默认折叠；点击 summary 只展开说明，不提交动作 */
+  if (p.kind === "discover" || p.kind === "choose_one") {
+    const head = p.kind === "discover"
+      ? ("发现：" + ((p.options || []).length === 3 ? "三选一" : ((p.options || []).length + " 选一")) + " ▸")
+      : "抉择：选项1/2 ▸";
+    parts.push('<details class="pendinginfo" data-key="pending-info"><summary>' + head + '</summary>');
+    if (p.hint) parts.push('<div class="sub">' + esc(p.hint) + '</div>');
+    if (p.source && (p.source.name_zh || p.source.name)) {
+      parts.push('<div class="sub">来源：' + esc(p.source.name_zh || p.source.name) +
+        (p.source.text ? ' — [卡面] ' + esc(p.source.text) : '') + '</div>');
+    }
+    parts.push('</details>');
+  } else {
+    if (p.hint) parts.push('<div class="sub">' + esc(p.hint) + '</div>');
+    if (p.source && (p.source.name_zh || p.source.name)) {
+      parts.push('<div class="sub">来源：' + esc(p.source.name_zh || p.source.name) +
+        (p.source.text ? ' — [卡面] ' + esc(p.source.text) : '') + '</div>');
+    }
   }
   if (p.kind === "target") {
     parts.push('<div class="sub">点击一个目标（action = 30 + 序号）</div><div class="popts">');
-    for (const t of p.targets) {
+    for (const t of (p.targets || [])) {
       parts.push('<div class="card' + (t.action !== null ? ' clickable' : '') + '" data-a="' + t.action + '">' +
         '<div class="cname">' + esc(t.name) + '</div>' +
         '<div class="mini">eid ' + esc(t.eid) + ' · 目标 ' + t.index + '</div>' +
@@ -2278,15 +2870,14 @@ function renderOverlay() {
     parts.push('</div>');
   } else if (p.kind === "hero") {
     parts.push('<div class="sub">选择本局英雄（技能与护甲随英雄而定）</div><div class="popts">');
-    for (const o of p.options) {
+    for (const o of (p.options || [])) {
       const ok = o.action !== null && o.action !== undefined;
       parts.push('<div class="card' + (ok ? ' clickable' : '') + '" data-a="' + o.action + '">' +
-        cardHTML(o,
-          '<div class="cmeta"><span>护甲 ' + (o.armor ?? 0) + '</span><span>生命 ' + (o.hp ?? 30) + '</span></div>' +
-          (o.power ? '<div class="attach">技能：' + esc(o.power.name_zh || "") +
-            (o.power.text ? '<br>[卡面] ' + esc(o.power.text) : '') + '</div>' : '') +
+        cardHTML(o, '<div class="cmeta"><span>护甲 ' + (o.armor ?? 0) + '</span><span>生命 ' + (o.hp ?? 30) + '</span></div>' +
+          (o.power ? '<details class="fx"><summary>技能效果 ▸</summary><div class="attach">技能：' +
+            esc(o.power.name_zh || "") + (o.power.text ? '<br>[卡面] ' + esc(o.power.text) : '') + '</div></details>' : '') +
           '<div class="chips"><span class="chip">选择 · [' + o.action + ']</span></div>' +
-          (ok ? '' : '<div class="reason">' + esc(o.action_reason || "") + '</div>')) + '</div>');
+          (ok ? '' : '<div class="reason">' + esc(o.action_reason || "") + '</div>'), "pending-hero-" + o.action) + '</div>');
     }
     parts.push('</div>');
   } else {
@@ -2296,7 +2887,7 @@ function renderOverlay() {
         ' · 四选一，回合数（第 6/9 回合）≠ 酒馆星级</div>');
     }
     parts.push('<div class="popts">');
-    for (const o of p.options) {
+    for (const o of (p.options || [])) {
       const ok = o.action !== null && o.action !== undefined;
       const priceBits = [];
       if (o.price_label) priceBits.push(o.price_label);
@@ -2306,13 +2897,12 @@ function renderOverlay() {
       if (o.chronum_cost !== undefined && o.chronum_cost !== null) priceBits.push(o.chronum_cost + ' 时空币');
       if (o.weight !== undefined && o.weight !== null) priceBits.push('出价权重 ' + o.weight + '%');
       parts.push('<div class="card' + (ok ? ' clickable' : '') + '" data-a="' + o.action + '">' +
-        cardHTML(o,
-          '<div class="mini">' + (o.branch_label ? esc(o.branch_label) + ' · ' : '') +
+        cardHTML(o, '<div class="mini">' + (o.branch_label ? esc(o.branch_label) + ' · ' : '') +
           (o.goal ? '目标：' + esc(o.goal) + ' ' : '') +
           (o.reward ? '奖励：' + esc(o.reward.name_zh || o.reward.name) : '') + '</div>' +
           (priceBits.length ? '<div class="badge">' + esc(priceBits.join(' · ')) + '</div>' : '') +
           '<div class="chips"><span class="chip">选择 · [' + o.action + ']</span></div>' +
-          (ok ? '' : '<div class="reason">' + esc(o.action_reason || "当前不可选") + '</div>')) + '</div>');
+          (ok ? '' : '<div class="reason">' + esc(o.action_reason || "当前不可选") + '</div>'), "pending-opt-" + o.action) + '</div>');
     }
     parts.push('</div>');
   }
@@ -2330,7 +2920,66 @@ function renderOverlay() {
     el.onclick = () => act(Number(el.dataset.a));
     el.style.cursor = "pointer";
   });
+  ov.querySelectorAll("details").forEach((d) => d.addEventListener("click", (e) => e.stopPropagation()));
 }
+function menuActions(payload) {
+  const out = [];
+  const i = payload.index;
+  if (payload.kind === "shop") {
+    const c = (S.shop || [])[i];
+    if (c && c.buy !== null && c.buy !== undefined) {
+      out.push({label: "购买 " + (c.name_zh || c.name) + "（Buy " + c.buy + "）", action: c.buy,
+        toast: "已购买：" + (c.name_zh || c.name) + "，已进入手牌"});
+    }
+  } else if (payload.kind === "hand") {
+    const c = (S.hand || [])[i] || {};
+    for (const p of (c.play || [])) out.push({label: "打出到 " + (p.pos + 1) + " 号位（Play " + p.action + "）", action: p.action});
+    for (const m of (c.magnetize || [])) out.push({label: "磁力→随从" + (m.board + 1) + "（Magnetize " + m.action + "）", action: m.action});
+  } else if (payload.kind === "board") {
+    const b = (S.board || [])[i] || {};
+    if (b.sell !== null && b.sell !== undefined) out.push({label: "出售（Sell " + b.sell + "）", action: b.sell});
+    if (b.activate !== null && b.activate !== undefined) out.push({label: "发动（Activate " + b.activate + "）", action: b.activate});
+    for (const m of (b.move || [])) out.push({label: "移到 " + (m.to + 1) + " 号位（Move " + m.action + "）", action: m.action});
+  }
+  return out;
+}
+function showActionMenu(payload) {
+  const acts = menuActions(payload);
+  if (!acts.length) { toast("该卡当前没有可执行动作"); return; }
+  const box = $("menubox");
+  box.classList.remove("hidden");
+  box.innerHTML = '<div class="menu"><h3>键盘操作 · ' + esc(payload.name || "") + '</h3>' +
+    acts.map((a, i) => '<button class="mbtn" data-mi="' + i + '">' + esc(a.label) + '</button>').join("") +
+    '<button class="mbtn" data-close="1">关闭</button></div>';
+  box.querySelectorAll("[data-mi]").forEach((b) => {
+    b.onclick = () => { const a = acts[Number(b.dataset.mi)]; box.classList.add("hidden"); act(a.action, a.toast); };
+  });
+  box.querySelector("[data-close]").onclick = () => box.classList.add("hidden");
+}
+
+/* ── 全局事件 ─────────────────────────────────────────────────── */
+document.addEventListener("dragover", (ev) => {
+  if (!DRAG.payload) return;
+  ev.preventDefault();
+  const z = dropTargetAt(ev.clientX, ev.clientY);
+  setTarget(z);
+  if (ev.dataTransfer) {
+    const plan = z ? planDrop(DRAG.payload, z) : {ok: false};
+    ev.dataTransfer.dropEffect = plan.ok ? "move" : "none";
+  }
+});
+document.addEventListener("drop", (ev) => {
+  if (!DRAG.payload) return;
+  ev.preventDefault();
+  const z = dropTargetAt(ev.clientX, ev.clientY);
+  const payload = DRAG.payload, src = DRAG.sourceEl;
+  if (!z) { rollbackDrag("拖到了无效区域，已回滚", src); return; }
+  dispatchDrop(z, payload, src);
+});
+document.addEventListener("dragend", () => endDrag());
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") { $("menubox").classList.add("hidden"); }
+});
 $("newbtn").onclick = newGame;
 if (S) { render(); } else { refresh(); }
 </script>

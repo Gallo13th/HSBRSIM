@@ -27,7 +27,42 @@ ssh -L 8000:127.0.0.1:8000 bicourse-glt
 
 ## 界面能做什么
 
-按 `docs/HUMAN_ARENA_UI_SPEC.md` 做了信息升级（只改 UI 与 `/state` 白名单，**不改引擎、不占 GPU**）。
+按 `docs/HUMAN_ARENA_UI_SPEC_V2.md` 做了官方酒馆战棋布局 V2（只改 UI 与 `/state` 白名单，**不改引擎、不占 GPU**）。
+
+### 官方布局 V2（三行 + 侧栏）
+
+- **第一行·鲍勃酒馆**：8 个固定槽位（空槽也保留 drop 区域）+ 金币/上限、等级、刷新/冻结/升本费用；
+  按钮条含 `EndTurn/Refresh/Freeze/Upgrade/HeroPower/DarkGift`，按钮文案带价格与动作下标；
+- **第二行·我方战场**：7 个固定槽位（横向可滚动），卡片可左右拖动排序；右侧/下方有出售区与发动区；
+- **第三行·手牌**：10 个固定格，拖到战场空槽 = Play，拖到已有随从 = Magnetize；
+- **侧栏/底栏**：对手公开信息、饰品/持续效果、黑暗之赐、神明、日志/战果、合法掩码、`/snapshot.txt`；
+  移动端按「HUD→酒馆→战场→手牌→出售区→侧栏」纵向滚动（桌面 `@media` 保持三行 + 双栏）。
+- 固定槽位由 `S.action_space.N_SHOP/N_BOARD` 派生，空槽保留宽高，不因商店/手牌数量变化抖动。
+
+### 拖拽（HTML5 DnD + Pointer Events + 键盘）
+
+| 源 | 目标 | 动作 |
+|---|---|---|
+| 商店槽 i | 战场/购买区 | `Buy 8+i`：**只购买**，卡进入手牌并提示“已购买”，需再拖手牌；不会自动打出（“买完自动打出”需要新端点，本版不做） |
+| 手牌 h | 战场空槽 p | `Play 46+h*8+p` |
+| 手牌 h（磁力） | 战场随从 b | `Magnetize 126+h*7+b` |
+| 战场 from | 战场 to | `Move 196+from*7+to`（from≠to） |
+| 战场 b | 出售区 | `Sell 16+b` |
+| 战场 b | 发动区 | `Activate 23+b` |
+
+拖拽先按当前 `state.mask`/子字段做本地预校验：合法才调用 `/act`，非法**不提交**、源卡抖动、
+toast 显示原因（如“金币不足/手牌已满/该位置不能移动/当前不能出售”）；pending 期间暂停普通拖拽。
+桌面用 `dragstart/dragover/drop`，触屏用 `pointerdown` 长按约 150ms 生成拖影、`pointermove` +
+`elementFromPoint` 找目标、`pointerup` 复用同一 `dispatchDrop`；`dragend`/取消清理高亮。
+卡片也可用 Enter/Space 打开动作菜单（与拖拽等价），`aria-grabbed` 标记拖拽状态。
+
+### 折叠（默认收起）
+
+`attached` 折叠为一行 `+N 附件 ▸`（展开才显示每项名称/类型/效果/来源）；卡面效果、金卡效果、
+`breakdown`（`属性来源 ▸`）、Discover/抉择说明（`发现：三选一 ▸` / `抉择：选项1/2 ▸`）、
+神明触发（`神明触发：N 条 ▸`）、对手所见战团、战斗帧、日志（最新一条 + `更多日志 ▸`）默认折叠。
+点击 `summary` 只切换自身内容，`stopPropagation` 保证不触发购买/打出；重渲染时用
+`data-key` 保留已展开项。
 
 操作入口：点商店卡 = `Buy(slot)`（`8+slot`）；手牌「打出/磁力→随从j」chip = `Play{hand,pos}`
 （`46+hand*8+pos`）/ `Magnetize`；战场 chip = 出售 `[16+slot]` / 发动 `[23+slot]` / 移到位置 j
@@ -158,6 +193,8 @@ python -m pytest tests/test_human_arena.py -q
 python -m pytest tests/test_human_arena_ui.py -q
 # 神明面板：有/无神明、结构化触发要求、snapshot 与 HTML 一致、金卡与复生标识
 python -m pytest tests/test_human_arena_deity.py -q
+# 7 项：三行顺序/拖拽映射 id/商店拖 Buy/非法回滚/折叠默认收起/DnD+Pointer/snapshot 字段
+python -m pytest tests/test_human_arena_v2.py -q
 ```
 
 `--selftest` 会额外打印“中局状态文本”（与 `/snapshot.txt` 同款，含种族/关键词/饰品/神明）。
