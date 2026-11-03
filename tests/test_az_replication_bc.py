@@ -8,7 +8,8 @@ import pytest
 
 torch = pytest.importorskip('torch')
 from hsbg.az.train import ppo
-from hsbg.env.action_space_std import A_BUY, A_CHOOSE
+from hsbg.az.train.common import OBS_FLOATS
+from hsbg.env.action_space_std import A_BUY, A_CHOOSE, A_UPGRADE
 from hsbg.env.obs_std import (SLICE_CARD_BOARD, SLICE_CARD_HAND,
                               SLICE_CARD_SHOP, SLICE_CARD_CHOICES)
 from scripts.train_entity_sync import _attach_replication_bc_labels
@@ -18,10 +19,20 @@ from hsbg.az.train.model import build_net
 
 @pytest.fixture
 def labels(monkeypatch):
+    """与真实 PPOBatch 同构的最小 batch。
+
+    ``train_entity_sync._attach_replication_bc_labels`` 无条件读取
+    ``batch.features``（tier/gold/price 三个 global 字段）与 ``batch.turns``
+    （``scripts/train_entity_sync.py:242-243``；真实批次来自 ``PPOBatch`` 两者都有），
+    因此 fixture 必须补齐这两列，否则测试与实现漂移（门禁红）。
+    """
     monkeypatch.setattr(ppo, '_rep_card_flags', lambda: {
         10: (0, 3, 1), 11: (0, 6, 2), 12: (0, 6, 1), 13: (1, 6, 0)})
     return SimpleNamespace(cards=np.zeros((1, 124), dtype=np.int16),
-                           masks=np.zeros((1, 245), dtype=bool))
+                           masks=np.zeros((1, 245), dtype=bool),
+                           # 全局特征：tier(10)=tier/6、gold(7)=gold/10、price(11)=price/10
+                           features=np.zeros((1, OBS_FLOATS), dtype=np.float32),
+                           turns=np.zeros(1, dtype=np.int32))
 
 
 def test_discover_only_legal_targets(labels):
@@ -57,6 +68,32 @@ def test_illegal_buy_and_golden_excluded(labels):
     labels.masks[0, A_BUY] = True
     _attach_replication_bc_labels(labels)
     assert labels.triple_bc_action[0] == -1
+
+
+def test_upgrade_curve_labels_from_features(labels):
+    """``want_upgrade=True``：升级曲线标签确实读 features(tier/gold/price) 与 turns。"""
+    labels.turns[0] = 2                       # 默认曲线 {2,5,7,9}
+    labels.features[0, 10] = 0.0 / 6.0        # tier=0 < 曲线目标 2
+    labels.features[0, 7] = 5.0 / 10.0        # gold=5
+    labels.features[0, 11] = 3.0 / 10.0       # price=3 ⇒ 金币够
+    labels.masks[0, A_UPGRADE] = True
+    stat = _attach_replication_bc_labels(labels, want_upgrade=True)
+    assert stat['upgrade_states'] == 1
+    assert labels.upgrade_bc_action[0] == A_UPGRADE
+    assert labels.upgrade_bc_w[0] == 1.0
+
+    # 非曲线回合（t=3）：即使条件齐也不标
+    off_curve = copy.deepcopy(labels)
+    off_curve.turns[0] = 3
+    assert _attach_replication_bc_labels(
+        off_curve, want_upgrade=True)['upgrade_states'] == 0
+    assert off_curve.upgrade_bc_action[0] == -1
+
+    # tier 已够（6 >= 目标 2）：不标
+    tier_met = copy.deepcopy(labels)
+    tier_met.features[0, 10] = 6.0 / 6.0
+    assert _attach_replication_bc_labels(
+        tier_met, want_upgrade=True)['upgrade_states'] == 0
 
 
 @pytest.mark.parametrize('coef,bc,pl,expected', [

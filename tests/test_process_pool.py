@@ -165,8 +165,19 @@ def test_reload_ignores_foreign_task_messages_without_livelock(tmp_path, monkeyp
     assert m["type"] == "collect_done"
 
 
+def _ack_msg(w: int, task: dict, pid: int) -> dict:
+    """worker 侧 reload ack（生产 ``_worker_main`` 现会带 ``pid=os.getpid()``）。"""
+    return {"worker": int(w), "type": "reload_done",
+            "task_id": task["task_id"], "pid": int(pid)}
+
+
 def test_reload_detects_worker_death_after_ack(tmp_path, monkeypatch):
-    """ack 后立刻死亡（无 queue.Empty 分支）：必须在收到后续消息时 resync 并重发。"""
+    """ack 后立刻死亡（无 queue.Empty 分支）：必须在收到后续消息时 resync 并重发。
+
+    确定性说明：worker1 的 ack 被显式排在 worker0 的**第二次** ack 之后；worker0 的
+    ack 带 pid（重启前 100 / 重启后 999），与 ``_info[0]["pid"]`` 对齐，用于验证
+    「只接受当前存活进程的 ack」。
+    """
     pytest.importorskip("torch")
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
     import queue as _q
@@ -196,9 +207,17 @@ def test_reload_detects_worker_death_after_ack(tmp_path, monkeypatch):
             task = q.get(timeout=5.0)
             if w == 0:
                 state["w0_acks"] += 1
-            pool._result_q.put({"worker": w, "type": "reload_done",
-                                "task_id": task["task_id"]})
-            if w == 1 and state["w0_acks"] >= 2:
+                pid = 100 if state["w0_acks"] == 1 else 999   # 重启后 pid 变化
+            else:
+                # 确定性排序：worker1 的 ack 必须晚于 worker0 的第二次 ack，
+                # 否则遗留 ack 可能被误当成本任务（重发后）的 ack。
+                for _ in range(1000):
+                    if state["w0_acks"] >= 2:
+                        break
+                    time.sleep(0.005)
+                pid = 200
+            pool._result_q.put(_ack_msg(w, task, pid))
+            if w == 1:
                 return
 
     ths = [threading.Thread(target=worker, args=(w, q), daemon=True)
@@ -211,3 +230,59 @@ def test_reload_detects_worker_death_after_ack(tmp_path, monkeypatch):
     assert state["w0_acks"] >= 2, state
     assert done == 2, done
     assert elapsed < 9.5, elapsed
+
+
+def test_reload_stale_ack_after_restart_is_not_counted(tmp_path, monkeypatch):
+    """回归（2026-11-04 修复）：重启前遗留的 ack 不得抢答重发任务。
+
+    worker0 ack 后死亡 → resync 检测 pid 变化并重发；**旧 ack**（pid=100）若在重发之后
+    才被消费，必须被 ``reload_weights`` 忽略（``_info[0]["pid"]`` 已是 999），继续等
+    重启后 worker 的 ack（pid=999）。修复前本用例返回成功但 ``w0_acks==1``。
+    """
+    pytest.importorskip("torch")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+    import queue as _q
+    import threading
+
+    from hsbg.az.train.process_pool import ProcessActorPool
+
+    pool = ProcessActorPool.__new__(ProcessActorPool)
+    pool._result_q = _q.Queue()
+    pool._deferred = []
+    pool._task_qs = [_q.Queue(), _q.Queue()]
+    pool._info = [{"pid": 100}, {"pid": 200}]
+    pool._procs = [None, None]
+
+    state = {"w0_acks": 0}
+
+    def fake_check_alive():
+        if state["w0_acks"] >= 1 and pool._info[0]["pid"] == 100:
+            pool._info[0]["pid"] = 999
+        return []
+
+    pool._check_alive = fake_check_alive
+
+    def worker(w, q):
+        while True:
+            task = q.get(timeout=5.0)
+            if w == 0:
+                state["w0_acks"] += 1
+                pid = 100 if state["w0_acks"] == 1 else 999   # 重启后 pid 变化
+                if state["w0_acks"] == 1:
+                    time.sleep(0.20)     # 让 worker1 的 ack 先入队
+            else:
+                pid = 200
+            pool._result_q.put(_ack_msg(w, task, pid))
+            if w == 0:
+                # 关键交错：旧 ack 已被消费且重启已检测之后，才轮到「新 worker」取重发任务
+                time.sleep(0.50)
+            if w == 1 and state["w0_acks"] >= 2:
+                return
+
+    ths = [threading.Thread(target=worker, args=(w, q), daemon=True)
+           for w, q in enumerate(pool._task_qs)]
+    [t.start() for t in ths]
+    done = pool.reload_weights("ckpt.pt", updates=1, timeout=5.0)
+    # 修复后的语义：返回成功前，restarted worker 必须真的处理过重发任务。
+    assert state["w0_acks"] >= 2, state
+    assert done == 2, done

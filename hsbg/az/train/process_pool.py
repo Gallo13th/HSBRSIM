@@ -521,9 +521,11 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                     server.evaluator.std = np.asarray(
                         payload_ckpt["norm_std"], dtype=np.float32)
                 _report({"type": "reload_done", "task_id": task_id,
+                         "pid": os.getpid(),
                          "updates": int(task.get("updates", -1))})
             except BaseException as exc:  # noqa: BLE001
                 _report({"type": "reload_error", "task_id": task_id,
+                         "pid": os.getpid(),
                          "error": repr(exc), "traceback": traceback.format_exc()})
             continue
 
@@ -1081,6 +1083,8 @@ class ProcessActorPool:
         - 只接受本任务的消息（`accept`），别的任务消息留在缓冲里给它的等待者；
         - worker 死亡被 `_check_alive` 重启后，**重新加入 pending 并向新队列重发**，
           避免「旧队列任务发给死进程 → 永远等不到」和「重启后仍跑构造时旧权重」；
+        - ack 带 ``pid``（worker 侧 ``os.getpid()``）：pid 与当前 ``_info[w]["pid"]`` 不符的
+          **陈旧 ack**（重启前遗留）被忽略并继续等新 ack；无 ``pid`` 的旧消息按原逻辑接受；
         - 成功数按 worker 集合计，重复 done 不重复计数。
         """
         task_id = uuid.uuid4().hex[:12]
@@ -1123,7 +1127,18 @@ class ProcessActorPool:
                     _resend()
                 continue
             w = int(msg.get("worker", -1))
-            if msg["type"] == "reload_done":
+            # 陈旧 ack 防线（2026-11-04）：worker 收下 reload 后死亡 → 本函数 resync
+            # 重启并重发，但**重启前**发出的 ack 可能还在结果队列里；若用它满足 pending，
+            # 会在新 worker 尚未加载新权重时就返回成功。ack 现带 ``pid``；pid 与
+            # ``_info[w]`` 当前 pid 不一致的消息一律视为陈旧（向后兼容：无 pid 字段的
+            # 旧消息仍按原逻辑接受）。
+            info_w = (self._info[w] if 0 <= w < len(self._info) else None) or {}
+            mpid, cur_pid = msg.get("pid"), info_w.get("pid")
+            stale = bool(mpid is not None and cur_pid is not None
+                         and str(mpid) != str(cur_pid))
+            if stale:
+                pass  # 不从 pending 移除：继续等重启后 worker 的 ack
+            elif msg["type"] == "reload_done":
                 if w in pending:
                     pending.discard(w)
                     acked.add(w)
