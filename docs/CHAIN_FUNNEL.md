@@ -1,4 +1,4 @@
-﻿# 链条漏斗审计（s23b 终点，纯离线）
+# 链条漏斗审计（s23b 终点，纯离线）
 
 > 数据：`runs/az_entity_s23b/eval/quality_final_{bot,p09}.json`（各 96 局，seed 520000）与
 > 10M 点对照 `quality_10m_{bot,p09}.json`；原始抽取 `runs/az_entity_s23b/funnel.json`。

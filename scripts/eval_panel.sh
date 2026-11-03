@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 # 固定评测面板（唯一口径）：真实库 5 席 p0.9 / full fidelity / p75 / 96 局 / seed 520000
 # 用法：bash scripts/eval_panel.sh <checkpoint> <run_tag> [games]
 set -euo pipefail

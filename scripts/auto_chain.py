@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Auto chain: keep training 20M blocks from the newest checkpoint until cumulative
 decisions reach TARGET_M (default 300M), evaluating each block with eval_panel.sh."""
 import json, os, itertools, subprocess, sys, time, glob, re
