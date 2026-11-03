@@ -105,6 +105,8 @@ class CompSpec:
     spell_heavy: bool = True
     tavern_buy: bool = False       # 买「酒馆里被养最肥」的随从（而不是最高 tier）
     note: str = ""
+    enabler: Tuple[str, ...] = ()
+    filler: Tuple[str, ...] = ()
 
     @property
     def aim(self) -> Tuple[str, ...]:
@@ -182,7 +184,17 @@ _reg(CompSpec(
     curve=CURVE_MID,
     note="法强养大赤红守备巨龙；龙系身材靠执念诗心龙在战斗里留存"))
 
-# G. rank20「Beast Beetle」：暴虐巨蝎 + 绿松石飞掠虫 + 猎头狮鹫 + 香蕉猛猿
+# V2 F 龙链：塔蕾 + 诗人 + 奥术师 + 融合怪；保留旧版 F 不变。
+_reg(CompSpec(
+    "f_dragon", "F Dragon Chain V2", "f_dragon", "DRAGON",
+    core=("BG21_015", "BG29_813", "BG36_245", "BG36_640"),
+    carrier=("BG21_015",), cast_on=("BG21_015",), type_min=2,
+    trinkets=("BG32_MagicItem_417", "BG32_MagicItem_364", "BG30_MagicItem_995"),
+    curve=(2, 2, 3, 4, 4, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6),
+    enabler=("BG29_813", "BG36_245", "BG36_640"),
+    filler=("BG24_500", "BG34_631", "BG29_814"),
+    note="V2：核心优先塔蕾/诗人/奥术师/融合怪；法术优先打塔蕾，t8 未见核心退通用"))
+
 _reg(CompSpec(
     "G", "Beast Beetle", "beast_beetle", "BEAST",
     core=("BG36_209", "BG31_809", "BG36_204", "BG26_802"),
@@ -353,6 +365,17 @@ class CompPolicy:
             self.replaced = 0
             self._snapshot(v)
 
+        if self.spec0 is not None and self.spec0.key == "f_dragon":
+            me = v.get("me") or {}
+            for m in (me.get("hand") or []) + (me.get("board") or []):
+                cid = str(m.get("id"))
+                base = cid[:-2] if cid.endswith("_G") else cid
+                if base in self.spec0.core:
+                    self.core_seen.setdefault(base, t)
+            if any(str(m.get("id")) in expand(self.spec0.carrier)
+                   for m in (me.get("board") or [])) and self.carrier_turn < 0:
+                self.carrier_turn = t
+
     def act(self, v: dict, mask: np.ndarray) -> int:
         self.observe(v, mask)
         me = v.get("me") or {}
@@ -387,6 +410,8 @@ class CompPolicy:
         tier = int(me.get("tier") or 1)
         best, best_key = None, None
         for sp in COMPS.values():
+            if sp.key == "f_dragon":
+                continue
             core = expand(sp.core)
             n_own = len(core & (board_ids | hand_ids))
             n_shop = len(core & shop_ids)
@@ -414,6 +439,25 @@ class CompPolicy:
         ids = {str(m.get("id")) for m in (me.get("board") or [])}
         ids |= {str(m.get("id")) for m in (me.get("hand") or [])}
         return bool(self.core_ids & ids)
+
+    def _f_core_count(self, me: dict) -> int:
+        """F V2 已拥有的不同核心数（手牌或棋盘，金色按普通牌归一）。"""
+        if self.spec is None or self.spec.key != "f_dragon":
+            return 0
+        ids = {str(m.get("id")) for m in (me.get("board") or []) + (me.get("hand") or [])}
+        base = {x[:-2] if x.endswith("_G") else x for x in ids}
+        return len({x for x in self.spec.core if x in base})
+
+    def _f_can_roll(self, me: dict) -> bool:
+        """F V2 只在已有核心、血量安全且升本后仍留三金时找伴生。"""
+        if self.spec is None or self.spec.key != "f_dragon":
+            return True
+        hp = int(me.get("health") or 0)
+        if hp <= 20:
+            return False
+        up = int(me.get("upgrade_price") or 99)
+        gold = int(me.get("gold") or 0)
+        return self._f_core_count(me) >= 1 and gold >= up + 3
 
     # -- 回合快照 -----------------------------------------------------------
     def _snapshot(self, v: dict) -> None:
@@ -494,6 +538,14 @@ class CompPolicy:
                 cost = int(o.get("cost") or 0)
                 sc = 100.0 if cid in want else 0.0
                 txt = str(o.get("text") or "").lower()
+                if self.spec0 is not None and self.spec0.key == "f_dragon":
+                    chain = self._f_core_count(me) > 0 or gold >= 6
+                    growth = any(w in txt for w in ("dragon", "spell", "combat", "adjacent"))
+                    survival = any(w in txt for w in ("health", "shield", "armor", "damage"))
+                    if self.turn >= 6 or chain:
+                        sc += 150.0 if cid in want else 40.0 if growth else 0.0
+                    elif survival:
+                        sc += 200.0
                 if "spell" in txt or "tavern" in txt:
                     sc += 8.0
                 if "gold" in txt or "buy" in txt or "refresh" in txt:
@@ -602,8 +654,89 @@ class CompPolicy:
                     return A_BUY + i
         return None
 
+    def _recruit_f(self, v: dict, me: dict, mask) -> int:
+        """F V2 分阶段经济：核心/伴生链优先，刷新与转本均有硬门槛。"""
+        legal = lambda a: 0 <= a < 245 and bool(mask[a])
+        board, hand, shop = (me.get(k) or [] for k in ("board", "hand", "shop"))
+        turn, gold = self.turn, int(me.get("gold") or 0)
+        tier, hp = int(me.get("tier") or 1), int(me.get("health") or 0)
+        up = int(me.get("upgrade_price", 99))
+        spec = self.spec
+        if turn >= 8 and not self._f_core_count(me):
+            self.exited, self.spec = True, None
+            spec = None
+        core = self.core_ids
+        own = [str(x.get("id")) for x in board + hand]
+        enabler = expand(spec.enabler) if spec else set()
+        protected = core | enabler
+        buys = [(i, x) for i, x in enumerate(shop[:N_SHOP])
+                if legal(A_BUY + i) and gold >= price_of(x)]
+        # t2 升本；t3–7 常规曲线；t8+ 转本须核心在手、血量安全且剩三金。
+        due = tier < (self._curve_tier(turn) if spec else 6)
+        can_upgrade = (turn == 2 or (turn >= 3 and due and len(board) >= 4))
+        if turn >= 8:
+            can_upgrade = can_upgrade and bool(core & set(own)) and hp > 20 and gold >= up + 3
+        if legal(A_UPGRADE) and gold >= up and can_upgrade:
+            self.upgraded_turn = turn
+            return A_UPGRADE
+        # 升本回合不追重复牌/三连；优先铺手牌，避免刷新前空场。
+        for h, it in sorted(enumerate(hand[:N_HAND]),
+                            key=lambda kv: (str(kv[1].get("id")) not in core,
+                                            -strength_of(kv[1]))):
+            if is_minion(it) and len(board) < N_BOARD:
+                a = A_PLAY + h * N_POS + len(board)
+                if legal(a):
+                    return a
+            elif not is_minion(it) and any(str(m.get("id")) in self.aim_ids for m in board):
+                a = A_PLAY + h * N_POS
+                if legal(a):
+                    self.spells += 1
+                    return a
+        def score(it):
+            cid = str(it.get("id"))
+            if turn <= 2:
+                return strength_of(it)
+            order = spec.core.index(cid) if spec and cid in spec.core else 9
+            return (1000 - order * 20 if cid in core else
+                    700 if cid in enabler else
+                    100 if spec and cid in expand(spec.filler) else 0) + strength_of(it)
+        candidates = [(i, it) for i, it in buys if is_minion(it)
+                      and not (getattr(self, "upgraded_turn", -1) == turn
+                               and str(it.get("id")) in own)]
+        candidates.sort(key=lambda kv: score(kv[1]), reverse=True)
+        # t13+ 撤掉无成长价值的经济位，金币留给刷新/核心三连。
+        if turn >= 13 and spec:
+            econ = [(strength_of(m), j) for j, m in enumerate(board)
+                    if str(m.get("id")) not in protected
+                    and any(w in str((CATALOG.get(str(m.get("id"))) or {}).get("text", "")).lower()
+                            for w in ("gold", "coin")) and legal(A_SELL + j)]
+            if econ and candidates:
+                return A_SELL + min(econ)[1]
+        if candidates and len(hand) < N_HAND:
+            i, it = candidates[0]
+            cid = str(it.get("id"))
+            if len(board) < N_BOARD:
+                return A_BUY + i
+            sell = [(strength_of(m), j) for j, m in enumerate(board)
+                    if str(m.get("id")) not in protected and legal(A_SELL + j)]
+            if sell and self.replaced < 2 and (cid in core or strength_of(it) > min(sell)[0] + 5):
+                self.replaced += 1
+                return A_SELL + min(sell)[1]
+        if spec and any(str(m.get("id")) in self.aim_ids for m in board):
+            spells = [(i, x) for i, x in buys if not is_minion(x)]
+            if spells and len(hand) < N_HAND - 1:
+                return A_BUY + min(spells, key=lambda kv: price_of(kv[1]))[0]
+        # 转通用后仍执行安全刷新门槛；不让退出状态绕过生命/经济约束。
+        can_roll = self._f_can_roll(me) if spec else (hp > 20 and gold >= up + 3)
+        if legal(A_REFRESH) and can_roll and self.refreshes < self.max_refresh:
+            self.refreshes += 1
+            return A_REFRESH
+        return A_END
+
     # -- 招募 ---------------------------------------------------------------
     def _recruit(self, v: dict, me: dict, mask) -> int:
+        if self.spec0 is not None and self.spec0.key == "f_dragon":
+            return self._recruit_f(v, me, mask)
         def legal(a: int) -> bool:
             return 0 <= a < 245 and bool(mask[a])
 
@@ -771,7 +904,8 @@ class CompPolicy:
             budget = self.max_refresh + 6
         else:
             budget = self.max_refresh
-        if self.refreshes < budget and legal(A_REFRESH) and gold >= rp + 2:
+        if (self.refreshes < budget and legal(A_REFRESH) and gold >= rp + 2
+                and self._f_can_roll(me)):
             self.refreshes += 1
             return A_REFRESH
 
@@ -853,7 +987,7 @@ def play_one(seed: int, spec: Optional[CompSpec], *, auto: bool = False,
             else:
                 mask = mask_from_bytes(game.legal_mask(0))
                 v = json.loads(game.view(0))
-                if hybrid:
+                if hybrid and not (pol.spec0 and pol.spec0.key == "f_dragon"):
                     # 混合：阵容动作优先，其余交给引擎 bot（经济/升本/站位兜底）
                     pol.observe(v, mask)
                     if pol.auto:

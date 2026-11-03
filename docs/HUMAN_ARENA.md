@@ -9,7 +9,14 @@
 
 ![发现/目标弹窗](human_arena_pending.png)
 
-## 启动
+## 撤回（Undo）
+
+每次人类动作前保存引擎 `Game.state_json()` 快照（默认栈深 50，至少 10 步），`POST /undo` 用 `Game.from_json` 精确恢复 RNG、bot 与 pending 状态。页面按钮支持 `Ctrl/Cmd+Z`，`/state` 暴露 `undo.enabled/reason/depth/limit`；对局结束、回合/战斗结算、Discover 已选或无快照时禁用并显示原因。
+
+replay 会把被撤回的 decision 行标记 `undone: true`，并追加 undo 事件；`convert_replays` 过滤这些行，避免进入 BC。可通过 `/snapshot.txt` 对比撤回前后的状态。
+
+战场右侧为独立出售区，拖拽槽位 `i` 映射 `Sell(16+i)`。卡面效果默认完整展示；buff/附件默认为 `+N 附件 ▸` 折叠摘要；英雄技能描述默认折叠，点击标题展开。
+
 
 ```bash
 # 远端仓库根目录（默认只绑 127.0.0.1:8000）

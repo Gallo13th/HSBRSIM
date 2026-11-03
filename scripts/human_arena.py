@@ -959,7 +959,7 @@ class GameSession:
         self._stamp_seq = 0
         self.seed = int(seed)
         # 撤回栈：每步动作前的引擎 state_json + 会话计数（new_game 清空）
-        self.undo_limit = max(1, int(undo_limit))
+        self.undo_limit = max(10, int(undo_limit))
         self.undo_stack: List[Dict[str, Any]] = []
         # 引擎 RulesConfig（只读透传；用于 --aberration/--config-json 与测试的确定性大厅）。
         self.config = _parse_config(config_json)
@@ -981,7 +981,7 @@ class GameSession:
         self.over = False
         # 新局清空撤回栈（旧局快照不能跨局使用）
         self.undo_stack = []
-        # 引擎只保留最近若干条 combats；人类被淘汰后继续打时，缓存自己的最后一场战果
+        self.undo_barrier = ""
         self.last_my_combat: Optional[Dict[str, Any]] = None
         self.placement = 0
         self.placements: List[int] = []
@@ -1462,6 +1462,7 @@ class GameSession:
             "refreshes", "gold_spent_total", "triples_held",
             "won_last", "lost_last", "tied_last", "last_damage") if k in stats_src}
 
+        undo_ok, undo_reason = self.can_undo()
         return {
             "ok": True,
             "seat": self.seat,
@@ -1471,6 +1472,8 @@ class GameSession:
             "phase_label": {"hero_select": "选择英雄", "recruit": "招募",
                             "game_over": "对局结束"}.get(phase, phase),
             "over": bool(g.is_over()),
+            "undo": {"enabled": undo_ok, "reason": undo_reason,
+                      "depth": len(self.undo_stack), "limit": self.undo_limit},
             "alive": v.get("alive"),
             "hero_select": phase == "hero_select",
             "hud": hud,
@@ -1564,6 +1567,55 @@ class GameSession:
             return "当前是选英雄阶段，只能选择英雄"
         return "该动作当前不在合法动作掩码中（金币/位置/阶段/目标不满足）"
 
+    def _undo_reason(self) -> str:
+        """返回撤回禁用原因；战斗结算/Discover 选择点不可跨越。"""
+        if self.over or self.game.is_over():
+            return "对局已结束，不能撤回"
+        v = json.loads(self.game.view(self.seat))
+        phase = str(v.get("phase") or "")
+        if phase in ("combat", "game_over"):
+            return "战斗已结算，不能撤回"
+        me = v.get("me") or {}
+        if me.get("pending"):
+            kind = str((me.get("pending") or {}).get("kind") or "")
+            if kind == "discover":
+                return "Discover 已选/选择面板进行中，不能撤回"
+        if not self.undo_stack:
+            return self.undo_barrier or "没有可撤回的动作"
+        return ""
+
+    def can_undo(self) -> Tuple[bool, str]:
+        reason = self._undo_reason()
+        return (not reason, reason)
+
+    def undo(self) -> Dict[str, Any]:
+        ok, reason = self.can_undo()
+        if not ok:
+            raise IllegalAction(reason)
+        item = self.undo_stack.pop()
+        # state_json 是引擎的精确序列化；from_json 恢复 RNG、bot 与 pending。
+        self.game = self.E.Game.from_json(item["state_json"])
+        self.decisions = int(item["decisions"])
+        self.steps = int(item["steps"])
+        self.over = False
+        self.placement = 0
+        self.placements = []
+        self.last_my_combat = copy.deepcopy(item.get("last_my_combat"))
+        with gzip.open(self.replay_path, "rt", encoding="utf-8") as fh:
+            records = [json.loads(line) for line in fh if line.strip()]
+        for rec in reversed(records):
+            if (rec.get("type") == "decision" and not rec.get("undone")
+                    and rec.get("decision") == item["decision"]):
+                rec["undone"] = True
+                break
+        # 只在 Undo 重写日志，使下载的原始 decision 本身携带 undone: true。
+        with gzip.open(self.replay_path, "wt", encoding="utf-8") as fh:
+            for rec in records:
+                fh.write(json.dumps(rec, ensure_ascii=False, separators=(",", ":")) + "\n")
+        self._append_line({"type": "undo", "decision": item["decision"],
+                           "action": item["action"], "turn": item["turn"],
+                           "phase": item["phase"], "undone": True})
+        return self.state()
     def act(self, action: Any) -> Dict[str, Any]:
         """执行一个人类动作（先按掩码校验），返回新状态。"""
         g = self.game
@@ -1587,9 +1639,18 @@ class GameSession:
         phase = str(snap.get("phase") or "")
         tier = int((snap.get("me") or {}).get("tier") or 0)
         gold = int((snap.get("me") or {}).get("gold") or 0)
+        self.undo_stack.append({
+            "state_json": g.state_json(), "decisions": self.decisions,
+            "steps": self.steps, "decision": self.decisions, "action": a,
+            "turn": turn, "phase": phase,
+            "last_my_combat": copy.deepcopy(self.last_my_combat),
+        })
+        if len(self.undo_stack) > self.undo_limit:
+            self.undo_stack.pop(0)
         try:
             g.step(self.seat, a)
         except Exception as exc:  # noqa: BLE001 - 掩码通过但引擎仍拒绝：包装成 400
+            self.undo_stack.pop()
             raise IllegalAction(f"引擎拒绝动作 {a}（{action_name(a)}）：{exc}") from exc
         self.steps += 1
 
@@ -1612,6 +1673,15 @@ class GameSession:
         self.decisions += 1
 
         self.advance_bots()
+        pending_kind = str(((snap.get("me") or {}).get("pending") or {}).get("kind") or "")
+        if a == A_END or int(self.game.turn) != turn or self.game.is_over():
+            self.undo_stack.clear()
+            self.undo_barrier = "回合已结束 / 战斗已结算，不能撤回"
+        elif pending_kind == "discover" and A_CHOOSE <= a < A_CHOOSE + 16:
+            self.undo_stack.clear()
+            self.undo_barrier = "Discover 已选，不能撤回"
+        else:
+            self.undo_barrier = ""
         return self.state()
 
     def replay_bytes(self) -> bytes:
@@ -1646,7 +1716,7 @@ def convert_replays(src: str, out: str, skip_hero_select: bool = False) -> Dict[
     tiers: List[int] = []
     golds: List[int] = []
     eids: List[int] = []
-    skipped = {"hero_select": 0, "bad": 0, "meta": 0}
+    skipped = {"hero_select": 0, "bad": 0, "meta": 0, "undone": 0}
     for ep, path in enumerate(paths):
         with gzip.open(path, "rt", encoding="utf-8") as fh:
             for line in fh:
@@ -1656,6 +1726,9 @@ def convert_replays(src: str, out: str, skip_hero_select: bool = False) -> Dict[
                 rec = json.loads(line)
                 if rec.get("type") != "decision" or "action" not in rec:
                     skipped["meta"] += 1
+                    continue
+                if rec.get("undone"):
+                    skipped["undone"] += 1
                     continue
                 if skip_hero_select and rec.get("phase") == "hero_select":
                     skipped["hero_select"] += 1
@@ -1904,6 +1977,9 @@ header .pill{background:#232838;border:1px solid var(--line);border-radius:999px
 header .hp{color:var(--hp);font-weight:700}
 header .gold{color:var(--gold);font-weight:700}
 header .dim{color:var(--dim)}
+.battle-layout{display:grid;grid-template-columns:minmax(0,1fr) 145px;gap:10px;align-items:stretch}
+.battle-layout #boardrow{min-width:0}
+#sellrow .sellzone{height:100%;min-height:150px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;text-align:center}
 main.arena{display:flex;flex-direction:column;gap:10px;padding:12px;max-width:1680px;margin:0 auto}
 .arena-row{min-width:0}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
@@ -1956,7 +2032,7 @@ details>summary{list-style:none;cursor:pointer;color:#8fc1ff;font-size:10px;line
 details>summary::-webkit-details-marker{display:none}
 details>summary::before{content:"▸ ";color:var(--dim)}
 details[open]>summary::before{content:"▾ "}
-details.fx .quote{color:#8d99b5;font-size:11px;line-height:1.32;max-height:86px;overflow:auto;margin-top:3px}
+details.fx .quote{color:#8d99b5;font-size:11px;line-height:1.32;margin-top:3px}
 details.attach>summary{color:#d8c4ff}
 .attachlist{display:flex;flex-direction:column;gap:4px;margin-top:3px}
 .attachitem{border-left:2px solid #5a4478;padding-left:5px;font-size:10px;color:#c8d2e8}
@@ -2058,8 +2134,10 @@ body.busy #loading{display:block}
     <div id="taverninfo" class="taverninfo"></div>
     <div id="shop" class="shopgrid slots" aria-label="鲍勃酒馆"></div>
     <div id="buttons" class="btns"></div>
+    <button id="undobtn" disabled>撤回（Ctrl/Cmd+Z）</button> <span id="undoreason" class="mini"></span>
     <div class="mini dim">拖动商店卡到战场/购买区 = Buy（只购买，卡进入手牌并提示“已购买”，需再拖手牌打出）</div>
   </section>
+  <div class="battle-layout">
   <section id="boardrow" class="arena-row panel">
     <div class="ptitle"><span><b>第二行 · 我方战场</b>（7 槽，拖动排序）</span><span id="boardhint" class="mini"></span></div>
     <div id="board" class="boardgrid slots" aria-label="我方战场"></div>
@@ -2067,14 +2145,13 @@ body.busy #loading{display:block}
       <div id="activatezone" class="dropzone activatezone" data-drop="activate">拖到此处发动技能/效果（Activate = 23+槽位）</div>
     </div>
   </section>
+  </div>
   <section id="handrow" class="arena-row panel">
     <div class="ptitle"><span><b>第三行 · 手牌</b>（10 格）</span><span id="handhint" class="mini"></span></div>
     <div id="hand" class="handgrid slots" aria-label="手牌"></div>
     <div class="mini dim">拖到战场空槽 = Play；拖到已有机械/随从 = Magnetize；点卡片上的快捷按钮或按 Enter 也可操作</div>
   </section>
-  <section id="sellrow" class="arena-row">
-    <div id="sellzone" class="sellzone" data-drop="sell"><b>出售区</b> 拖到此处出售（Sell = 16+槽位）</div>
-  </section>
+  <aside id="sellrow"><div id="sellzone" class="sellzone" data-drop="sell"><b>出售区</b><br>拖到此处出售（Sell = 16+槽位）</div></aside>
   <div class="lower">
     <aside class="sidebar">
       <div class="panel">
@@ -2186,6 +2263,16 @@ async function act(action, okMsg) {
     document.body.classList.remove("busy");
   }
 }
+async function undo() {
+  if (!S || BUSY) return;
+  if (!S.undo || !S.undo.enabled) { toast(S.undo?.reason || "不可撤回"); return; }
+  BUSY = true; document.body.classList.add("busy");
+  try {
+    const data = await api("/undo", {}, "撤回");
+    if (data) { S = data; render(); toast("已撤回一步", true); }
+    else await refresh();
+  } finally { BUSY = false; document.body.classList.remove("busy"); }
+}
 async function newGame() {
   if (BUSY) { toast("请求处理中，请稍候"); return; }
   BUSY = true;
@@ -2239,7 +2326,7 @@ function attachedHTML(items, key) {
   return '<details class="attach" data-key="attach-' + esc(key || "x") + '">' +
     '<summary>+' + n + ' 附件 ▸</summary><div class="attachlist">' + rows + '</div></details>';
 }
-/* 卡面效果/属性来源默认折叠；动态关键词仍常驻标签。 */
+/* 卡面效果默认完整展示；属性来源与附件默认折叠。 */
 function cardHTML(c, extra, key) {
   const name = c.name_zh || c.name || "?";
   const k = key || c.card_id || name;
@@ -2620,6 +2707,9 @@ function renderBoard() {
   }
 }
 function renderButtons() {
+  $("undobtn").disabled = !S.undo?.enabled;
+  $("undobtn").title = S.undo?.reason || "撤回上一步";
+  $("undoreason").textContent = S.undo?.reason || ("可撤回 " + S.undo.depth + " 步");
   const box = $("buttons");
   box.innerHTML = "";
   for (const b of (S.buttons || [])) {
@@ -2635,6 +2725,14 @@ function renderButtons() {
       (b.hint ? " · " + b.hint : "") + (b.reason ? " · 不可用：" + b.reason : "");
     if (b.key === "end") el.classList.add("end");
     wrap.appendChild(el);
+    if (String(b.key).startsWith("power")) {
+      const p = (S.hero_powers || []).find(p => "power" + p.slot === b.key);
+      if (p && p.text) {
+        const d = document.createElement("details"); d.className = "power-description";
+        d.innerHTML = '<summary>技能描述 ▸</summary><div class="quote">' + esc(p.text) + '</div>';
+        wrap.appendChild(d);
+      }
+    }
     if (!b.enabled && b.reason) {
       const r = document.createElement("span");
       r.className = "reason";
@@ -2782,6 +2880,7 @@ function restoreOpen(m) {
   document.querySelectorAll("details[data-key]").forEach((d) => { if (m[d.dataset.key]) d.open = true; });
 }
 function render() {
+  /* 卡面效果默认完整展示；附件/技能描述仍由 details 保持折叠。 */
   if (!S) return;
   const open = collectOpen();
   const h = S.hud || {};
@@ -2820,6 +2919,7 @@ function render() {
   $("handhint").textContent = (S.hand || []).length + " / " + (h.hand_limit ?? 10) +
     (h.hand_queue_len ? " · 队列 " + h.hand_queue_len : "");
   renderButtons();
+  document.querySelectorAll("details.fx").forEach(d => { d.open = true; });
   renderTrinkets();
   renderDeity();
   renderOpponents();
@@ -2996,9 +3096,14 @@ document.addEventListener("drop", (ev) => {
 });
 document.addEventListener("dragend", () => endDrag());
 document.addEventListener("keydown", (ev) => {
+  if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && ev.key.toLowerCase() === "z" &&
+      !ev.target.closest("input,textarea,[contenteditable]")) {
+    ev.preventDefault(); undo();
+  }
   if (ev.key === "Escape") { $("menubox").classList.add("hidden"); }
 });
 $("newbtn").onclick = newGame;
+$("undobtn").onclick = undo;
 if (S) { render(); } else { refresh(); }
 </script>
 </body>
@@ -3134,6 +3239,9 @@ class ArenaHandler(BaseHTTPRequestHandler):
                     raise IllegalAction("缺少 action 字段")
                 with self.server.lock:  # type: ignore[attr-defined]
                     self._json(200, self.server.session.act(body["action"]))  # type: ignore[attr-defined]
+            elif path == "/undo":
+                with self.server.lock:
+                    self._json(200, self.server.session.undo())
             elif path == "/new":
                 seed = body.get("seed")
                 if seed is not None:
