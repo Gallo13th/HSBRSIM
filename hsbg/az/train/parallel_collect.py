@@ -469,6 +469,10 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     mirror_on = mirror_pool is not None and mirror_p > 0.0 and int(mirror_seats_count) > 0
     mirror_targets = (mirror_seats(int(mirror_seats_count), N_PLAYERS, seat)
                       if mirror_on else [])
+    # 脚本席必须是纯脚本阵容：镜像快照/人类战团注入都不得占用这些座位，
+    # 否则脚本席会被快照替换（A/B 不再干净）。见 docs/COMP_SCRIPT_SEATS.md。
+    if mirror_on and frozen_set:
+        mirror_targets = [s for s in mirror_targets if s not in frozen_set]
     # ── 人类战团（board-only）注入（默认关闭） ──────────────────────────────
     human_p = max(0.0, min(1.0, float(human_board_p)))
     human_on = (human_board_pool is not None and human_p > 0.0
@@ -519,6 +523,8 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         targets = (mirror_seats_random(int(mirror_seats_count), st["mirror_rng"],
                                        N_PLAYERS, seat)
                    if mirror_seat_random else mirror_targets)
+        if frozen_set:
+            targets = [s for s in targets if s not in frozen_set]
         inject_turn(g, mirror_pool, t, seats=targets, p=mirror_p,
                     rng=st["mirror_rng"], learner_seat=seat,
                     stats=st["mirror_stats"],
@@ -537,12 +543,22 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         if t == int(st.get("human_turn", t)):
             return
         st["human_turn"] = t
+        # 脚本席（frozen_set）必须保持纯脚本阵容：显式排座，从非 learner、非脚本席里
+        # 抽 human_targets 个（为空则不注入）。
+        seats_arg = None
+        if frozen_set:
+            _pool = [s for s in range(N_PLAYERS)
+                     if s != int(seat) and s not in frozen_set]
+            _k = max(0, min(int(human_targets), len(_pool)))
+            seats_arg = (sorted(st["human_rng"].sample(_pool, _k))
+                         if _k > 0 else [])
         inject_human_boards(
             g, human_board_pool, t, seats_count=human_targets, p=human_p,
             rng=st["human_rng"], learner_seat=seat, stats=st["human_stats"],
             mirror_seats=st.get("mirror_applied_seats") or (),
             num_players=N_PLAYERS, set_tier=human_set_tier,
-            fidelity=human_fidelity, fast_inject=human_fast_inject)
+            fidelity=human_fidelity, fast_inject=human_fast_inject,
+            seats=seats_arg)
 
     def _maybe_inject(st: Dict[str, Any]) -> None:
         """新回合注入总入口（顺序固定：镜像快照 → 人类战团）。"""
@@ -608,7 +624,9 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                             st["lib_error"] += 1
                             st.setdefault("lib_error_last", repr(exc))
                 replayed = False
-                if st.get("traj") is not None and int(q) != seat:
+                # 脚本席（frozen_set）保持纯脚本阵容：不允许轨迹回放抢占其动作。
+                if (st.get("traj") is not None and int(q) != seat
+                        and int(q) not in st.get("frozen_set", ())):
                     a_rec = st["traj"].next_action(int(q), int(g.turn))
                     if a_rec is not None:
                         st["traj_attempt"] = st.get("traj_attempt", 0) + 1
@@ -619,7 +637,8 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                             st["traj_replayed"] = st.get("traj_replayed", 0) + 1
                         else:
                             st["traj_illegal"] = st.get("traj_illegal", 0) + 1
-                if not replayed and st.get("traj") is not None and int(q) != seat:
+                if (not replayed and st.get("traj") is not None and int(q) != seat
+                        and int(q) not in st.get("frozen_set", ())):
                     st["traj_fallback"] = st.get("traj_fallback", 0) + 1
                 if replayed:
                     pass
@@ -632,6 +651,8 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                         if not (0 <= game_action < N_ACTIONS and bool(mq[game_action])):
                             game_action = int(np.flatnonzero(mq)[0]) if mq.any() else 0
                         g.step(int(q), game_action)
+                        st["frozen_decisions"] = int(
+                            st.get("frozen_decisions", 0)) + 1
                     except BaseException:  # noqa: BLE001 - 失败退回 bot，保证对局继续
                         g.bot_play(int(q))
                 elif str(gamemode) == "weak":
@@ -829,6 +850,8 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
             "trajectory_fallback": int(sum(st.get("traj_fallback", 0) for st in states)),
             "frozen_opponent": bool(opponent_policy is not None),
             "frozen_seats": int(len(frozen_set)),
+            "frozen_decisions": int(sum(st.get("frozen_decisions", 0)
+                                        for st in states)),
             "mirror_on": bool(mirror_on), "mirror_p": float(mirror_p),
             "mirror_seats": int(len(mirror_targets)),
             "mirror_targets": list(mirror_targets),

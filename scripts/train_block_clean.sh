@@ -53,6 +53,9 @@ COMP_FIT_T9_BONUS="${COMP_FIT_T9_BONUS:-0}"
 COMP_TRINKET_COEF="${COMP_TRINKET_COEF:-0}"
 # 0 = 不按「已用显存 > 阈值」剔除 actor 卡（默认；邻居只占 5GB 时仍可用）
 GPU_FREE_CHECK="${GPU_FREE_CHECK:-0}"
+# 固定阵容脚本席（1..3；0=关闭）。脚本席 = hybrid 对手：阵容动作优先、其余引擎 bot 兜底。
+SCRIPT_SEATS="${SCRIPT_SEATS:-0}"
+SCRIPT_COMPS="${SCRIPT_COMPS:-auto}"
 DRY_RUN="${DRY_RUN:-0}"
 TAG="${TAG:-$(basename "$OUT")}"
 EVAL_GAMES="${EVAL_GAMES:-96}"
@@ -192,6 +195,7 @@ CMD=("$PY" scripts/train_entity_sync.py
   --upgrade-curve-bc-coef 0.0 --discover-bc-coef 0.0 --triple-bc-coef 0.0
   --bc-ce-norm 1 --bc-warmup-decisions 0.0 --bc-guard-ratio 0.0
   --dyn-curriculum 0 --dyn-start-seats 2 --dyn-max-seats 5 --dyn-p 0.75
+  --script-seats "$SCRIPT_SEATS" --script-comps "$SCRIPT_COMPS"
   --dyn-threshold 0.1 --dyn-hold-decisions 10000000.0 --dyn-quality-games 96)
 
 gpu_snapshot() {
@@ -210,7 +214,7 @@ if [ "$DRY_RUN" = "1" ]; then
   say "CK=$CK"
   say "TS=$TS"
   say "OUT=$OUT  TAG=$TAG  SEED=$SEED  STOP_DECISIONS=$STOP_DECISIONS  GAMES=$GAMES"
-  say "PROCESSES=$PROCESSES  GPUS=$GPUS  DEVICE=$DEVICE  EVAL_DEVICE=$EVAL_DEVICE  GPU_FREE_CHECK=$GPU_FREE_CHECK"
+  say "PROCESSES=$PROCESSES  GPUS=$GPUS  DEVICE=$DEVICE  EVAL_DEVICE=$EVAL_DEVICE  GPU_FREE_CHECK=$GPU_FREE_CHECK  SCRIPT_SEATS=$SCRIPT_SEATS  SCRIPT_COMPS=$SCRIPT_COMPS"
   say "COMP_FIT_COEF=$COMP_FIT_COEF  COMP_FIT_T9_BONUS=$COMP_FIT_T9_BONUS  COMP_TRINKET_COEF=$COMP_TRINKET_COEF"
   say "=== 最终训练命令 ==="
   printf '%s ' "${CMD[@]}"; printf '\n'

@@ -103,6 +103,15 @@ from scripts.async_eval import (AsyncEvalRunner, build_c0_cmd,  # noqa: E402
 DPO_REF_TOTAL_LOSS = 0.77
 
 
+def _load_comp_scripts() -> Any:
+    """运行时加载 ``scripts/comp_scripts.py``（importlib；与 T1 的 ``_comp_fit_tables`` 同做法）。
+
+    只在 ``--script-seats>0`` 的启动校验里调用，避免无引擎机器 import 训练脚本时被拖慢。
+    """
+    from hsbg.az.train.comp_offline_policy import load_comp_module
+    return load_comp_module()
+
+
 def _ppo_total_ref(out_dir: str) -> tuple:
     """本 run 最近一次 PPO ``total`` loss（无历史时退回 s9d 量级常数）；返回 (值, 来源)。"""
     path = os.path.join(str(out_dir), "history.jsonl")
@@ -1833,6 +1842,14 @@ def main() -> int:
                     help="由冻结对手驱动的 bot 座位数（1–2 性价比最高；7=全部，慢 ~25x）")
     ap.add_argument("--frozen-opponent", default="",
                     help="冻结对手模型 checkpoint（空=引擎 bot）；bot 座位由它驱动（分裂模型/自对弈）")
+    ap.add_argument("--script-seats", type=int, default=0,
+                    help="脚本席数（0..3，默认 0）：把 1..N 号 bot 席位换成固定阵容脚本"
+                         "（comp scripts，hybrid：阵容动作优先、其余引擎 bot）。"
+                         "脚本席只改变对手分布，不改变奖励/PPO 数学；需要 --lockstep 1、"
+                         "--opponent bot|weak，且不能与 --frozen-opponent 同时给。")
+    ap.add_argument("--script-comps", default="auto",
+                    help="脚本席阵容：auto（按 seed 稳定轮转）或逗号分隔的阵容 key"
+                         "（见 python scripts/comp_scripts.py --list）")
     ap.add_argument("--trajectory-pool", default="",
                     help="对手场面轨迹库目录（空=不用）；见 docs/LIBRARY_POOL_PLAN.md")
     ap.add_argument("--trajectory-p", type=float, default=0.0,
@@ -2344,6 +2361,42 @@ def main() -> int:
         if _scope != "all":
             os.environ["HSBG_TIER_UPGRADE_DISCOUNT_SCOPE"] = _scope
     args.out = os.path.abspath(args.out)
+    # ── 脚本席（固定阵容脚本作为 bot 席位）──────────────────────────────────
+    # 语义：只改对手分布（seat 1..N 由 CompPolicy hybrid 驱动），不改奖励/PPO 数学。
+    _script_seats = int(getattr(args, "script_seats", 0) or 0)
+    if _script_seats:
+        if not (0 <= _script_seats <= 3):
+            print("[error] --script-seats 必须在 0..3（0=关闭）", file=sys.stderr)
+            return 2
+        if not int(args.lockstep):
+            print("[error] --script-seats>0 需要 --lockstep 1"
+                  "（脚本席只在 lockstep 采集路径生效）", file=sys.stderr)
+            return 2
+        if str(args.opponent) not in ("bot", "weak"):
+            print(f"[error] --script-seats>0 需要 --opponent bot|weak，"
+                  f"收到 {args.opponent!r}", file=sys.stderr)
+            return 2
+        if str(args.frozen_opponent).strip():
+            print("[error] --script-seats 与 --frozen-opponent 不能同时给"
+                  "（二者都占用冻结席位）", file=sys.stderr)
+            return 2
+        try:
+            from hsbg.az.train.comp_offline_policy import resolve_comp_keys
+            _script_keys = resolve_comp_keys(str(args.script_comps), _script_seats,
+                                             int(args.seed))
+        except Exception as exc:  # noqa: BLE001 - 启动期参数错误，直接报错退出
+            print(f"[error] --script-comps 非法: {exc}", file=sys.stderr)
+            return 2
+        if int(getattr(args, "frozen_seats", 0) or 0) not in (0, _script_seats):
+            print(f"[warn] --frozen-seats={args.frozen_seats} 被 --script-seats="
+                  f"{_script_seats} 覆盖", flush=True)
+        args.frozen_seats = _script_seats
+        args.frozen_opponent = "comp:" + (str(args.script_comps).strip() or "auto")
+        print(f"[script-seats] seats={_script_seats} comps={_script_keys} "
+              f"frozen_opponent={args.frozen_opponent!r}（hybrid：阵容动作优先、"
+              f"其余引擎 bot；不改变奖励）", flush=True)
+    elif str(getattr(args, "script_comps", "auto") or "auto").strip().lower() != "auto":
+        print("[warn] --script-comps 只在 --script-seats>0 时生效", flush=True)
     # 经济课程：gold_curriculum=1 且 stage=none 时按 warmup 处理；非法倍数/窗口启动期报错
     if int(args.gold_curriculum) and str(args.curriculum_stage) == "none":
         args.curriculum_stage = "warmup"

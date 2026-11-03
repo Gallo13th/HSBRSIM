@@ -687,7 +687,25 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                         hpool = cached[1]
                 opp_pol = None
                 fck = str(getattr(cfg, "frozen_opponent", "") or "")
-                if fck:
+                if fck.startswith("comp:"):
+                    # 脚本席（固定阵容脚本）：comp:auto / comp:A,C —— 不加载 checkpoint，
+                    # 纯 CPU 脚本对手（hybrid：阵容动作优先、其余引擎 bot）。缓存键含字符串。
+                    from .comp_offline_policy import (CompOpponentPolicy,
+                                                      resolve_comp_keys)
+                    spec = fck[len("comp:"):].strip() or "auto"
+                    _keys = resolve_comp_keys(
+                        spec, int(getattr(cfg, "frozen_seats", 0) or 0),
+                        int(task["seed"]))
+                    key = ("comp", fck, tuple(_keys))
+                    opp_pol = _OPP_CACHE.get(key)
+                    if opp_pol is None:
+                        opp_pol = CompOpponentPolicy(
+                            _keys, seed=int(task["seed"]) + 31, hybrid=True)
+                        _OPP_CACHE[key] = opp_pol
+                        print(f"[opp] comp_script_seats spec={spec!r} keys={_keys} "
+                              f"seats={int(getattr(cfg, 'frozen_seats', 0) or 0)}",
+                              flush=True)
+                elif fck:
                     key = (fck, os.path.getmtime(fck) if os.path.isfile(fck) else 0.0)
                     cached_pol = _OPP_CACHE.get(key)
                     if cached_pol is None:
@@ -1374,6 +1392,15 @@ class ProcessActorPool:
             "worker_meta": to_jsonable(metas),
             "elapsed_s": wall,
         }
+        # 脚本席（comp script seats）：worker meta 逐 shard 回传，父进程汇总到 collect 顶层，
+        # 这样 history.jsonl 才能直接证明「脚本席真的上场」（frozen_decisions>0）。
+        # 只在确有脚本席时才新增键，避免改变其它 run 的 collect schema。
+        if any(bool(m.get("frozen_opponent")) for m in metas):
+            meta["frozen_opponent"] = True
+            meta["frozen_seats"] = int(max(
+                int(m.get("frozen_seats", 0) or 0) for m in metas))
+            meta["frozen_decisions"] = int(sum(
+                int(m.get("frozen_decisions", 0) or 0) for m in metas))
         # 注入计数（mirror_* / human_board_*）：worker meta 逐 shard 回传，父进程按
         # 「计数 sum / 开关 any / p mean」聚合到 collect 段顶层（history 可直接验证生效）。
         meta.update(aggregate_injection(metas))
