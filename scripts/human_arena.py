@@ -14,7 +14,10 @@
   ``hsbg_engine.action_name``）；前端按钮全部映射到具体 action id；
 - 每次请求只做一件事：``GET /state`` 读状态，``POST /act {action}`` 推进一步；
 - bot 座位用引擎原生 ``Game.bot_play(p)`` 推进到本回合结束（不训练、不占 GPU）；
-- replay 逐决策**增量**写 gzip（多 member 拼接，``gzip.open`` 可正常读）。
+- replay 逐决策**增量**写 gzip（多 member 拼接，``gzip.open`` 可正常读）；
+- 撤回：每个可撤回动作前用引擎 ``Game.state_json()`` 做**精确快照**（``Game.from_json``
+  可逐位续局），栈默认 50 步（≥10）；撤回后 replay 追加 ``{"type":"undo"}`` 标记，
+  ``convert_replays`` 把被撤回的决策行**剔除**（不进入 BC 数据）。
 
 HTTP 端点
 ---------
@@ -22,8 +25,9 @@ HTTP 端点
 方法    路径     说明
 ======  ======  ==========================================================
 GET     /       内嵌 HTML/JS 界面
-GET     /state  当前状态 JSON（商店/手牌/场上/HUD/合法动作/对手/pending）
+GET     /state  当前状态 JSON（商店/手牌/场上/HUD/合法动作/对手/pending/撤回）
 POST    /act    ``{"action": int}`` 执行一步并返回新状态（非法动作 400）
+POST    /undo   撤回上一步并返回新状态（不可撤回时 400 + 原因）
 POST    /new    ``{"seed": int}``（可省）开新局并返回新状态
 GET     /replay 下载本局 replay（jsonl.gz）
 GET     /snapshot 注入当前状态的静态 HTML（同步渲染，便于截图/复盘）
@@ -48,6 +52,8 @@ replay 格式（每行一个 JSON；gzip 多 member）
 - 首行 ``{"type": "meta", ...}``：engine / game_version / seed / seat / obs 尺寸；
 - 中间每行 ``{"type": "decision", ...}``：``features``(3227) / ``cards``(124) /
   ``mask``(245) / ``action`` / ``turn`` / ``tier`` / ``gold`` / ``phase`` / ``decision``；
+- 撤回时追加 ``{"type": "undo", decision, action, turn, phase, ...}``：``decision`` 指向被
+  撤回的决策序号；``convert_replays`` 读到 undo 就弹出对应 decision 行（``skipped.undone``）；
 - 末行 ``{"type": "summary", ...}``：placement / placements / decisions / turns。
 
 BC 转换：``--to-npz`` 生成 ``obs``(n,3351 float32) + ``cards`` + ``mask``(bool) +
@@ -58,9 +64,11 @@ BC 转换：``--to-npz`` 生成 ``obs``(n,3351 float32) + ``cards`` + ``mask``(b
 from __future__ import annotations
 
 import argparse
+import copy
 import functools
 import glob
 import gzip
+import hashlib
 import json
 import os
 import sys
@@ -104,6 +112,10 @@ OBS_CARDS = 124
 OBS_TOTAL = OBS_FLOATS + OBS_CARDS
 #: 默认 replay 目录（项目根下）
 DEFAULT_OUT = os.path.join(ROOT, "runs", "human_play")
+#: 撤回栈默认深度（任务要求至少 10；50 × ~30KB 快照 ≈ 1.5MB，可接受）
+UNDO_LIMIT_DEFAULT = 50
+#: replay 里撤回的标记方式：追加 ``{"type":"undo"}``，转换 BC 时剔除被撤回的决策
+UNDO_REPLAY_MODE = "mark-undone"
 
 #: 卡图（HSJSON 原图）；加载失败时前端回退为文字占位，绝不阻塞操作。
 ART_URL_TEMPLATE = "https://art.hearthstonejson.com/v1/orig/{card_id}.png"
@@ -936,7 +948,8 @@ class GameSession:
     """一局人类 vs 7 bot；每次 ``act`` 落一条 BC 决策记录。"""
 
     def __init__(self, seed: int, seat: int = 0, out_dir: str = DEFAULT_OUT,
-                 engine: Any = None, config_json: Any = None) -> None:
+                 engine: Any = None, config_json: Any = None,
+                 undo_limit: int = UNDO_LIMIT_DEFAULT) -> None:
         self.E = engine or load_engine()
         self.seat = int(seat)
         if not 0 <= self.seat < 8:
@@ -945,6 +958,9 @@ class GameSession:
         os.makedirs(self.out_dir, exist_ok=True)
         self._stamp_seq = 0
         self.seed = int(seed)
+        # 撤回栈：每步动作前的引擎 state_json + 会话计数（new_game 清空）
+        self.undo_limit = max(1, int(undo_limit))
+        self.undo_stack: List[Dict[str, Any]] = []
         # 引擎 RulesConfig（只读透传；用于 --aberration/--config-json 与测试的确定性大厅）。
         self.config = _parse_config(config_json)
         self.new_game(self.seed)
@@ -963,6 +979,8 @@ class GameSession:
         self.decisions = 0
         self.steps = 0
         self.over = False
+        # 新局清空撤回栈（旧局快照不能跨局使用）
+        self.undo_stack = []
         # 引擎只保留最近若干条 combats；人类被淘汰后继续打时，缓存自己的最后一场战果
         self.last_my_combat: Optional[Dict[str, Any]] = None
         self.placement = 0

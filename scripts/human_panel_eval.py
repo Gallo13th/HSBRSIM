@@ -337,6 +337,7 @@ def _panel(seed_base: int, games: int, seats: int, per_seat: int, *,
         # 推理期搜索（--infer-search）+ Σ(turn) 强度轨迹（t12/t15 强度比）
         "search": search_meta,
         "strength": strength,
+        "model_ranks": model_ranks,
     })
     return panel
 

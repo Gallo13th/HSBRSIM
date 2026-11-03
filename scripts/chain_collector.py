@@ -136,7 +136,8 @@ def play_one(seed: int, policy, cid2id: dict, by_id: dict, amp_ids: set,
              triple_bias: float = 0.0,
              pair_freeze: int = 0) -> Optional[dict]:
     import hsbg_engine as E
-    game = E.Game(seed=int(seed))
+    from hsbg.az.train.game_rules import game_config_json as _game_cfg
+    game = E.Game(seed=int(seed), config_json=_game_cfg())
     policy.reset()
     turns: List[dict] = []
     last_turn = -1

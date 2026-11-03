@@ -326,8 +326,9 @@ def _play(seed: int, policy, q: dict) -> dict | None:
     同一条代码路径；默认关闭 -> 行为与旧版逐位一致）。
     """
     import hsbg_engine as E
+    from hsbg.az.train.game_rules import game_config_json as _game_cfg
 
-    game = E.Game(seed=int(seed))
+    game = E.Game(seed=int(seed), config_json=_game_cfg())
     policy.reset()
     turns = []
     last_turn = -1

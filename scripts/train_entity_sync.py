@@ -301,7 +301,8 @@ def _attach_replication_bc_labels(batch: Any, *, want_upgrade: bool = False,
         _turns_set = {float(x) for x in str(upgrade_turns).split(",") if x.strip()}
         if want_upgrade and _tt in _turns_set and bool(mk[3]) \
                 and float(_gold_p[i]) >= float(_price_p[i]):
-            _tg = {2.0: 2.0, 5.0: 3.0, 7.0: 4.0, 9.0: 5.0}[_tt]
+            _tg = (2.0 if _tt <= 4.0 else 3.0 if _tt <= 6.0
+                   else 4.0 if _tt <= 8.0 else 5.0 if _tt <= 11.0 else 6.0)
             if float(_tier_p[i]) < _tg - 1e-6:
                 u_act[i] = 3
                 u_w[i] = 1.0
@@ -454,6 +455,7 @@ def _reward_card_meta() -> Dict[str, Any]:
 
 def _apply_custom_rewards(batch: Any, *, upgrade_w: float = 0.0,
                           win_w: float = 0.0, strength_c: float = 0.0,
+                          strength_from_turn: float = 0.0,
                           golden_w: float = 0.0, golden_t5_w: float = 0.0,
                           amp_board_w: float = 0.0, engine_board_w: float = 0.0,
                           survive_t12_w: float = 0.0,
@@ -468,6 +470,35 @@ def _apply_custom_rewards(batch: Any, *, upgrade_w: float = 0.0,
                           comp_trinket_c: float = 0.0,
                           t1p_coef: float = 0.0,
                           t1s_coef: float = 0.0,
+                          save_up_w: float = 0.0,
+                          late_growth_coef: float = 0.0,
+                          late_shadow_coef: float = 0.0,
+                          late_log_ratio_coef: float = 0.0,
+                          late_alive_bonus: float = 0.0,
+                          late_death_penalty: float = 0.0,
+                          late_shadow_ratio: float = 3.15,
+                          churn_w: float = 0.0,
+                          hightier_w: float = 0.0,
+                          hero_power_w: float = 0.0,
+                          early_upgrade_w: float = 0.0,
+                          churn_sell_cap: float = 12.0,
+                          churn_roll_cap: float = 8.0,
+                          churn_pair_w: float = 0.0,
+                          roll_pair_w: float = 0.0,
+                          tier_early_w: float = 0.0,
+                          chain_w: float = 0.0,
+                          chain_complete_bonus: float = 0.5,
+                          chain2_w: float = 0.0,
+                          late_rel_growth_coef: float = 0.0,
+                          final_20k_w: float = 0.0,
+                          chain_early_w: float = 0.0,
+                          t9_chain_target_w: float = 0.0,
+                          roll_bonus_t8t9: float = 0.0,
+                          final_3500_w: float = 0.0,
+                          scaling_value_w: float = 0.0,
+                          scaling_value_model: str = "data/scaling_value/logit.npz",
+                          chain_any_w: float = 0.0,
+                          retain_growth_coef: float = 0.0,
                           gamma: float, lam: float) -> Optional[Dict[str, Any]]:
     """**默认全部关闭**的奖励改造；一次改 rewards 后**整批重算 GAE**。
 
@@ -515,7 +546,8 @@ def _apply_custom_rewards(batch: Any, *, upgrade_w: float = 0.0,
             prev_L = 0.0
             for ts, te in zip(turn_starts.tolist(), turn_ends.tolist()):
                 cur_L = float(L[te])
-                delta[te] += float(strength_c) * (cur_L - prev_L)
+                if float(turns[te]) >= float(strength_from_turn) - 1e-6:
+                    delta[te] += float(strength_c) * (cur_L - prev_L)
                 prev_L = cur_L
     # ── 金卡 / 放大器 / 引擎卡 / 存活到 t12（全部默认 0）─────────────────
     n_gold = n_gold5 = n_ampb = n_engb = n_surv = 0
@@ -879,6 +911,476 @@ def _apply_custom_rewards(batch: Any, *, upgrade_w: float = 0.0,
             _t1s["buys_upg_turn_mean"] = float(np.mean(_buys_upg_turn)) if _buys_upg_turn else None
         except BaseException:  # noqa: BLE001
             pass
+    # s29：攒钱纪律（t7/t8/t9 回合末金币 >= 8 → +w；只奖励"攒得住"，不给钱）
+    n_su = 0
+    _su = {"g7": [], "g8": [], "g9": [], "t9_upg": 0, "save8": 0, "save8_upg": 0}
+    if float(save_up_w) > 0.0:
+        try:
+            import hsbg.env.obs_std as _O5  # noqa: PLC0415
+            _f5 = np.asarray(batch.features, dtype=np.float32)
+            _n5 = _f5.shape[0]
+            _gold5 = _f5[:, _O5.GLOBAL_FIELD_INDEX["gold"]] * 10.0
+            _acts5 = np.asarray(batch.actions, dtype=np.int64)
+            _turns5 = np.asarray(batch.turns, dtype=np.float64)
+            _eps5 = np.asarray(batch.episode_ids)
+            _b5 = np.flatnonzero(np.diff(_eps5) != 0) + 1
+            _s5 = np.concatenate(([0], _b5))
+            _e5 = np.concatenate((_b5, [_n5]))
+            for _st5, _en5 in zip(_s5.tolist(), _e5.tolist()):
+                _g = {}
+                for _tt in (7, 8, 9):
+                    _idxs = np.flatnonzero(_turns5[_st5:_en5] == float(_tt))
+                    if _idxs.size:
+                        _ix = _st5 + int(_idxs[-1])
+                        _g[_tt] = float(_gold5[_ix])
+                        if float(_gold5[_ix]) >= 8.0:
+                            delta[_ix] += float(save_up_w)
+                if 7 in _g:
+                    _su["g7"].append(_g[7])
+                if 8 in _g:
+                    _su["g8"].append(_g[8])
+                if 9 in _g:
+                    _su["g9"].append(_g[9])
+                _t9upg = bool(((_acts5[_st5:_en5] == 3)
+                               & (_turns5[_st5:_en5] == 9.0)).any())
+                if _t9upg:
+                    _su["t9_upg"] += 1
+                if 8 in _g and _g[8] >= 8.0:
+                    _su["save8"] += 1
+                    if _t9upg:
+                        _su["save8_upg"] += 1
+                n_su += 1
+        except BaseException:  # noqa: BLE001
+            pass
+    # s35 人类行为三件套：卖牌/刷新周转 + 高 tier 买牌 + 英雄技能
+    n_ch = 0
+    _ch = {"sells": 0, "rolls": 0, "h4": 0, "h5": 0, "h6": 0, "hp": 0, "early_upg": 0, "buf": 0.0}
+    if float(churn_w) > 0.0 or float(hightier_w) > 0.0 or float(hero_power_w) > 0.0:
+        try:
+            import hsbg.env.obs_std as _O8  # noqa: PLC0415
+            _acts8 = np.asarray(batch.actions, dtype=np.int64)
+            _carr8 = np.asarray(batch.cards, dtype=np.int64)
+            if _carr8.ndim == 1:
+                _carr8 = _carr8.reshape(-1, 124)
+            _cid2id8 = _COMP_FIT_CACHE.get("cid2id")
+            if _cid2id8 is None:
+                import hsbg_engine as _E8  # noqa: PLC0415
+                _cid2id8 = {int(c["cid"]): str(c["id"]) for c in json.loads(_E8.catalog_json())}
+                _COMP_FIT_CACHE["cid2id"] = _cid2id8
+            _cards8 = json.load(open(os.path.join(ROOT, "data/p2/cards_37.json"), encoding="utf-8"))
+            if isinstance(_cards8, dict):
+                _cards8 = _cards8.get("cards") or _cards8.get("data") or list(_cards8.values())
+            _tier8 = {str(c["id"]): int(c.get("tier") or 0)
+                      for c in _cards8 if isinstance(c, dict) and c.get("id")}
+            _shop = _carr8[:, _O8.SLICE_CARD_SHOP]
+            _turns8 = np.asarray(batch.turns, dtype=np.float64)
+            _eps8 = np.asarray(batch.episode_ids)
+            _sell_k = {}
+            _roll_k = {}
+            from hsbg.az.train.action_counts import classify as _classify
+            for _i in range(_acts8.shape[0]):
+                _a = int(_acts8[_i])
+                _ep = int(_eps8[_i])
+                _tt = float(_turns8[_i])
+                _k8 = _classify(_a)
+                if _k8 == "sell":
+                    _ch["sells"] += 1
+                    _k = _sell_k.get(_ep, 0) + 1
+                    _sell_k[_ep] = _k
+                    if float(churn_w) > 0.0 and _k <= int(churn_sell_cap):
+                        _mw = 1.0 if _k <= 8 else 0.5
+                        delta[_i] += float(churn_w) * _mw
+                        _ch["buf"] += float(churn_w) * _mw
+                elif _k8 == "roll":
+                    _ch["rolls"] += 1
+                    _k = _roll_k.get(_ep, 0) + 1
+                    _roll_k[_ep] = _k
+                    if float(churn_w) > 0.0 and _k <= int(churn_roll_cap):
+                        _mw = 1.0 if _k <= 4 else 0.5 if _k <= 8 else 0.0
+                        delta[_i] += float(churn_w) * 0.667 * _mw
+                        _ch["buf"] += float(churn_w) * 0.667 * _mw
+                elif _k8 == "hero_power":
+                    _ch["hp"] += 1
+                    if float(hero_power_w) > 0.0:
+                        delta[_i] += float(hero_power_w)
+                        _ch["buf"] += float(hero_power_w)
+                elif _k8 == "upgrade" and float(early_upgrade_w) > 0.0 and 2.0 <= _tt <= 5.0:
+                    _ch["early_upg"] = _ch.get("early_upg", 0) + 1
+                    delta[_i] += float(early_upgrade_w)
+                    _ch["buf"] += float(early_upgrade_w)
+                elif _k8 == "buy" and float(hightier_w) > 0.0:
+                    _slot = _a - 8
+                    _cid = int(_shop[_i, _slot]) - 1 if _slot < _shop.shape[1] else -1
+                    _tid = _cid2id8.get(_cid, "") if _cid >= 0 else ""
+                    _tr = int(_tier8.get(_tid, 0))
+                    if _tr >= 4:
+                        _rw8 = float(hightier_w) * (0.5 if _tr == 4 else 1.0 if _tr == 5 else 1.5)
+                        delta[_i] += _rw8
+                        _ch["buf"] += _rw8
+                        _ch["h4" if _tr == 4 else "h5" if _tr == 5 else "h6"] += 1
+            n_ch = 1
+            # s37 卖→买 / 刷→买 配对（按 episode 时间序；每 sell/roll 至多配一个 buy）
+            if float(churn_pair_w) > 0.0 or float(roll_pair_w) > 0.0:
+                _pair = {"n_sell": 0, "n_sell_pair": 0, "n_roll": 0, "n_roll_pair": 0}
+                _b_eps = np.flatnonzero(np.diff(_eps8) != 0) + 1
+                _ep_starts = np.concatenate(([0], _b_eps))
+                _ep_ends = np.concatenate((_b_eps, [_acts8.shape[0]]))
+                for _a2, _b2 in zip(_ep_starts.tolist(), _ep_ends.tolist()):
+                    _pend_s = []
+                    _pend_r = []
+                    for _i2 in range(_a2, _b2):
+                        _k2 = _classify(int(_acts8[_i2]))
+                        _t2 = float(_turns8[_i2])
+                        if _k2 == "sell":
+                            _pend_s.append(_t2)
+                            _pair["n_sell"] += 1
+                        elif _k2 == "roll":
+                            _pend_r.append(_t2)
+                            _pair["n_roll"] += 1
+                        elif _k2 == "buy":
+                            _hit = None
+                            for _j, _st in enumerate(_pend_s):
+                                if 0.0 <= _t2 - _st <= 2.0:
+                                    _hit = _j
+                                    break
+                            if _hit is not None:
+                                _pend_s.pop(_hit)
+                                _pair["n_sell_pair"] += 1
+                                delta[_i2] += float(churn_pair_w)
+                                _ch["buf"] += float(churn_pair_w)
+                            _hitr = None
+                            for _j, _rt in enumerate(_pend_r):
+                                if 0.0 <= _t2 - _rt <= 1.0:
+                                    _hitr = _j
+                                    break
+                            if _hitr is not None:
+                                _pend_r.pop(_hitr)
+                                _pair["n_roll_pair"] += 1
+                                delta[_i2] += float(roll_pair_w)
+                                _ch["buf"] += float(roll_pair_w)
+                _ch["pair"] = _pair
+            if os.environ.get("HSBG_CHURN_DEBUG"):
+                _seats8 = np.asarray(batch.seats, dtype=np.int64)
+                _eps8b = np.asarray(batch.episode_ids, dtype=np.int64)
+                _turns8b = np.asarray(batch.turns, dtype=np.int64)
+                print(f"[churn-dbg] rows={len(_acts8)} seats={np.bincount(_seats8).tolist()} "
+                      f"episodes={len(set(_eps8b.tolist()))} sells={_ch['sells']} rolls={_ch['rolls']} "
+                      f"turn_min={int(_turns8b.min())} turn_max={int(_turns8b.max())} "
+                      f"turn_mean={float(_turns8b.mean()):.1f}", flush=True)
+        except BaseException:  # noqa: BLE001
+            pass
+    # s39 tier-timing（非门控、一次性）：t<=9 到达 tier4/tier5 各 +w
+    _te = {"t4": 0, "t5": 0}
+    if float(tier_early_w) > 0.0:
+        try:
+            import hsbg.env.obs_std as _O9  # noqa: PLC0415
+            _f9 = np.asarray(batch.features, dtype=np.float32)
+            _tier9 = _f9[:, _O9.GLOBAL_FIELD_INDEX["tier"]] * 6.0
+            _turns9 = np.asarray(batch.turns, dtype=np.float64)
+            _eps9 = np.asarray(batch.episode_ids)
+            _b9 = np.flatnonzero(np.diff(_eps9) != 0) + 1
+            _s9 = np.concatenate(([0], _b9))
+            _e9 = np.concatenate((_b9, [_f9.shape[0]]))
+            for _a9, _b9e in zip(_s9.tolist(), _e9.tolist()):
+                _got4 = _got5 = False
+                for _i9 in range(_a9, _b9e):
+                    if float(_turns9[_i9]) > 9.0:
+                        break
+                    _tr9 = int(float(_tier9[_i9]))
+                    if not _got4 and _tr9 >= 4:
+                        delta[_i9] += float(tier_early_w)
+                        _got4 = True
+                        _te["t4"] += 1
+                    if not _got5 and _tr9 >= 5:
+                        delta[_i9] += float(tier_early_w)
+                        _got5 = True
+                        _te["t5"] += 1
+        except BaseException:  # noqa: BLE001
+            pass
+    # s50：scaling 潜力价值 Δp 密集奖励（logistic p(Σ15>=3.5k) 的逐回合增量）
+    n_sv = 0
+    _dp_turns = 0
+    _sv = {"p_mean": 0.0, "dp_sum": 0.0}
+    if float(scaling_value_w) > 0.0:
+        try:
+            import hsbg.env.obs_std as _OS  # noqa: PLC0415
+            _d = np.load(str(scaling_value_model))
+            _w, _b = _d["w"].astype(np.float64), float(_d["b"])
+            _mu, _sd = _d["mu"].astype(np.float64), _d["sd"].astype(np.float64)
+            _fs = np.asarray(batch.features, dtype=np.float32)
+            _ns = _fs.shape[0]
+            _bbS = _fs[:, _OS.SLICE_BOARD].reshape(_ns, _OS.N_BOARD, _OS.MINION_F)
+            _presS = _bbS[:, :, _OS.MINION_PRESENT] > 0.5
+            _sigS = np.where(_presS, (_bbS[:, :, _OS.MINION_ATK]
+                                      + _bbS[:, :, _OS.MINION_HP]) * 10.0, 0.0).sum(axis=1)
+            _cntS = _presS.sum(axis=1).astype(np.float64)
+            _gldS = np.where(_presS, _bbS[:, :, _OS.MINION_GOLDEN] > 0.5, False).sum(axis=1)
+            _race_start = int(_OS.MINION_RACES)
+            _rbS = np.where(_presS[:, :, None], _bbS[:, :, _race_start:_race_start + 11] > 0.5, False)
+            _rorS = np.zeros((_ns, 11), dtype=bool)
+            for _k in range(11):
+                _rorS[:, _k] = _rbS[:, :, _k].any(axis=1)
+            _nracS = _rorS.sum(axis=1).astype(np.float64)
+            _tierS = _fs[:, _OS.GLOBAL_FIELD_INDEX["tier"]] * 6.0
+            _goldS = _fs[:, _OS.GLOBAL_FIELD_INDEX["gold"]] * 10.0
+            _healthS = _fs[:, _OS.GLOBAL_FIELD_INDEX["health"]] * 40.0
+            _handS = (_fs[:, _OS.SLICE_CARD_HAND] > 0).sum(axis=1) if hasattr(_OS, "SLICE_CARD_HAND") else np.zeros(_ns)
+            _carrS = np.asarray(batch.cards, dtype=np.int64)
+            if _carrS.ndim == 1:
+                _carrS = _carrS.reshape(-1, 124)
+            _cid2idS = _COMP_FIT_CACHE.get("cid2id")
+            if _cid2idS is None:
+                import hsbg_engine as _ES  # noqa: PLC0415
+                _cid2idS = {int(c["cid"]): str(c["id"]) for c in json.loads(_ES.catalog_json())}
+                _COMP_FIT_CACHE["cid2id"] = _cid2idS
+            _retS = _COMP_FIT_CACHE.get("retention_ids")
+            if _retS is None:
+                _cardsS = json.load(open(os.path.join(ROOT, "data/p2/cards_37.json"), encoding="utf-8"))
+                if isinstance(_cardsS, dict):
+                    _cardsS = _cardsS.get("cards") or _cardsS.get("data") or list(_cardsS.values())
+                _retS = set()
+                for _c in _cardsS:
+                    if not isinstance(_c, dict):
+                        continue
+                    _id = str(_c.get("id") or "")
+                    _tr = int(_c.get("tier") or 0)
+                    _tx = str(_c.get("text") or "").lower()
+                    if 4 <= _tr <= 6 and (_id in ("BG21_015", "BG29_813", "BG36_245", "BG36_640")
+                                          or "permanently keep" in _tx or "double" in _tx or "twice" in _tx):
+                        _retS.add(_id)
+                _COMP_FIT_CACHE["retention_ids"] = _retS
+            _retS = _COMP_FIT_CACHE["retention_ids"]
+            _slB = _OS.CARD_BLOCK_SLICES["card_board"]
+            _retcnt = np.zeros(_ns, dtype=np.float64)
+            for _iS in range(_ns):
+                _bb = 0
+                for _x in _carrS[_iS, _slB.start:_slB.stop]:
+                    _cid = int(_x) - 1
+                    if _cid >= 0:
+                        _id = _cid2idS.get(_cid, "")
+                        if _id and ((_id[:-2] if _id.endswith("_G") else _id) in _retS):
+                            _bb += 1
+                _retcnt[_iS] = _bb
+            _X = np.stack([batch.turns.astype(np.float64), _goldS, _tierS,
+                           np.log1p(_sigS), _cntS, _gldS, _nracS, _retcnt,
+                           _handS, _healthS], axis=1)
+            _p = 1.0 / (1.0 + np.exp(-(((_X - _mu) / _sd) @ _w + _b)))
+            _turnsS = np.asarray(batch.turns, dtype=np.float64)
+            _epsS = np.asarray(batch.episode_ids)
+            _bS = np.flatnonzero(np.diff(_epsS) != 0) + 1
+            _sS = np.concatenate(([0], _bS))
+            _eS = np.concatenate((_bS, [_ns]))
+            _p_sum = 0.0
+            _p_ps = []
+            _p_last = []
+            _sig_last = []
+            _dp_turns = 0
+            for _aS, _eS2 in zip(_sS.tolist(), _eS.tolist()):
+                _prev_p = None
+                for _tt in sorted({float(x) for x in _turnsS[_aS:_eS2].tolist()}):
+                    _idxS = np.flatnonzero(_turnsS[_aS:_eS2] == _tt)
+                    if not _idxS.size:
+                        continue
+                    _ixS = _aS + int(_idxS[-1])
+                    _pv = float(_p[_ixS])
+                    if _prev_p is not None:
+                        _dpv = max(0.0, _pv - _prev_p)
+                        delta[_ixS] += float(scaling_value_w) * _dpv
+                        _sv["dp_sum"] += _dpv
+                    _prev_p = _pv
+                    _p_sum += _pv
+                _p_ps.extend(float(x) for x in _p[_aS:_eS2].tolist())
+                _p_last.append(float(_p[_eS2 - 1]))
+                _sig_last.append(float(_sigS[_eS2 - 1]))
+                _dp_turns += 1
+                n_sv += 1
+            _sv["p_mean"] = _p_sum / max(1.0, float(_ns))
+            if _p_ps:
+                _sv["p50"] = float(np.percentile(_p_ps, 50))
+                _sv["p90"] = float(np.percentile(_p_ps, 90))
+            if _p_last:
+                import math as _m
+                _pl = np.asarray(_p_last, dtype=np.float64)
+                _sl = np.asarray(_sig_last, dtype=np.float64)
+                if _pl.size >= 3 and _pl.std() > 1e-9 and _sl.std() > 1e-9:
+                    _rp = np.argsort(np.argsort(_pl)); _rs = np.argsort(np.argsort(_sl))
+                    _sv["spearman"] = float(np.corrcoef(_rp, _rs)[0, 1])
+        except BaseException:  # noqa: BLE001
+            pass
+    # s49：t8-9 刷新压力（本回合已 roll>=2 后，每次再 roll +w）
+    if float(roll_bonus_t8t9) > 0.0:
+        try:
+            from hsbg.az.train.action_counts import classify as _cB  # noqa: PLC0415
+            _actsB = np.asarray(batch.actions, dtype=np.int64)
+            _turnsB = np.asarray(batch.turns, dtype=np.float64)
+            _epsB = np.asarray(batch.episode_ids)
+            _bB = np.flatnonzero(np.diff(_epsB) != 0) + 1
+            _sB = np.concatenate(([0], _bB))
+            _eB = np.concatenate((_bB, [_actsB.shape[0]]))
+            for _aB, _eB2 in zip(_sB.tolist(), _eB.tolist()):
+                _roll_cnt = {}
+                for _iB in range(_aB, _eB2):
+                    if _cB(int(_actsB[_iB])) != "roll":
+                        continue
+                    _tB = float(_turnsB[_iB])
+                    if _tB not in (8.0, 9.0):
+                        continue
+                    _k = _roll_cnt.get(_tB, 0) + 1
+                    _roll_cnt[_tB] = _k
+                    if _k >= 2:
+                        delta[_iB] += float(roll_bonus_t8t9)
+        except BaseException:  # noqa: BLE001
+            pass
+    # s41 链定向（塔蕾苟萨/坚韧诗人/符文奥术师/守门融合怪）+ 保留型成长
+    _ch2 = {"n_turns": 0, "chain_sum": 0, "chain4_turns": 0, "chain2_turns": 0,
+            "retain_sum": 0.0}
+    if (float(chain_w) > 0.0 or float(chain_complete_bonus) > 0.0
+            or float(retain_growth_coef) > 0.0):
+        try:
+            import hsbg.env.obs_std as _OA  # noqa: PLC0415
+            _fA = np.asarray(batch.features, dtype=np.float32)
+            _nA = _fA.shape[0]
+            _bbA = _fA[:, _OA.SLICE_BOARD].reshape(_nA, _OA.N_BOARD, _OA.MINION_F)
+            _presA = _bbA[:, :, _OA.MINION_PRESENT] > 0.5
+            _sigA = np.where(_presA, (_bbA[:, :, _OA.MINION_ATK]
+                                      + _bbA[:, :, _OA.MINION_HP]) * 10.0, 0.0).sum(axis=1)
+            _carrA = np.asarray(batch.cards, dtype=np.int64)
+            if _carrA.ndim == 1:
+                _carrA = _carrA.reshape(-1, 124)
+            _cid2idA = _COMP_FIT_CACHE.get("cid2id")
+            if _cid2idA is None:
+                import hsbg_engine as _EA  # noqa: PLC0415
+                _cid2idA = {int(c["cid"]): str(c["id"]) for c in json.loads(_EA.catalog_json())}
+                _COMP_FIT_CACHE["cid2id"] = _cid2idA
+            _CHAIN = ("BG21_015", "BG29_813", "BG36_245", "BG36_640")
+            _turnsA = np.asarray(batch.turns, dtype=np.float64)
+            _epsA = np.asarray(batch.episode_ids)
+            _bA = np.flatnonzero(np.diff(_epsA) != 0) + 1
+            _sA = np.concatenate(([0], _bA))
+            _eA = np.concatenate((_bA, [_nA]))
+            for _aA, _bAe in zip(_sA.tolist(), _eA.tolist()):
+                _start_sig = float(_sigA[_aA])
+                _end_sig0 = float(_sigA[_bAe - 1])
+                if float(final_3500_w) > 0.0 and _end_sig0 >= 3500.0:
+                    delta[_bAe - 1] += float(final_3500_w)
+                if float(final_20k_w) > 0.0 and _end_sig0 >= 20000.0:
+                    delta[_bAe - 1] += float(final_20k_w)
+                if float(late_rel_growth_coef) > 0.0 and _start_sig > 0.0:
+                    _end_sig = _end_sig0
+                    delta[_bAe - 1] += float(late_rel_growth_coef) * float(
+                        np.log1p(max(0.0, _end_sig / _start_sig - 1.0)))
+                _last_sig = None
+                for _tA in sorted({float(x) for x in _turnsA[_aA:_bAe].tolist()}):
+                    _idxsA = np.flatnonzero(_turnsA[_aA:_bAe] == _tA)
+                    if not _idxsA.size:
+                        continue
+                    _ixA = _aA + int(_idxsA[-1])
+                    _sig_now = float(_sigA[_ixA])
+                    # 链四卡：盘面上出现任意 N 张
+                    _cards_now = [str(_cid2idA.get(int(x) - 1, "")) for x in _carrA[_ixA, _OA.SLICE_CARD_BOARD] if int(x) > 0]
+                    _norm = {c[:-2] if c.endswith("_G") else c for c in _cards_now if c}
+                    _N = sum(1 for c in _CHAIN if c in _norm)
+                    if _tA == 9.0 and float(t9_chain_target_w) > 0.0:
+                        _tierA = int(float(_fA[_ixA, _OA.GLOBAL_FIELD_INDEX["tier"]]) * 6.0)
+                        _compA = sum(1 for _c in ("BG21_015", "BG29_813", "BG36_245", "BG36_640")
+                                     if _c in _norm)
+                        if _tierA >= 4 and _compA >= 1:
+                            _w9 = 0.3 if _compA == 1 else (0.6 if _compA == 2 else 1.0)
+                            delta[_ixA] += float(t9_chain_target_w) * (_w9 / 0.5)
+                    if _tA <= 10.0 and float(chain_early_w) > 0.0 and (
+                            "BG21_015" in _norm or "BG29_813" in _norm or "BG36_245" in _norm):
+                        delta[_ixA] += float(chain_early_w)
+                    if _N >= 1 and float(chain_any_w) > 0.0:
+                        delta[_ixA] += float(chain_any_w)
+                    if _N >= 2 and "BG21_015" in _norm and float(chain2_w) > 0.0:
+                        delta[_ixA] += float(chain2_w)
+                        _ch2["chain2_turns"] = _ch2.get("chain2_turns", 0) + 1
+                    if _N:
+                        delta[_ixA] += float(chain_w) * _N
+                        _ch2["chain_sum"] += _N
+                        if _N == 4:
+                            delta[_ixA] += float(chain_complete_bonus)
+                            _ch2["chain4_turns"] += 1
+                    if _last_sig is not None and float(retain_growth_coef) > 0.0:
+                        _g = max(0.0, _sig_now - _last_sig)
+                        if _g > 0.0:
+                            delta[_ixA] += float(retain_growth_coef) * float(np.log1p(_g))
+                            _ch2["retain_sum"] += float(np.log1p(_g))
+                    _last_sig = _sig_now
+                    _ch2["n_turns"] += 1
+        except BaseException:  # noqa: BLE001
+            pass
+    # 后段增长（late-game curriculum）：log1p(Σ15)−log1p(Σ8) + shadow·(Σ15 − 283)
+    n_lg = 0
+    _lg = {"s8": [], "s15": [], "mult": []}
+    if (float(late_growth_coef) > 0.0 or float(late_shadow_coef) > 0.0
+            or float(late_log_ratio_coef) > 0.0 or float(late_alive_bonus) > 0.0
+            or float(late_death_penalty) > 0.0):
+        try:
+            import hsbg.env.obs_std as _O7  # noqa: PLC0415
+            _f7 = np.asarray(batch.features, dtype=np.float32)
+            _n7 = _f7.shape[0]
+            _bb7 = _f7[:, _O7.SLICE_BOARD].reshape(_n7, _O7.N_BOARD, _O7.MINION_F)
+            _pres7 = _bb7[:, :, _O7.MINION_PRESENT] > 0.5
+            _sig7 = np.where(_pres7, (_bb7[:, :, _O7.MINION_ATK]
+                                      + _bb7[:, :, _O7.MINION_HP]) * 10.0, 0.0).sum(axis=1)
+            _turns7 = np.asarray(batch.turns, dtype=np.float64)
+            _eps7 = np.asarray(batch.episode_ids)
+            _b7 = np.flatnonzero(np.diff(_eps7) != 0) + 1
+            _s7 = np.concatenate(([0], _b7))
+            _e7 = np.concatenate((_b7, [_n7]))
+            for _a, _b in zip(_s7.tolist(), _e7.tolist()):
+                _i0 = _a
+                _i1 = _b - 1
+                _s8 = float(_sig7[_i0])
+                _s15 = float(_sig7[_i1])
+                _r = float(late_growth_coef) * (float(np.log1p(_s15)) - float(np.log1p(_s8)))
+                _r += float(late_shadow_coef) * (_s15 - 283.0)
+                if float(late_log_ratio_coef) > 0.0:
+                    _shadow = float(late_shadow_ratio) * _s8
+                    _r += float(late_log_ratio_coef) * (
+                        float(np.log1p(_s15)) - float(np.log1p(_shadow)))
+                if float(late_alive_bonus) > 0.0 or float(late_death_penalty) > 0.0:
+                    _last_turn = float(_turns7[_i1])
+                    if _last_turn >= 15.0:
+                        _r += float(late_alive_bonus)
+                    else:
+                        _r -= float(late_death_penalty)
+                delta[_i1] += _r
+                _lg["s8"].append(_s8)
+                _lg["s15"].append(_s15)
+                _lg["mult"].append(_s15 / max(1.0, _s8))
+                n_lg += 1
+        except BaseException:  # noqa: BLE001
+            pass
+    # 金探针（始终记录、不进奖励）：t9 回合末金币 → 能付得起 tier5 的局比例
+    n_gp = 0
+    _gp_g8 = _gp_g9 = 0
+    _gp_sum = 0.0
+    if True:
+        try:
+            import hsbg.env.obs_std as _O6  # noqa: PLC0415
+            _fg = np.asarray(batch.features, dtype=np.float32)
+            _gold6 = _fg[:, _O6.GLOBAL_FIELD_INDEX["gold"]] * 10.0
+            _turns6 = np.asarray(batch.turns, dtype=np.float64)
+            _eps6 = np.asarray(batch.episode_ids)
+            _bg = np.flatnonzero(np.diff(_eps6) != 0) + 1
+            _sg = np.concatenate(([0], _bg))
+            _eg = np.concatenate((_bg, [_fg.shape[0]]))
+            for _a, _b in zip(_sg.tolist(), _eg.tolist()):
+                _i9 = np.flatnonzero(_turns6[_a:_b] == 9.0)
+                if not _i9.size:
+                    continue
+                _gi = _a + int(_i9[-1])
+                _g = float(_gold6[_gi])
+                _gp_sum += _g
+                n_gp += 1
+                if _g >= 8.0:
+                    _gp_g8 += 1
+                if _g >= 9.0:
+                    _gp_g9 += 1
+        except BaseException:  # noqa: BLE001
+            pass
     # T1'：t1-9 经济与存活里程碑（二值 +1/-1，权重 tier .4 / sigma .3 / survive .2 / races .1）
     n_t1p = 0
     _t1p = {"tier8": 0, "tier9": 0, "sig7": 0, "sig9": 0, "surv": 0, "races": 0,
@@ -989,7 +1491,14 @@ def _apply_custom_rewards(batch: Any, *, upgrade_w: float = 0.0,
             or float(tier_mix_w) > 0.0 or float(lowtier_stat_p) > 0.0
             or float(comp_fit_c) > 0.0 or float(comp_fit_t9_bonus) > 0.0
             or float(comp_trinket_c) > 0.0 or float(t1p_coef) > 0.0
-            or float(t1s_coef) > 0.0):
+            or float(t1s_coef) > 0.0 or float(save_up_w) > 0.0
+            or float(late_growth_coef) > 0.0 or float(late_shadow_coef) > 0.0
+            or float(late_log_ratio_coef) > 0.0 or float(late_alive_bonus) > 0.0
+            or float(late_death_penalty) > 0.0
+            or float(churn_w) > 0.0 or float(hightier_w) > 0.0 or float(hero_power_w) > 0.0
+            or float(tier_early_w) > 0.0
+            or float(chain_w) > 0.0 or float(chain_complete_bonus) > 0.0
+            or float(retain_growth_coef) > 0.0):
         return None
     rewards = (np.asarray(batch.rewards, dtype=np.float64) + delta)
     adv, ret = compute_gae(rewards, np.asarray(batch.values, dtype=np.float64),
@@ -1036,6 +1545,55 @@ def _apply_custom_rewards(batch: Any, *, upgrade_w: float = 0.0,
             "t1s_t9_tier_mean": (float(np.mean(_t1s["t9_tier"])) if _t1s["t9_tier"] else None),
             "t1s_t9_sig_mean": (float(np.mean(_t1s["t9_sig"])) if _t1s["t9_sig"] else None),
             "t1s_death_mean": (float(np.mean(_t1s["death"])) if _t1s["death"] else None),
+            "late_growth_coef": float(late_growth_coef), "late_shadow_coef": float(late_shadow_coef),
+            "churn_w": float(churn_w), "hightier_w": float(hightier_w),
+            "hero_power_w": float(hero_power_w),
+            "churn_sells": _ch["sells"], "churn_rolls": _ch["rolls"],
+            "churn_h4": _ch["h4"], "churn_h5": _ch["h5"], "churn_h6": _ch["h6"],
+            "churn_hp": _ch["hp"],
+            "chain_w": float(chain_w), "chain_complete_bonus": float(chain_complete_bonus),
+            "retain_growth_coef": float(retain_growth_coef),
+            "chain2_w": float(chain2_w), "chain2_turns": _ch2.get("chain2_turns", 0),
+            "late_rel_growth_coef": float(late_rel_growth_coef),
+            "final_3500_w": float(final_3500_w), "final_20k_w": float(final_20k_w),
+            "scaling_value_w": float(scaling_value_w),
+            "sv_p_mean": round(_sv["p_mean"], 4), "sv_dp_sum": round(_sv["dp_sum"], 3),
+            "sv_p50": round(_sv.get("p50", 0.0), 4), "sv_p90": round(_sv.get("p90", 0.0), 4),
+            "sv_spearman": round(_sv.get("spearman", 0.0), 3),
+            "sv_dp_turn_mean": round(_sv["dp_sum"] / max(1, _dp_turns), 5),
+            "sv_eps": n_sv, "chain_early_w": float(chain_early_w),
+            "chain_any_w": float(chain_any_w), "t9_chain_target_w": float(t9_chain_target_w),
+            "roll_bonus_t8t9": float(roll_bonus_t8t9),
+            "strength_from_turn": float(strength_from_turn),
+            "chain_turns": _ch2["n_turns"], "chain_card_sum": _ch2["chain_sum"],
+            "chain4_turns": _ch2["chain4_turns"], "retain_sum": round(_ch2["retain_sum"], 2),
+            "tier_early_w": float(tier_early_w), "tier_early_t4": _te["t4"],
+            "tier_early_t5": _te["t5"],
+            "churn_pair_sell": _ch.get("pair", {}).get("n_sell", 0),
+            "churn_pair_sell_hit": _ch.get("pair", {}).get("n_sell_pair", 0),
+            "churn_pair_roll": _ch.get("pair", {}).get("n_roll", 0),
+            "churn_pair_roll_hit": _ch.get("pair", {}).get("n_roll_pair", 0), "churn_early_upg": _ch.get("early_upg", 0),
+            "churn_buf": round(_ch["buf"], 3),
+            "late_log_ratio_coef": float(late_log_ratio_coef),
+            "late_alive_bonus": float(late_alive_bonus),
+            "late_death_penalty": float(late_death_penalty),
+            "late_shadow_ratio": float(late_shadow_ratio),
+            "late_eps": n_lg,
+            "late_sigma8_mean": (float(np.mean(_lg["s8"])) if _lg["s8"] else None),
+            "late_sigma15_mean": (float(np.mean(_lg["s15"])) if _lg["s15"] else None),
+            "late_mult_mean": (float(np.mean(_lg["mult"])) if _lg["mult"] else None),
+            "gold_probe_eps": n_gp,
+            "gold_probe_t9_mean": (round(_gp_sum / n_gp, 3) if n_gp else None),
+            "gold_probe_t9_g8_rate": (round(_gp_g8 / n_gp, 3) if n_gp else None),
+            "gold_probe_t9_g9_rate": (round(_gp_g9 / n_gp, 3) if n_gp else None),
+            "save_up_w": float(save_up_w), "save_up_eps": n_su,
+            "save_gold7_mean": (float(np.mean(_su["g7"])) if _su["g7"] else None),
+            "save_gold8_mean": (float(np.mean(_su["g8"])) if _su["g8"] else None),
+            "save_gold9_mean": (float(np.mean(_su["g9"])) if _su["g9"] else None),
+            "save_t9_upg_rate": (float(_su["t9_upg"]) / n_su if n_su else None),
+            "save8_rate": (float(_su["save8"]) / n_su if n_su else None),
+            "save8_then_t9upg_rate": (float(_su["save8_upg"]) / _su["save8"]
+                                      if _su["save8"] else None),
             "t1s_upg_elig": _t1s["upg_elig"], "t1s_upg_hit": _t1s["upg_hit"],
             "t1s_upg_games": _t1s.get("upg_games", 0),
             "t1s_upg_per_game": _t1s.get("upg_per_game"),
@@ -1643,6 +2201,78 @@ def main() -> int:
                     help="终局 tier>=5 随从占 7 槽位比例 × W（默认 0=关闭，直接改盘面构成）")
     ap.add_argument("--lowtier-stat-penalty", type=float, default=0.0,
                     help="终局 tier<=3 随从身材占比 × P 扣分（默认 0=关闭，镜像项）")
+    ap.add_argument("--gold-bonus-turn", default="",
+                    help="指定回合金币加成，如 \"5:1,7:1,9:3\"（默认空=逐位等价）")
+    ap.add_argument("--tier-upgrade-discount-scope", default="all",
+                    help="折扣范围：all（默认）或 tier5（只降「升到 tier5」）")
+    ap.add_argument("--tier-upgrade-discount", type=int, default=0,
+                    help="A/B：所有升本费用再减 N 金（默认 0；经 HSBG_TIER_UPGRADE_DISCOUNT 传给引擎）")
+    ap.add_argument("--late-growth-coef", type=float, default=0.0,
+                    help="后段课程：log1p(Σ15)−log1p(Σ8) × coef（默认 0=关）")
+    ap.add_argument("--churn-reward", type=float, default=0.0,
+                    help="s35 周转：每卖一张 +w、每次刷新 +0.667w（默认 0=关）")
+    ap.add_argument("--hightier-buy-reward", type=float, default=0.0,
+                    help="s35 高 tier 买牌：t4 +0.5w / t5 +w / t6 +1.5w（默认 0=关）")
+    ap.add_argument("--early-upgrade-reward", type=float, default=0.0,
+                    help="s36 早升：t∈{2,3,4,5} 发生 upgrade 时 +w（默认 0=关）")
+    ap.add_argument("--collect-chain-ids", default="",
+                    help="s49：伴生卡 id 列表（逗号分隔；空=默认四卡）")
+    ap.add_argument("--collect-reroll-bias-t8t9", type=float, default=0.0,
+                    help="s49：t8-9 reroll 动作偏置（默认 0=关）")
+    ap.add_argument("--collect-chain-buy-bias", type=float, default=0.0,
+                    help="s42：采集期商店出现链四卡时对 buy 位 +该偏置（默认 0=关）")
+    ap.add_argument("--chain-reward", type=float, default=0.0,
+                    help="s41 链定向：盘面四卡（塔蕾苟萨/诗人/奥术师/融合怪）每张 +w/回合")
+    ap.add_argument("--scaling-value-reward", type=float, default=0.0,
+                    help="s50：0.3·Δp(Σ15>=3.5k) 逐回合密集奖励（默认 0=关）")
+    ap.add_argument("--scaling-value-model", default="data/scaling_value/logit.npz",
+                    help="logistic 潜力模型路径")
+    ap.add_argument("--final-3500-reward", type=float, default=0.0,
+                    help="s49：终局 Σ>=3,500 时 +w（普通成功档）")
+    ap.add_argument("--final-20k-reward", type=float, default=0.0,
+                    help="s46：终局 Σ≥20k 时 +w（到达可爆档）")
+    ap.add_argument("--roll-bonus-t8t9", type=float, default=0.0,
+                    help="s49：t8-9 本回合已 roll>=2 后，每次再 roll +w")
+    ap.add_argument("--t9-chain-target-reward", type=float, default=0.0,
+                    help="s47：t9 时 tier>=4 且盘面有塔蕾/诗人/奥术师 任一 → +w")
+    ap.add_argument("--chain-early-reward", type=float, default=0.0,
+                    help="s46：t<=10 盘面出现塔蕾/诗人/奥术师任一 +w/回合")
+    ap.add_argument("--late-rel-growth-coef", type=float, default=0.0,
+                    help="s44：末决策 0.5·log1p(Σ_end/Σ_start−1)（相对起点增长）")
+    ap.add_argument("--chain-any-reward", type=float, default=0.0,
+                    help="s44：每回合盘面出现任一链卡 +w")
+    ap.add_argument("--strength-from-turn", type=float, default=0.0,
+                    help="strength 奖励只在这些回合之后生效（默认 0=全程）")
+    ap.add_argument("--chain2-reward", type=float, default=0.0,
+                    help="s43：塔蕾苟萨 + 任意其他链卡 1 张 → +w/回合（中间目标）")
+    ap.add_argument("--chain-complete-bonus", type=float, default=0.5,
+                    help="s41：四卡齐全额外 +bonus/回合（默认 0.5）")
+    ap.add_argument("--retain-growth-coef", type=float, default=0.0,
+                    help="s41：每回合 0.3·log1p(max(0,Σ_t−Σ_{t−1})) 保留型成长")
+    ap.add_argument("--tier-early-reward", type=float, default=0.0,
+                    help="s39：t<=9 到达 tier4/tier5 各 +w（一次性、非门控；默认 0=关）")
+    ap.add_argument("--churn-pair-reward", type=float, default=0.0,
+                    help="s37 卖→买配对：卖出后 2 回合内买进随从时 +w（默认 0=关）")
+    ap.add_argument("--roll-pair-reward", type=float, default=0.0,
+                    help="s37 刷→买配对：刷新后 1 回合内买进随从时 +w（默认 0=关）")
+    ap.add_argument("--churn-sell-cap", type=float, default=12.0,
+                    help="卖牌每局上限（>cap 不给分；1-8 全额、8-cap 半额）")
+    ap.add_argument("--churn-roll-cap", type=float, default=8.0,
+                    help="刷新每局上限（1-4 全额、4-8 半额、>cap 0）")
+    ap.add_argument("--hero-power-reward", type=float, default=0.0,
+                    help="s35 英雄技能：每次 +w（默认 0=关）")
+    ap.add_argument("--late-log-ratio-coef", type=float, default=0.0,
+                    help="后段课程：coef·(log1p(Σ15) − log1p(ratio·Σ8))（默认 0）")
+    ap.add_argument("--late-alive-bonus", type=float, default=0.0,
+                    help="后段课程：活到 t15 给 +bonus（默认 0）")
+    ap.add_argument("--late-death-penalty", type=float, default=0.0,
+                    help="后段课程：t15 前死亡给 −penalty（默认 0）")
+    ap.add_argument("--late-shadow-ratio", type=float, default=3.15,
+                    help="脚本影子比率（S 臂 t15/t8 中位，默认 3.15）")
+    ap.add_argument("--late-shadow-coef", type=float, default=0.0,
+                    help="后段课程：shadow·(Σ15 − 283)（默认 0=关）")
+    ap.add_argument("--save-up-reward", type=float, default=0.0,
+                    help="s29 攒钱纪律：t7/t8/t9 回合末金币>=8 时 +w（默认 0=关）")
     ap.add_argument("--t1s-coef", type=float, default=0.0,
                     help="T1s 密集 shaping：每回合 tier>=curve 0.30 + 金币>=3 0.10 + "
                          "种族收敛 0.10 + t>=10 存活 0.20（默认 0=关）")
@@ -1705,6 +2335,14 @@ def main() -> int:
     ap.add_argument("--trainer-state", default="")
     ap.add_argument("--out", default="runs/az_entity_sync")
     args = ap.parse_args()
+    _gb = str(getattr(args, "gold_bonus_turn", "") or "").strip()
+    if _gb:
+        os.environ["HSBG_GOLD_BONUS_TURNS"] = _gb
+    if int(getattr(args, "tier_upgrade_discount", 0) or 0) > 0:
+        os.environ["HSBG_TIER_UPGRADE_DISCOUNT"] = str(int(args.tier_upgrade_discount))
+        _scope = str(getattr(args, "tier_upgrade_discount_scope", "all") or "all")
+        if _scope != "all":
+            os.environ["HSBG_TIER_UPGRADE_DISCOUNT_SCOPE"] = _scope
     args.out = os.path.abspath(args.out)
     # 经济课程：gold_curriculum=1 且 stage=none 时按 warmup 处理；非法倍数/窗口启动期报错
     if int(args.gold_curriculum) and str(args.curriculum_stage) == "none":
@@ -2978,6 +3616,9 @@ def main() -> int:
             archetype_model=str(args.archetype_model),
             collect_discover_bias=float(args.collect_discover_bias),
             collect_triple_bias=float(args.collect_triple_bias),
+            collect_chain_buy_bias=float(getattr(args, "collect_chain_buy_bias", 0.0) or 0.0),
+            collect_chain_ids=str(getattr(args, "collect_chain_ids", "") or ""),
+            collect_reroll_bias_t8t9=float(getattr(args, "collect_reroll_bias_t8t9", 0.0) or 0.0),
             record_logp_mu=int(args.record_logp_mu),
             move_repeat_limit=int(args.move_repeat_limit),
             library_pool=str(args.library_pool), library_p=float(args.library_p),
@@ -3191,11 +3832,36 @@ def main() -> int:
                     or float(args.comp_fit_t9_bonus) > 0.0
                     or float(args.comp_trinket_coef) > 0.0
                     or float(args.t1p_coef) > 0.0
-                    or float(args.t1s_coef) > 0.0):
+                    or float(args.t1s_coef) > 0.0
+                    or float(getattr(args, "save_up_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "late_growth_coef", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "late_shadow_coef", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "late_log_ratio_coef", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "late_alive_bonus", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "late_death_penalty", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "churn_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "hightier_buy_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "hero_power_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "early_upgrade_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "churn_pair_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "roll_pair_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "tier_early_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "chain_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "chain2_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "late_rel_growth_coef", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "final_20k_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "final_3500_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "scaling_value_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "chain_early_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "t9_chain_target_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "roll_bonus_t8t9", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "chain_any_reward", 0.0) or 0.0) > 0.0
+                    or float(getattr(args, "retain_growth_coef", 0.0) or 0.0) > 0.0):
                 _rw = _apply_custom_rewards(
                     batch, upgrade_w=float(args.upgrade_reward),
                     win_w=float(args.win_only_reward),
                     strength_c=float(args.strength_reward_coef),
+                    strength_from_turn=float(getattr(args, "strength_from_turn", 0.0) or 0.0),
                     golden_w=float(args.golden_reward),
                     golden_t5_w=float(args.golden_t5_reward),
                     amp_board_w=float(args.amp_board_reward),
@@ -3212,6 +3878,36 @@ def main() -> int:
                     comp_trinket_c=float(args.comp_trinket_coef),
                     t1p_coef=float(args.t1p_coef),
                     t1s_coef=float(args.t1s_coef),
+                    save_up_w=float(getattr(args, "save_up_reward", 0.0) or 0.0),
+                    late_growth_coef=float(getattr(args, "late_growth_coef", 0.0) or 0.0),
+                    late_shadow_coef=float(getattr(args, "late_shadow_coef", 0.0) or 0.0),
+                    late_log_ratio_coef=float(getattr(args, "late_log_ratio_coef", 0.0) or 0.0),
+                    late_alive_bonus=float(getattr(args, "late_alive_bonus", 0.0) or 0.0),
+                    late_death_penalty=float(getattr(args, "late_death_penalty", 0.0) or 0.0),
+                    late_shadow_ratio=float(getattr(args, "late_shadow_ratio", 3.15) or 3.15),
+                    churn_w=float(getattr(args, "churn_reward", 0.0) or 0.0),
+                    hightier_w=float(getattr(args, "hightier_buy_reward", 0.0) or 0.0),
+                    hero_power_w=float(getattr(args, "hero_power_reward", 0.0) or 0.0),
+                    early_upgrade_w=float(getattr(args, "early_upgrade_reward", 0.0) or 0.0),
+                    churn_sell_cap=float(getattr(args, "churn_sell_cap", 12.0) or 12.0),
+                    churn_roll_cap=float(getattr(args, "churn_roll_cap", 8.0) or 8.0),
+                    churn_pair_w=float(getattr(args, "churn_pair_reward", 0.0) or 0.0),
+                    tier_early_w=float(getattr(args, "tier_early_reward", 0.0) or 0.0),
+                    chain_w=float(getattr(args, "chain_reward", 0.0) or 0.0),
+                    chain_complete_bonus=float(getattr(args, "chain_complete_bonus", 0.5) or 0.5),
+                    chain2_w=float(getattr(args, "chain2_reward", 0.0) or 0.0),
+                    late_rel_growth_coef=float(getattr(args, "late_rel_growth_coef", 0.0) or 0.0),
+                    final_20k_w=float(getattr(args, "final_20k_reward", 0.0) or 0.0),
+                    final_3500_w=float(getattr(args, "final_3500_reward", 0.0) or 0.0),
+                    scaling_value_w=float(getattr(args, "scaling_value_reward", 0.0) or 0.0),
+                    scaling_value_model=str(getattr(args, "scaling_value_model",
+                                                     "data/scaling_value/logit.npz")),
+                    chain_early_w=float(getattr(args, "chain_early_reward", 0.0) or 0.0),
+                    t9_chain_target_w=float(getattr(args, "t9_chain_target_reward", 0.0) or 0.0),
+                    roll_bonus_t8t9=float(getattr(args, "roll_bonus_t8t9", 0.0) or 0.0),
+                    chain_any_w=float(getattr(args, "chain_any_reward", 0.0) or 0.0),
+                    retain_growth_coef=float(getattr(args, "retain_growth_coef", 0.0) or 0.0),
+                    roll_pair_w=float(getattr(args, "roll_pair_reward", 0.0) or 0.0),
                     gamma=float(args.gamma), lam=float(args.lam))
                 _st["rewards"] = time.monotonic()
 

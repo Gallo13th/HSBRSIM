@@ -35,6 +35,8 @@ MCTS visit ``π``。按 ``(game_id, seat)`` 分组计算 GAE(λ) 与 reward-to-g
 
 from __future__ import annotations
 
+from hsbg.az.train.game_rules import game_config_json as _game_cfg
+
 import contextlib
 import json
 import math
@@ -448,6 +450,15 @@ class CollectConfig:
     collect_discover_bias: float = 0.0
     #: Triple：商店里能凑三连（已持 2 张）的 buy 位 +2×该值、能凑对子（1 张）+1×该值。
     collect_triple_bias: float = 0.0
+    #: s42：商店出现"链四卡"时对对应 buy 位加的偏置（默认 0 = 关；只对合法位）
+    collect_chain_buy_bias: float = 0.0
+    #: s49：伴生卡 id 列表（逗号分隔；空 = 用默认四卡）
+    collect_chain_ids: str = ""
+    #: s49：t8-9 的 reroll 动作偏置（0 = 关）
+    collect_reroll_bias_t8t9: float = 0.0
+    #: 记录行为策略 logprob（配合 collect 侧 bias）：写 logp_mu=log μ(a)（PPO ratio 分母）
+    #: 与 logp_pi=log π(a)（KL/approx_kl 口径）。默认 0 = 不写字段（逐位等价）。
+    record_logp_mu: int = 0
     #: ── 经济（金币）课程（默认 none + 1.0 = 逐位等价；见 docs/CURRICULUM_SCALING.md）──
     #: 阶段名（none/warmup/anneal）只用于 meta/history 记录；采集侧真正用的是
     #: ``curriculum_gold_mult``（训练入口按累计 decisions 求值后的**当前**倍数）。
@@ -1162,6 +1173,11 @@ class PPOConfig:
     bc_guard_ratio: float = 0.0
     discover_bc_scale: float = 1.0
     triple_bc_scale: float = 1.0
+    #: 升级曲线辅助 BC（默认 0 = 不执行；guard 与 discover/triple 同一机制）
+    upgrade_bc_coef: float = 0.0
+    upgrade_bc_scale: float = 1.0
+    #: upgrade BC 单独的 guard ratio：<0 表示沿用 bc_guard_ratio；0 = 不走 guard（固定系数）
+    upgrade_bc_guard_ratio: float = -1.0
     #: 辅助 BC 的 CE **归一化**（除以合法动作数的 log；默认 False = 原始 CE）
     bc_ce_norm: bool = False
     #: 过程价值辅助头系数（0=关闭，默认）：预测 log1p(酒馆永久 buff 总和) /
@@ -2463,6 +2479,12 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     actions = torch.from_numpy(np.ascontiguousarray(batch.actions[idx].astype(np.int64))).to(dev)
     old_logp = torch.from_numpy(
         np.ascontiguousarray(batch.old_logprobs[idx].astype(np.float32))).to(dev)
+    # KL/approx_kl 口径：有 pi_logprobs（collect 侧 bias）时用无偏 π(a)，不用行为 μ(a)；
+    # 默认 None -> 与旧路径逐位一致。
+    kl_logp = old_logp
+    if getattr(batch, "pi_logprobs", None) is not None:
+        kl_logp = torch.from_numpy(np.ascontiguousarray(
+            batch.pi_logprobs[idx].astype(np.float32))).to(dev)
     returns_t = torch.from_numpy(
         np.ascontiguousarray(batch.returns[idx].astype(np.float32))).to(dev)
     adv = torch.from_numpy(
@@ -2608,6 +2630,23 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
             if triple_bc_n:
                 total = total + _tbc * _ce_t
                 triple_bc_loss = _ce_t.detach()
+    upgrade_bc_loss = None
+    upgrade_bc_n = 0
+    _ubc = (float(getattr(config, "upgrade_bc_coef", 0.0) or 0.0)
+            * float(getattr(config, "upgrade_bc_scale", 1.0) or 1.0))
+    if _ubc > 0.0:
+        _ua = getattr(batch, "upgrade_bc_action", None)
+        if _ua is not None:
+            _uv = torch.as_tensor(np.asarray(_ua)[idx], dtype=torch.long, device=dev)
+            _uw = getattr(batch, "upgrade_bc_w", None)
+            _uw = (torch.ones_like(_uv, dtype=torch.float32) if _uw is None else
+                   torch.as_tensor(np.asarray(_uw)[idx], dtype=torch.float32, device=dev))
+            _ce_u, upgrade_bc_n = replication_bc_ce(logp, m, _uv[:, None], _uw[:, None],
+                                                    valid, normalize=config.bc_ce_norm,
+                                                    row_weight=True)
+            if upgrade_bc_n:
+                total = total + _ubc * _ce_u
+                upgrade_bc_loss = _ce_u.detach()
     # ── 过程价值辅助头（默认 process_value_coef=0 时整段不执行）──────────────
     # 独立前向（forward_process），不改变策略/价值主干前向的输出；目标 NaN = 不可得，
     # 只在 (available & valid) 样本上算 MSE。梯度经辅助损失回传 trunk。
@@ -2765,7 +2804,7 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         kl_all = (probs * (safe_logp - a_safe)).sum(dim=-1)
         anchor_kl = (kl_all * valid).sum() / valid.sum().clamp_min(1.0)
         total = total + beta * anchor_kl
-    approx_kl = ((old_logp - action_logp) * valid).sum() / valid.sum().clamp_min(1.0)
+    approx_kl = ((kl_logp - action_logp) * valid).sum() / valid.sum().clamp_min(1.0)
     illegal_prob_max = (probs * (~m).to(probs.dtype)).max()
     result = {
         "total": total,
@@ -2798,6 +2837,10 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         result["triple_bc_loss"] = triple_bc_loss
         result["triple_bc_coef"] = torch.as_tensor(float(_tbc), device=dev)
         result["triple_bc_samples"] = torch.as_tensor(float(triple_bc_n), device=dev)
+    if upgrade_bc_loss is not None:
+        result["upgrade_bc_loss"] = upgrade_bc_loss
+        result["upgrade_bc_coef"] = torch.as_tensor(float(_ubc), device=dev)
+        result["upgrade_bc_samples"] = torch.as_tensor(float(upgrade_bc_n), device=dev)
     # 过程价值辅助头：只有真的算了 MSE 才出现（默认关闭 -> 结构不变）
     if process_stats:
         result.update(process_stats)
@@ -3054,21 +3097,27 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         rec.update({k: float(np.mean(v)) for k, v in acc.items()})
         # 当前 epoch 已用的有效系数与比率；调整只作用下一 epoch/update。
         _ratios, _scales = [], []
-        for _side in ("discover", "triple"):
+        for _side in ("discover", "triple", "upgrade"):
             _key = _side + "_bc"
             if _key + "_loss" not in rec:
                 continue
             _base = float(getattr(cfg, _key + "_coef"))
             _scale = float(getattr(cfg, _key + "_scale"))
             _eff = _base * _scale
+            _ratio = float(getattr(cfg, "bc_guard_ratio", 0.0) or 0.0)
+            if _side == "upgrade":
+                _ur = getattr(cfg, "upgrade_bc_guard_ratio", -1.0)
+                _ur = -1.0 if _ur is None else float(_ur)
+                if _ur >= 0.0:
+                    _ratio = _ur
             _new, _r = replication_bc_guard(_eff, rec[_key + "_loss"],
-                                            rec["policy_loss"], ratio=cfg.bc_guard_ratio)
+                                            rec["policy_loss"], ratio=_ratio)
             rec[_key + "_scale"] = _scale
             rec[_key + "_r"] = _r
             rec[_key + "_next_coef"] = _new
             _ratios.append(_r)
             _scales.append(_scale)
-            if cfg.bc_guard_ratio > 0 and _base > 0:
+            if _ratio > 0 and _base > 0:
                 setattr(cfg, _key + "_scale", _new / _base)
         if _ratios:
             rec["bc_scale"] = max(_scales)
@@ -3141,9 +3190,12 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
         "config": to_jsonable(asdict(cfg)),
     }
     # 提升 epoch 指标，供训练入口/history 使用；缺标签的 epoch 不以 0 稀释。
-    for _key in ("policy_loss", "discover_bc_loss", "triple_bc_loss", "bc_scale", "r",
-                 "discover_bc_scale", "triple_bc_scale", "discover_bc_r", "triple_bc_r",
-                 "discover_bc_coef", "triple_bc_coef", "discover_bc_next_coef", "triple_bc_next_coef"):
+    for _key in ("policy_loss", "discover_bc_loss", "triple_bc_loss", "upgrade_bc_loss",
+                 "bc_scale", "r",
+                 "discover_bc_scale", "triple_bc_scale", "upgrade_bc_scale",
+                 "discover_bc_r", "triple_bc_r", "upgrade_bc_r",
+                 "discover_bc_coef", "triple_bc_coef", "upgrade_bc_coef",
+                 "discover_bc_next_coef", "triple_bc_next_coef", "upgrade_bc_next_coef"):
         _vals = [rec[_key] for rec in logs if _key in rec]
         if _vals:
             stats[_key] = float(np.mean(_vals))
@@ -3404,13 +3456,28 @@ class _ReplicationBias:
     两个系数都 <=0 时**不构造对象** ⇒ 采样路径逐位等价。
     """
 
-    def __init__(self, discover_w: float = 0.0, triple_w: float = 0.0) -> None:
+    def __init__(self, discover_w: float = 0.0, triple_w: float = 0.0,
+                 chain_w: float = 0.0, chain_ids: str = "",
+                 reroll_bias_t8t9: float = 0.0) -> None:
         from hsbg.env.action_space_std import (A_BUY as _A_BUY, A_CHOOSE as _A_CHOOSE,
                                                N_CHOICE as _N_CHOICE, N_SHOP as _N_SHOP)
         from hsbg.env.obs_std import (SLICE_CARD_BOARD, SLICE_CARD_CHOICES,
                                       SLICE_CARD_HAND, SLICE_CARD_SHOP)
         self.discover_w = float(discover_w)
         self.triple_w = float(triple_w)
+        self.chain_w = float(chain_w)
+        self._chain_ids: set = set()
+        self._cid2id: dict = {}
+        if self.chain_w > 0.0:
+            try:
+                import hsbg_engine as _E2
+                self._cid2id = {int(cc["cid"]): str(cc["id"])
+                                for cc in json.loads(_E2.catalog_json())}
+            except BaseException:  # noqa: BLE001
+                self._cid2id = {}
+            self._chain_ids = (set(str(x).strip() for x in str(chain_ids).split(",") if x.strip())
+                               or {"BG21_015", "BG29_813", "BG36_245", "BG36_640"})
+            self.reroll_bias_t8t9 = float(reroll_bias_t8t9)
         self._A_BUY = int(_A_BUY)
         self._A_CHOOSE = int(_A_CHOOSE)
         self._N_SHOP = int(_N_SHOP)
@@ -3478,6 +3545,40 @@ class _ReplicationBias:
                         v = np.zeros(N_ACTIONS, dtype=np.float32)
                     v[a] += float(self.triple_w)
                     self.stats["pair_biased"] += 1
+        if self.chain_w > 0.0 and bool(m[self._A_BUY:self._A_BUY + self._N_SHOP].any()):
+            base = self._sl_shop.start
+            for slot in range(self._N_SHOP):
+                a = self._A_BUY + slot
+                if not m[a]:
+                    continue
+                idx = base + slot
+                if idx >= cc.size:
+                    break
+                cid = int(cc[idx]) - 1
+                if cid < 0:
+                    continue
+                sid = self._cid2id.get(cid, "")
+                if not sid:
+                    continue
+                if sid.endswith("_G"):
+                    sid = sid[:-2]
+                if sid in self._chain_ids:
+                    if v is None:
+                        v = np.zeros(N_ACTIONS, dtype=np.float32)
+                    v[a] += float(self.chain_w)
+                    self.stats["chain_biased"] = self.stats.get("chain_biased", 0) + 1
+        if float(getattr(self, "reroll_bias_t8t9", 0.0)) > 0.0 and bool(m[1]):
+            try:
+                from hsbg.env.obs_std import GLOBAL_FIELD_INDEX as _GFI
+                fv = np.asarray(features, dtype=np.float32).reshape(-1)
+                turn = int(round(float(fv[_GFI["turn"]]) * 20.0))
+            except BaseException:  # noqa: BLE001
+                turn = -1
+            if turn in (8, 9):
+                if v is None:
+                    v = np.zeros(N_ACTIONS, dtype=np.float32)
+                v[1] += float(self.reroll_bias_t8t9)
+                self.stats["reroll_biased"] = self.stats.get("reroll_biased", 0) + 1
         return v
 
 
@@ -3550,8 +3651,13 @@ class PPOSelfPlayPolicy(Policy):
         # 复利结构选牌先验（默认 0 -> 不构造对象、零开销）
         _rep_dw = float(getattr(self.config, "collect_discover_bias", 0.0) or 0.0)
         _rep_tw = float(getattr(self.config, "collect_triple_bias", 0.0) or 0.0)
-        self._rep_bias = (_ReplicationBias(_rep_dw, _rep_tw)
-                          if (_rep_dw > 0.0 or _rep_tw > 0.0) else None)
+        _rep_cw = float(getattr(self.config, "collect_chain_buy_bias", 0.0) or 0.0)
+        _rep_ids = str(getattr(self.config, "collect_chain_ids", "") or "")
+        _rep_rb = float(getattr(self.config, "collect_reroll_bias_t8t9", 0.0) or 0.0)
+        self._rep_bias = (_ReplicationBias(_rep_dw, _rep_tw, chain_w=_rep_cw,
+                                           chain_ids=_rep_ids, reroll_bias_t8t9=_rep_rb)
+                          if (_rep_dw > 0.0 or _rep_tw > 0.0 or _rep_cw > 0.0
+                              or _rep_rb > 0.0) else None)
         if move_model:
             self.model.to(self.device)
         self.model.eval()
@@ -3727,8 +3833,9 @@ class PPOSelfPlayPolicy(Policy):
             "game_id": int(self.game_id),
             "forced": bool(forced),
         }
-        if self._mix is not None and self._mix.enabled:
-            # 搜索行为混合：μ 的 logprob（ratio 分母）与 π 的 logprob（KL 口径）。
+        if ((self._mix is not None and self._mix.enabled)
+                or int(getattr(self.config, "record_logp_mu", 0) or 0) > 0):
+            # 搜索行为混合 / collect 侧采样 bias：μ 的 logprob（ratio 分母）与 π 的 logprob（KL 口径）。
             # 未混合/搜索失败的决策两者都等于按 π 采样的 logprob。
             _lp_pi = float(logprob) if logp_pi is None else float(logp_pi)
             _lp_mu = _lp_pi if logp_mu is None else float(logp_mu)
@@ -3764,14 +3871,21 @@ class PPOSelfPlayPolicy(Policy):
         if self._can_fast_act():
             # worker 侧采样：省掉 prior 回传 + 调用方 numpy softmax/采样
             seed = int(self._rng.integers(0, 2 ** 63 - 1))
+            _lp_pi_ret = None
             if abias is None:
                 # 关闭时**不传** bias 关键字：兼容旧 eval_fn 签名（逐位等价旧路径）
                 a, lp, value = self.eval_fn.act(f, c, mask,
                                                 float(self.config.temperature), seed)
             else:
-                a, lp, value = self.eval_fn.act(f, c, mask,
-                                                float(self.config.temperature), seed,
-                                                bias=abias)
+                if (int(getattr(self.config, "record_logp_mu", 0) or 0) > 0
+                        and hasattr(self.eval_fn, "act_mu_pi")):
+                    a, lp, _pi_lp, value = self.eval_fn.act_mu_pi(
+                        f, c, mask, float(self.config.temperature), seed, bias=abias)
+                    _lp_pi_ret = float(_pi_lp)
+                else:
+                    a, lp, value = self.eval_fn.act(f, c, mask,
+                                                    float(self.config.temperature), seed,
+                                                    bias=abias)
             # 搜索作为行为策略（默认关闭）：fast-act 路径同样在采样后混合
             mix = None
             if (self._mix is not None and self._mix.enabled and not guard_forced
@@ -3783,12 +3897,16 @@ class PPOSelfPlayPolicy(Policy):
                     temperature=float(self.config.temperature), rng=self._rng)
             if mix is not None:
                 a, lp = int(mix.action), float(mix.logp_pi)
+            _lmu = None if mix is None else mix.logp_mu
+            _lpi = None if mix is None else mix.logp_pi
+            if mix is None and abias is not None and _lp_pi_ret is not None:
+                _lmu, _lpi = float(lp), float(_lp_pi_ret)
             return self._finish(game, seat, f, c, mask, action=int(a),
                                 logprob=float(lp),
                                 value=float(value), target_pi=None, out_pi=None,
                                 guard_forced=guard_forced,
-                                logp_mu=(None if mix is None else mix.logp_mu),
-                                logp_pi=(None if mix is None else mix.logp_pi),
+                                logp_mu=_lmu,
+                                logp_pi=_lpi,
                                 action_source=(("search_mix" if mix.used_search
                                                 else "pi_mix") if mix is not None
                                                else "pi"))
@@ -3885,10 +4003,15 @@ class PPOSelfPlayPolicy(Policy):
                 if p[7] is not None:
                     B[i] = p[7]
         seed = int(self._rng.integers(0, 2 ** 63 - 1))
+        lps_pi = None
         if B is None:
             # 关闭时**不传** bias 关键字：兼容旧 eval_fn 签名（逐位等价旧路径）
             acts, lps, vals = self.eval_fn.act_batch(F, C, M,
                                                      float(self.config.temperature), seed)
+        elif (int(getattr(self.config, "record_logp_mu", 0) or 0) > 0
+                and hasattr(self.eval_fn, "act_batch_mu_pi")):
+            acts, lps, lps_pi, vals = self.eval_fn.act_batch_mu_pi(
+                F, C, M, float(self.config.temperature), seed, bias=B)
         else:
             acts, lps, vals = self.eval_fn.act_batch(F, C, M,
                                                      float(self.config.temperature), seed,
@@ -3897,6 +4020,8 @@ class PPOSelfPlayPolicy(Policy):
             if gid is not None:
                 self.game_id = int(gid)
             a_i, lp_i = int(acts[i]), float(lps[i])
+            _lmu_i = None if lps_pi is None else float(lps[i])
+            _lpi_i = None if lps_pi is None else float(lps_pi[i])
             # 搜索作为行为策略（默认关闭）：只在非 forced 的关键决策上混合
             mix = None
             if (self._mix is not None and self._mix.enabled and not gf
@@ -3907,12 +4032,16 @@ class PPOSelfPlayPolicy(Policy):
                     rng=self._rng)
             if mix is not None:
                 a_i, lp_i = int(mix.action), float(mix.logp_pi)
+            if mix is not None:
+                _mu_fin, _pi_fin = mix.logp_mu, mix.logp_pi
+            else:
+                _mu_fin, _pi_fin = _lmu_i, _lpi_i
             out.append(self._finish(g, s, f, c, mask, action=a_i,
                                     logprob=float(lp_i),
                                     value=float(vals[i]), target_pi=None, out_pi=None,
                                     guard_forced=gf,
-                                    logp_mu=(None if mix is None else mix.logp_mu),
-                                    logp_pi=(None if mix is None else mix.logp_pi),
+                                    logp_mu=_mu_fin,
+                                    logp_pi=_pi_fin,
                                     action_source=(("search_mix"
                                                     if mix.used_search else "pi_mix")
                                                    if mix is not None else "pi")))
@@ -4259,7 +4388,7 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
             policy.game_id = gid
             policy.reseed(int(cfg.seed) + gi)
             policy.reset()
-            game = E.Game(seed=int(cfg.seed) + gi)
+            game = E.Game(seed=int(cfg.seed) + gi, config_json=_game_cfg())
             if _process_on:
                 # consume 计数来自引擎事件日志；只在过程价值开启时打开（默认关闭零影响）
                 game.set_record_log(True)

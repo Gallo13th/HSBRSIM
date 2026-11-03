@@ -203,6 +203,7 @@ def _run_arm(state: dict, arm: str, args, spec) -> Optional[dict]:
         if spec is not None and cid in CS.expand(spec.carrier):
             cb += buf
     return {"seed": state["seed"], "arm": arm, "t8": t8, "t15": t15,
+            "alive_t15": bool(15 in st),
             "delta": t15 - t8, "multiple": (float(t15) / float(t8)) if t8 > 0 else None,
             "carrier_buff_share": (cb / tb) if tb > 0 else None,
             "spells": int(getattr(script.pol, "spells", 0) or 0) if script is not None else 0,
@@ -281,6 +282,10 @@ def run_arms(args) -> int:
                                       "ci95": [round(float(np.percentile(boot, 2.5)), 1),
                                                round(float(np.percentile(boot, 97.5)), 1)],
                                       "n": int(arr.size)}
+    if getattr(args, "dump_records", ""):
+        _rec = {"arms": out, "n_states": len(states)}
+        with open(args.dump_records, "w", encoding="utf-8") as _f:
+            json.dump(_rec, _f, ensure_ascii=False, indent=1)
     res = {"arms": summ, "paired": pair, "n_states": len(states),
            "seconds": round(time.time() - t0, 1)}
     print(json.dumps(res, ensure_ascii=False), flush=True)
@@ -309,6 +314,7 @@ def main() -> int:
     ap.add_argument("--human-fidelity", default="full")
     ap.add_argument("--states", default="/tmp/s22/t8_states.jsonl.gz")
     ap.add_argument("--out", default="")
+    ap.add_argument("--dump-records", default="", help="每状态逐臂记录 JSON（shadow 用）")
     args = ap.parse_args()
     if args.dump:
         return dump_states(args)

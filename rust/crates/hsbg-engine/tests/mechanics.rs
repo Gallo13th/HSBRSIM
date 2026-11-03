@@ -74,6 +74,89 @@ fn economy_turn_one() {
 }
 
 #[test]
+fn tier_upgrade_discount_zero_is_default() {
+    let g = game(4);
+    assert_eq!(g.cfg.tier_upgrade_discount, 0);
+    assert_eq!(g.upgrade_price(0), 5, "默认 0 = 与旧行为逐位一致");
+}
+
+#[test]
+fn gold_bonus_by_turn_zero_is_default() {
+    let g = game(7);
+    assert!(g.cfg.gold_bonus_by_turn.is_empty());
+    assert_eq!(g.players[0].gold, 3, "默认无加成");
+}
+
+#[test]
+fn gold_bonus_by_turn_applies() {
+    let cfg = RulesConfig {
+        gold_bonus_by_turn: vec![(2, 1), (5, 2)],
+        ..RulesConfig::default()
+    };
+    let mut g = Game::new(8, cfg);
+    for p in 0..8 {
+        g.apply(p, Action::Choose(0)).unwrap();
+    }
+    for p in 0..8 {
+        g.players[p].hero = Some(cid("TB_BaconShop_HERO_34"));
+        g.players[p].pending.clear();
+        g.players[p].hand.clear();
+        g.players[p].shop.clear();
+    }
+    assert_eq!(g.players[0].gold, 3, "t1 无加成");
+    for p in 0..8 {
+        g.apply(p, Action::EndTurn).unwrap();
+    }
+    assert_eq!(g.turn, 2);
+    assert_eq!(g.players[0].gold, 5, "t2 base 4 + 1");
+}
+
+#[test]
+fn tier_upgrade_discount_scope_tier5_only() {
+    let cfg = RulesConfig {
+        tier_upgrade_discount: 3,
+        tier_upgrade_discount_scope: "tier5".to_string(),
+        ..RulesConfig::default()
+    };
+    let mut g = Game::new(6, cfg);
+    for p in 0..8 {
+        g.apply(p, Action::Choose(0)).unwrap();
+    }
+    for p in 0..8 {
+        g.players[p].hero = Some(cid("TB_BaconShop_HERO_34"));
+        g.players[p].pending.clear();
+        g.players[p].hand.clear();
+        g.players[p].shop.clear();
+    }
+    // tier1 → 2 的升级价不受 tier5 折扣影响：仍是 5。
+    assert_eq!(g.upgrade_price(0), 5, "scope=tier5 不降前期");
+    // 手动把玩家放到 tier4：目标 tier5 的价格 = 基础 11 − 3 = 8。
+    g.players[0].tier = 4;
+    g.players[0].upgrade_cost = g.cfg.upgrade_costs[3];
+    assert_eq!(g.upgrade_price(0), 8, "scope=tier5 时 tier5 价格 11→8");
+}
+
+#[test]
+fn tier_upgrade_discount_two() {
+    let cfg = RulesConfig {
+        tier_upgrade_discount: 2,
+        ..RulesConfig::default()
+    };
+    let mut g = Game::new(5, cfg);
+    for p in 0..8 {
+        g.apply(p, Action::Choose(0)).unwrap();
+    }
+    for p in 0..8 {
+        g.players[p].hero = Some(cid("TB_BaconShop_HERO_34"));
+        g.players[p].pending.clear();
+        g.players[p].hand.clear();
+        g.players[p].shop.clear();
+    }
+    // 回合 1 的升级价：基础 5（含 +1 后回合末 −1）再减 2 = 3。
+    assert_eq!(g.upgrade_price(0), 3, "折扣 2 后升值价 5→3");
+}
+
+#[test]
 fn gold_and_upgrade_discount_progress() {
     let mut g = game(2);
     for p in 0..8 {

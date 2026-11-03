@@ -49,6 +49,10 @@ class LeafRequest:
     seed: Optional[int] = None
     action: Optional[int] = None
     logprob: Optional[float] = None
+    #: True = 同时回传该动作在**无偏** π 下的 logprob（collect 侧 bias 的 KL 口径）。
+    want_logp_pi: bool = False
+    logp_pis: Optional[np.ndarray] = None
+    logp_pi: Optional[float] = None
     #: True = 该请求要「整批逐行 prior」（``priors[k,245]``），不走采样。
     #: 搜索的 rollout 每步要为 k 个候选各算一次 π：逐行 submit 会变成 k 次队列往返
     #: （实测每次 ~12 ms），这里合成一次批量前向 + 一次往返（见 ``logits_batch``）。
@@ -115,7 +119,8 @@ class BatchLeafServer:
                want_action: bool = False, temperature: float = 1.0,
                seed: Optional[int] = None, batch_mode: bool = False,
                bias: Optional[np.ndarray] = None,
-               want_prior_batch: bool = False) -> LeafRequest:
+               want_prior_batch: bool = False,
+               want_logp_pi: bool = False) -> LeafRequest:
         with self._state_lock:
             if self._state != "open":
                 raise RuntimeError(f"BatchLeafServer is {self._state}")
@@ -136,6 +141,7 @@ class BatchLeafServer:
             req.seed = seed
             req.batch_mode = bool(batch_mode)
             req.want_prior_batch = bool(want_prior_batch)
+            req.want_logp_pi = bool(want_logp_pi)
             req.submit_t = time.monotonic()
             try:
                 self._q.put(req, timeout=float(timeout))
@@ -179,6 +185,22 @@ class BatchLeafServer:
         assert req.action is not None
         return int(req.action), float(req.logprob or 0.0), float(req.value or 0.0)
 
+    def act_mu_pi(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
+                  temperature: float = 1.0, seed: Optional[int] = None,
+                  timeout: float = 30.0, bias: Optional[np.ndarray] = None):
+        """同 ``act``，但额外回传无偏 π(a) 的 logprob：``(a, logμ, logπ, value)``。"""
+        req = self.submit(features, cards, mask, want_action=True,
+                          temperature=temperature, seed=seed, bias=bias,
+                          want_logp_pi=True)
+        if not req.event.wait(timeout=timeout):
+            raise TimeoutError("batch leaf timeout")
+        if req.error is not None:
+            raise req.error
+        assert req.action is not None
+        _pi = req.logp_pi if req.logp_pi is not None else req.logprob
+        return (int(req.action), float(req.logprob or 0.0),
+                float(_pi or 0.0), float(req.value or 0.0))
+
     def act_batch(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
                   temperature: float = 1.0, seed: Optional[int] = None,
                   timeout: float = 60.0, bias: Optional[np.ndarray] = None):
@@ -195,6 +217,23 @@ class BatchLeafServer:
         if req.error is not None:
             raise req.error
         return req.actions, req.logprobs, req.values
+
+    def act_batch_mu_pi(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
+                        temperature: float = 1.0, seed: Optional[int] = None,
+                        timeout: float = 60.0, bias: Optional[np.ndarray] = None):
+        """同 ``act_batch``，但额外回传无偏 π 的 logprob：``(acts, logμ, logπ, values)``。"""
+        req = self.submit(np.atleast_2d(features), np.atleast_2d(cards),
+                          np.atleast_2d(mask), want_action=True,
+                          temperature=temperature, seed=seed, batch_mode=True,
+                          bias=(None if bias is None else np.atleast_2d(bias)),
+                          want_logp_pi=True)
+        if not req.event.wait(timeout=timeout):
+            raise TimeoutError("batch leaf timeout")
+        if req.error is not None:
+            raise req.error
+        lps_pi = (req.logp_pis if req.logp_pis is not None
+                  else np.asarray(req.logprobs, dtype=np.float32))
+        return req.actions, req.logprobs, lps_pi, req.values
 
     def logits_batch(self, features: np.ndarray, cards: np.ndarray,
                      mask: np.ndarray, timeout: float = 60.0) -> Any:
@@ -331,6 +370,7 @@ class BatchLeafServer:
                     _off += k if r.batch_mode else 0
                 t0 = time.monotonic()
                 plog, rlog = self.evaluator.logits(f, c, m)
+                plog_raw = plog  # 无偏 logits（bias 只在副本上加；KL 口径用）
                 if any(getattr(r, "bias", None) is not None for r in batch):
                     # 流派软偏置：逐行加到 logits（只在 worker 侧做，主进程零拷贝）
                     plog = np.array(plog, copy=True)
@@ -376,6 +416,16 @@ class BatchLeafServer:
                         r.actions = acts_all[a0:a0 + k]
                         r.logprobs = lps_all[a0:a0 + k]
                         r.values = vals_all[a0:a0 + k]
+                        if getattr(r, "want_logp_pi", False):
+                            _base = row_base[i]
+                            _pp = []
+                            for _j in range(k):
+                                _pr = masked_probs_np(plog_raw[_base + _j],
+                                                      m[_base + _j], temp)
+                                _pr = _pr / max(float(_pr.sum()), 1e-12)
+                                _pp.append(float(np.log(max(
+                                    float(_pr[int(r.actions[_j])]), 1e-12))))
+                            r.logp_pis = np.asarray(_pp, dtype=np.float32)
                         off += k
                         r.event.set()
                         continue
@@ -387,6 +437,10 @@ class BatchLeafServer:
                         a = int(rng.choice(p.size, p=p))
                         r.action = a
                         r.logprob = float(np.log(max(float(p[a]), 1e-12)))
+                        if getattr(r, "want_logp_pi", False):
+                            _pr = masked_probs_np(plog_raw[i], m[i], temp)
+                            _pr = _pr / max(float(_pr.sum()), 1e-12)
+                            r.logp_pi = float(np.log(max(float(_pr[a]), 1e-12)))
                     else:
                         p = masked_probs_np(plog[i], m[i], temp)
                         p = p / max(float(p.sum()), 1e-12)
@@ -496,6 +550,20 @@ class BatchPPOEvaluator:
                   bias: Optional[np.ndarray] = None):
         return self.server.act_batch(features, cards, mask, temperature, seed,
                                      bias=bias)
+
+    def act_mu_pi(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
+                  temperature: float = 1.0, seed: Optional[int] = None,
+                  timeout: float = 30.0, bias: Optional[np.ndarray] = None):
+        """同 ``act``，额外回传无偏 π(a) 的 logprob：``(a, logμ, logπ, value)``。"""
+        return self.server.act_mu_pi(features, cards, mask, temperature, seed,
+                                     timeout, bias=bias)
+
+    def act_batch_mu_pi(self, features: np.ndarray, cards: np.ndarray, mask: np.ndarray,
+                        temperature: float = 1.0, seed: Optional[int] = None,
+                        timeout: float = 60.0, bias: Optional[np.ndarray] = None):
+        """同 ``act_batch``，额外回传无偏 π 的 logprob：``(acts, logμ, logπ, values)``。"""
+        return self.server.act_batch_mu_pi(features, cards, mask, temperature,
+                                           seed, timeout, bias=bias)
 
 
 __all__ = ["LeafRequest", "BatchLeafServer", "BatchPPOEvaluator"]

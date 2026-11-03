@@ -19,6 +19,8 @@
 
 from __future__ import annotations
 
+from hsbg.az.train.game_rules import game_config_json as _game_cfg
+
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -92,7 +94,7 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
         E = load_engine()
         policy.reset()
         weak_rng = np.random.default_rng(int(seed) + gi)
-        game = E.Game(seed=int(cfg.seed) + gi)
+        game = E.Game(seed=int(cfg.seed) + gi, config_json=_game_cfg())
         # 塑形：上一决策的 Φ(s') 复用为本决策的 Φ(s)；局末/截断用 Φ(terminal)=0。
         rec_prev: Optional[int] = None
         phi_prev = 0.0
@@ -380,7 +382,7 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     _teacher = ScalingTeacher() if _teacher_on else None
     states: List[Dict[str, Any]] = []
     for gi in range(n):
-        g0 = E.Game(seed=int(cfg.seed) + gi)
+        g0 = E.Game(seed=int(cfg.seed) + gi, config_json=_game_cfg())
         states.append({
             "gi": gi, "gid": int(cfg.game_id_offset) + gi,
             "game": g0,
