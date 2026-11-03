@@ -21,7 +21,7 @@
 - **数字**：bot 面板从 C0 2.279（s4 末）→ 1.768（s6 末，top4 97.1%）；human 面板当时尚无（后补）。
 - **结论**：采纳。**但这次改动没有单变量证据**，后续所有「变强」都混着对手分布变化，写报告时必须声明。
 - **是否回退**：不回退。回退方式 = `--mirror-seats 0 --human-board-seats 0`（等价纯 bot）。
-- **链接**：[HUMAN_BOARD_OPPONENT.md](HUMAN_BOARD_OPPONENT.md) §1–§2、[MIRROR_SNAPSHOT_DESIGN.md](MIRROR_SNAPSHOT_DESIGN.md)、[STAGE6_REPORT.md](_history/STAGE6_REPORT.md)
+- **链接**：[HUMAN_BOARD_OPPONENT.md](HUMAN_BOARD_OPPONENT.md) §1–§2、[MIRROR_SNAPSHOT_DESIGN.md](MIRROR_SNAPSHOT_DESIGN.md)、[STAGE6_REPORT.md](STAGE6_REPORT.md)
 
 ---
 
@@ -167,7 +167,7 @@
   bot +0.0703；t12 强度比 −0.0006、t15 **−0.0051**；**t14 p50 腰斩 −40%**、t13/t14 p90 −11~17%。
 - **结论**：不采纳。混池**稀释 t14**，且 512 局 CI 下界 −0.031 已排除「改善 ≥0.10」。
 - **是否回退**：不适用。若再试：只在「高回合上限补充」小权重（<0.1）下另开预算足够的 A/B。
-- **链接**：[FIRESTONE_MIX_AB.md](_history/FIRESTONE_MIX_AB.md) §0、§3–§5
+- **链接**：[FIRESTONE_MIX_AB.md](FIRESTONE_MIX_AB.md) §0、§3–§5
 
 ---
 
@@ -187,8 +187,8 @@
 - **结论**：**采纳降级**——用 2,048 配对（52 min 墙钟）而不是 65,536 局；理由是 MDE 已≈目标效应，
   再扩样本只会在「0.1 名次」量级上继续买精度，运营成本（数 GPU·小时）不划算。
   **同时确认：开发面板的细粒度排序不可复现，只有配对差可复现。**
-- **是否回退**：不回退。若要把「≥0.10 改善」写进结论，仍需按 [REVIEW_PLATEAU.md](_history/REVIEW_PLATEAU.md) §4.3 扩容。
-- **链接**：[REVIEW_PLATEAU.md](_history/REVIEW_PLATEAU.md) §4、[runs/exam/SUMMARY.md](../runs/exam/SUMMARY.md) §9
+- **是否回退**：不回退。若要把「≥0.10 改善」写进结论，仍需按 [REVIEW_PLATEAU.md](REVIEW_PLATEAU.md) §4.3 扩容。
+- **链接**：[REVIEW_PLATEAU.md](REVIEW_PLATEAU.md) §4、[runs/exam/SUMMARY.md](../runs/exam/SUMMARY.md) §9
 
 ---
 
@@ -305,6 +305,29 @@
 - **结论**：采纳。历史报告/曲线中引用 s62/s63 的结论一律作废。
 - **是否回退**：不适用（事实修正）。
 - **链接**：[TRAINING_STACK.md](TRAINING_STACK.md) §1、[TRAINING_CURVE_300M.md](TRAINING_CURVE_300M.md)
+
+---
+
+## D-20261104-05 · B01（s73，精确续训 20M）结果：rank 不可判，强度描述性 +7~14%
+
+- **日期**：2026-11-04（训练 00:13–01:01，评测至 01:15）
+- **状态**：观察中（s73 作为下一块起点；是否变强未证实）
+- **动机**：验证 D-20261104-01 的精确续训路径在真实 20M 块上可用，并给出 B01 相对 s61 基线的同口径读数。
+- **改动**：唯一变量 = 恢复语义（`--checkpoint` + `--trainer-state`）；其余 233 个 flag 逐字保留；
+  `comp_fit=0`、`shaping=0`、辅助头全关。`--gpu-free-check 0`（GPU3 有邻居 5.3GB，1 会误剔除）。
+- **A/B**：单臂对照 s61 冻结 ckpt；96 局（seed 520000）+ 512 局（新 seed 740000）双面板。
+- **数字**：
+  - 96 局：rank 6.083→**6.208**（Δ+0.125）；top4 14.6%→14.6%；strength 323.5→**347.5**（+24）；
+    tier≥4 66.7%→60.4%；survive12 11.46%→11.46%；tier≥5@t15 6.06%→4.41%。
+  - 512 局（seed 740000）：rank 6.385→**6.275**（Δ−0.109）；top4 9.8%→**12.5%**；strength 293→**334**（+41）；
+    tier≥4 61.3%→57.4%；survive12 13.67%→13.28%；tier≥5@t15 9.59%→10.53%。
+  - 训练：20,016,527 decisions / updates 566 / 2743s；dec/s p50 10,628；KL p50 0.0025、max 0.0152；
+    entropy 0.755→0.744；illegal/truncated/restart/OOM 全 0。
+- **结论**：**采纳「精确续训可稳定跑完且不退化」**；rank 的 |Δ| 在两个 seed 上均 <0.3 且方向相反 ⇒
+  噪声、不可判。强度/top4/tier≥5 为描述性正向，**不构成「变强」的证据**（96 局 SE 0.146；512 局 diff SE≈0.13）。
+- **是否回退**：不回退。下一块从 `runs/az_entity_s73/model.pt` 精确续训或先做 P2 anchor A/B（ROADMAP）。
+- **链接**：[CURRENT_STATE.md](CURRENT_STATE.md) §7、[TRAINING_CURVE_300M.md](TRAINING_CURVE_300M.md)、
+  `runs/az_entity_s73/REPORT.md`
 
 ---
 

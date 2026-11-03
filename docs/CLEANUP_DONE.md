@@ -7,7 +7,7 @@
 
 | 指标 | 前 | 后 | 变化 |
 |---|---:|---:|---|
-| `runs/` | 207G | **7.0G** | −200G（du） |
+| `runs/` | 207G | **7.0G** | −200G（du；s73 训练结束后 7.3G） |
 | 删除 | — | **2012 项 / 214.05 GB** | 零 missing、保护项命中 0 |
 | `/home/data` 空闲 | 5754.4G | **5967.8G** | **+213.4G**（含训练轮转删除） |
 | `runs/` 目录数 | 250 | 250 | 未丢 run 目录 |
@@ -22,7 +22,7 @@ B5 453/28.15/47.9→5899.8；B6 186/29.48/26.0→5929.2；B7 95/14.77/11.8→594
 ## 3. 保护项校验（全部存在）
 
 `s61`（23 文件/1.43G）：ckpt `a2bd7f0c58b0722c5d1fe4e662334bde9ce3d114a06d754aff441ec3c0f4478c`、trainer `5cfa5d32…f7396`、model `7ff9cd50…bcdf`，与清理前一致。
-`s73`（20 文件/1.11G）：训练中；model.pt sha 待训练+评测完成后重算（本文件不写临时值）。
+`s73`（28 文件/1.4G）：训练完成（2026-11-04 01:00 退出）；model.pt sha256 `9c39693cca1d8813410bb54954ef374396659111394d297ab9a6d7230d9b2082`（与 train log / REPORT 记录一致），`summary.json`、96 局 panel 与 512 局 seed740000 评测均已产出。
 其余：`eval_panel` 17 文件/20KB、`comp_scripts` 152/10M、`_lead` 7、`_archive` 10、`exam` 42/407.6M、`quality` 69；
 `CHAIN_300M.csv` 仅表头（原件快照 `runs/_archive/CHAIN_300M.csv.precleanup`），`CHAIN_300M.log` 与 `next_block.sh` 在。
 
@@ -37,11 +37,11 @@ B5 453/28.15/47.9→5899.8；B6 186/29.48/26.0→5929.2；B7 95/14.77/11.8→594
 `s62_final.json`、`s63_final.json`（2113B，与 `s61_20m.json` 同长，chain 复评旧 ckpt 的错账）、`s64_final.json`（0B）
 → `runs/_archive/stale_panel/`，README 标注「chain 错账，勿引用」；`runs/eval_panel` 现 17 文件。
 
-## 6. 剩余体积与 `.pt` 构成（4.44G / 53 文件）
+## 6. 剩余体积与 `.pt` 构成（4.51G / 54 文件；`runs/` 训练结束后 7.3G）
 
 | 分组 | 文件 | 体积 |
 |---|---:|---:|
-| s73（protected，在涨） | 13 | 1356.6MB |
+| s73（protected，训练完成） | 14 | 1424.4MB |
 | s61（protected） | 14 | 1424.4MB |
 | exam（protected） | 6 | 407.2MB |
 | 保留历史 eval ckpt | 12 | 751.3MB |
@@ -52,4 +52,4 @@ B5 453/28.15/47.9→5899.8；B6 186/29.48/26.0→5929.2；B7 95/14.77/11.8→594
 ## 7. 证据与边界
 
 证据：`runs/_archive/{DELETED_MANIFEST.jsonl,README.md,CHAIN_300M.csv.precleanup}`、`runs/_archive/stale_panel/README.md`。
-未动：`data/` 6.1G、`reversed/` 16M、`$t/` 75K、`.tmp_trace/` 24K（P3）。遗留：s73 sha 终算；task-10 待 task-8 解依赖后 claim/complete。
+未动：`data/` 6.1G、`reversed/` 16M（P3 已归档 `$t/`→`scripts/_archive/s22_s26/`、`.tmp_trace/final.py`→`scripts/_archive/tmp_trace_final.py`）。s73 最终 sha256 已回填（§3）；task-10 已 complete（依赖 task-8 已解除）。
