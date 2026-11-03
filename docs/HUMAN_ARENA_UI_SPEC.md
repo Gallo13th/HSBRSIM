@@ -3,7 +3,7 @@
 ## 0. 范围、证据与状态定义
 - 目标：支持连续手打几十局；仅设计，不改引擎、动作契约或训练代码。基线为 37.0.0.255790。
 - 已核对：[现实现](<../scripts/human_arena.py>)、[使用说明](<HUMAN_ARENA.md>)、[动作](<../hsbg/env/action_space_std.py>)、[观测](<../hsbg/env/obs_std.py>)、[卡表](<../rust/crates/hsbg-engine/data/cards.json>)、[引擎视图](<../rust/crates/hsbg-engine/src/debug.rs>)及[编码](<../rust/crates/hsbg-engine/src/obs.rs>)。
-- [主界面截图](<human_arena_ui.png>)与[选择截图](<human_arena_pending.png>)为视觉验收基线；本次模型不支持图像输入，未完成像素级审阅，不宣称已验证截图布局。
+- [主界面截图](<assets/human_arena_ui.png>)与[选择截图](<assets/human_arena_pending.png>)为视觉验收基线；本次模型不支持图像输入，未完成像素级审阅，不宣称已验证截图布局。
 - 下文 O = 标准 obs；C = 同构建卡表；V = 现有 `Game.view(seat)`；A = `legal_mask` 与标准动作；U = UI 自身状态。每行的来源是实现依据。
 - **现**：现有 `/state` 已有数据，补渲染即可；**接**：O/C/V 已有，补 Python 白名单字段即可，无需改引擎；**补**：现有公开接口不足，需引擎补充；**禁**：不得泄露或伪造。
 - 审校纠正：当前实现并非完全没有对手、战斗、费用、种族、金卡或关键词字段；主要问题是展示不足及裁剪丢字段。`_card_brief` 的 `golden` 是实例布尔值，不能直接套用 C 的同名字符串。

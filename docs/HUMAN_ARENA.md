@@ -5,9 +5,9 @@
 每个人类决策按训练同口径（`features` 3227 + `cards` 124 + `mask` 245 + `action`）
 落盘到 `runs/human_play/*.jsonl.gz`，可直接转成 BC 数据。**CPU 即可，不训练、不占 GPU。**
 
-![界面](human_arena_ui.png)
+![界面](assets/human_arena_ui.png)
 
-![发现/目标弹窗](human_arena_pending.png)
+![发现/目标弹窗](assets/human_arena_pending.png)
 
 ## 撤回（Undo）
 

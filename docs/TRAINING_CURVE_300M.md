@@ -17,3 +17,5 @@
 - survive12 从 11.5% 升到 17.7%：模型倾向“求生/稳名次”，盘面强度回落。
 - 当前最佳 checkpoint：`runs/az_entity_s61/eval/ckpt_020026719.pt`。
 - 与辅助奖励版对比：s55（含 tier-target）同口径 rank 6.458 / strength 305 ⇒ **干净配方在峰值上更优（323.5 vs 305）**。
+
+![curve](assets/training_curve_300m.png)

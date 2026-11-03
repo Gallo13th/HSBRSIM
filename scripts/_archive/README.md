@@ -30,3 +30,9 @@
 
 当前入口以 `scripts/README.md`（按角色分组）与 `docs/README.md` 为准；训练/评测/数据/门禁核心脚本
 （`train_entity_sync.py`、`train_block_clean.sh`、`eval_panel.sh`、`verify_all.py` 等）**不在**本目录。
+
+## 2026-11-04 · P3 追加归档
+
+- `s22_s26/`（36 个文件）：原仓库根 `$t/`，s22–s26 时代的临时驱动/探针脚本，全仓零引用。
+- `tmp_trace_final.py`：原 `.tmp_trace/final.py`，一次性 human trace 复算脚本。
+- 恢复：`git mv scripts/_archive/s22_s26 '$t'`、`git mv scripts/_archive/tmp_trace_final.py .tmp_trace/final.py`（按需）。
