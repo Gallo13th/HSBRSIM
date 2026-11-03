@@ -344,6 +344,239 @@ def _card_brief(it: Optional[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 # ══════════════════════════════════════════════════════════════════════
+# 神明（Deity）：名字 + atk/hp + 金卡/复生 + 效果全文 + 结构化触发要求
+# ══════════════════════════════════════════════════════════════════════
+
+#: 触发阶段（结构化字段；与「招募 / 战斗 / 回合结束」同口径）。
+DEITY_PHASE_ZH: Dict[str, str] = {
+    "recruit": "招募", "combat": "战斗", "end_of_turn": "回合结束",
+}
+#: 兜底唤醒门槛；实际值优先取引擎 ``RulesConfig.deity_threshold``（默认 4）。
+DEITY_THRESHOLD_FALLBACK = 4
+
+#: 神明脚本行为（与 ``flow.rs::DEITIES`` 的 2 个神明一一对应）。
+#: 卡面只写了「神明 / 被唤醒后 / 亡语」，**唤醒条件**只在引擎脚本里：
+#: ``engine.rs::check_deity``（本场战斗畸变怪累计死亡 ≥ cfg.deity_threshold）+
+#: ``content/mod.rs::deity_awakened``（克苏恩均分属性）/
+#: ``content/minions.rs::yshaarj``（亚煞极亡语）。卡表 id 来自 ``Game.view`` 的
+#: ``me.deity.card``，名字/文本/种族/星级/类型用 ``cards.json`` 补全。
+DEITY_RULES: Dict[str, Dict[str, Any]] = {
+    "BGFYM_000": {
+        "awaken": "唤醒克苏恩：把它召唤到己方战场最右侧（属性 = 面板 atk/hp；金卡使用金色卡）",
+        "after_awaken": "把它的属性值均分给你的其他随从；金卡按它的双倍属性值分配（余数按 1 点随机分配）",
+        "source_ref": "engine.rs::check_deity + content/mod.rs::deity_awakened",
+        "golden_mult": 2,
+    },
+    "BGFYM_011": {
+        "awaken": "唤醒亚煞极：把它召唤到己方战场最右侧（属性 = 面板 atk/hp；金卡使用金色卡）",
+        "deathrattle": "召唤你在本场战斗中死亡的前 2 个畸变怪（金卡 4 个），"
+                       "并使其具有其最大属性值（神明除外）",
+        "source_ref": "engine.rs::check_deity + content/minions.rs::yshaarj",
+        "golden_mult": 2,
+        "revive": 2,
+    },
+}
+
+
+def normal_card_id(card_id: Any) -> str:
+    """去除金卡后缀（``BGFYM_000_G`` -> ``BGFYM_000``）。"""
+    cid = str(card_id or "")
+    return cid[:-2] if cid.endswith("_G") else cid
+
+
+@functools.lru_cache(maxsize=1)
+def _engine_default_config() -> Dict[str, Any]:
+    """引擎默认 ``RulesConfig``（只读；用于取 ``deity_threshold`` 等数值）。"""
+    try:
+        return json.loads(load_engine().default_config_json())
+    except Exception:  # noqa: BLE001 - 配置读取失败不能影响手打
+        return {}
+
+
+@functools.lru_cache(maxsize=1)
+def deity_buff_card_ids() -> Tuple[str, ...]:
+    """静态卡表中卡面提到「神明 / Deity」的卡 id（含金卡与衍生；只用于展示数量）。"""
+    out: List[str] = []
+    for cid, c in sorted(_static_card_db().items()):
+        text = "%s %s" % (c.get("text_zh") or "", c.get("text") or "")
+        if "神明" in text or "Deity" in text:
+            out.append(cid)
+    return tuple(out)
+
+
+def _deity_threshold(cfg: Optional[Dict[str, Any]] = None) -> int:
+    """唤醒门槛：会话配置 > 引擎默认配置 > 兜底 4。"""
+    raw: Any = (cfg or {}).get("deity_threshold")
+    if raw is None:
+        raw = _engine_default_config().get("deity_threshold")
+    try:
+        return int(raw) if raw is not None else DEITY_THRESHOLD_FALLBACK
+    except (TypeError, ValueError):
+        return DEITY_THRESHOLD_FALLBACK
+
+
+def deity_brief(raw: Optional[Dict[str, Any]],
+                cfg: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """神明面板数据：名字/atk/hp/金卡/复生/效果全文/结构化触发要求/数值。
+
+    ``raw`` 来自 ``Game.view(...)["me"]["deity"]``（``card/atk/hp/golden/reborn``）。
+    卡面文本以 view 为准，缺失时用 ``cards.json`` 补；触发条件卡面没写，由引擎脚本
+    推导并标 ``脚本``；未收录的神明 id 退化为 ``推断``。无神明时返回
+    ``{"present": False, "label": "本局无神明", ...}``。
+    """
+    threshold = _deity_threshold(cfg)
+    n_buff = len(deity_buff_card_ids())
+    if not isinstance(raw, dict) or not raw.get("card"):
+        return {
+            "present": False,
+            "label": "本局无神明",
+            "name": "", "name_zh": "", "card_id": "", "art": "",
+            "atk": None, "hp": None, "golden": False, "reborn": False,
+            "golden_label": "", "reborn_label": "",
+            "text": "", "text_note": "", "effect_text": "", "effect_source": "",
+            "tier": 0, "tier_label": "", "type": "", "kind": "", "kind_label": "",
+            "races": [], "race_labels": [], "race_text": "无",
+            "triggers": [], "numbers": [],
+            "threshold": threshold, "buff_card_count": n_buff,
+            "hint": "本局大厅没有畸变怪（ABERRATION）；神明只在含畸变怪的大厅出现",
+        }
+
+    card = _card_brief(raw.get("card"))
+    cid = normal_card_id(card.get("card_id"))
+    meta = _static_card_db().get(cid) or {}
+    golden = bool(raw.get("golden"))
+    reborn = bool(raw.get("reborn"))
+    atk, hp = raw.get("atk"), raw.get("hp")
+    golden_id = str(meta.get("golden_id") or (cid + "_G"))
+    golden_meta = _static_card_db().get(golden_id) or {}
+
+    # cards.json 只补静态字段；view 有就以 view 为准。
+    name = card.get("name") or meta.get("name") or ""
+    name_zh = card.get("name_zh") or meta.get("name_zh") or name
+    text = card.get("text") or meta.get("text_zh") or meta.get("text") or ""
+    text_note = "卡面" if text else ""
+    if golden and golden_meta.get("text_zh"):
+        text, text_note = golden_meta["text_zh"], "金卡卡面"
+    races = list(card.get("races") or meta.get("races") or [])
+    tier = card.get("tier") or int(meta.get("tier") or 0)
+    typ = meta.get("type") or card.get("type") or card.get("kind") or "minion"
+
+    rule = DEITY_RULES.get(cid)
+    triggers: List[Dict[str, Any]] = []
+    if rule:
+        triggers.append({
+            "phase": "combat", "phase_label": DEITY_PHASE_ZH["combat"],
+            "condition": "本场战斗中你的畸变怪累计死亡 ≥ %d 只" % threshold,
+            "condition_source": "脚本",
+            "effect": rule["awaken"],
+            "effect_source": "脚本",
+            "source": "脚本",
+            "source_ref": rule["source_ref"],
+            "detail": "唤醒阈值来自引擎 RulesConfig.deity_threshold（默认 %d），卡面没有写" % threshold,
+        })
+        if rule.get("after_awaken"):
+            triggers.append({
+                "phase": "combat", "phase_label": DEITY_PHASE_ZH["combat"],
+                "condition": "神明被唤醒（召唤）后",
+                "condition_source": "脚本",
+                "effect": rule["after_awaken"],
+                "effect_source": "脚本",
+                "source": "脚本",
+                "source_ref": rule["source_ref"],
+                "detail": "金卡按双倍属性值分配（脚本 `me.g()`）",
+            })
+        if rule.get("deathrattle"):
+            triggers.append({
+                "phase": "combat", "phase_label": DEITY_PHASE_ZH["combat"],
+                "condition": "神明死亡（亡语结算）",
+                "condition_source": "卡面",
+                "effect": rule["deathrattle"],
+                "effect_source": "脚本",
+                "source": "卡面",
+                "source_ref": rule["source_ref"],
+                "detail": "「最大属性值」= 该随从本场战斗达到过的峰值（peak_atk/peak_hp）",
+            })
+    else:
+        triggers.append({
+            "phase": "combat", "phase_label": DEITY_PHASE_ZH["combat"],
+            "condition": "卡面未写唤醒条件（引擎未收录该神明 id，推断为战斗内唤醒）",
+            "condition_source": "推断",
+            "effect": text or "卡面/脚本均未收录",
+            "effect_source": "卡面" if text else "推断",
+            "source": "推断",
+            "source_ref": "cards.json 无对应神明脚本",
+            "detail": "未收录 id：只展示卡面，不编造触发条件",
+        })
+    if n_buff:
+        triggers.append({
+            "phase": "recruit", "phase_label": DEITY_PHASE_ZH["recruit"],
+            "condition": "打出/触发卡面提到「神明」的卡（%d 张，含金卡/衍生）" % n_buff,
+            "condition_source": "卡面",
+            "effect": "你的神明获得对应属性值（面板 atk/hp 随之变化，本面板实时同步）",
+            "effect_source": "卡面",
+            "source": "卡面",
+            "source_ref": "cards.json 静态卡表（文本检索）",
+            "detail": "属性成长不是唤醒；只影响唤醒后的身材",
+        })
+
+    numbers: List[Dict[str, Any]] = [
+        {"key": "atk_hp", "label": "面板属性", "value": "%s/%s" % (atk, hp),
+         "source": "引擎 view"},
+    ]
+    if meta:
+        numbers.append({
+            "key": "base", "label": "初始属性（卡面）",
+            "value": "%s/%s（金卡 %s/%s）" % (
+                meta.get("atk"), meta.get("hp"),
+                golden_meta.get("atk", meta.get("atk")), golden_meta.get("hp", meta.get("hp"))),
+            "source": "卡面",
+        })
+    numbers.append({
+        "key": "threshold", "label": "唤醒门槛（本场畸变怪死亡）",
+        "value": str(threshold), "source": "引擎 config.deity_threshold",
+    })
+    if cid == "BGFYM_000" and rule and rule.get("golden_mult"):
+        numbers.append({
+            "key": "golden_mult", "label": "金卡均分倍率",
+            "value": "×%s" % rule["golden_mult"], "source": "脚本",
+        })
+    if rule and rule.get("revive"):
+        numbers.append({
+            "key": "revive", "label": "亡语复活数量",
+            "value": "%d 只（金卡 %d 只）" % (rule["revive"], rule["revive"] * 2),
+            "source": "卡面+脚本",
+        })
+    if n_buff:
+        numbers.append({
+            "key": "buff_cards", "label": "可提升神明的卡",
+            "value": "%d 张" % n_buff, "source": "卡面（卡表检索）",
+        })
+
+    out = dict(card)
+    out.update({
+        "present": True,
+        "label": "%s %s/%s" % (name_zh, atk, hp),
+        "name": name, "name_zh": name_zh,
+        "card_id": card.get("card_id") or cid,
+        "atk": atk, "hp": hp,
+        "golden": golden, "golden_label": "金色" if golden else "",
+        "reborn": reborn, "reborn_label": "复生" if reborn else "",
+        "text": text, "text_note": text_note,
+        "effect_text": text, "effect_source": text_note or ("脚本" if rule else "推断"),
+        "tier": tier, "tier_label": ("★%d" % tier) if tier else "—",
+        "type": typ, "kind": card.get("kind") or "minion",
+        "kind_label": card.get("kind_label") or "随从",
+        "races": races,
+        "race_labels": [race_label(r) for r in races],
+        "race_text": "/".join(race_label(r) for r in races) if races else "无",
+        "triggers": triggers, "numbers": numbers,
+        "threshold": threshold, "buff_card_count": n_buff,
+        "hint": "唤醒门槛：本场战斗畸变怪死亡 ≥ %d 只" % threshold,
+    })
+    return out
+
+
+# ══════════════════════════════════════════════════════════════════════
 # 引擎与动作
 # ══════════════════════════════════════════════════════════════════════
 
@@ -358,6 +591,21 @@ def load_engine() -> Any:
             "（见 docs/RUST_ENGINE.md）"
         ) from exc
     return E
+
+
+def _parse_config(config_json: Any) -> Dict[str, Any]:
+    """解析 ``--config-json`` / ``GameSession(config_json=...)``：JSON 对象或 dict。"""
+    if config_json in (None, ""):
+        return {}
+    if isinstance(config_json, str):
+        cfg = json.loads(config_json)
+    elif isinstance(config_json, dict):
+        cfg = dict(config_json)
+    else:
+        raise ValueError(f"config_json 必须是 JSON 对象/字符串，得到 {type(config_json)!r}")
+    if not isinstance(cfg, dict):
+        raise ValueError("config_json 必须是 JSON 对象")
+    return cfg
 
 
 class IllegalAction(Exception):
@@ -530,7 +778,7 @@ class GameSession:
     """一局人类 vs 7 bot；每次 ``act`` 落一条 BC 决策记录。"""
 
     def __init__(self, seed: int, seat: int = 0, out_dir: str = DEFAULT_OUT,
-                 engine: Any = None) -> None:
+                 engine: Any = None, config_json: Any = None) -> None:
         self.E = engine or load_engine()
         self.seat = int(seat)
         if not 0 <= self.seat < 8:
@@ -539,6 +787,8 @@ class GameSession:
         os.makedirs(self.out_dir, exist_ok=True)
         self._stamp_seq = 0
         self.seed = int(seed)
+        # 引擎 RulesConfig（只读透传；用于 --aberration/--config-json 与测试的确定性大厅）。
+        self.config = _parse_config(config_json)
         self.new_game(self.seed)
 
     # ── 开局 / 落盘 ──────────────────────────────────────────────────
@@ -547,7 +797,11 @@ class GameSession:
         if seed is None:
             seed = self.seed
         self.seed = int(seed)
-        self.game = self.E.Game(seed=self.seed)
+        if self.config:
+            self.game = self.E.Game(seed=self.seed,
+                                    config_json=json.dumps(self.config, ensure_ascii=False))
+        else:
+            self.game = self.E.Game(seed=self.seed)
         self.decisions = 0
         self.steps = 0
         self.over = False
@@ -799,14 +1053,8 @@ class GameSession:
             for x in (me.get("effects") or []) if isinstance(x, dict)
         ]
         deity_raw = me.get("deity") or None
-        deity = None
-        if deity_raw:
-            deity = _card_brief(deity_raw.get("card"))
-            deity.update({
-                "atk": deity_raw.get("atk"), "hp": deity_raw.get("hp"),
-                "golden": bool(deity_raw.get("golden")),
-                "reborn": bool(deity_raw.get("reborn")),
-            })
+        # 始终给出结构化的神明面板（无神明时 present=False + “本局无神明”）。
+        deity = deity_brief(deity_raw, cfg=getattr(self, "config", None))
 
         # 黑暗之赐：cost/uses/max_uses/tiers + 使用按钮与不可用原因
         dark_gift = dict(dark_raw)
@@ -1400,10 +1648,32 @@ def state_text(st: Dict[str, Any]) -> str:
         card = eff.get("card") or {}
         lines.append("持续效果：%s ×%s" % (card.get("name_zh") or card.get("name"),
                                           eff.get("stacks")))
-    if hud.get("deity"):
-        d = hud["deity"]
-        lines.append("神灵（deity，不等于赐福）：%s %s/%s" % (
-            d.get("name_zh") or d.get("name"), d.get("atk"), d.get("hp")))
+    d = hud.get("deity") or {}
+    if d.get("present"):
+        lines.append("神明（deity，不等于赐福）：%s %s/%s%s%s · %s · %s（%s）" % (
+            d.get("name_zh") or d.get("name"), d.get("atk"), d.get("hp"),
+            " · 金色" if d.get("golden") else "",
+            " · 复生" if d.get("reborn") else "",
+            d.get("tier_label") or "—", d.get("race_text") or "无",
+            d.get("card_id") or "?"))
+        if d.get("text"):
+            lines.append("  [%s] %s" % (d.get("text_note") or "卡面",
+                                        str(d["text"]).replace("\n", " ")))
+        lines.append("  触发要求（阶段｜条件｜效果｜来源）：")
+        for i, t in enumerate(d.get("triggers") or [], 1):
+            lines.append("    %d) 阶段=%s｜条件=%s｜效果=%s｜来源=%s" % (
+                i, t.get("phase_label") or t.get("phase"), t.get("condition"),
+                t.get("effect"), t.get("source")))
+        if d.get("numbers"):
+            lines.append("  数值：" + " · ".join(
+                "%s=%s[%s]" % (n.get("label"), n.get("value"), n.get("source"))
+                for n in d["numbers"]))
+        if d.get("hint"):
+            lines.append("  提示：" + str(d["hint"]))
+    else:
+        lines.append("神明（deity，不等于赐福）：本局无神明")
+        if d.get("hint"):
+            lines.append("  " + str(d["hint"]))
 
     lines.append("对手：")
     for o in st.get("opponents") or []:
@@ -1533,6 +1803,16 @@ summary{color:var(--dim);cursor:pointer;font-size:12px}
 .dg{display:flex;flex-direction:column;gap:4px;border:1px solid #4a3d6b;border-radius:8px;padding:8px;background:#241f33}
 .dg .dgline{font-size:12px}
 .dg .reason{color:#e0a06a;font-size:11px}
+.deity{border:1px solid #5a4478;border-radius:8px;padding:8px;background:#241f33;display:flex;flex-direction:column;gap:5px}
+.deity .dname{font-size:15px}
+.deity .dmeta{color:#93a0bd;font-size:11px}
+.deity .dtext{color:#c8d2e8;font-size:12px;line-height:1.4}
+.deity .dtrig{font-size:12px;line-height:1.4}
+.deity .dtrig b{color:var(--gold)}
+.deity .src{color:#8d99b5;font-size:10px}
+.deity .dnumline{display:flex;flex-wrap:wrap;gap:6px;font-size:11px;color:#c8d2e8}
+.deity .dnum{background:#2c3245;border:1px solid #3a4258;border-radius:6px;padding:1px 6px}
+.deity .dempty{color:#93a0bd;font-size:12px}
 .mycombat{border-left:3px solid var(--line);padding-left:8px;margin-bottom:4px}
 .mycombat.win{border-color:var(--good)}.mycombat.loss{border-color:var(--bad)}
 .mycombat.tie{border-color:var(--gold)}
@@ -1558,6 +1838,10 @@ summary{color:var(--dim);cursor:pointer;font-size:12px}
     <div class="panel">
       <div class="ptitle"><span>我的战场</span><span id="boardhint" class="mini"></span></div>
       <div id="board" class="board"></div>
+    </div>
+    <div class="panel">
+      <div class="ptitle"><span>神明（Deity，独立于赐福）</span><span id="deityhint" class="mini"></span></div>
+      <div id="deity"></div>
     </div>
     <div class="panel">
       <div class="ptitle"><span>饰品 / 黑暗之赐</span><span id="trinkethint" class="mini"></span></div>
@@ -1802,16 +2086,40 @@ function renderTrinkets() {
     if (btn) btn.onclick = () => act(Number(btn.dataset.aDark));
   }
   const effects = h.effects || [];
-  let extra = effects.map((e) => {
+  $("effects").innerHTML = effects.map((e) => {
     const card = e.card || {};
     return '<div>持续效果：' + esc(card.name_zh || card.name) + ' ×' + esc(e.stacks) + '</div>';
   }).join("");
-  if (h.deity) {
-    extra += '<div>神灵（deity ≠ 赐福）：' + esc(h.deity.name_zh || h.deity.name) +
-      ' ' + (h.deity.atk ?? "") + '/' + (h.deity.hp ?? "") +
-      (h.deity.golden ? ' · 金色' : '') + (h.deity.reborn ? ' · 复生' : '') + '</div>';
+}
+function deityHTML(d) {
+  if (!d || !d.present) {
+    return '<div class="dempty">本局无神明</div>' +
+      '<div class="dmeta">' + esc((d && d.hint) || "大厅没有畸变怪时不会出现神明") + '</div>';
   }
-  $("effects").innerHTML = extra;
+  const badges = [];
+  if (d.golden) badges.push('<span class="kw golden-kw">金色</span>');
+  if (d.reborn) badges.push('<span class="kw">复生</span>');
+  const trigs = (d.triggers || []).map((t, i) =>
+    '<div class="dtrig">' + (i + 1) + ') <b>阶段：' + esc(t.phase_label || t.phase) + '</b>' +
+    ' · 条件：' + esc(t.condition) + ' · 效果：' + esc(t.effect) +
+    ' <span class="src">[' + esc(t.source) + ']</span></div>').join("");
+  const nums = (d.numbers || []).map((n) =>
+    '<span class="dnum"><b>' + esc(n.label) + '</b> ' + esc(n.value) +
+    ' <span class="src">[' + esc(n.source) + ']</span></span>').join("");
+  return '<div class="dname"><b>' + esc(d.name_zh || d.name) + '</b> ' +
+    '<span class="atk-hp"><span class="a">' + (d.atk ?? "") + '</span>/' +
+    '<span class="h">' + (d.hp ?? "") + '</span></span> ' + badges.join(" ") + '</div>' +
+    '<div class="dmeta">' + esc(d.tier_label || "") + ' · ' + esc(d.race_text || "") +
+    ' · ' + esc(d.card_id || "") + '</div>' +
+    (d.text ? '<div class="dtext">[' + esc(d.text_note || "卡面") + '] ' + esc(d.text) + '</div>' : '') +
+    '<div class="dtrig"><span class="src">触发要求（结构化）</span>' + trigs + '</div>' +
+    (nums ? '<div class="dnumline">' + nums + '</div>' : '');
+}
+function renderDeity() {
+  const d = (S.hud || {}).deity || {};
+  $("deityhint").textContent = d.present ? ("唤醒门槛 ≥ " + d.threshold + " 只畸变怪死亡")
+    : "本局大厅无畸变怪";
+  $("deity").innerHTML = deityHTML(d);
 }
 function render() {
   if (!S) return;
@@ -1852,6 +2160,7 @@ function render() {
   if (!S.board.length) $("board").innerHTML = '<span class="dim">场上没有随从</span>';
 
   renderTrinkets();
+  renderDeity();
 
   $("buttons").innerHTML = "";
   for (const b of S.buttons) {
@@ -2224,10 +2533,11 @@ def scripted_action(st: Dict[str, Any]) -> int:
     return A_END
 
 
-def run_selftest(seed: int, seat: int, out_dir: str, max_decisions: int = 3000) -> Dict[str, Any]:
+def run_selftest(seed: int, seat: int, out_dir: str, max_decisions: int = 3000,
+                 config_json: Any = None) -> Dict[str, Any]:
     """脚本化人类打完整一局，打印中局状态文本并校验 replay/npz。"""
     t0 = time.time()
-    sess = GameSession(seed=seed, seat=seat, out_dir=out_dir)
+    sess = GameSession(seed=seed, seat=seat, out_dir=out_dir, config_json=config_json)
     n = 0
     mid_text = ""
     while not sess.over and n < max_decisions:
@@ -2309,12 +2619,23 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--seat", type=int, default=0, help="人类座位 0..7（默认 0）")
     ap.add_argument("--out", default=DEFAULT_OUT, help="replay 输出目录")
     ap.add_argument("--selftest", action="store_true", help="不开服务器：脚本化跑完一局并校验 replay")
+    ap.add_argument("--config-json", default="",
+                    help="透传给引擎的 RulesConfig JSON（例如强制畸变怪大厅）")
+    ap.add_argument("--aberration", action="store_true",
+                    help="强制大厅包含畸变怪（等价于 config_json.aberration_forced=true）")
     ap.add_argument("--to-npz", default="", metavar="DIR", help="把 DIR 下 *.jsonl.gz 转成 BC npz 后退出")
     ap.add_argument("--npz-out", default="", help="--to-npz 的输出 npz 路径")
     ap.add_argument("--skip-hero-select", action="store_true",
                     help="--to-npz 时跳过英雄选择阶段决策")
     ap.add_argument("--quiet", action="store_true", help="不打印启动横幅")
     args = ap.parse_args(argv)
+
+    config: Dict[str, Any] = {}
+    if args.config_json:
+        config = _parse_config(args.config_json)
+    if args.aberration:
+        config = dict(config)
+        config["aberration_forced"] = True
 
     if args.to_npz:
         out = args.npz_out or os.path.join(os.path.dirname(os.path.abspath(args.to_npz)) or ".",
@@ -2324,12 +2645,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     if args.selftest:
-        run_selftest(int(args.seed), int(args.seat), os.path.abspath(args.out))
+        run_selftest(int(args.seed), int(args.seat), os.path.abspath(args.out),
+                     config_json=config)
         return 0
 
     E = load_engine()
     sess = GameSession(seed=int(args.seed), seat=int(args.seat),
-                       out_dir=os.path.abspath(args.out), engine=E)
+                       out_dir=os.path.abspath(args.out), engine=E, config_json=config)
     httpd = ArenaServer((str(args.host), int(args.port)), sess)
     url = f"http://{args.host}:{args.port}"
     if not args.quiet:

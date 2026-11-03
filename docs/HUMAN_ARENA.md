@@ -21,7 +21,8 @@ ssh -L 8000:127.0.0.1:8000 bicourse-glt
 ```
 
 参数：`--seat 0`（人类座位）、`--out runs/human_play`（replay 目录）、
-`--host`（默认 127.0.0.1，**改成 0.0.0.0 等于对网络开放，风险自担**）。
+`--host`（默认 127.0.0.1，**改成 0.0.0.0 等于对网络开放，风险自担**）、
+`--aberration`（强制大厅含畸变怪，必有神明）、`--config-json '{...}'`（透传引擎 `RulesConfig`）。
 `GET /health` 是存活探针。
 
 ## 界面能做什么
@@ -64,11 +65,33 @@ ssh -L 8000:127.0.0.1:8000 bicourse-glt
   请求处理中锁定提交（防双击重复购买）；非法动作的 HTTP 400 回包带 `action` 与可读原因，
   前端提示后刷新状态。
 
+### 神明（Deity）
+
+神明（`me.deity`）只在含畸变怪（ABERRATION）的大厅出现，和“赐福/持续效果”是两套机制，
+单独一块面板显示（没有神明时写“本局无神明”），字段：
+
+- **名字**、当前 **atk/hp**、`★tier`、种族、卡 id、卡图；金卡/复生分别打“金色/复生”标识；
+- **效果全文**：优先 view 的卡面文本（金卡用 `_G` 卡面），标来源 `[卡面]`；
+- **触发要求（结构化）**：每条 `阶段（招募/战斗/回合结束）｜条件｜效果｜来源`。
+  唤醒条件卡面**没有写**，由引擎脚本推导并标 `[脚本]`：
+  `engine.rs::check_deity`（本场战斗中你的畸变怪累计死亡 ≥ `RulesConfig.deity_threshold`，默认 4）
+  → `content/mod.rs::deity_awakened`（克苏恩：把自身属性均分给其他随从；金卡 ×2）/
+  `content/minions.rs::yshaarj`（亚煞极亡语：复活本场死亡的前 2 个畸变怪，金卡 4 个）。
+  卡表未收录的神明 id 只展示卡面并标 `[推断]`，不编造条件；
+- **数值**：面板 atk/hp、卡面初始属性（含金卡值）、唤醒门槛、金卡倍率/复活数量、
+  卡表中可提升神明的卡数（静态卡表按“神明/Deity”文本检索，含金卡/衍生）。
+
+数据来源：卡 id 来自 `Game.view` 的 `me.deity.card`；名字/文本/种族/星级/类型用
+`rust/crates/hsbg-engine/data/cards.json` 补全；唤醒/亡语触发条件从畸变怪机制
+（`content/aberrations.rs` 同源）与引擎脚本（`engine.rs::check_deity`、`content/mod.rs::deity_awakened`、
+`content/minions.rs::yshaarj`）推导，逐条标 `卡面/脚本/推断`。
+`/state` 的 `hud.deity`、`/snapshot`、`/snapshot.txt` 三处同源。
+
 ### 快照
 
 `GET /snapshot` 返回注入状态 JSON + `<pre id="statetext">` 纯文本的静态 HTML；
 `GET /snapshot.txt` 直接返回同一段中局状态文本（回合/种族/星级/商店/手牌/战场/饰品/黑暗之赐/
-对手/上轮战果/按钮原因），便于截图与复盘，例如：
+神明/对手/上轮战果/按钮原因），便于截图与复盘，例如：
 
 ```text
 === 第 6 回合 · 招募 · 种子 1234 · 座位 0 ===
@@ -78,7 +101,17 @@ ssh -L 8000:127.0.0.1:8000 bicourse-glt
 饰品（已获得 1）：
   [小饰品] 腐蚀的节杖
 黑暗之赐：3 金 · 已用 0/3 · 本回合未用 · 可选星级 3/4（下回合 4）· 可用 [6]
+神明（deity，不等于赐福）：亚煞极 1/1 · ★1 · 畸变怪（BGFYM_011）
+  [卡面] 神明。亡语：召唤你在本场战斗中死亡的前2个畸变怪，且其具有其最大属性值（神明除外）。
+  触发要求（阶段｜条件｜效果｜来源）：
+    1) 阶段=战斗｜条件=本场战斗中你的畸变怪累计死亡 ≥ 4 只｜效果=唤醒亚煞极：把它召唤到己方战场最右侧（属性 = 面板 atk/hp；金卡使用金色卡）｜来源=脚本
+    2) 阶段=战斗｜条件=神明死亡（亡语结算）｜效果=召唤你在本场战斗中死亡的前 2 个畸变怪（金卡 4 个），并使其具有其最大属性值（神明除外）｜来源=卡面
+    3) 阶段=招募｜条件=打出/触发卡面提到「神明」的卡（34 张，含金卡/衍生）｜效果=你的神明获得对应属性值（面板 atk/hp 随之变化，本面板实时同步）｜来源=卡面
+  数值：面板属性=1/1[引擎 view] · 初始属性（卡面）=1/1（金卡 2/2）[卡面] · 唤醒门槛（本场畸变怪死亡）=4[引擎 config.deity_threshold] · 亡语复活数量=2 只（金卡 4 只）[卡面+脚本] · 可提升神明的卡=34 张[卡面（卡表检索）]
+  提示：唤醒门槛：本场战斗畸变怪死亡 ≥ 4 只
 ```
+
+无神明时同一位置输出 `神明（deity，不等于赐福）：本局无神明`（并说明大厅没有畸变怪）。
 
 `GET /replay` 下载本局 replay；「新开一局」按钮调 `POST /new {seed}`。
 
@@ -117,13 +150,17 @@ python scripts/human_arena.py --to-npz runs/human_play --npz-out data/human_bc/h
 ```bash
 # 脚本化人类跑完整一局 + 校验 replay + 转 npz（默认写 runs/human_play/）
 python scripts/human_arena.py --selftest --seed 1234
+# 强制畸变怪大厅，验证神明面板（任意 seed 必有神明；seed 1 = 亚煞极，seed 3 = 克苏恩）
+python scripts/human_arena.py --selftest --aberration --seed 1
 # 8 项：动作映射/状态序列化/replay/完整局/BC 转换/HTTP
 python -m pytest tests/test_human_arena.py -q
 # 8 项：卡片字段/卡图回退/价格与原因/饰品/黑暗之赐/对手与战果/snapshot 文本/400 原因
 python -m pytest tests/test_human_arena_ui.py -q
+# 神明面板：有/无神明、结构化触发要求、snapshot 与 HTML 一致、金卡与复生标识
+python -m pytest tests/test_human_arena_deity.py -q
 ```
 
-`--selftest` 会额外打印“中局状态文本”（与 `/snapshot.txt` 同款，含种族/关键词/饰品/赐福）。
+`--selftest` 会额外打印“中局状态文本”（与 `/snapshot.txt` 同款，含种族/关键词/饰品/神明）。
 
 限制：单用户、单进程；bot 在人类请求内推进（无动画）；UI 只展示公开对手信息；
 卡图是在线增强，离线/加载失败时自动回退文字占位。
