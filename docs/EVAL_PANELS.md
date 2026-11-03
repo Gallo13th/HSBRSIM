@@ -15,7 +15,7 @@ C0 gate（`scripts/c0_gate.py`）的口径是 **512 局 = 8 seat × 64 局，lea
 7 个对手全部是引擎内置 bot**。该口径在早期有效，但现在已经失效：
 
 - **分数被压缩**：历史最好 checkpoint 在 bot 面板上 mean rank 1.768、top4 97.1%、
-  win 48.8%（`docs/STAGE6_REPORT.md`），64 局实测 mean rank 1.69 / top4 100%；
+  win 48.8%（`docs/_history/STAGE6_REPORT.md`），64 局实测 mean rank 1.69 / top4 100%；
   再提升 1% 都要多打几百万 decisions，指标却几乎不动；
 - **bot 的强度天花板太低**：从 t9 起 bot 的战团强度基本锁死在 **tier 4** 左右的水平，
   真实 10k+ 玩家 t9+ 的战团强度是它的 **3–13 倍**（见 `docs/STRENGTH_CALIBRATION.md`、

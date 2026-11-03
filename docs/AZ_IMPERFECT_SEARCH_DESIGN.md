@@ -7,7 +7,7 @@
 > 代码：`hsbg/az/`（env_api / belief / puct / search / policy / toy_env / evaluate）
 > 测试：`tests/test_az_search.py`
 > 相关：[AZ_MCTS_SELFPLAY_DESIGN.md](AZ_MCTS_SELFPLAY_DESIGN.md)（D1–D11 决策）、
-> [ACTION_OBS.md](ACTION_OBS.md)、[COMPUTE_BENCHMARK.md](COMPUTE_BENCHMARK.md)（搜索/训练吞吐实测）。
+> [ACTION_OBS.md](ACTION_OBS.md)、[COMPUTE_BENCHMARK.md](_history/COMPUTE_BENCHMARK.md)（搜索/训练吞吐实测）。
 > 从零 AZ 与 bot-rollout 纯搜索的两份负结果原始报告（原 `AZ_1K_VALIDATION.md`、
 > `AZ_PURE_SEARCH_TEST.md`）已在 `c53148c` 的 AutoTavern-only 清理中删除，现存结论见
 > §5.3 与 `runs/` 下的历史产物。

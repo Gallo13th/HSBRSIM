@@ -30,7 +30,7 @@
 | 采集尾部 | **静态分片的长尾**：8 个 worker 分别是 3.83/4.34/3.86/3.89/4.71/4.76/3.91/3.93 s，最慢比均值多 **0.61 s（15%）** | 上图 actor 行长度差；每进程固定 24 局，局有长短 |
 | 合并（1.62 s） | **单核 + pickle**：431 MB records 读回 0.57 s、np.stack+GAE 1.05 s | `parent_read_s` / `build_batch_s` |
 | 更新（6.68 s） | **fp32 前向/反向**：1024 微批 202.9 ms，bf16 只需 100.2 ms（2.03×） | `scripts/plot_iteration_timeline.py` 报告 + 微基准 |
-| 长训练后段 | **history.json 全量重写**：97 MB `json.dumps(indent=2)` 3.61 s/iter（单条 entry 94 KB，其中 `worker_meta` 40.6 KB 从未使用） | `docs/THROUGHPUT_PLAN.md` §1 |
+| 长训练后段 | **history.json 全量重写**：97 MB `json.dumps(indent=2)` 3.61 s/iter（单条 entry 94 KB，其中 `worker_meta` 40.6 KB 从未使用） | `docs/_history/THROUGHPUT_PLAN.md` §1 |
 | 每 5M | **512 局评测阻塞**：400–490 s，期间训练完全停 | `eval/history.json` |
 
 **一句话**：单次 iteration 内限速步是「PPO（6.68 s）→ 采集（4.8 s）→ 合并（1.62 s）」的**串行链**；
@@ -197,4 +197,4 @@ entropy/value 轨迹同带 → 1 个 batch 的策略滞后在 lr 6e-6 下可忽�
 6. **O4 免 pickle / O5 Rust 批式**（最后做，属于结构性改造）。
 
 预期路径：13.3 →（O1+O2+O3）→ ≈7.4 →（S2）→ ≈4.8 →（动态分片）→ ≈4.6 s/iter。
-与 `docs/THROUGHPUT_PLAN.md` §4 的纯串行优化（7.2 s/iter）相比，**流水线把上限再抬 1.5×**。
+与 `docs/_history/THROUGHPUT_PLAN.md` §4 的纯串行优化（7.2 s/iter）相比，**流水线把上限再抬 1.5×**。

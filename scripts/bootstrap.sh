@@ -78,5 +78,5 @@ cat <<'EOF'
   # 3) 文档
   #   docs/QUICKSTART.md            一键开始 / 常见问题
   #   docs/MULTISTAGE_TRAINING.md   训练曲线与 stage-1 结果
-  #   docs/THROUGHPUT_TIMELINE.md   吞吐瓶颈与并行方案
+  #   docs/_history/THROUGHPUT_TIMELINE.md   吞吐瓶颈与并行方案
 EOF

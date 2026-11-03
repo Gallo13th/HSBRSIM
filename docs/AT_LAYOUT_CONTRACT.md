@@ -25,17 +25,17 @@ MINION_F=31 ITEM_F=40 GLOBAL_F=53 QUEST_F=2 OPP_F=9
 1 Refresh
 2 Freeze
 3 Upgrade
-4..6 HeroPower(0..1)   # N_POWERS=2; 6 是 DarkGift
-6 DarkGift          # 注意：HeroPower 区是 4..5，6 是 DarkGift
+4..5 HeroPower(0..1)   # N_POWERS=2
+6 DarkGift            # 注意：HeroPower 区是 4..5，6 是 DarkGift
 7 Cancel
-8..16 Buy(0..8)     # 8 个 shop slot
-16..23 Sell(0..7)
-23..30 Activate(0..7)
-30..46 Choose(0..16)
-46..126 Play(hand 0..10, pos 0..8)
-126..196 Magnetize(hand 0..10, board 0..7)
-196..245 Move(from 0..7, to 0..7)
-N_ACTIONS = 245
+8..15 Buy(0..7)       # N_SHOP=8
+16..22 Sell(0..6)     # N_BOARD=7
+23..29 Activate(0..6)
+30..45 Choose(0..15)  # N_CHOICE=16
+46..125 Play(hand 0..9, pos 0..7)
+126..195 Magnetize(hand 0..9, board 0..6)
+196..244 Move(from 0..6, to 0..6)
+N_ACTIONS = 245（与 hsbg/env/action_space_std.py 的 ACTION_SEGMENTS 逐项一致）
 ```
 
 边界：

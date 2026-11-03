@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """异步评测执行器：训练主循环提交 checkpoint，子进程跑评测，不等待。
 
-设计约束（见 ``docs/TRAINING_THROUGHPUT_NOTES.md`` / ``docs/EVAL_PANELS.md``）：
+设计约束（见 ``docs/_history/TRAINING_THROUGHPUT_NOTES.md`` / ``docs/EVAL_PANELS.md``）：
 
 - **并发上限 1**：同一时刻最多一个评测子进程；到点但上一个还没完成 -> 跳过，并往
   ``eval/history.json`` 追加一条 ``eval_skipped`` 记录（不阻塞训练）；

@@ -20,11 +20,11 @@
 | s14 human mean rank | 6.328（6.328125） | `runs/az_entity_s14/eval/history.json`（human, 256 局, 193.8 s, 10,027,241 decisions） | 10M eval（2026-10-31） |
 | 强度比 t9 / t12 / t13 / t15 | 约 0.38 / 0.14 / 0.07 / 0.03–0.04（A：0.383/0.133/0.069/0.031；B：0.388/0.144/0.073/0.036） | [REWARD_SHAPING](<REWARD_SHAPING.md>) §10.2 | 2026-10-30，s9d 起点 A/B 各 60 iter；质量面板 64 局 |
 | tier p50 t9 / t12 / t15 | 4 / 4 / 5（DPO 有效臂；对照臂 4 / 4 / 4） | [DPO_UPGRADE](<DPO_UPGRADE.md>) §6.5；[REWARD_SHAPING](<REWARD_SHAPING.md>) §10.2 | 64–96 局质量面板；t15 4→5 来自 DPO 有效系数臂 |
-| 出局强度 p50 | 约 800–860（报告值，`reported_not_verified`） | 用户委托基线快照；[REVIEW_PLATEAU](<REVIEW_PLATEAU.md>) §5 仅引述约 800；未定位 860 的原始 artifact | 历史质量快照，非本次实测 |
-| 暴露剂量 | 4.6% → 约 60% | [PRESSURE_AUDIT](<PRESSURE_AUDIT.md>) §2.3；[REVIEW_PLATEAU](<REVIEW_PLATEAU.md>) §1 | 旧 s10 实测 → 当前报告值；约 60% 尚须实际命中日志核验 |
+| 出局强度 p50 | 约 800–860（报告值，`reported_not_verified`） | 用户委托基线快照；[REVIEW_PLATEAU](_history/REVIEW_PLATEAU.md) §5 仅引述约 800；未定位 860 的原始 artifact | 历史质量快照，非本次实测 |
+| 暴露剂量 | 4.6% → 约 60% | [PRESSURE_AUDIT](<PRESSURE_AUDIT.md>) §2.3；[REVIEW_PLATEAU](_history/REVIEW_PLATEAU.md) §1 | 旧 s10 实测 → 当前报告值；约 60% 尚须实际命中日志核验 |
 | 保真度 counters | +2.62pp（combat；95% CI [1.75,3.53]）；pipeline +1.36pp | [FIDELITY_INJECTION](<FIDELITY_INJECTION.md>) §4 | B2r−B0，自有可信快照消融；不是 human rank 收益 |
 
-> 状态标注：`docs/REVIEW_PLATEAU.md` 中 s13=6.430 是 **20M 旧快照**；最新状态以 s13 120M（6.307 @110M）为准。未有原始 artifact 的用户委托数字保留为快照/报告值，不冒充重新测得。
+> 状态标注：`docs/_history/REVIEW_PLATEAU.md` 中 s13=6.430 是 **20M 旧快照**；最新状态以 s13 120M（6.307 @110M）为准。未有原始 artifact 的用户委托数字保留为快照/报告值，不冒充重新测得。
 
 最直观缺口是战团强度比（我方 p50/真实 10k+ p50）：t9 约 0.38、t12 约 0.14、t13 约 0.07、t15 约 0.03–0.04；t15 才勉强 tier 5，而真人 t9+ 已 tier 5–6。出局强度 p50 约 800–860，真实 t15 约 26,500。训练是 14.9M entity transformer、PPO/rank-only、γ=1、λ=0.995、KL anchor 0.1×200 iter、seq 辅助 0.05、分层 BC 0.004、DPO(upgrade) 0.02、move-guard、archetype 软偏置 0.5、准完整 board+hand+counters 注入；真实数据没有 gold/shop/player-level effects。
 
@@ -245,7 +245,7 @@ E[ĝ_w] = ∇J − E[∇logπ b] + E[∇logπ b] = ∇J
 - 两本预算：评测（human 256 + quality 64）与训练采集分开记账；评测成本不计入 collect 增幅（§5.4）。
 - 不以单次最佳 checkpoint 晋级，预先固定 checkpoint/seed；显存/CPU 峰值、NaN 同时记录。
 - t9/t12/t13/t15 强度比、tier≥5、存活率按有条件/无条件口径报告；核心强度门按预注册的无条件口径计算，相对提升为 `(candidate/baseline−1)×100%`，t12/t15 各自须 ≥10%，同时报告 CI；这些是工程门，而非真实人类阈值。
-- 旧 human panel 仅 development；不得在同一 panel 反复挑低点。遵守 [REVIEW_PLATEAU](REVIEW_PLATEAU.md) 的独立源组、配对差值和 exam 隔离原则。
+- 旧 human panel 仅 development；不得在同一 panel 反复挑低点。遵守 [REVIEW_PLATEAU](_history/REVIEW_PLATEAU.md) 的独立源组、配对差值和 exam 隔离原则。
 
 ## 3. 通用接口、目录和默认关闭规格
 
@@ -332,7 +332,7 @@ TransitionRecord { game_id, seat, turn, decision_idx, action, old_logp,
 
 只与人类面板测：human 面板固定 **256 局（评测约 194 秒）**，另配 **质量面板 64–96 局**；不再安排 bot 评测。质量面板用于强度/tier/出局强度诊断，不作为额外的弱对手名次门。评测耗时为既有参考，不是本次运行结果；本次仅修改文档，不启动训练或评测、不占 GPU。候选与基线同 seed/seat 配对，统一执行 §2.3 门禁；任一不达标回退该单因素并记录进 `EXPERIMENTS`。
 
-先按 [REVIEW_PLATEAU](REVIEW_PLATEAU.md) 冻结 checkpoint hash、seed、引擎/卡表版本、温度、move-guard、注入语义和 source-group manifest。用户主面板可做 development，但不能把其最佳点当独立证据。正式 exam 按整局 source group 隔离；缺独立源组就明确“同库泛化”，不声称人类泛化。
+先按 [REVIEW_PLATEAU](_history/REVIEW_PLATEAU.md) 冻结 checkpoint hash、seed、引擎/卡表版本、温度、move-guard、注入语义和 source-group manifest。用户主面板可做 development，但不能把其最佳点当独立证据。正式 exam 按整局 source group 隔离；缺独立源组就明确“同库泛化”，不声称人类泛化。
 
 ### 5.2 必报表
 
@@ -440,7 +440,7 @@ TransitionRecord { game_id, seat, turn, decision_idx, action, old_logp,
 - [BC_PRETRAIN](BC_PRETRAIN.md)、[DPO_UPGRADE](DPO_UPGRADE.md)：已有人类监督与 upgrade DPO 的结果/接口。
 - [ARCHETYPE_BIAS](ARCHETYPE_BIAS.md)：流派分类、线上置信度和软偏置。
 - [REWARD_SHAPING](REWARD_SHAPING.md)、[TIER_TARGET](TIER_TARGET.md)、[MOVE_GUARD](MOVE_GUARD.md)：已证伪/应复用的现有开关。
-- [REVIEW_PLATEAU](REVIEW_PLATEAU.md)：旧面板选点、独立 exam 和统计规则。
+- [REVIEW_PLATEAU](_history/REVIEW_PLATEAU.md)：旧面板选点、独立 exam 和统计规则。
 - [PROJECT_MEMORY](PROJECT_MEMORY.md) §1.3/§5：开发面板逐点、s14 命令行、强度比/tier 口径与证据边界。
 - [EVAL_PANELS](EVAL_PANELS.md)：human 面板协议、注入计数与“bot 面板降级为回归线”的说明。
 - [AUTOTAVERN_PAPER_TRAINING](AUTOTAVERN_PAPER_TRAINING.md)：论文训练背景；论文记录 18M + 纯 PPO + 7 library seats + γ=1/λ=.995 + 300 iter、约 310M decisions/stage、exam 24,576 局/点、平均名次 3.40→2.33，且搜索未来泄漏在重播种后消失。用户指定的 `TRAINING_PLAN_AUTOTAVERN.md` 当前不存在。

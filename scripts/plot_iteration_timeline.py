@@ -41,7 +41,7 @@ for _name in ("Noto Sans CJK JP", "Noto Sans CJK SC", "Noto Sans CJK TC",
         break
 from matplotlib.patches import Patch  # noqa: E402
 
-# 实测常数（来自 docs/THROUGHPUT_PLAN.md；只在 history 缺字段时兜底）
+# 实测常数（来自 docs/_history/THROUGHPUT_PLAN.md；只在 history 缺字段时兜底）
 BF16_SPEEDUP = 2.03
 
 

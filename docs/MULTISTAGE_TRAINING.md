@@ -193,11 +193,11 @@
 
 结论：**PPO 1M 的 scaling 不成立**，不要用 64 局曲线选 checkpoint。
 
-> 多 GPU / 多 CPU / 6–12h 预算见 [COMPUTE_PLAN_4GPU.md](COMPUTE_PLAN_4GPU.md)。
+> 多 GPU / 多 CPU / 6–12h 预算见 [COMPUTE_PLAN_4GPU.md](_history/COMPUTE_PLAN_4GPU.md)。
 
 ## 10. 进程级 actor + sims=4 PPO 1.08M（2026-10-27 21:30，**负结果**）
 
-背景：进程级 actor pool 修复后（[COMPUTE_BENCHMARK.md](COMPUTE_BENCHMARK.md) §10：
+背景：进程级 actor pool 修复后（[COMPUTE_BENCHMARK.md](_history/COMPUTE_BENCHMARK.md) §10：
 684.9 decisions/s，3.6×），用 8 进程 × 16 线程在 GPU 0/5/6/7 上续训，验证
 「同算力下 sims=4 的 PPO 能否把 C0 从 4.709 推过 bot」。
 

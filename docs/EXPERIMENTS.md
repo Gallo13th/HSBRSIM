@@ -33,11 +33,11 @@
 | `dpo_ab` | A 0 / B 0.002 / C 0.005 / **D 0.02+e1** | 40–60 iter | D−A **−0.042**（96 局）；bot −0.016 | D：4 / 4 / **5**（A：4/4/4） | — | **采纳 D** | [DPO_UPGRADE](DPO_UPGRADE.md) §6.5 |
 | `shaping_ab` | A 关 / B 开（γ 对齐），两批独立 seed | 60 iter ≈1.6M/臂 | Δ(B−A) **−0.208 [−0.427,+0.010]**（seed 15100）/ **−0.035 [−0.194,+0.125]**（seed 23200） | 两批 t15：A 5.0 / B 4.0 | — | **采纳关闭** | [REWARD_SHAPING](REWARD_SHAPING.md) §10.3 |
 | `ab_tier` | A 0 / B coef1 / C coef10 | 40 iter ≈1.6M/臂 | B≈A（6.50 vs 6.48，48 局）；C 6.79（更差，噪声内） | B 未动；C t12 tier≥5 28→50% | — | **不启用** | [TIER_TARGET](TIER_TARGET.md) §7 |
-| `ab_firestone_mix` | A quasi_full / B mixed（3,922 行） | 40 iter ≈1.1M/臂 | 144 局 6.2917/6.3542 Δ**+0.063**；512 局 6.3496/6.4180 Δ**+0.068 [-0.031,+0.172]** | — | t12 .1381→.1375；t15 .0363→**.0312** | **否决**（稀释 t14 −40%） | [FIRESTONE_MIX_AB](FIRESTONE_MIX_AB.md) §0 |
+| `ab_firestone_mix` | A quasi_full / B mixed（3,922 行） | 40 iter ≈1.1M/臂 | 144 局 6.2917/6.3542 Δ**+0.063**；512 局 6.3496/6.4180 Δ**+0.068 [-0.031,+0.172]** | — | t12 .1381→.1375；t15 .0363→**.0312** | **否决**（稀释 t14 −40%） | [FIRESTONE_MIX_AB](_history/FIRESTONE_MIX_AB.md) §0 |
 | `az_arch_ab`（archetype） | A coef0 / B 0.5 / C 1.5 | 40 iter ≈1.1M/臂，seed 同 s13 | 144 局 6.257 / **6.194** / 6.347（Δ 全在噪声内） | C 的 tier/强度最好，但 human top4 −4pp | — | **采纳 0.5，否决 1.5** | [ARCHETYPE_BIAS](ARCHETYPE_BIAS.md) §7 |
 | `bc_moveA`…`bc_moveF` | BC 预训练 8 组（含 Move 监督 / anchor / lr 变体） | 20k 样本 × 200 步/臂 | 48 局 top4：29.2 / 20.8 / 14.6 / 33.3 / 47.9 / 41.7（判据 ≥85%） | 最好 F 4/5/5 | 最好 F .053/.008 | **全败 → 否决 warm-start** | [BC_PRETRAIN](BC_PRETRAIN.md) §9.3 |
 | `ab_board`（方向 A 场面题/强度头） | A 现状 / B 强度头 0.05 / C 题目 CE 0.05 / D 两者 | 40 iter ≈1.12M/臂，同冻结起点（s14 step_1601, sha `fc35c7e3…`）、seed 20100 | 256 局配对：6.270 / 6.289 / 6.309 / 6.320；Δ vs A **+0.020 [−0.109,+0.145]** / **+0.039 [−0.137,+0.211]** / **+0.051 [−0.141,+0.231]** | tier≥5@t12 10.4→15.6/21.9/20.0%（t15 42.4→46.9/60.7/49.2%），单 seed 不算收益 | t12 .134→.133/.137/.136；t15 .035→.035/.037/.032 | **四臂全未过 §2.3 → 两开关保持默认 0、不进 s15**；题目 CE 确在改行为（全池 soft CE −16.6%），建议只把 C 作为单因素跑到 20–40M 再判 | [BOARD_PROBLEMS](BOARD_PROBLEMS.md) §10 |
-| `ab_rare`、`ab_l*`、`ab_rc_*`、`ab_amp_*`、`ab_leaf_*`、`ab_wait*`、`ab_ls_*`、`ab_pipeline*`、`ab_serial*` | 吞吐/采集管线参数（lockstep、pipeline、leaf bf16、wait、amp、RSS） | 多为 1–10 iter 短跑 | —（不看面板） | — | — | 见 [THROUGHPUT_FINAL_REPORT](THROUGHPUT_FINAL_REPORT.md)、[PERF_COLLECT](PERF_COLLECT.md) | `runs/ab_*` |
+| `ab_rare`、`ab_l*`、`ab_rc_*`、`ab_amp_*`、`ab_leaf_*`、`ab_wait*`、`ab_ls_*`、`ab_pipeline*`、`ab_serial*` | 吞吐/采集管线参数（lockstep、pipeline、leaf bf16、wait、amp、RSS） | 多为 1–10 iter 短跑 | —（不看面板） | — | — | 见 [THROUGHPUT_FINAL_REPORT](_history/THROUGHPUT_FINAL_REPORT.md)、[PERF_COLLECT](PERF_COLLECT.md) | `runs/ab_*` |
 
 ## 3. 评测 / 审计（不训练，不占 GPU）
 

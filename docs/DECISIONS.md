@@ -21,7 +21,7 @@
 - **数字**：bot 面板从 C0 2.279（s4 末）→ 1.768（s6 末，top4 97.1%）；human 面板当时尚无（后补）。
 - **结论**：采纳。**但这次改动没有单变量证据**，后续所有「变强」都混着对手分布变化，写报告时必须声明。
 - **是否回退**：不回退。回退方式 = `--mirror-seats 0 --human-board-seats 0`（等价纯 bot）。
-- **链接**：[HUMAN_BOARD_OPPONENT.md](HUMAN_BOARD_OPPONENT.md) §1–§2、[MIRROR_SNAPSHOT_DESIGN.md](MIRROR_SNAPSHOT_DESIGN.md)、[STAGE6_REPORT.md](STAGE6_REPORT.md)
+- **链接**：[HUMAN_BOARD_OPPONENT.md](HUMAN_BOARD_OPPONENT.md) §1–§2、[MIRROR_SNAPSHOT_DESIGN.md](MIRROR_SNAPSHOT_DESIGN.md)、[STAGE6_REPORT.md](_history/STAGE6_REPORT.md)
 
 ---
 
@@ -167,7 +167,7 @@
   bot +0.0703；t12 强度比 −0.0006、t15 **−0.0051**；**t14 p50 腰斩 −40%**、t13/t14 p90 −11~17%。
 - **结论**：不采纳。混池**稀释 t14**，且 512 局 CI 下界 −0.031 已排除「改善 ≥0.10」。
 - **是否回退**：不适用。若再试：只在「高回合上限补充」小权重（<0.1）下另开预算足够的 A/B。
-- **链接**：[FIRESTONE_MIX_AB.md](FIRESTONE_MIX_AB.md) §0、§3–§5
+- **链接**：[FIRESTONE_MIX_AB.md](_history/FIRESTONE_MIX_AB.md) §0、§3–§5
 
 ---
 
@@ -187,8 +187,8 @@
 - **结论**：**采纳降级**——用 2,048 配对（52 min 墙钟）而不是 65,536 局；理由是 MDE 已≈目标效应，
   再扩样本只会在「0.1 名次」量级上继续买精度，运营成本（数 GPU·小时）不划算。
   **同时确认：开发面板的细粒度排序不可复现，只有配对差可复现。**
-- **是否回退**：不回退。若要把「≥0.10 改善」写进结论，仍需按 [REVIEW_PLATEAU.md](REVIEW_PLATEAU.md) §4.3 扩容。
-- **链接**：[REVIEW_PLATEAU.md](REVIEW_PLATEAU.md) §4、[runs/exam/SUMMARY.md](../runs/exam/SUMMARY.md) §9
+- **是否回退**：不回退。若要把「≥0.10 改善」写进结论，仍需按 [REVIEW_PLATEAU.md](_history/REVIEW_PLATEAU.md) §4.3 扩容。
+- **链接**：[REVIEW_PLATEAU.md](_history/REVIEW_PLATEAU.md) §4、[runs/exam/SUMMARY.md](../runs/exam/SUMMARY.md) §9
 
 ---
 
@@ -227,6 +227,84 @@
 - **结论**：采纳两项。**`--games 256` 不采纳**（采集 +26% 但 PPO 翻倍，端到端不变，且改训练语义）。
 - **是否回退**：回退 = `--human-board-fast-inject 0 --leaf-wait-ms 1.0`（零代码改动）。
 - **链接**：[PERF_COLLECT.md](PERF_COLLECT.md) §0、§7、§9
+
+---
+
+## D-20261104-01 · Phase-2 续训标准：`--checkpoint` + `--trainer-state`（精确续训）
+
+- **日期**：2026-11-04（本轮 B01 启动，`runs/az_entity_s73`）
+- **状态**：生效（Phase-2 起）
+- **动机**：历史链 `chain_300m.sh` 只传 `--checkpoint`，而该参数仅恢复 `model + meta(norm)`
+  （`scripts/train_entity_sync.py:2821-2824`）；optimizer/Adam、scheduler/updates、RNG 全部重置
+  ⇒ 每个 20M 块都从 lr 基准重启，`3×20M ≠ 1×60M`。s62–s64 的「失败/复评旧 ckpt」也有选起点 bug 叠加。
+- **改动**：`scripts/train_block_clean.sh` 固定同时传
+  `--checkpoint runs/az_entity_s61/eval/ckpt_020026719.pt --trainer-state runs/az_entity_s61/trainer.pt`；
+  `--eval-drain 1`；`--eval-device cuda:1`；`--gpu-free-check 0`（共享卡上 1 会误剔除有 5GB 邻居的 GPU3）。
+- **A/B**：无（这是语义修复，不是算法实验）。smoke `runs/_smoke_p2b01`（64 局 × 5 iter）
+  验证：`start_iter=285`、`lr=1.11423e-6`、history 从 iter 285 起、保存后 `updates=290`、
+  optimizer `step=2575`（=2565+10）、无异常。
+- **数字**：s73 实测 ~9.5–10.8k dec/s（24 进程 / GPU 3,4,5），20M 预计 ~50–60 min。
+- **结论**：采纳。**今后任何块间续训必须带 `--trainer-state`**；只给 `--checkpoint` 的 run 只能标「热启动」。
+- **是否回退**：不回退；回退 = 去掉 `--trainer-state`（等价旧语义，但结论只能按「热启动」写）。
+- **链接**：[TRAINING_STACK.md](TRAINING_STACK.md) §2、[CURRENT_STATE.md](CURRENT_STATE.md) §3、`tests/test_resume_contract.py`
+
+---
+
+## D-20261104-02 · 固定阵容脚本：**不启用** `comp_fit`，只作评测参照
+
+- **日期**：2026-11-04
+- **状态**：不采纳（三开关保持 0；脚本只做评测/探针）
+- **动机**：①T1 已有四臂实测（从 s27d 起）：t1(0.5/1.0/0.25) 6.5547、对照 t1p 6.5938、
+  t1iso(8/10/2) 6.4688、t1iso2 6.4766（human128 面板，n=128；MDE80≈0.5）⇒ Δ 在噪声内；
+  ②实现只在 `turn<=9` 累计 `ΔΦ`，终局 `Φ≠0`，整局和 = `c·Φ@t9`，**不是 policy-invariant PBRS**；
+  ③候选集实跑只有 2 套（`implementable ∩ supply.reachable`），help 文本「26 套」不成立；
+  ④模型 96 局实测：`Φ(t9)` 与 t15 强度 Pearson −0.079 / Spearman −0.196（n=84）⇒ Φ 高 ≠ 强；
+  脚本 M 的 Φ(t9) 与模型相当但 t15 Σ 只有 131（模型 425）。
+- **改动**：无（`--comp-fit-coef 0 --comp-fit-t9-bonus 0 --comp-trinket-coef 0`）。
+- **A/B**：无新 A/B；引用 T1 四臂与 comp-audit 30 局探针（4 套、非法 0、合法率 1.000）。
+- **数字**：若未来重试，只允许真 PBRS（全程 ΔΦ + 终局 −Φ）、`c ≤ 0.05`、≥384 对面板；
+  8M 时 Φ↑ 但 strength_t15 不↑ 即停。
+- **结论**：不采纳。**脚本的价值是「不随训练漂移的尺子」**，不是教师/势函数。
+- **是否回退**：不适用（从未进主线）。重试前提见 ROADMAP P3。
+- **链接**：[COMP_SCRIPTS_TRAINING.md](COMP_SCRIPTS_TRAINING.md)、[ASTRA_REVIEW_2026-11.md](ASTRA_REVIEW_2026-11.md) §2、[COMP_SCRIPTS.md](COMP_SCRIPTS.md) §0
+
+---
+
+## D-20261104-03 · 退役失控链，单一训练入口 `scripts/train_block_clean.sh`
+
+- **日期**：2026-11-04
+- **状态**：生效
+- **动机**：`chain_300m.sh` 与 `auto_chain.py` 同时存活（两个 watcher 各拉一遍）；都用
+  `ls -t eval/ckpt_*.pt | head -1` 选下一块起点，而 `_submit_eval` 在评测忙时不落 ckpt
+  ⇒ 静默丢 10M 且 CSV 照记 +20M。工作区版 `auto_chain.py` 还多了一行调用
+  `/tmp/cleanup.sh`（会 kill 所有 HSBRSIM 窗口的 GPU 进程与全部 `train_entity_sync`）。
+- **改动**：两条链脚本移入 `runs/_archive/chaos_20261103/`；`auto_chain.py` 回到 HEAD；
+  `/tmp/cleanup.sh` 改名为 `.disabled_20261104`；新入口 `scripts/train_block_clean.sh`
+  （并行拒绝 / OUT flock / 精确续训 / 结束自动 `eval_panel.sh`）。
+- **A/B**：无。
+- **数字**：s73 单块稳定 ~10k dec/s，无重启、无 illegal、无 truncated。
+- **结论**：采纳。**禁止再用 `ls -t eval/ckpt_*` 选起点**；块间只从 `$OUT/model.pt` 或显式 ckpt 续训。
+- **是否回退**：不回退。
+- **链接**：[CLEANUP_PLAN.md](CLEANUP_PLAN.md)、[CURRENT_STATE.md](CURRENT_STATE.md) §6
+
+---
+
+## D-20261104-04 · 历史最优基线锁定 s61，s62–s64/s72 作废
+
+- **日期**：2026-11-04
+- **状态**：生效（Phase-2 起点）
+- **动机**：`runs/eval_panel/s62_final.json`、`s63_final.json` 与 `s61_20m.json` **md5 全同**
+  （`52ddb7e3…`），且 s62/s63 无 `eval/` 目录 ⇒ chain 在训练失败后复评旧 ckpt；
+  s64_final 为 0 字节；s65/s72 是同起点的两条并行链（Lead 已停机）。
+- **改动**：基线登记为 `runs/az_entity_s61/eval/ckpt_020026719.pt`
+  （sha256 `a2bd7f0c…`，块内 20,026,719 decisions，文档口径累计 30.07M）；
+  `runs/CHAIN_300M.csv` 的 60M/80M 两行标记错账（待清理时删除）。
+- **A/B**：无。
+- **数字**：冻结面板（96 局/seed 520000/5 席 p0.9/full/p75）：rank 6.083、top4 14.6%、
+  strength 323.5、tier≥4 66.7%、survive12 11.5%。
+- **结论**：采纳。历史报告/曲线中引用 s62/s63 的结论一律作废。
+- **是否回退**：不适用（事实修正）。
+- **链接**：[TRAINING_STACK.md](TRAINING_STACK.md) §1、[TRAINING_CURVE_300M.md](TRAINING_CURVE_300M.md)
 
 ---
 

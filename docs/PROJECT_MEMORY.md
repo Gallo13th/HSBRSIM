@@ -48,7 +48,7 @@
 | 分位规则 | `--quantile auto`：**t≤8 → p50，t9–12 → p75，t≥13 → p90**（按 `strength=Σ(atk+hp)` 桶内最近秩分位） | 同上 §2.1 |
 | 局数 | **512 局 = 8 seat × 64**（正式）；**256 局**用于训练内每 10M 的在线监控（s14 起）；`--smoke` 可 64 | 同上 §2.2 + s14 命令行 |
 | learner 座位 | seat 0..7 轮换 | 同上 §2.2 |
-| seed | **420000**（`--eval-seed-base 420000`） | [REVIEW_PLATEAU.md](REVIEW_PLATEAU.md) §4.1 |
+| seed | **420000**（`--eval-seed-base 420000`） | [REVIEW_PLATEAU.md](_history/REVIEW_PLATEAU.md) §4.1 |
 | 指标 | mean rank（1 最好、8 最差）、top4、win；**win 在 human 面板恒为 0（从未第 1）** | [runs/exam/SUMMARY.md](../runs/exam/SUMMARY.md) §4 |
 | 硬约束 | 0 illegal / 0 truncated / 0 truncated_combats | [EVAL_PANELS.md](EVAL_PANELS.md) §2.2 |
 | 注入自检 | `human_board_applied/attempt` ≈ **80%（512 局）/ 80%（256 局）**，拒绝原因 **100% `pending_choice`** | `runs/az_entity_s14/eval/human_010027241.json` |
@@ -76,7 +76,7 @@
 
 来源：`runs/az_entity_s{8b,9,9b,9c,9d,10,12,13,14}/eval/history.json`（逐点可复算）。
 
-> **必须一起读的三条纠偏**（[REVIEW_PLATEAU.md](REVIEW_PLATEAU.md) §1）：
+> **必须一起读的三条纠偏**（[REVIEW_PLATEAU.md](_history/REVIEW_PLATEAU.md) §1）：
 > ① s10 的最佳是 **6.402 不是 6.344**；② 同一个 512 局面板被反复查看，最小值有**选点偏差**；
 > ③ s10/s12/s13 的剂量/保真配置不同，**不能**当作「同一算法三个种子的方差估计」。
 
@@ -200,8 +200,8 @@
 | **势函数塑形** | γ bug **已修**（commit `900911b`），但「γ 对齐的塑形」相对关闭**没有可测收益**（两批 human Δ 点估计 ≤0.21、CI 含 0，bot 两批符号相反）；λ=1e-3 的逐决策 \|F\| p50 是名次全距 7.5× | 两批 A/B：seed 15100 / 23200 | [REWARD_SHAPING.md](REWARD_SHAPING.md) §10.3 |
 | **tier-target 回合惩罚** | 推荐参数（coef=1）在 1.6M decisions 尺度上**完全无效**（tier 曲线与对照一致）；coef=10 能抬 tier（t12 tier≥5 28%→50%）但 human 面板不升 → 不是「更早升级」的问题 | A/B 40 iter | [TIER_TARGET.md](TIER_TARGET.md) §7–§8 |
 | **BC 预训练 warm-start** | 含 **Move 监督的 8 组配置全败**（判据 top4≥85% & 出局强度≥600 & tier≥5@t12≥45%）；最好 top4 41.7% / 强度 118。Move 概率质量压得住（20.9%→5.8%）但强度回不来 | 8 行判据表 | [BC_PRETRAIN.md](BC_PRETRAIN.md) §9.3–§9.4 |
-| **Firestone 混池** | 混池**稀释 t14**（t14 p50 腰斩 −40%、t13/t14 p90 −11~17%）；A/B human Δ **+0.063/+0.068**（B 更差），已排除「改善 ≥0.10」→ **不作 s14 默认库** | 3,922 行混池 + 40 iter A/B | [FIRESTONE_MIX_AB.md](FIRESTONE_MIX_AB.md) §0、§3–§5 |
-| **大样本 exam（65,536 局）** | 32,768 配对 / 65,536 局的预注册方案**运营上否决**：改用 4×512 独立面板 × 6 ckpt（n=2,048，墙钟 52 min），80% 功效 MDE **0.0898** ≈ 目标 0.101，已足以判定方向；再扩样本不改结论 | MDE/成本 | [REVIEW_PLATEAU.md](REVIEW_PLATEAU.md) §4.3 + [runs/exam/SUMMARY.md](../runs/exam/SUMMARY.md) §9 |
+| **Firestone 混池** | 混池**稀释 t14**（t14 p50 腰斩 −40%、t13/t14 p90 −11~17%）；A/B human Δ **+0.063/+0.068**（B 更差），已排除「改善 ≥0.10」→ **不作 s14 默认库** | 3,922 行混池 + 40 iter A/B | [FIRESTONE_MIX_AB.md](_history/FIRESTONE_MIX_AB.md) §0、§3–§5 |
+| **大样本 exam（65,536 局）** | 32,768 配对 / 65,536 局的预注册方案**运营上否决**：改用 4×512 独立面板 × 6 ckpt（n=2,048，墙钟 52 min），80% 功效 MDE **0.0898** ≈ 目标 0.101，已足以判定方向；再扩样本不改结论 | MDE/成本 | [REVIEW_PLATEAU.md](_history/REVIEW_PLATEAU.md) §4.3 + [runs/exam/SUMMARY.md](../runs/exam/SUMMARY.md) §9 |
 | （附）换位双投影头 | `--move-head-split 1` 让 human 面板**显著劣化 +0.51**（随机初始化头 40 iter 训不动） | B vs A | [MOVE_GUARD.md](MOVE_GUARD.md) §7.3 |
 | （附）动作回放/轨迹库 | 从 s6 起被 B-vs-C pilot 否决（无可测强度增益），整 `Player` 移植破坏 pool/eid 不变量 | commit `865b333`（`exp(trajectory): … drop the replay route`） | [LIBRARY_POOL_PLAN.md](LIBRARY_POOL_PLAN.md)、[MIRROR_SNAPSHOT_DESIGN.md](MIRROR_SNAPSHOT_DESIGN.md) §1 |
 | （附）`--games 256` 提速 | 采集 +26% 但 PPO 时间翻倍，端到端不变 → 保持 192 | 瓶颈从 collect 转到 PPO | [PERF_COLLECT.md](PERF_COLLECT.md) §6.2 |
@@ -245,7 +245,7 @@
 （t10 p50 1,128.5 / t12 4,458 / t15 26,516）。
 
 > **口径警告**：强度比、tier 都是「本局 learner 的 p50 / 同时刻真实人类 p50」，**分母按 turn 匹配**；
-> 不要用「出局时强度 800 ÷ 真实 t15 26,516」当强度比（[REVIEW_PLATEAU.md](REVIEW_PLATEAU.md) §5）。
+> 不要用「出局时强度 800 ÷ 真实 t15 26,516」当强度比（[REVIEW_PLATEAU.md](_history/REVIEW_PLATEAU.md) §5）。
 
 ### 5.2 tier p50 / tier≥5（同一批 96 局 quality 面板，**seed 740000，bot 对手，评测侧守卫关**）
 
@@ -302,7 +302,7 @@
 
 2. **信用分配**：terminal 分量仅 14.6%（边界态）。若改成回合级/分层回报（SMDP），
    **必须**先证明「独立 exam 已能分辨」再预注册 A/B，且不能把回合内优势简单求和
-   （[REVIEW_PLATEAU.md](REVIEW_PLATEAU.md) §7 备选路线 A）。
+   （[REVIEW_PLATEAU.md](_history/REVIEW_PLATEAU.md) §7 备选路线 A）。
 3. **信念建模**：当前观测对手块信息有限；注入是「模板对手」不是「会反应的对手」。
    从未验证过 belief/对手建模是否带来收益。
 4. **分层结构**（hierarchical policy：先选「升本/买/换位」再选具体）：BC 预训练的 10 类
@@ -313,7 +313,7 @@
    「识别错就没有补救数据」。
 6. **exam 隔离**：现有 exam 面板只是**新 seed**，源玩家/源对局**未按源组切分**，
    且旧库可能全部被训练看过 → 严格意义上它只能回答「固定旧库上的新 RNG 泛化」，
-   **不能声称独立库泛化**（[REVIEW_PLATEAU.md](REVIEW_PLATEAU.md) §4.2）。
+   **不能声称独立库泛化**（[REVIEW_PLATEAU.md](_history/REVIEW_PLATEAU.md) §4.2）。
 7. **训练的暴露剂量是否足够**：4.6%→(配置级)41–64% 的提升尚未做过「剂量→面板」的因果 A/B；
    [PRESSURE_AUDIT.md](PRESSURE_AUDIT.md) §3.3 的「先做剂量对齐」仍是建议而非结论。
 8. **保真度上界**：真实人类隐藏字段（golden/keywords/counters/gems/attachments）不可得，

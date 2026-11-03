@@ -143,5 +143,5 @@ decisions/s, leaf/s, GPU util, queue p95, actor CPU%, 显存, 失败率
 
 > 状态（2026-10-27 21:00）：方案 A（进程级 actor pool）**已实现并实测** —— 8 进程 × 16 线程 /
 > GPU 0/5/6/7，sims=4，684.9 decisions/s（3.6× 单进程），queue wait p95 13.3ms，
-> 详见 [COMPUTE_BENCHMARK.md](COMPUTE_BENCHMARK.md) §10；方案 B（Rust `NeedEval` 批式回调）
+> 详见 [COMPUTE_BENCHMARK.md](_history/COMPUTE_BENCHMARK.md) §10；方案 B（Rust `NeedEval` 批式回调）
 > 仍待做，也是把 GPU util 从 32% 抬上去的下一步。

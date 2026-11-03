@@ -138,7 +138,7 @@ PYTHONPATH=rust/python:. $P scripts/plot_resource_profile.py --run runs/az_entit
 
 ## 7. lock-step 批量 actor 实测（2026-10-28）
 
-见 `docs/THROUGHPUT_TIMELINE.md` §3.9。要点：
+见 `docs/_history/THROUGHPUT_TIMELINE.md` §3.9。要点：
 
 | 配置 | dec/s | collect | 备注 |
 |---|---:|---:|---|

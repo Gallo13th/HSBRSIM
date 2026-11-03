@@ -46,7 +46,7 @@
 > **状态更新（2026-10-27）**：`entity`（14.8M/49）仍是默认训练模型；`entity18m`（17.98M/57）
 > 已实现并完成单卡/4 GPU 吞吐基准，但它 8 个 pending-context token 是 `global + pending one-hot`
 > 派生的**结构补位**，不是新增真实观测槽位，且与 `entity` 的 checkpoint 不通用。因此本节
-> 「18M 是 P2 ablation」的结论不变，实测数字见 [COMPUTE_BENCHMARK.md](COMPUTE_BENCHMARK.md)。
+> 「18M 是 P2 ablation」的结论不变，实测数字见 [COMPUTE_BENCHMARK.md](_history/COMPUTE_BENCHMARK.md)。
 
 ## 2. 冷启动：先单模型打 bot，稳定后再分裂
 

@@ -97,20 +97,29 @@ python scripts/run_tavernbench.py --check
 
 ## 文档
 
+**现状与路线图**（先读这两份）：
+
+- `docs/CURRENT_STATE.md` — **唯一现状来源**（基线 ckpt、评测口径、run 可信度、未决风险）
+- `docs/ROADMAP.md` — Phase-2 开发目标与实验判据
+- `docs/DECISIONS.md` — 配方决策流水（含 2026-11-04 的续训/comp_fit/清理决策）
+- `docs/INTERFACE_AUDIT.md` / `docs/AUTOTAVERN_REFERENCE.md` — 接口契约与上游对标
+- `docs/TRAINING_STACK.md` / `docs/COMP_SCRIPTS_TRAINING.md` — 训练栈取证 / 固定阵容脚本接入分析
+- `docs/README.md` — 全部当前有效文档索引；历史报告在 `docs/_history/`
+
+**设计与契约**：
+
 - `docs/ARCHITECTURE.md` — 分层与数据流
 - `docs/ENGINE.md` — `hsbg_engine` fork/数据/构建
 - `docs/ACTION_OBS.md` — 动作/观测契约
 - `docs/AZ_MCTS_SELFPLAY_DESIGN.md` / `docs/AZ_IMPERFECT_SEARCH_DESIGN.md` — MCTS/自对弈设计
 - `docs/AZ_AUTOTAVERN_MODEL_TRANSFER.md` — AT entity 模型迁移记录（网络结构/pointer head 对齐与对照）
-- `docs/TRAINING.md` — MCTS + 自对弈 + PPO 快速指南
+- `docs/TRAINING.md` — 训练快速指南
 - `docs/TRAINING_DESIGN.md` — **完整训练系统设计**（搜索/叶评估/吞吐/剪枝/PPO）
 - `docs/TRAINING_PLAN_V2.md` — **v2 计划**（entity 14.8M / 异步 actor-learner / 重搜做题 / 冷启动联赛）
 - `docs/MULTISTAGE_TRAINING.md` — **多 stage 与数据预算**（BC/PPO 实测曲线、吞吐预算、S1–S3）
-- `docs/TRAINING_RUN_2026-10-27.md` — **1h tiny 自对弈试训结果**（7.98→7.63 的负结果与诊断）
 - `docs/TRAINING_RUNTIME_HANDOFF.md` — **接手文档**（BC 数据来源 / 对手课程 / actor 架构 / 决策与评分示例）
-- `docs/COMPUTE_PLAN_4GPU.md` — **4 GPU / 多 CPU / 6–12h 长训练计算计划**
-- `docs/COMPUTE_BENCHMARK.md` — **18M/56+1、4 GPU、worker/sims 吞吐实测**
 - `docs/AT_LAYOUT_CONTRACT.md` — **AT 3227/124/245 数据与动作契约**
 - `docs/ACTOR_RUST_OPTIONS.md` — **Rust actor / GIL 分析与方案**
 - `docs/VERIFICATION.md` — 门禁与预期
 - `docs/TAVERNBENCH.md` — 决策基准
+

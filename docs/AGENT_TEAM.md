@@ -21,7 +21,7 @@
 | **az-search** | `hsbg/az/{search,belief,puct,env_api,policy,toy_env}.py`、`tests/test_az_search.py` | 把搜索接进训练主环（需 Lead 决策 + DECISIONS 条目） |
 | **engine** | `rust/**`（机制/数据）、`rust/FORK.md`、`tests/test_rust_engine.py` | 改 Python 训练侧；跳过 `cargo test --release -p hsbg-engine` |
 | **env-profile** | `hsbg/env/action_space_std.py`、`hsbg/env/obs_std.py`、对应测试 | 改 0..244 动作段（**永久冻结**）或 `layout()` 32 项 |
-| **data** | `data/**`、`data/p2/**`、`tools/p2_data/**`、`tools/version_sync.py`、`scripts/import_*.py`、`scripts/build_*_library.py`、`scripts/mix_human_libraries.py`、`scripts/fetch_firestone_replays.py`、`scripts/parse_firestone_replay_xml.py` | 改训练 loss/奖励；在没有 `DECISIONS` 条目的情况下换默认训练库 |
+| **data** | `data/**`、`data/p2/**`、`tools/p2_data/**`（注：`tools/version_sync.py` 已不存在，版本一致性当前由 `gen_carddb_37.py --check` + `data_info()` 覆盖）、`scripts/import_*.py`、`scripts/build_*_library.py`、`scripts/mix_human_libraries.py`、`scripts/fetch_firestone_replays.py`、`scripts/parse_firestone_replay_xml.py` | 改训练 loss/奖励；在没有 `DECISIONS` 条目的情况下换默认训练库 |
 | **eval（新增）** | `scripts/human_panel_eval.py`、`scripts/c0_gate.py`、`scripts/quality_monitor.py`、`scripts/exam_paired_eval.py`、`scripts/exam_summary.py`、`hsbg/eval/**`、`runs/exam/**`（只写自己的产物）、`runs/eval/**` | 改训练代码；**改评测器口径而不写 DECISIONS**（这是最隐蔽的作弊面） |
 | **archive（新增）** | `runs/**`（归档/清理/`MANIFEST`/`SHA256SUMS`）、`docs/assets/**`、`plots/` 产物 | 删除别人的 run 目录；`git clean`；改 `runs/<run>/model.pt` |
 
