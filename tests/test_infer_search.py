@@ -285,7 +285,9 @@ def test_stats_and_trace_summary_consistent():
     st = pol.stats()
     assert st["search_calls"] == 1
     assert st["mean_ms_per_call"] is not None and st["mean_ms_per_call"] > 0.0
-    assert abs(float(st["search_ms_total"]) - float(st["mean_ms_per_call"])) < 0.05
+    # 两个统计量各自按 1 位小数四舍五入，差值上界是 0.05 + 舍入误差；
+    # 用严格 `< 0.05` 会偶发卡在 0.05000000000000004（既有 flaky，非搜索逻辑）。
+    assert abs(float(st["search_ms_total"]) - float(st["mean_ms_per_call"])) <= 0.051
     pol.flush()
     summ = trace_summary(pol.game_rows(), turns=(1, 12))
     assert summ["games"] == 1
