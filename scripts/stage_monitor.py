@@ -521,6 +521,48 @@ def canonical_eval(run: str, point: int, ckpt_dec: int, ckpt: str,
     return entry
 
 
+def bot_panel_eval(run: str, point: int, ckpt: str, gpu: str, args):
+    """8 席全 bot 面板（无人类盘面），返回 bot rank/top4/win + 加权指标。
+
+    与 canonical（human）面板分开存：``runs/eval_panel/<run>_<N>M_bot.json``。
+    weighted 只在纯 bot 面板计算（长度 + bot 席强度），见 docs/WEIGHTED_EVAL.md。
+    """
+    runbase = os.path.basename(os.path.normpath(run))
+    tag = f"{runbase}_{int(round(point / 1e6))}M_bot"
+    out_json = os.path.join(REPO, "runs", "eval_panel", tag + ".json")
+    err_log = out_json[:-5] + ".err"
+    d = _valid_panel(out_json)
+    if d is None:
+        cmd = [sys.executable, os.path.join(REPO, "scripts", "quality_monitor.py"),
+               "--checkpoint", os.path.abspath(ckpt), "--device", gpu,
+               "--games", str(int(args.bot_panel_games)),
+               "--seed-base", str(int(args.bot_panel_seed))]
+        try:
+            with open(out_json, "w", encoding="utf-8") as fo, \
+                    open(err_log, "w", encoding="utf-8") as fe:
+                cp = subprocess.run(cmd, cwd=REPO, stdout=fo, stderr=fe)
+            rc = int(cp.returncode)
+        except BaseException as e:  # noqa: BLE001
+            return {"bot_status": "failed", "bot_reason": str(e)[:200]}
+        if rc != 0:
+            return {"bot_status": "failed", "bot_reason": f"rc={rc} " + _tail(err_log)}
+        d = _valid_panel(out_json)
+    if d is None:
+        return {"bot_status": "failed", "bot_reason": _tail(err_log)}
+    w = d.get("weighted") or {}
+    return {
+        "bot_status": "ok",
+        "bot_games": _int(d.get("games"), args.bot_panel_games),
+        "bot_rank": _num(d.get("mean_rank")),
+        "bot_top4": _num(d.get("top4")),
+        "bot_win": _num(d.get("win")),
+        "bot_w_rank": _num(w.get("mean_rank") if isinstance(w, dict) else None),
+        "bot_w_top4": _num(w.get("top4") if isinstance(w, dict) else None),
+        "bot_w_win": _num(w.get("win") if isinstance(w, dict) else None),
+        "bot_w_n_eff": _num(d.get("weight_n_eff")),
+    }
+
+
 # ---------------------------------------------------------------- 系统采样 / 告警
 
 
@@ -747,6 +789,9 @@ def draw(run, paths, hist, dev, points, samples, alerts, args, status):
     xs, ys = cser("rank")
     if xs:
         a.plot(xs, ys, "o-", color="tab:blue", label="canonical rank (seed 520000)")
+    xs, ys = _xy(cx, [e.get("bot_rank") for e in canon])
+    if xs:
+        a.plot(xs, ys, "^--", color="tab:purple", alpha=0.85, label="8-bot rank")
     xs, ys = _xy(dx, [e["rank"] for e in dev])
     if xs:
         a.plot(xs, ys, "s--", color="tab:red", alpha=0.75, label="dev rank (seed 420000)")
@@ -763,6 +808,10 @@ def draw(run, paths, hist, dev, points, samples, alerts, args, status):
     xs, ys = cser("top4")
     if xs:
         a.plot(xs, [v * 100 for v in ys], "o-", color="tab:green", label="canonical top4%")
+    xs, ys = _xy(cx, [e.get("bot_top4") for e in canon])
+    if xs:
+        a.plot(xs, [v * 100 for v in ys], "^--", color="tab:purple", alpha=0.85,
+               label="8-bot top4%")
     xs, ys = _xy(dx, [e["top4"] for e in dev])
     if xs:
         a.plot(xs, [v * 100 for v in ys], "s--", color="tab:olive", alpha=0.75,
@@ -1058,6 +1107,26 @@ def write_dashboard(run, paths, hist, dev, points, alerts, args, status):
             sec=e.get("seconds"), gpu=e.get("gpu") or "-"))
     if not ok:
         lines.append("| — | 尚无 canonical 点 | | | | | | | | |")
+    # ── 8-bot 面板（可选；--bot-panel-games>0 时每点追加）──
+    if int(getattr(args, "bot_panel_games", 0) or 0) > 0:
+        lines += [
+            "",
+            "## bot 面板（8 席全 bot；加权 = 长度 + bot 强度）",
+            "",
+            "| 点(M) | bot_rank | bot_top4 | bot_win | bot_w_rank | bot_w_win |",
+            "|---|---|---|---|---|---|",
+        ]
+        any_bot = False
+        for e in ok[-16:]:
+            if e.get("bot_rank") is None:
+                continue
+            any_bot = True
+            lines.append(f"| {int((e.get('point_decisions') or 0) / 1e6)} | "
+                         f"{_fmt(e.get('bot_rank'), 3)} | {_fmt(e.get('bot_top4'), 3)} | "
+                         f"{_fmt(e.get('bot_win'), 3)} | {_fmt(e.get('bot_w_rank'), 3)} | "
+                         f"{_fmt(e.get('bot_w_win'), 3)} |")
+        if not any_bot:
+            lines.append("| — | 尚无 bot 面板 | | | | |")
     lines += [
         "",
         "## dev 面板（训练内，seed 420000）",
@@ -1159,6 +1228,20 @@ def process_points(run: str, hist: History, points: Points, alerts: Alerts, args
             added += 1
             continue
         entry = canonical_eval(run, point, ckpt_dec, ckpt, gpu, args)
+        if entry.get("status") == "ok" and int(getattr(args, "bot_panel_games", 0) or 0) > 0:
+            try:
+                _b = bot_panel_eval(run, point, ckpt, gpu, args)
+                entry.update(_b)
+                if _b.get("bot_status") == "ok":
+                    print(f"[{_now()}] point {int(point / 1e6)}M bot_rank="
+                          f"{_b.get('bot_rank')} bot_w_rank={_b.get('bot_w_rank')}",
+                          flush=True)
+                else:
+                    alerts.log("WARN", f"bot_point_failed_{int(point / 1e6)}M",
+                               str(_b.get("bot_reason"))[:200])
+            except BaseException as e:  # noqa: BLE001
+                entry["bot_status"] = "failed"
+                entry["bot_reason"] = str(e)[:200]
         points.add(entry)
         added += 1
         if entry.get("status") == "ok":
@@ -1246,6 +1329,11 @@ def build_args(argv=None):
     ap.add_argument("--eval-games", type=int, default=96)
     ap.add_argument("--eval-seed", type=int, default=DEFAULT_SEED,
                     help="canonical 面板 seed（默认 520000）")
+    ap.add_argument("--bot-panel-games", type=int, default=0,
+                    help="每个 canonical 点后追加 8-bot 面板的局数（0=关闭）；"
+                         "用于持续监控 bot 局 rank（human 面板看不出好坏）")
+    ap.add_argument("--bot-panel-seed", type=int, default=620000,
+                    help="8-bot 面板 seed（默认 620000）")
     ap.add_argument("--eval-timeout", type=int, default=2400, help="单次评测超时秒")
     ap.add_argument("--min-free-mib", type=int, default=2500,
                     help="评测卡最低空闲显存（默认 2500 MiB）")

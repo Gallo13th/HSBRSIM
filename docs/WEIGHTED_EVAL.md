@@ -48,6 +48,10 @@
 
 - 看 bot 强度/长局表现：`python scripts/bot_weighted_eval.py --json 90M=runs/bot_curves/ckpt90m.json`
   （或对 `runs/az_stage300m_b01/eval/ckpt_*.pt` 跑 `bot_strength_curves.py` 生成 JSON）。
+- **持续监控（下一 stage/训练完）**：stage monitor 加
+  `--bot-panel-games 96 --bot-panel-seed 620000`，每个 canonical 点后追加一个 8-bot 面板，
+  在仪表盘/曲线里同时显示 `bot_rank/bot_top4/bot_win` 与加权 `bot_w_rank/bot_w_win`。
+  当前 300M run 先不加（用户要求等训练完）；训练结束后再开。
 - 训练侧（下一 stage，opt-in）：batch 已有 `game_ids/episode_ids/turns/ranks`；
   collector 补每局 `final_max_bot_strength`，用同一 `game_weights` 做 per-episode PPO loss
   权重（`--game-weight-mode {off,loss}`，默认 off）。当前 300M stage 不改。
