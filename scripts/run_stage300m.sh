@@ -1,0 +1,76 @@
+#!/bin/bash
+# =============================================================================
+# run_stage300m.sh — Phase-2 Stage-300M launcher（单进程、连续 300M decisions）
+#
+# 起点：runs/az_entity_s73/model.pt + trainer.pt（精确续训: optimizer/updates/LR/RNG）
+# 配方：clean recipe（与 B01/s73 相同的 233 flags；不含 comp_fit/shaping/辅助头）
+# 预算：STOP_DECISIONS=300,000,000（= 300M stage），MINUTES 仅作兜底
+# 评测：训练内 dev 面板每 10M（seed 420000）；canonical 96 局由 stage_monitor.py 每 10M 补
+#
+# 用法（推荐 nohup 常驻）：
+#   nohup bash scripts/run_stage300m.sh > /tmp/stage300m_launch.out 2>&1 &
+#   tail -f runs/az_stage300m_b01/train.log
+#
+# 断点重跑：见 scripts/resume_stage300m.sh
+# =============================================================================
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+ROOT="$(pwd)"
+
+CK="${CK:-runs/az_entity_s73/model.pt}"
+TS="${TS:-runs/az_entity_s73/trainer.pt}"
+OUT="${OUT:-runs/az_stage300m_b01}"
+SEED="${SEED:-27501}"
+STOP_DECISIONS="${STOP_DECISIONS:-300000000}"
+MINUTES="${MINUTES:-1500}"
+PROCESSES="${PROCESSES:-32}"
+THREADS="${THREADS:-2}"
+MINIBATCH="${MINIBATCH:-2048}"
+GRAD_ACCUM="${GRAD_ACCUM:-4}"
+GAMES="${GAMES:-384}"
+GPUS="${GPUS:-3,4,5}"
+DEVICE="${DEVICE:-cuda:0}"
+EVAL_DEVICE="${EVAL_DEVICE:-cuda:1}"
+EVAL_GAMES="${EVAL_GAMES:-96}"
+SNAPSHOT_EVERY="${SNAPSHOT_EVERY:-100}"
+KEEP_SNAPSHOTS="${KEEP_SNAPSHOTS:-8}"
+TAG="${TAG:-az_stage300m_b01}"
+FORCE="${FORCE:-0}"
+
+META="$OUT/meta.txt"
+LOG="$OUT/train.log"
+
+die() { echo "[stage300m] ERROR: $*" >&2; exit 2; }
+
+[ -f "$CK" ] || die "missing checkpoint: $CK"
+[ -f "$TS" ] || die "missing trainer state: $TS"
+[ -f data/real_library/winner_library.jsonl ] || die "missing winner_library.jsonl"
+if pgrep -f 'train_entity_sync.py' >/dev/null 2>&1; then
+  die "another train_entity_sync.py is already running"
+fi
+if [ -e "$OUT" ] && [ -n "$(ls -A "$OUT" 2>/dev/null || true)" ] && [ "$FORCE" != "1" ]; then
+  die "OUT 非空: $OUT（断点重跑请用 scripts/resume_stage300m.sh 或 FORCE=1）"
+fi
+
+# 资源预检（只警告，不阻断；GPU 由用户/环境保证）
+FREE() { nvidia-smi --query-gpu=index,memory.free --format=csv,noheader,nounits 2>/dev/null | \
+  awk -v g="$1" -F', *' '$1==g {print $2}'; }
+for g in ${GPUS//,/ }; do
+  f=$(FREE "$g" || echo 0)
+  [ "${f:-0}" -ge 1500 ] || echo "[stage300m][warn] GPU$g free=${f}MiB (<1500)" >&2
+done
+lf=$(FREE "${DEVICE#cuda:}" || echo 0)
+[ "${lf:-0}" -ge 16000 ] || echo "[stage300m][warn] learner ${DEVICE} free=${lf}MiB (<16000)" >&2
+
+mkdir -p "$OUT"
+echo "[stage300m] start $(date -Is) out=$OUT seed=$SEED stop=$STOP_DECISIONS procs=$PROCESSES threads=$THREADS minibatch=$MINIBATCH accum=$GRAD_ACCUM" | tee -a "$LOG"
+
+# 委托给唯一入口；本脚本只负责 Stage 配置与记录。
+CK="$CK" TS="$TS" OUT="$OUT" SEED="$SEED" STOP_DECISIONS="$STOP_DECISIONS" \
+MINUTES="$MINUTES" PROCESSES="$PROCESSES" THREADS="$THREADS" \
+MINIBATCH="$MINIBATCH" GRAD_ACCUM="$GRAD_ACCUM" GAMES="$GAMES" \
+GPUS="$GPUS" DEVICE="$DEVICE" EVAL_DEVICE="$EVAL_DEVICE" EVAL_GAMES="$EVAL_GAMES" \
+SNAPSHOT_EVERY="$SNAPSHOT_EVERY" KEEP_SNAPSHOTS="$KEEP_SNAPSHOTS" TAG="$TAG" FORCE="$FORCE" \
+bash scripts/train_block_clean.sh >> "$LOG" 2>&1
+
+echo "[stage300m] trainer exited $(date -Is) log=$LOG" | tee -a "$LOG"

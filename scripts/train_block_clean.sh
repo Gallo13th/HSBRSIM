@@ -44,7 +44,13 @@ OUT="${OUT:-runs/az_entity_s73}"
 SEED="${SEED:-27301}"
 STOP_DECISIONS="${STOP_DECISIONS:-20000000}"
 GAMES="${GAMES:-384}"
+MINUTES="${MINUTES:-400}"
+SNAPSHOT_EVERY="${SNAPSHOT_EVERY:-100}"
+KEEP_SNAPSHOTS="${KEEP_SNAPSHOTS:-4}"
 PROCESSES="${PROCESSES:-24}"
+THREADS="${THREADS:-3}"
+MINIBATCH="${MINIBATCH:-1024}"
+GRAD_ACCUM="${GRAD_ACCUM:-8}"
 GPUS="${GPUS:-3,4,5}"
 DEVICE="${DEVICE:-cuda:6}"
 EVAL_DEVICE="${EVAL_DEVICE:-cuda:1}"
@@ -112,8 +118,8 @@ fi
 # ---------------------------------------------------------------- 最终命令（逐字基线：runs/next_block.sh）
 CMD=("$PY" scripts/train_entity_sync.py
   --checkpoint "$CK" --trainer-state "$TS"
-  --device "$DEVICE" --gpus "$GPUS" --processes "$PROCESSES" --threads 3
-  --minutes 400 --seed "$SEED" --stop-at-decisions "$STOP_DECISIONS"
+  --device "$DEVICE" --gpus "$GPUS" --processes "$PROCESSES" --threads "$THREADS"
+  --minutes "$MINUTES" --seed "$SEED" --stop-at-decisions "$STOP_DECISIONS"
   --out "$OUT" --iterations 8000 --games "$GAMES"
   --arch entity --d-model 0 --n-layers 0 --n-heads 0
   --move-head-split 0 --move-guard 1 --move-cap 3 --move-repeat-limit 2
@@ -122,11 +128,11 @@ CMD=("$PY" scripts/train_entity_sync.py
   --behavior-mix-eps 0.0 --behavior-mix-when carrier_or_spell
   --behavior-mix-max-per-turn 6 --behavior-mix-topk 8 --behavior-mix-turns 1
   --behavior-mix-max-ms 500.0 --behavior-mix-exact 1
-  --epochs 1 --minibatch 1024 --lr 1.17e-06 --lr-min-ratio 0.5 --max-updates 3000
+  --epochs 1 --minibatch "$MINIBATCH" --lr 1.17e-06 --lr-min-ratio 0.5 --max-updates 3000
   --clip 0.2 --target-kl 0.02 --lam 0.995 --gamma 1.0
   --adv-estimator gae --power-alpha 0.25 --power-kappa 10.0 --power-normalize 1
   --power-cutoff 0 --credit-timebase decision --baseline-action-dependent 0
-  --max-grad-norm 1.0 --grad-accum 8
+  --max-grad-norm 1.0 --grad-accum "$GRAD_ACCUM"
   --leaf-compile 0 --leaf-amp off --leaf-wait-ms 0.0 --rc-threads 8
   --rust-collector 0 --frozen-seats 0 --trajectory-p 0.0
   --mirror-seats 0 --mirror-p 0.0 --mirror-sample p50 --mirror-seat-random 0
@@ -162,7 +168,7 @@ CMD=("$PY" scripts/train_entity_sync.py
   --gpu-free-check "$GPU_FREE_CHECK" --gpu-free-mib 1024
   --records-dtype fp32 --ipc-mode shm --ipc-shm-slots 2 --collect-sha 0
   --pipeline 1 --pipeline-guard warn --keep-versions 3
-  --snapshot-every 100 --keep-snapshots 4
+  --snapshot-every "$SNAPSHOT_EVERY" --keep-snapshots "$KEEP_SNAPSHOTS"
   --anchor-beta 0.1 --anchor-iterations 100000 --anchor-beta-tail 0.1
   --eval-every-decisions 10000000 --eval-games 96 --eval-seats 8
   --eval-seed-base 420000 --eval-async 1 --eval-device "$EVAL_DEVICE"
