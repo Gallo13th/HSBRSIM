@@ -36,7 +36,8 @@ from hsbg.az.train.infer_search import (  # noqa: E402
     InferSearchPolicy,
 )
 from hsbg.az.train.model import load_checkpoint  # noqa: E402
-from hsbg.az.train.ppo import PPOEvaluator, PPOSelfPlayPolicy  # noqa: E402
+from hsbg.az.train.ppo import PPOEvaluator, PPOSelfPlayPolicy
+from hsbg.eval.metrics import weighted_eval_summary  # noqa: E402
 
 
 #: action aliases for --action-logit-bias (see hsbg/env/action_space_std.py)
@@ -583,8 +584,18 @@ def _play(seed: int, policy, q: dict) -> dict | None:
                 _cb += _buf
     except BaseException:  # noqa: BLE001
         pass
+    try:
+        _fb_all = [json.loads(game.player_json(p)) for p in range(8)]
+        _final_max = max(
+            sum(int(m.get("atk") or 0) + int(m.get("hp") or 0)
+                for m in (pj.get("board") or [])) for pj in _fb_all)
+    except BaseException:  # noqa: BLE001
+        _final_max = None
+    _game_turns = max((int(x["turn"]) for x in turns), default=0)
     return {"placement": int(placements[0]), "death_turn": death_turn,
             "death_strength": death_strength, "turns": turns,
+            "game_turns": int(_game_turns),
+            "final_max_strength": _final_max,
             "carrier_buff": float(_cb), "total_buff": float(_tb),
             "carrier_buff_share": (float(_cb / _tb) if _tb > 0 else None),
             "carrier_turns": int(carrier_turns),
@@ -686,6 +697,11 @@ def main() -> int:
     ap.add_argument("--carrier-audit", type=int, default=1, choices=[0, 1],
                     help="1=面板里带 carrier_encounter_rate / casts_on_carrier_mean / "
                          "r(载体回合数, Σ12)")
+    # ── 加权对局指标（长度 + 终局强度）：0.5/0.5 = 各占一半 ──
+    ap.add_argument("--weight-alpha", type=float, default=0.5,
+                    help="对局长度在权重中的占比（默认 0.5）")
+    ap.add_argument("--weight-beta", type=float, default=0.5,
+                    help="对局强度（终局最强盘面 Σ）在权重中的占比（默认 0.5）")
     # ── 对手强度（人类战团注入）：默认关闭 -> 与旧版逐位一致 ──
     #    与训练采集同一条注入路径（human_board_pool.inject_turn），用于对照
     #    「1 席 vs 2 席」「不同分位」下的存活率 / tier 分布（docs/BOARD_RAMP.md §4）。
@@ -966,6 +982,19 @@ def main() -> int:
     alive_turns = [max((int(x["turn"]) for x in r["turns"] if bool(x.get("alive", True))),
                        default=0) for r in rows]
     game_turns = [max((int(x["turn"]) for x in r["turns"]), default=0) for r in rows]
+    # ── 加权对局指标（长度 + 强度）─────────────────────────────────────────
+    weighted_out = None
+    if rows:
+        try:
+            weighted_out = weighted_eval_summary(
+                [int(r["placement"]) for r in rows],
+                [float(r.get("game_turns") or 0) for r in rows],
+                [float(r.get("final_max_strength") or 0) for r in rows],
+                alpha=float(getattr(args, "weight_alpha", 0.5) or 0.5),
+                beta=float(getattr(args, "weight_beta", 0.5) or 0.5),
+                num_players=8)
+        except BaseException:  # noqa: BLE001 - 加权指标不阻塞主评测
+            weighted_out = None
     max_tiers = [max((int(x["tier"]) for x in r["turns"]), default=0) for r in rows]
     tier_turn_hist: dict[int, int] = {}
     for r in rows:
@@ -989,6 +1018,7 @@ def main() -> int:
     out = {"checkpoint": args.checkpoint, "games": len(rows),
            "policy": args.policy,
            "seed_base": int(args.seed_base),
+           "weighted": weighted_out,
            "placements": [r["placement"] for r in rows],
            "mean_rank": float(np.mean([r["placement"] for r in rows])) if rows else None,
            "top4": float(np.mean([r["placement"] <= 4 for r in rows])) if rows else None,
@@ -1084,7 +1114,7 @@ def main() -> int:
     out.update(_carrier_panel(rows, carrier_ids))
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     json.dump(out, open(args.out, "w"), ensure_ascii=False, indent=2)
-    print(json.dumps({k: out.get(k) for k in (
+    _show = {k: out.get(k) for k in (
         "games", "policy", "move_guard", "mean_rank", "top4", "win", "death_turn_p50",
         "death_strength_p50",
         "moves_per_turn_mean", "moves_per_turn_p90", "moves_per_turn_max",
@@ -1101,8 +1131,12 @@ def main() -> int:
         "r_carrier_turns_str12", "r_carrier_turns_str12_ci95",
         "survive_t12_ratio", "tier_ge4_ratio", "tier_ge4_turn_ratio",
         "max_tier_p50", "learner_turn_p50", "game_turn_p50",
-        "tier_turn_hist", "human_board")},
-        ensure_ascii=False))
+        "tier_turn_hist", "human_board")}
+    if weighted_out is not None:
+        _show["weighted"] = weighted_out["weighted"]
+        _show["weight_n_eff"] = weighted_out["n_eff"]
+        _show["weight_stats"] = weighted_out["weight_stats"]
+    print(json.dumps(_show, ensure_ascii=False))
     return 0
 
 

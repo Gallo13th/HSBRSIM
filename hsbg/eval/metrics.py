@@ -32,6 +32,110 @@ def avg_rank_percentile(ranks: Sequence[int], num_players: int = 8) -> float:
     )
 
 
+def percentile_ranks(values: Sequence[float]) -> List[float]:
+    """平均秩百分位，0（最小）..1（最大）；并列取平均秩。"""
+    n = len(values)
+    if n == 0:
+        return []
+    order = sorted(range(n), key=lambda i: float(values[i]))
+    out = [0.0] * n
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and float(values[order[j + 1]]) == float(values[order[i]]):
+            j += 1
+        r = (i + j) / 2.0
+        for k in range(i, j + 1):
+            out[order[k]] = r
+        i = j + 1
+    denom = float(n - 1) if n > 1 else 1.0
+    return [r / denom for r in out]
+
+
+def game_weights(turns: Sequence[float], strengths: Sequence[float], *,
+                 alpha: float = 0.5, beta: float = 0.5,
+                 floor: float = 0.5, cap: float = 2.0) -> List[float]:
+    """按「对局长度 + 对局强度」给每局一个权重，均值归一到 1。
+
+    - ``turns``：对局长度（回合数）；``strengths``：对局强度（如终局最强盘面 Σ(atk+hp)）。
+    - 两者先在当前 cohort 内转成平均秩百分位（0..1），再 ``alpha*u + beta*v`` 混合。
+    - 原始权重 = floor + (cap-floor) * 混合分，再归一化到均值 1（再 clip 到 [floor, cap]）。
+    - 默认 alpha=beta=0.5：长且强的局权重最高，短且弱的局最低。
+    """
+    n = len(turns)
+    if n == 0:
+        return []
+    if len(strengths) != n:
+        raise ValueError("turns/strengths 长度不一致")
+    u = percentile_ranks(turns)
+    v = percentile_ranks(strengths)
+    raw = [floor + (cap - floor) * (alpha * u[i] + beta * v[i]) for i in range(n)]
+    m = statistics.fmean(raw)
+    w = [x / m for x in raw]
+    # 归一化后再 clip，最后再归一化一次（保持均值≈1）
+    w = [min(cap, max(floor, x)) for x in w]
+    m2 = statistics.fmean(w)
+    return [x / m2 for x in w]
+
+
+def weighted_mean(values: Sequence[float], weights: Sequence[float]) -> float:
+    if not values:
+        return float("nan")
+    if len(values) != len(weights):
+        raise ValueError("values/weights 长度不一致")
+    sw = sum(weights)
+    if sw <= 0:
+        return float("nan")
+    return sum(float(v) * float(w) for v, w in zip(values, weights)) / sw
+
+
+def effective_sample_size(weights: Sequence[float]) -> float:
+    if not weights:
+        return 0.0
+    sw = sum(weights)
+    sw2 = sum(w * w for w in weights)
+    return (sw * sw / sw2) if sw2 > 0 else 0.0
+
+
+def weighted_eval_summary(ranks: Sequence[int], turns: Sequence[float],
+                          strengths: Sequence[float], *, alpha: float = 0.5,
+                          beta: float = 0.5, num_players: int = 8) -> Dict[str, object]:
+    """返回 unweighted / weighted 两套指标 + 权重统计（纯函数，便于评测 JSON 直接落盘）。"""
+    n = len(ranks)
+    if n != len(turns) or n != len(strengths):
+        raise ValueError("ranks/turns/strengths 长度不一致")
+    w = game_weights(turns, strengths, alpha=alpha, beta=beta)
+    top4 = [1.0 if int(r) <= max(1, num_players // 2) else 0.0 for r in ranks]
+    win = [1.0 if int(r) == 1 else 0.0 for r in ranks]
+    out = {
+        "n": int(n),
+        "formula": {"alpha": float(alpha), "beta": float(beta),
+                    "turns": "percentile_rank", "strength": "percentile_rank"},
+        "weights": [round(float(x), 6) for x in w],
+        "n_eff": float(effective_sample_size(w)),
+        "unweighted": {
+            "mean_rank": mean_rank(ranks),
+            "top4": statistics.fmean(top4) if n else float("nan"),
+            "win": statistics.fmean(win) if n else float("nan"),
+            "mean_strength": statistics.fmean(strengths) if n else float("nan"),
+            "mean_turns": statistics.fmean(turns) if n else float("nan"),
+        },
+        "weighted": {
+            "mean_rank": weighted_mean(ranks, w),
+            "top4": weighted_mean(top4, w),
+            "win": weighted_mean(win, w),
+            "mean_strength": weighted_mean(strengths, w),
+            "mean_turns": weighted_mean(turns, w),
+        },
+        "weight_stats": {
+            "min": min(w) if w else None,
+            "max": max(w) if w else None,
+            "mean": statistics.fmean(w) if w else None,
+        },
+    }
+    return out
+
+
 def rank_distribution(ranks: Sequence[int],
                       num_players: int = 8) -> Dict[int, float]:
     dist = {r: 0.0 for r in range(1, num_players + 1)}
