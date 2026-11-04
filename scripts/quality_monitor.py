@@ -589,13 +589,19 @@ def _play(seed: int, policy, q: dict) -> dict | None:
         _final_max = max(
             sum(int(m.get("atk") or 0) + int(m.get("hp") or 0)
                 for m in (pj.get("board") or [])) for pj in _fb_all)
+        # 对局强度只认 bot 席（seat 1..7），排除 learner —— 这是「面对 bot」加权口径。
+        _final_max_bot = max(
+            sum(int(m.get("atk") or 0) + int(m.get("hp") or 0)
+                for m in (pj.get("board") or [])) for pj in _fb_all[1:])
     except BaseException:  # noqa: BLE001
         _final_max = None
+        _final_max_bot = None
     _game_turns = max((int(x["turn"]) for x in turns), default=0)
     return {"placement": int(placements[0]), "death_turn": death_turn,
             "death_strength": death_strength, "turns": turns,
             "game_turns": int(_game_turns),
             "final_max_strength": _final_max,
+            "final_max_bot_strength": _final_max_bot,
             "carrier_buff": float(_cb), "total_buff": float(_tb),
             "carrier_buff_share": (float(_cb / _tb) if _tb > 0 else None),
             "carrier_turns": int(carrier_turns),
@@ -982,14 +988,15 @@ def main() -> int:
     alive_turns = [max((int(x["turn"]) for x in r["turns"] if bool(x.get("alive", True))),
                        default=0) for r in rows]
     game_turns = [max((int(x["turn"]) for x in r["turns"]), default=0) for r in rows]
-    # ── 加权对局指标（长度 + 强度）─────────────────────────────────────────
+    # ── 加权对局指标（长度 + **bot 强度**；只对纯 bot 对局生效）─────────────
+    # 用户口径：加权只用于「面对 bot」的长且强对局；human-board 面板不加权。
     weighted_out = None
-    if rows:
+    if rows and not (hb_pool is not None and float(args.human_board_p) > 0.0):
         try:
             weighted_out = weighted_eval_summary(
                 [int(r["placement"]) for r in rows],
                 [float(r.get("game_turns") or 0) for r in rows],
-                [float(r.get("final_max_strength") or 0) for r in rows],
+                [float(r.get("final_max_bot_strength") or 0) for r in rows],
                 alpha=float(getattr(args, "weight_alpha", 0.5) or 0.5),
                 beta=float(getattr(args, "weight_beta", 0.5) or 0.5),
                 num_players=8)

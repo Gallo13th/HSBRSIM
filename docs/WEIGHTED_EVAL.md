@@ -1,57 +1,54 @@
-# 对局加权的评估（长度 + 强度，2026-11-04）
+# 对局加权的评估（仅用于「面对 bot」的对局，2026-11-04）
 
-> 用户需求：按「对局结束后的回合数长度 + 对局强度」给每局加权，用于精选 batch 或加权打分。
-> 本轮实现**加权打分**（评测侧，不改变训练）；同一个 `game_weights` 可直接接到 PPO 的
-> per-episode loss 权重（见 §5，作为下一 stage 的 opt-in）。
+> 用户澄清：加权只针对**bot 对局**——希望在「存在长且强的 bot」的对局里，模型依旧能赢；
+> **不**把加权口径用于 human-board 高强度面板。本实现已按此收口：
+> canonical（5 席人类盘面）**不加权**；加权只出现在纯 bot 面板与
+> `scripts/bot_weighted_eval.py` 的 bot 对局分析里。
 
-## 1. 权重定义
+## 1. 权重定义（bot 对局）
 
-对同一 cohort（一个评测 panel / 一个 collect batch）内的每局：
+对同一 cohort（一个 bot 面板 / 一个 collect batch）内每局：
 
 - `turns`：对局长度（局末最大回合数）。
-- `strength`：对局强度（**局末全桌最强盘面 Σ(atk+hp)**；canonical 面板含人类盘面，
-  所以数值会是数万，这是「全桌最强」而不是模型自己的身材）。
-- 先转成 cohort 内的**平均秩百分位** `u,v ∈ [0,1]`（并列取平均），
-  `raw = floor + (cap-floor) * (alpha*u + beta*v)`，再归一化到均值 1。
-- 默认 `alpha=beta=0.5`、`floor=0.5`、`cap=2.0`：长且强的局权重最高，短且弱的局最低。
-- 加权指标：`w_mean_rank / w_top4 / w_win / w_mean_strength / w_mean_turns`；
-  同时给 `n_eff = (Σw)² / Σw²`（有效样本量，权重越集中越小）。
+- `strength`：**局末 bot 席（seat 1..7）最强盘面 Σ(atk+hp)**；排除 learner（seat 0），
+  这样加权衡量的是「bot 有多强」，而不是模型自己滚多大。
+- 两者在 cohort 内转成平均秩百分位 `u,v`，`raw = 0.5 + 1.5*(αu + βv)`（默认 α=β=0.5），
+  归一化到均值 1（软 floor/cap 0.5–2.0）。
+- 指标：加权 mean_rank / top4 / win + `n_eff`；另报「长且强」子集
+  （turns 与 bot 强度都在 top 25%）的 win / mean_rank。
 
-## 2. 评测侧实现
+## 2. 实现
 
-- 纯函数：`hsbg/eval/metrics.py` 的 `percentile_ranks / game_weights / weighted_mean /
-  effective_sample_size / weighted_eval_summary`（带单测 `tests/test_eval_metrics_weighted.py`）。
-- `scripts/quality_monitor.py`：每局记录 `game_turns` 与 `final_max_strength`；panel JSON 增加
-  - `weighted`：加权指标（与未加权并列）；
-  - `weight_n_eff` / `weight_stats`（min/max/mean）。
-  - 新参数 `--weight-alpha/--weight-beta`（默认 0.5/0.5）。
-- `scripts/stage_monitor.py`：canonical 点记录 `w_rank/w_top4/w_win/w_strength/w_n_eff`；
-  仪表盘新增「加权点表」；曲线面板 1/2/3 叠加 `w_rank/w_top4/w_strength` 虚线。
-  `points.jsonl` 自动带这些字段（从下一个 10M 点开始）。
+- 纯函数：`hsbg/eval/metrics.py`（`percentile_ranks / game_weights / weighted_mean /
+  effective_sample_size / weighted_eval_summary`），单测
+  `tests/test_eval_metrics_weighted.py`。
+- `scripts/quality_monitor.py`：每局记录 `game_turns` 与 `final_max_bot_strength`；
+  **仅当未开人类盘面注入时**输出 `weighted`（`weighted` / `weight_n_eff` /
+  `weight_stats`）；`--weight-alpha/--weight-beta`。
+- `scripts/bot_weighted_eval.py`：读 `bot_strength_curves` JSON，按最终名次/每局
+  turns+bot 强度计算加权指标与「长且强」子集。
+- canonical/human 面板：**不加权**，stage monitor 也移除了加权列与曲线叠加。
 
-## 3. 130M 样本（96 局 canonical，seed 520000，5 席人类盘面）
+## 3. 32 局 bot 面板结果（seed 830000）
 
-| 指标 | 未加权 | 加权（长度+强度） |
-|---|---:|---:|
-| 130M mean_rank | 6.177 | **6.167** |
-| 130M top4 | 13.54% | **12.32%** |
-| 130M n_eff | 96 | **89.6** |
-| 140M mean_rank | 6.156 | **6.158** |
-| 140M top4 | 17.71% | **17.56%** |
-| 140M n_eff | 96 | **89.9** |
+| ckpt | win | mean_rank | 加权 win | 加权 rank | 长且强 n | 长且强 win | 长且强 rank | 强 bot 子集 win |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| s73 | 46.9% | 2.094 | 40.4% | 2.233 | 4 | 25.0% | 3.00 | 11.1% |
+| stage 40M | 46.9% | 1.906 | 38.3% | 2.064 | 5 | **0.0%** | 2.80 | 0.0% |
+| stage 80M | 21.9% | 2.094 | 22.7% | 2.046 | 4 | 25.0% | 1.75 | 22.2% |
+| stage 90M | 40.6% | 1.875 | 33.7% | 1.972 | 4 | **0.0%** | 2.25 | 11.1% |
 
-⇒ 130M/140M 两个 checkpoint 上加权/未加权几乎一致（rank Δ≤0.01，top4 Δ≤1.2pp），
-说明模型在「长且强」的局里没有明显更好或更差；8 局 bot 小样本里加权 rank 1.786 vs
-未加权 1.625（长/强局更差），样本太小不做结论。两个口径都保留，避免只挑好看的。
+- 加权后 win 从 40–47% 降到 34–40%（s73/40M/90M），**长且强 bot 局 win 只有 0–25%**；
+  强 bot 子集 win 0–22%。即：**模型目前还做不到在长且强的 bot 局里稳定取胜**。
+- 80M 的「长且强 rank 1.75」来自 4 局样本，不可当结论。
+- 32 局里「长且强」只有 4–5 局，噪声大；正式判定建议 128 局 bot 面板。
 
+## 4. 用法
 
-## 4. 结论/用法
-
-- **评估**：默认同时报未加权 + 加权；加权 rank/top4 只作为**补充口径**，不单独用于
-  early-stop（n_eff 会随权重集中而下降）。
-- **训练（下一 stage，opt-in）**：batch 已带 `game_ids/episode_ids/turns/ranks`，
-  只需在 collector 里补每局 `final_max_strength` 并换算 `game_weights`，在 PPO loss 里
-  按 episode 权重乘 policy/value loss（归一化到均值 1）。`--game-weight-mode {off,loss}`
-  默认 off，不影响当前 300M stage。
-- **风险**：强度含人类盘面时是「全桌最强」，不是模型强度；权重会让长/强局占更大比重，
-  需同时看 `n_eff` 与未加权值，防止评测口径漂移。
+- 看 bot 强度/长局表现：`python scripts/bot_weighted_eval.py --json 90M=runs/bot_curves/ckpt90m.json`
+  （或对 `runs/az_stage300m_b01/eval/ckpt_*.pt` 跑 `bot_strength_curves.py` 生成 JSON）。
+- 训练侧（下一 stage，opt-in）：batch 已有 `game_ids/episode_ids/turns/ranks`；
+  collector 补每局 `final_max_bot_strength`，用同一 `game_weights` 做 per-episode PPO loss
+  权重（`--game-weight-mode {off,loss}`，默认 off）。当前 300M stage 不改。
+- 结论：**暂不给 bot 加强化倍数**（k=1）；先让模型在长且强 bot 局里的 win 稳定 >50%，
+  再按 `k ≈ 目标难度` 逐步加。

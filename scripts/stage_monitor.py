@@ -496,10 +496,7 @@ def canonical_eval(run: str, point: int, ckpt_dec: int, ckpt: str,
         rc, _out, err = _run(cmd, cwd=REPO, env=env, timeout=args.eval_timeout)
         sec = time.time() - t0
         d = _valid_panel(out_json) or {}
-    _w = d.get("weighted") or {}
-    _wm = _w.get("weighted") if isinstance(_w.get("weighted"), dict) else _w
-    entry = {
-        "ts": _iso(),
+    entry = {        "ts": _iso(),
         "point_decisions": int(point),
         "ckpt_decisions": int(ckpt_dec),
         "ckpt": ckpt,
@@ -517,11 +514,6 @@ def canonical_eval(run: str, point: int, ckpt_dec: int, ckpt: str,
         "tier_ge5_t15": _num(d.get("tier_ge5_t15")),
         "survive12": _num(d.get("survive_t12_ratio")),
         "tier_p50_t15": _num(d.get("tier_p50_t15")),
-        "w_rank": _num(_wm.get("mean_rank")),
-        "w_top4": _num(_wm.get("top4")),
-        "w_win": _num(_wm.get("win")),
-        "w_strength": _num(_wm.get("mean_strength")),
-        "w_n_eff": _num(d.get("weight_n_eff")),
         "seconds": round(sec, 1),
         "reused": reused,
         "rc": int(rc),
@@ -755,10 +747,6 @@ def draw(run, paths, hist, dev, points, samples, alerts, args, status):
     xs, ys = cser("rank")
     if xs:
         a.plot(xs, ys, "o-", color="tab:blue", label="canonical rank (seed 520000)")
-    xs, ys = _xy(cx, [e.get("w_rank") for e in canon])
-    if xs:
-        a.plot(xs, ys, "s--", color="tab:orange", alpha=0.85,
-               label="canonical w_rank (len+str)")
     xs, ys = _xy(dx, [e["rank"] for e in dev])
     if xs:
         a.plot(xs, ys, "s--", color="tab:red", alpha=0.75, label="dev rank (seed 420000)")
@@ -775,10 +763,6 @@ def draw(run, paths, hist, dev, points, samples, alerts, args, status):
     xs, ys = cser("top4")
     if xs:
         a.plot(xs, [v * 100 for v in ys], "o-", color="tab:green", label="canonical top4%")
-    xs, ys = _xy(cx, [e.get("w_top4") for e in canon])
-    if xs:
-        a.plot(xs, [v * 100 for v in ys], "s--", color="tab:orange", alpha=0.85,
-               label="canonical w_top4%")
     xs, ys = _xy(dx, [e["top4"] for e in dev])
     if xs:
         a.plot(xs, [v * 100 for v in ys], "s--", color="tab:olive", alpha=0.75,
@@ -796,14 +780,6 @@ def draw(run, paths, hist, dev, points, samples, alerts, args, status):
     xs, ys = cser("strength")
     if xs:
         a.plot(xs, ys, "o-", color="tab:orange", label="canonical strength")
-    xs, ys = _xy(cx, [e.get("w_strength") for e in canon])
-    if xs:
-        # 加权 strength 是「局末全桌最强盘面」（含人类盘面，数万），与 learner 出局强度
-        # 不同量纲；用右轴，避免把主轴的 300-350 压扁。
-        a2 = a.twinx()
-        a2.plot(xs, ys, "s--", color="tab:olive", alpha=0.85)
-        a2.set_ylabel("w_strength (game max Σ)", fontsize=7, color="tab:olive")
-        a2.tick_params(labelsize=6, colors="tab:olive")
     if args.baseline_strength:
         a.axhline(args.baseline_strength, color="gray", ls=":", lw=1,
                   label=f"s61 基线 {args.baseline_strength}")
@@ -1082,23 +1058,6 @@ def write_dashboard(run, paths, hist, dev, points, alerts, args, status):
             sec=e.get("seconds"), gpu=e.get("gpu") or "-"))
     if not ok:
         lines.append("| — | 尚无 canonical 点 | | | | | | | | |")
-    lines += [
-        "",
-        "## 加权点表（对局长度 + 终局强度；alpha=beta=0.5）",
-        "",
-        "| 点(M) | w_rank | w_top4 | w_strength | n_eff |",
-        "|---|---|---|---|---|",
-    ]
-    any_w = False
-    for e in ok[-16:]:
-        if e.get("w_rank") is None:
-            continue
-        any_w = True
-        lines.append(f"| {int((e.get('point_decisions') or 0) / 1e6)} | "
-                     f"{_fmt(e.get('w_rank'), 3)} | {_fmt(e.get('w_top4'), 3)} | "
-                     f"{_fmt(e.get('w_strength'), 1)} | {_fmt(e.get('w_n_eff'), 1)} |")
-    if not any_w:
-        lines.append("| — | 尚无加权点（从下一个 canonical 点开始） | | | |")
     lines += [
         "",
         "## dev 面板（训练内，seed 420000）",
