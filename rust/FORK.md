@@ -5,10 +5,10 @@
 | 项 | 值 |
 |---|---|
 | 上游 | `MCG-NJU/AutoTavern` |
-| commit | `fb61201a557ddd36a411cf44aac51ce4d9b606ce`（TavernGym + TavernBench v1.0.0） |
+| commit | `1c2086a997afde46d68c6c5992cab194ddcfce88`（AutoTavern 1.1.0 / TavernGym 1.1.0，Battlegrounds **37.0.2**） |
 | 许可 | MIT（`LICENSE` / `NOTICE` / `CITATION.cff` 原样保留） |
-| 引擎数据 | AutoTavern schema，官方 **37.0.0.255790**（3983 卡） |
-| fork 日期 | 2026-10-26 |
+| 引擎数据 | AutoTavern schema，官方 **37.0.2.256589**（3983 卡，ID 与顺序同 37.0.0） |
+| fork 日期 | 2026-10-26；**2026-11-04 升级到 37.0.2** |
 
 ## 2. 重命名
 
@@ -22,10 +22,11 @@
 
 ## 3. 相对上游的实质改动
 
-1. **数据替换**：`crates/hsbg-engine/data/cards.json` = 37.0.0.255790 AutoTavern schema（3983 卡 = 3695 映射 + 288 compat）；编译期 `include_str!`，换数据后必须 `pip install -e .`。
+1. **数据替换**：`crates/hsbg-engine/data/cards.json` = 上游 37.0.2.256589 数据（3983 卡，ID/顺序同 37.0.0；含上游 37.0.2 的随从/法术/饰品/池/暗赠规则）；编译期 `include_str!`，换数据后必须 `pip install -e .`。
 2. **版本 meta 驱动**：`game_version()` / `server_rules_version()` 读 `cards.json.meta`；`db_info()` / `data_info()` 供一行核对。
 3. **搜索**：新增 `src/search.rs`（逐步 MCTS，PyO3 `mcts_search`）与 `src/turn_search.rs`（回合内搜索；不进入 AZ 主路径）。
-4. **Naga**：移除 HSBRSIM 早期的 Naga 全局过滤；37.0.0.255790 池内保留 1 张 DRAGON/NAGA 双种族卡 `BG32_820`，NAGA 仍不作为大厅种族开放。
+4. **Naga**：默认随机大厅不主动抽 NAGA；显式 `lobby_types` 含 `NAGA` 时按 37.0.2 允许
+   （池内 2 张双种族卡：BG31_330 DEMON/NAGA、BG32_820 NAGA/DRAGON；不再用随机种族替换）。
 5. **构建**：macOS `cargo build --release` 的 `-undefined dynamic_lookup` 链接参数；maturin 兼容。
 6. **回合末场面快照镜像**（新增能力，默认不启用）：`src/snapshot.rs` 的 `Game::apply_turn_snapshots(snaps, advance)` +
    PyO3 `Game.apply_turn_snapshots`（同时暴露只读 `Game.pool_balance()` / `pool_species_violations()` /
@@ -44,9 +45,13 @@
 
 ## 4. 数据
 
-- `data/cards.json` 只允许由 `tools/p2_data/gen_carddb_37.py` 生成；禁止手改。
-- 当前数据版本：`37.0.0.255790`；`game_version()` 实测返回该值。
+- `data/cards.json` 由上游 AutoTavern 37.0.2 发布物提供（3983 卡，ID 与顺序与 37.0.0 相同）；
+  不再由 `tools/p2_data/gen_carddb_37.py` 生成，禁止手改。
+- 当前数据版本：`37.0.2.256589`；`game_version()` 实测返回该值。
 - 换数据：替换 JSON → `cd rust && python -m pip install -e .` → `cargo test --release -p hsbg-engine`。
+- **37.0.2 升级**（2026-11-04）：公开接口不变（245 动作 / 3227+124 观测 / state_json / seed 确定性）；
+  变化集中在随从/法术/饰品数值、池成员、大厅 t7–9 类型保底、Dark Gift 规则与 Kiri's Eclipse/Minion Bait。
+  旧 37.0.0 checkpoint 可直接加载（卡表顺序不变）。
 
 ## 5. 测试/构建
 

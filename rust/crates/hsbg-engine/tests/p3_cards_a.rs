@@ -254,13 +254,13 @@ fn tranquil_meditative_adds_tavern_spell_bonus() {
     g.with_recruit(0, |c| c.cast_spell(0, cid("BG32_835t"), 0, 0, 0));
     let st = &g.players[0].stats;
     assert_eq!((st.spell_atk, st.spell_hp), (1, 1), "+1/+1 this game");
-    // 经酒馆法术 Buff 出口生效：Natural Blessing +2/+1 → 每个共享类型随从 +3/+2。
+    // 经酒馆法术 Buff 出口生效：Natural Blessing 37.0.2 起 +2/+2 → 每个共享类型随从 +3/+3。
     let e = g.players[0].board[0].eid;
     g.with_recruit(0, |c| c.you_cast(0, cid("BG28_845"), 0, e, 0));
     let m = g.players[0].board.iter().find(|m| m.eid == e).unwrap();
     assert_eq!(
         (m.atk, m.max_hp),
-        (4 + 1 + 2, 3 + 1 + 1),
+        (4 + 1 + 2, 3 + 1 + 2),
         "+1/+1 extra applies"
     );
 
@@ -283,16 +283,16 @@ fn fauna_whisperer_casts_natural_blessing_on_neighbors() {
     g.with_recruit(0, |c| {
         c.run_minion_hook(0, fauna, |s| s.end_of_turn, 1, "end of turn")
     });
-    // 每个相邻目标各施放一次 Natural Blessing（+2/+1），共享类型的 3 只都吃到 → +4/+2。
-    assert_eq!(atk_hp(&g, 0, eids[0]), (4 + 4, 3 + 2), "Shell: two casts");
+    // 每个相邻目标各施放一次 Natural Blessing（37.0.2: +2/+2），共享类型的 3 只都吃到 → +4/+4。
+    assert_eq!(atk_hp(&g, 0, eids[0]), (4 + 4, 3 + 4), "Shell: two casts");
     assert_eq!(
         atk_hp(&g, 0, eids[1]),
-        (4 + 4, 9 + 2),
+        (4 + 4, 9 + 4),
         "Fauna itself: two casts"
     );
-    assert_eq!(atk_hp(&g, 0, eids[2]), (4 + 4, 3 + 2), "Shell: two casts");
+    assert_eq!(atk_hp(&g, 0, eids[2]), (4 + 4, 3 + 4), "Shell: two casts");
 
-    // 金色 "twice"：每相邻目标施放 2 次 → +8/+4。
+    // 金色 "twice"：每相邻目标施放 2 次 → +8/+8。
     let mut g = game(15);
     let eids = board(&mut g, 0, &["BG23_002", "BG32_837_G", "BG23_002"]);
     let fauna = eids[1];
@@ -301,17 +301,17 @@ fn fauna_whisperer_casts_natural_blessing_on_neighbors() {
     });
     assert_eq!(
         atk_hp(&g, 0, eids[0]),
-        (4 + 8, 3 + 4),
-        "golden Shell: +8/+4"
+        (4 + 8, 3 + 8),
+        "golden Shell: +8/+8"
     );
     assert_eq!(
         atk_hp(&g, 0, eids[1]),
-        (8 + 8, 18 + 4),
-        "golden Fauna: +8/+4"
+        (8 + 8, 18 + 8),
+        "golden Fauna: +8/+8"
     );
     assert_eq!(
         atk_hp(&g, 0, eids[2]),
-        (4 + 8, 3 + 4),
-        "golden Shell: +8/+4"
+        (4 + 8, 3 + 8),
+        "golden Shell: +8/+8"
     );
 }

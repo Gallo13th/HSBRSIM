@@ -1,9 +1,10 @@
 #![recursion_limit = "256"]
 //! HSbg Engine: a Hearthstone Battlegrounds solo-mode simulator engine with a
 //! reinforcement-learning interface. This is the vendored fork of the TavernGym engine
-//! (AutoTavern, MIT; see `FORK.md`): public API and behaviour are identical to upstream,
-//! only the crate/package names differ. The reported game-data version is read from
-//! `data/cards.json`'s `meta` (so replacing the data file updates it).
+//! (AutoTavern 1.1.0, BG 37.0.2, MIT; see `FORK.md`). Public API and behaviour are otherwise
+//! identical to upstream; only crate/package names and the extra HSBRSIM modules differ.
+//! The reported game-data version is read from `data/cards.json`'s `meta` (so replacing the
+//! data file updates it).
 //!
 //! Module map:
 //! - `cards`   static card database (`data/cards.json`)
@@ -59,12 +60,12 @@ pub use snapshot::{BoardInjectReport, SNAPSHOT_SCHEMA_VERSION, SnapshotReport};
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Hearthstone client build the simulator replicates, as a **fallback**: the authoritative
 /// value is `meta.client_version` of the embedded card data (`data/cards.json`), see
-/// [`game_version`]. The constant keeps upstream's value so a data file without `meta` still
-/// reports a sane version.
-pub const GAME_VERSION: &str = "36.6.3.253932";
+/// [`game_version`]. The constant keeps upstream 37.0.2's value so a data file without
+/// `meta` still reports a sane version.
+pub const GAME_VERSION: &str = "37.0.2.256589";
 /// Server-side rule overlay, as a **fallback**: the authoritative value is
 /// `meta.server_patch` of the embedded card data, see [`server_rules_version`].
-pub const SERVER_RULES_VERSION: &str = "36.6.3";
+pub const SERVER_RULES_VERSION: &str = "37.0.2";
 
 /// Hearthstone client build the embedded card data replicates (`meta.client_version` of
 /// `data/cards.json`), or [`GAME_VERSION`] when the data file carries none.

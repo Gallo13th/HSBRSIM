@@ -113,10 +113,8 @@ impl Game {
         let mut k = cfg.lobby_races;
         optional.push(Races::ABERRATION);
         let forced = cfg.lobby_types.iter().filter_map(|t| {
-            // 37.0.0.255790 只有 1 张 DRAGON/NAGA 双种族池内卡；NAGA 不作为大厅种族开放。
-            if t == "NAGA" {
-                return None;
-            }
+            // 37.0.2：NAGA 与其它类型一样按配置进入大厅（池内 2 张 Naga 卡）。
+            // 默认的随机大厅（lobby_types 为空）仍不主动抽 NAGA；只有显式配置才加入。
             let i = Races::NAMES.iter().position(|n| n == t)?;
             Some(Races(1 << i))
         });
@@ -388,6 +386,7 @@ impl Game {
         pl.freezes_this_turn = 0;
         pl.skipping = false;
         pl.turn_data.clear();
+        pl.tavern_turn_health = 0;
         // Refill: the natural amount plus max-Gold bonuses, capped at 99; Gold gained on top at the
         // start of the turn has no cap.
         pl.gold = (base + pl.max_gold_bonus).min(99) + gold_bonus + pl.gold_next_turn;
@@ -558,7 +557,11 @@ impl Game {
         let offer = self.trinket_offer(p, kind);
         let gold = self.players[p].gold;
         // Nothing affordable: the offer is skipped (an assumption).
-        if offer.is_empty() || offer.iter().all(|t| self.trinket_price(p, *t) > gold) {
+        if offer.is_empty()
+            || offer
+                .iter()
+                .all(|t| self.regular_trinket_price(p, *t) > gold)
+        {
             self.players[p].trinket_pivots = if below { kept } else { Vec::new() };
             self.log(|| format!("p{p}: no affordable trinket, offer skipped"));
             return;
@@ -566,6 +569,7 @@ impl Game {
         if below {
             self.players[p].trinket_pivot_stack.push(kept);
         }
+        self.with_recruit(p, |c| crate::content::prepare_trinket_options(c, 0, &offer));
         self.players[p].pending.push(Pending::Trinket {
             options: offer,
             free: false,
@@ -575,6 +579,20 @@ impl Game {
 
     /// Price of trinket `t` in player `p`'s current offer (pivot options are cheaper).
     pub fn trinket_price(&self, p: PlayerId, t: CardId) -> i32 {
+        let cost = db().get(t).cost;
+        if matches!(
+            self.players[p].pending.last(),
+            Some(Pending::Trinket {
+                replace: Some(_),
+                ..
+            })
+        ) {
+            return cost;
+        }
+        self.regular_trinket_price(p, t)
+    }
+
+    pub(crate) fn regular_trinket_price(&self, p: PlayerId, t: CardId) -> i32 {
         let cost = db().get(t).cost;
         if self.players[p].trinket_pivots.contains(&t) {
             (cost - self.cfg.trinket_pivot_discount).max(0)
@@ -870,7 +888,7 @@ impl Game {
     }
 
     /// `viewer` has fought `other` (or its ghost) this turn: it remembers what it saw.
-    fn note_scouted(&mut self, viewer: PlayerId, other: PlayerId) {
+    pub(crate) fn note_scouted(&mut self, viewer: PlayerId, other: PlayerId) {
         let n = self.players.len();
         let o = &self.players[other];
         let seen = Scouted {

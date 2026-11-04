@@ -70,7 +70,8 @@ fn end_turn_all(g: &mut Game) {
 fn azshara_hero_and_powers_are_registered() {
     let d = db();
     let hero = d.get(cid(AZSHARA));
-    assert!(hero.pools.hero);
+    // 37.0.2 英雄池轮换：Azshara 已不在 hero pool，但卡牌/技能脚本仍需注册。
+    assert!(hero.kind == hsbg_engine::cards::CardKind::Hero);
     assert_eq!(hero.hero_power, Some(cid(AMBITION)));
     // 37.0.0 卡面：主技能 0 费被动、Naga Conquest 1 费主动。
     assert_eq!(d.get(cid(AMBITION)).cost, 0);
@@ -91,14 +92,15 @@ fn azshara_hero_and_powers_are_registered() {
 }
 
 #[test]
-fn naga_lobby_is_ignored_in_current_pool() {
-    // 当前版本没有 Naga 随从池；外部配置强制 NAGA 也必须被忽略。
+fn naga_lobby_is_forced_when_configured() {
+    // 37.0.2：显式配置 NAGA 时按配置进入大厅（池内 2 张 Naga 卡）；
+    // Azshara 已不在英雄池，但不会被 lobby 强制拉回。
     let cfg = RulesConfig {
         lobby_types: vec!["NAGA".to_string()],
         ..RulesConfig::default()
     };
     let g = Game::new(0, cfg);
-    assert!(!g.lobby_races.intersects(Races::NAGA));
+    assert!(g.lobby_races.intersects(Races::NAGA));
     assert!(!g.lobby_heroes().any(|c| c.id == AZSHARA));
 }
 
@@ -108,19 +110,24 @@ fn naga_lobby_gates_naga_pool() {
     let naga_forms = |g: &Game| {
         g.universe
             .iter()
-            .filter(|c| d.get(**c).races == Races::NAGA)
+            .filter(|c| {
+                let r = d.get(**c).races;
+                r != Races::ALL && r.intersects(Races::NAGA)
+            })
             .count()
     };
     let cfg = RulesConfig {
         lobby_types: vec!["NAGA".to_string()],
+        lobby_races: 1,
         ..RulesConfig::default()
     };
     let g = Game::new(0, cfg);
-    assert!(!g.lobby_races.intersects(Races::NAGA));
-    assert_eq!(naga_forms(&g), 0, "当前版本 Naga 不在随从池");
+    assert!(g.lobby_races.intersects(Races::NAGA));
+    assert_eq!(naga_forms(&g), 2, "NAGA 大厅的 2 张双种族 Naga 卡");
 
     let cfg = RulesConfig {
         lobby_types: vec!["MURLOC".to_string()],
+        lobby_races: 1,
         ..RulesConfig::default()
     };
     let g = Game::new(0, cfg);
