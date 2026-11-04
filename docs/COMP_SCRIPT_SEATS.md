@@ -47,15 +47,35 @@ frozen_decisions` 到 collect 顶层（仅确有脚本席时新增键，不改�
 - 96 局 canonical 面板 rank SE≈0.2，`|Δrank|<0.3` 不可分辨；正式判定需 ≥288–384 局。
 - 不改网络、不改奖励、不改 PPO 数学。
 
-## 6. A/B 预注册（Lead 批准后执行）
-- 起点 `runs/az_entity_s73/model.pt`，其余沿用 clean recipe；唯一变量 `--script-seats`：
-  control `0` vs treat `2 --script-comps auto`。
-- 预算：每臂 10M decisions，`--seed 27401`（两臂同 seed）；actors 3,4,5 / learner cuda:6 /
-  eval cuda:1。
-- 主判据 canonical `eval_panel.sh` 96 局 `mean_rank`；次判据 top4 / death_strength_p50 /
-  tier_ge4_ratio / survive_t12_ratio。
-- 判定：`Δrank ≤ -0.3` 且 top4 不降 → 可能有改善（再用 384 局同 seed 复评）；
-  `|Δrank|<0.3` → 无差异（噪声）；`Δrank ≥ +0.3` → 回退（`--script-seats 0`，零影响）。
+## 6. A/B 预注册（2026-11-04 实际执行版）
+- 起点 `runs/az_entity_s73/model.pt` + `trainer.pt`（精确续训）；其余沿用 clean recipe。
+- 唯一变量 `--script-seats`：control `0` vs treat `2 --script-comps D,H`
+  （D=Elemental Azerite、H=Murloc End of Turn；探针 hybrid t15 Σ 314/313，是脚本里最强的两套）。
+- 预算：每臂 10M decisions，`--seed 27401`（两臂同 seed）；actors 3,4,5 / learner cuda:0 /
+  eval cuda:1；`GPU_FREE_CHECK=0`。两臂顺序执行（同一资源条件），代码冻结于 commit `31d61bf`。
+- 主判据：**新 seed 741024、512 局**的 `mean_rank`（起点 s73 也同 seed 复评）；
+  次判据：`top4` / `death_strength_p50` / `tier_ge4_ratio` / `survive_t12_ratio` / `tier_ge5_t15`；
+  另报 canonical 96 局（seed 520000）。
+- 判定：`Δrank ≤ -0.3` 且 top4 不降 → 可能有改善（再 384 局复评）；`|Δrank|<0.3` → 噪声；
+  `Δrank ≥ +0.3` → 回退（`--script-seats 0`，零影响）。10M 是 pilot，不宣称显著性。
+
+## 6.1 执行结果（2026-11-04，详见 [COMP_SCRIPT_AB.md](COMP_SCRIPT_AB.md)）
+
+| 指标 | s73 起点 | control(10M) | treatment(10M) | treat−ctl |
+|---|---:|---:|---:|---:|
+| 512 局 seed741024 rank | 6.232 | 6.324 | 6.258 | **−0.066** |
+| 512 局 strength | 322.0 | 315.5 | 322.0 | +6.5 |
+| 512 局 top4 | 12.70% | 12.89% | 10.74% | −2.15pp |
+| 96 局 seed520000 rank | 6.208 | 6.375 | 6.135 | **−0.240** |
+| 96 局 strength | 347.5 | 300.5 | 362.0 | +61.5 |
+| 采集 dec/s | — | 10,260 | 3,090 | **−3.3×** |
+| illegal / frozen decisions | — | 0 / 0 | 0 / 8.23M | — |
+
+**裁决**：接入正确、无退化；rank 方向偏好但两面板均 |Δ|<0.3（噪声），且 512 局 top4 反向
+⇒ **不宣称改善**。脚本席采集慢 3.3×（逐决策 `view_of`），默认保持 `--script-seats 0`；
+下一轮先优化决策路径再做 ≥1024 对配对 A/B。
+
+
 
 ## 7. Smoke 证据（2026-11-04）
 `train_block_clean.sh --dry-run` 派生命令，只改 `--processes 2 --games 8 --gpus 3,4

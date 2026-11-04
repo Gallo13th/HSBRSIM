@@ -331,6 +331,50 @@
 
 ---
 
+## D-20261104-06 · 固定阵容脚本完整实现（28 套 + V2 决策树）
+
+- **日期**：2026-11-04（commit `5d54814`）
+- **状态**：生效
+- **动机**：用户要求「固定阵容脚本应该完整实现」；此前 `COMPS` 只有 15 套、V2 决策树只对
+  f_dragon 生效、roles.json 的 26 套 implementable 有 13 套未注册。
+- **改动**：`scripts/comp_scripts.py` —— 注册表 15→28（新增 `undead_apm/murloc_scam/
+  aberration_discard/dragon_shield/undead_butcher/quilboar_choose_one/beast_lobster/
+  aberration_deathrattle/pirate_discover/demon_self_damage/elemental_tempest/dragon_kalecgos/
+  pirate_bounty`，core/enabler/trinkets 取 roles.json）；V2 决策树推广到所有套；新增
+  `view_of/comp_keys/reset`；`comp_full_probe.py` 双模式探针。
+- **A/B**：无（实现类改动）。探针：28×2×10 局 = 43,078 决策、非法 0、确定性 28/28；
+  hybrid t15 Σ 62–314、pure 49–86。
+- **数字**：`pytest tests/test_comp_scripts_full.py` 35 passed（22 s）。
+- **结论**：采纳。已知边界：13 套新阵容的成长在战斗内，脚本只实现招募期可执行部分；
+  hybrid 的强度主要来自 bot 兜底。
+- **是否回退**：不回退（旧 15 套语义保留，V2 门槛可用 `exit_on_miss=False` 关闭）。
+- **链接**：[COMP_SCRIPTS_FULL.md](COMP_SCRIPTS_FULL.md)、[COMP_SCRIPTS_V2.md](COMP_SCRIPTS_V2.md)
+
+---
+
+## D-20261104-07 · 固定阵容脚本接入训练：脚本席（对手分布），pilot 无显著差异、默认关闭
+
+- **日期**：2026-11-04（commit `31d61bf`；A/B 结果见 `docs/COMP_SCRIPT_AB.md`）
+- **状态**：生效但**默认关闭**（`--script-seats 0`，opt-in）
+- **动机**：用户要求「正确接入」训练，而不是只做评测参照。选择**对手席**而不是奖励 shaping：
+  comp_fit 已被 D-20261104-02 否决（非 PBRS、2 套可达、T1 无收益），改对手分布不动奖励与
+  PPO 数学，语义最干净。
+- **改动**：`CompOpponentPolicy`（每 seat 独立固定阵容 + hybrid：compx_action→bot fallback）；
+  `--script-seats 0..3 --script-comps auto|D,H`；`frozen_opponent="comp:..."` 走脚本分支；
+  人类战团/镜像/轨迹注入排除脚本席；history 增加 `frozen_decisions`。
+- **A/B**：control vs treatment（2 席 D,H），s73 精确续训，各 10M，seed 27401，同 GPU；
+  512 局新 seed 741024 + 96 局 520000。
+- **数字**：treatment−control：512 局 rank **−0.066**、strength +6.5、top4 −2.15pp；
+  96 局 rank **−0.240**、strength +61.5、survive12 +5.2pp；非法 0。
+  脚本席采集 dec/s 10,260→3,090（**3.3× 慢**，8.23M 脚本决策）。
+- **结论**：接入正确、无退化；方向偏好但两面板均 |Δrank|<0.3 ⇒ **证据不足，不设默认**。
+  先优化逐决策 `view_of` 的成本，再做 ≥1024 对配对 A/B；否则只保留 opt-in。
+- **是否回退**：不启用即零影响（`--script-seats 0` 与旧路径逐位等价）。
+- **链接**：[COMP_SCRIPT_SEATS.md](COMP_SCRIPT_SEATS.md)、[COMP_SCRIPT_AB.md](COMP_SCRIPT_AB.md)、
+  [COMP_SCRIPTS_FULL.md](COMP_SCRIPTS_FULL.md)
+
+---
+
 ## 模板（复制这一段新增）
 
 ```markdown

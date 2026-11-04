@@ -106,3 +106,24 @@ illegal=0 / truncated=0 / restart=0 / OOM=0；in-training eval 2 submitted / 2 c
 产物：`runs/az_entity_s73/REPORT.md`、`runs/eval_panel/az_entity_s73_panel.json`、
 `runs/eval_panel/{s61,s73}_seed740000.json`；panel JSON sha256 见 REPORT。
 
+## 8. 固定阵容脚本（2026-11-04 完整实现 + 脚本席接入）
+
+- **完整实现**（`scripts/comp_scripts.py`，commit `5d54814`）：`COMPS` 15→**28** 套
+  （roles.json 的 26 套 implementable 全覆盖：A–N + f_dragon + 13 套新 key）；V2 决策树对所有套生效
+  （核心窗口退出 `max(8, earliest core tier)`、`_v2_can_roll` hp>20/升后余 3 金、t2/t3–7 曲线升本、
+  核心∪载体∪enabler 不卖、t13+ 撤经济位、饰品按 spec.trinkets）。
+  探针 28 套 ×（hybrid/pure）×10 局：43,078 决策、**非法 0**、确定性 28/28；hybrid t15 Σ 62–314、
+  pure 49–86（纯脚本经济仍弱于 bot 兜底）。产物 `runs/comp_scripts/full_probe.json`、`docs/COMP_SCRIPTS_FULL.md`。
+- **正确接入**（commit `31d61bf`）：`--script-seats 0..3 --script-comps auto|A,C`；脚本席 =
+  `CompOpponentPolicy`（每 seat 独立 CompPolicy、固定阵容、hybrid）作为 lockstep 大厅的对手席
+  （seat 1..N），**只改对手分布，不改奖励/PPO 数学**；人类战团/镜像/轨迹注入均排除脚本席；
+  history 记录 `frozen_opponent/frozen_seats/frozen_decisions`。
+- **pilot A/B**（`docs/COMP_SCRIPT_AB.md`，seed 27401，s73 精确续训，各 10M）：
+  control dec/s 10,260；treatment dec/s 3,090（脚本席 8.23M 决策，**采集 3.3× 慢**，非法 0）。
+  512 局 seed 741024：treatment−control **rank −0.066**、strength +6.5、top4 −2.15pp；
+  96 局 seed 520000：**rank −0.240**、strength +61.5、survive12 +5.2pp。
+  **两面板方向偏好但都在噪声内（|Δ|<0.3），不能宣称改善；也无退化信号。**
+- **默认**：`--script-seats 0`（opt-in）。下一步：优化逐决策 `view_of` 的 CPU 成本
+  （缓存/仅关键决策调用），再做 ≥1024 对配对 A/B。
+
+
