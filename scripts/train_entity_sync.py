@@ -2137,6 +2137,9 @@ def main() -> int:
                     help="前 N 个 iteration 之后保留的 anchor β（stage-3 建议 0.02；0=旧行为）")
     ap.add_argument("--eval-every-decisions", type=int, default=0,
                     help="每累计 N decisions 做一次 C0 评测（0=关闭）")
+    ap.add_argument("--eval-first-decisions", type=int, default=0,
+                    help="断点续训用：本进程第一次评测的 decisions 门槛"
+                         "（默认 0 = 同 --eval-every-decisions；只影响评测时点）")
     ap.add_argument("--eval-games", type=int, default=512)
     ap.add_argument("--eval-seats", type=int, default=8)
     ap.add_argument("--eval-seed-base", type=int, default=420000)
@@ -3791,8 +3794,10 @@ def main() -> int:
     t0 = time.time()
     deadline = t0 + float(args.minutes) * 60.0
     cum_decisions = 0
-    next_eval = (int(args.eval_every_decisions)
-                 if int(args.eval_every_decisions) > 0 else 10 ** 18)
+    _eval_every = int(args.eval_every_decisions)
+    _eval_first = int(getattr(args, "eval_first_decisions", 0) or 0)
+    next_eval = ((_eval_first if _eval_first > 0 else _eval_every)
+                 if _eval_every > 0 else 10 ** 18)
     i = int(start_i)
     end_i = (int(start_i) + int(args.iterations)) if int(args.iterations) > 0 else 0
     last_len = 0.0

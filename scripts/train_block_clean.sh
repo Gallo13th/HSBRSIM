@@ -45,6 +45,7 @@ SEED="${SEED:-27301}"
 STOP_DECISIONS="${STOP_DECISIONS:-20000000}"
 GAMES="${GAMES:-384}"
 MINUTES="${MINUTES:-400}"
+EVAL_FIRST_DECISIONS="${EVAL_FIRST_DECISIONS:-0}"
 SNAPSHOT_EVERY="${SNAPSHOT_EVERY:-100}"
 KEEP_SNAPSHOTS="${KEEP_SNAPSHOTS:-4}"
 PROCESSES="${PROCESSES:-24}"
@@ -170,7 +171,8 @@ CMD=("$PY" scripts/train_entity_sync.py
   --pipeline 1 --pipeline-guard warn --keep-versions 3
   --snapshot-every "$SNAPSHOT_EVERY" --keep-snapshots "$KEEP_SNAPSHOTS"
   --anchor-beta 0.1 --anchor-iterations 100000 --anchor-beta-tail 0.1
-  --eval-every-decisions 10000000 --eval-games 96 --eval-seats 8
+  --eval-every-decisions 10000000 --eval-first-decisions "$EVAL_FIRST_DECISIONS" \
+  --eval-games 96 --eval-seats 8
   --eval-seed-base 420000 --eval-async 1 --eval-device "$EVAL_DEVICE"
   --eval-drain 1 --eval-stop-mean-rank 0.0
   --eval-panel human --eval-human-quantile auto --eval-human-baseline-bot 0

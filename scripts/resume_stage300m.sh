@@ -52,9 +52,14 @@ fi
 echo "[resume] latest snapshot: $SNAP"
 
 REMAIN=$((TARGET - DONE))
+# 评测对齐：下一次评测落在全局 10M 的整数倍上（本进程第一次评测门槛 = NEXT - DONE）。
+NEXT=$(( (DONE / 10000000 + 1) * 10000000 ))
+FIRST_EVAL=$((NEXT - DONE))
 MINUTES=$(( REMAIN / 8000 / 60 + 90 ))   # 按 8k dec/s 保守估计 + 90min 余量
-echo "[resume] remaining=${REMAIN} minutes_guard=${MINUTES}"
+SEED="${SEED:-27502}"                    # 换 RNG 流以避开导致上次崩溃的极端局面
+echo "[resume] remaining=${REMAIN} minutes_guard=${MINUTES} next_eval_at=${NEXT} first_eval=${FIRST_EVAL} seed=${SEED}"
 
-CK="$SNAP/model.pt" TS="$SNAP/trainer.pt" OUT="$OUT" FORCE=1 \
+CK="$SNAP/model.pt" TS="$SNAP/trainer.pt" OUT="$OUT" FORCE=1 SEED="$SEED" \
 STOP_DECISIONS="$REMAIN" MINUTES="$MINUTES" TAG="${TAG:-az_stage300m_b01}" \
+EVAL_FIRST_DECISIONS="$FIRST_EVAL" \
 bash scripts/run_stage300m.sh
