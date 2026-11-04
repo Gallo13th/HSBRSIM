@@ -400,6 +400,31 @@
 
 ---
 
+## D-20261104-09 · 固定阵容脚本获准作为 PPO 对手；下一 stage 默认 2 席
+
+- **日期**：2026-11-04（8 席全脚本对弈测试后）
+- **状态**：生效（作为下一 stage 的对手分布方案；当前 300M stage 保持 clean）
+- **动机**：用户判断「脚本强度可靠，可用于 PPO 训练的对手」。证据：
+  - 8 席全脚本 50 局（`docs/EIGHT_SCRIPT_BOTS.md`）：冠军终局强度 p50 **1268**、p90 1960、
+    max 2558；8 引擎 bot 对照 p50 1311、p90 3876、max 14576 ⇒ **中位相当、脚本尾部更紧**；
+  - 脚本冠军 p50=7 只/tier 6，与 bot 一致；脚本局没有 bot 那种 10k+ 极端滚雪球。
+- **改动/计划**：
+  1. **下一 stage**（300M 完成后或另起）默认 `--script-seats 2 --script-comps auto`
+     （或显式 D,H）；其它 recipe 不变。
+  2. 当前 `runs/az_stage300m_b01`（35M/300M）**保持 clean（0 席）**：该 stage 的 10M 曲线是
+     基准，跑中途改对手分布会使曲线不可解释；且脚本席当前实现有 **3.3× 采集开销**
+     （`docs/COMP_SCRIPT_AB.md`：10,260 → 3,090 dec/s），直接加入会把 ETA 从 ~9h 拉到 ~30h。
+  3. 启用前先做决策路径优化：快速 view（`player_json` 直读：3.79→0.445 ms/call，8.5×）仍需
+     补齐 shop 解包/价格字段；或改为「每回合只在前 k 个决策调用脚本 + bot 收尾」。
+- **A/B**：无新 A/B（用户明确当前不做 A/B）。既有 pilot A/B 结果：treatment（2 席 D,H）
+  512 局 rank −0.066、96 局 −0.240（噪声内，无退化）。
+- **结论**：采纳为**后续 stage 的对手方案**；当前 stage 不中途切换。
+- **是否回退**：`--script-seats 0` 即回到纯 bot 对手（与旧路径逐位等价）。
+- **链接**：[EIGHT_SCRIPT_BOTS.md](EIGHT_SCRIPT_BOTS.md)、[COMP_SCRIPT_SEATS.md](COMP_SCRIPT_SEATS.md)、
+  [COMP_SCRIPT_AB.md](COMP_SCRIPT_AB.md)、[ROADMAP.md](ROADMAP.md) P3
+
+---
+
 ## 模板（复制这一段新增）
 
 ```markdown
