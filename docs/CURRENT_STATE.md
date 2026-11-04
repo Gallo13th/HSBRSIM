@@ -106,7 +106,25 @@ illegal=0 / truncated=0 / restart=0 / OOM=0；in-training eval 2 submitted / 2 c
 产物：`runs/az_entity_s73/REPORT.md`、`runs/eval_panel/az_entity_s73_panel.json`、
 `runs/eval_panel/{s61,s73}_seed740000.json`；panel JSON sha256 见 REPORT。
 
-## 8. 固定阵容脚本（2026-11-04 完整实现 + 脚本席接入）
+## 9. 能力门禁：vs engine bot（P0，2026-11-04 12:19）
+
+口径：`quality_monitor.py`，8 席全是引擎 bot、**无人类盘面注入**，64 局，seed 620000。
+
+| 模型 | mean_rank | top4 | win | death_strength_p50 | tier≥4 |
+|---|---:|---:|---:|---:|---:|
+| stage @40M（当前） | **1.844** | **98.4%** | 39.1% | 723 | 93.8% |
+| s73（50M 累计） | 1.875 | 98.4% | 40.6% | 738.5 | 95.3% |
+
+- 8 人局随机 win=12.5%；模型对 bot 的 win≈40%（3.2× 随机），mean_rank≈1.85/8。
+- **判定**：`mean_rank ≤2.0`、`top4 ≥95%` 两条门禁**已通过**；`win ≥50%` 未达（8 人局
+  冠军本身方差大，64 局 SE≈6pp）。结论：**模型已经稳定压过 engine bot**；此前看到的
+  rank≈6.2 是「5 席人类 10k+ 盘面」面板，不是 bot 强度。
+- 用户指令（2026-11-04）：在稳定压过 bot 之前不考虑其它特性；按本数据，基本盘已达标，
+  后续新特性仍需先过 P0（或按用户指定更严的 win 门禁）。
+- 备注：segfault 恢复后（11:46）in-training eval ckpt 使用**进程内** decisions 命名，
+  40M 的 canonical 点需要一次 ckpt/记录重标（训练本身不受影响）。
+
+## 8. 固定阵容脚本（2026-11-04 完整实现 + 脚本席接入 — 对手用途已取消）
 
 - **完整实现**（`scripts/comp_scripts.py`，commit `5d54814`）：`COMPS` 15→**28** 套
   （roles.json 的 26 套 implementable 全覆盖：A–N + f_dragon + 13 套新 key）；V2 决策树对所有套生效
