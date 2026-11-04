@@ -798,7 +798,12 @@ def draw(run, paths, hist, dev, points, samples, alerts, args, status):
         a.plot(xs, ys, "o-", color="tab:orange", label="canonical strength")
     xs, ys = _xy(cx, [e.get("w_strength") for e in canon])
     if xs:
-        a.plot(xs, ys, "s--", color="tab:olive", alpha=0.85, label="canonical w_strength")
+        # 加权 strength 是「局末全桌最强盘面」（含人类盘面，数万），与 learner 出局强度
+        # 不同量纲；用右轴，避免把主轴的 300-350 压扁。
+        a2 = a.twinx()
+        a2.plot(xs, ys, "s--", color="tab:olive", alpha=0.85)
+        a2.set_ylabel("w_strength (game max Σ)", fontsize=7, color="tab:olive")
+        a2.tick_params(labelsize=6, colors="tab:olive")
     if args.baseline_strength:
         a.axhline(args.baseline_strength, color="gray", ls=":", lw=1,
                   label=f"s61 基线 {args.baseline_strength}")
