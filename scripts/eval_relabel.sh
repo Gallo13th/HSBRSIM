@@ -8,23 +8,28 @@ cd /home/data/users/gaoletian/projects/HSBRSIM || exit 1
 OFFSET="${1:-34980549}"
 SINCE="${2:-2026-11-04 11:46:00}"
 DIR=runs/az_stage300m_b01/eval
-MARK="$DIR/.relabeled"
-touch "$MARK"
+MARK="$DIR/.relabeled"          # 已处理过的文件名（local 或 global）
+CREATED="$DIR/.relabeled_global" # 由本脚本创建的 global 文件名
+touch "$MARK" "$CREATED"
 
 while true; do
-  # only post-resume local ckpts (mtime after resume), not yet processed
   while IFS= read -r f; do
     base=$(basename "$f")
-    [ "$base" = "$(basename "$f")" ] || continue
     grep -qxF "$base" "$MARK" && continue
+    grep -qxF "$base" "$CREATED" && { echo "$base" >> "$MARK"; continue; }
     local_dec=$(echo "$base" | sed -n 's/^ckpt_0*\([0-9][0-9]*\)\.pt$/\1/p')
     [ -n "$local_dec" ] || { echo "$base" >> "$MARK"; continue; }
-    # 已经带全局名（decisions 很大）的跳过
-    if [ "$local_dec" -ge "$OFFSET" ]; then echo "$base" >> "$MARK"; continue; fi
+    # 注意：不能因为 local_dec >= OFFSET 就跳过——resume 后 local 35M > offset 34.98M
+    # 也是合法 local 名；只靠 CREATED 集合区分本脚本创建的 global 名。
     global=$((local_dec + OFFSET))
     gname=$(printf "ckpt_%09d.pt" "$global")
     if [ ! -e "$DIR/$gname" ]; then
-      ln "$f" "$DIR/$gname" 2>/dev/null && echo "[relabel] $base -> $gname"
+      ln "$f" "$DIR/$gname" 2>/dev/null && {
+        echo "[relabel] $base -> $gname"
+        echo "$gname" >> "$CREATED"
+      }
+    else
+      echo "$gname" >> "$CREATED"
     fi
     echo "$base" >> "$MARK"
   done < <(find "$DIR" -maxdepth 1 -name 'ckpt_*.pt' -newermt "$SINCE" -type f 2>/dev/null | sort)

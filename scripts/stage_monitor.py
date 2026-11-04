@@ -388,16 +388,33 @@ class History:
         return self.series("cum_m")
 
 
-def load_dev_evals(run: str):
-    """训练内 dev 面板（seed 420000）的历次 eval 记录。"""
+def load_dev_evals(run: str, offset: int = 0, offset_from_index: int = 0,
+                   resume_epoch: float = 0.0):
+    """训练内 dev 面板（seed 420000）的历次 eval 记录。
+
+    断点续训后 eval/history.json 新条目用**进程内** decisions（从 0 开始），且文件按
+    decisions 排序，续训前后的条目会交错（5M,10M,15M,20M...），不能用 index 区分。
+    这里按 eval ckpt 的 mtime 判断：mtime >= resume_epoch 的条目是续训后产生的，
+    加全局 offset。``offset_from_index`` 仅在没给 resume_epoch 时作为回退。
+    """
     d = _read_json(os.path.join(run, "eval", "history.json")) or {}
     out = []
-    for e in d.get("evals") or []:
+    for i, e in enumerate(d.get("evals") or []):
         if not isinstance(e, dict):
             continue
         dec = _num(e.get("decisions"))
         if dec is None:
             continue
+        if offset:
+            add = i >= int(offset_from_index)
+            if resume_epoch:
+                ck = os.path.join(run, "eval", f"ckpt_{int(dec):09d}.pt")
+                try:
+                    add = os.path.isfile(ck) and os.path.getmtime(ck) >= float(resume_epoch)
+                except OSError:
+                    add = False
+            if add:
+                dec = float(dec) + float(offset)
         out.append({
             "decisions": dec,
             "rank": _num(e.get("human_mean_rank")),
@@ -1240,6 +1257,12 @@ def build_args(argv=None):
     ap.add_argument("--poll", type=int, default=30, help="主循环轮询秒")
     ap.add_argument("--system-every", type=int, default=60, help="系统采样间隔秒")
     ap.add_argument("--redraw-every", type=int, default=300, help="重绘间隔秒")
+    ap.add_argument("--dev-offset", type=int, default=0,
+                    help="断点续训后 dev eval 的全局 offset（0=不改）")
+    ap.add_argument("--dev-offset-from-index", type=int, default=0,
+                    help="从第几条 eval 记录开始加 offset（无 resume_epoch 时的回退）")
+    ap.add_argument("--dev-resume-epoch", type=float, default=0.0,
+                    help="续训开始时刻的 epoch；eval ckpt mtime>=它则视为续训后条目")
     ap.add_argument("--ckpt-wait", type=int, default=300, help="等 ckpt 最长秒数")
     ap.add_argument("--gpu-wait", type=int, default=600, help="等空闲评测卡最长秒数")
     ap.add_argument("--once", action="store_true", help="只跑一轮后退出")
@@ -1283,7 +1306,8 @@ def main(argv=None) -> int:
         os.makedirs(os.path.dirname(os.path.abspath(paths[key])) or ".", exist_ok=True)
 
     hist = History(os.path.join(run, "history.jsonl")).load_all()
-    dev = load_dev_evals(run)
+    dev = load_dev_evals(run, args.dev_offset, args.dev_offset_from_index,
+                     args.dev_resume_epoch)
     points = Points(paths["points"])
     alerts = Alerts(paths["alerts"])
     sampler = SystemSampler()
@@ -1309,7 +1333,8 @@ def main(argv=None) -> int:
         hist.poll()
         # dev 面板是训练内异步评测写 eval/history.json；必须每轮重读，
         # 否则启动时还没有 eval 就会永远显示 0 次（2026-11-04 修复）。
-        dev = load_dev_evals(run)
+        dev = load_dev_evals(run, args.dev_offset, args.dev_offset_from_index,
+                     args.dev_resume_epoch)
         trainers = check_alerts(run, hist, dev, alerts, state, args)
         if not args.no_eval:
             process_points(run, hist, points, alerts, args)
