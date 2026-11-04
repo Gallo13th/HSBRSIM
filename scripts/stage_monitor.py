@@ -674,6 +674,20 @@ def _xy(xs, ys):
 
 
 def _empty(ax, msg="无数据"):
+    """没有数据序列时才提示；参考线（axhline，无 marker）不算数据。
+
+    2026-11-04 修复：此前用「最后一个 series 为空」判断，canonical 有点但 dev 未出时
+    会误显示「无数据」，并把提示文字压在第一个点上。
+    """
+    for line in ax.lines:
+        try:
+            marker = line.get_marker()
+        except Exception:
+            continue
+        if marker not in (None, "", "None", " "):
+            return
+    if getattr(ax, "collections", None):
+        return
     ax.text(0.5, 0.5, msg, ha="center", va="center", fontsize=10, color="gray",
             transform=ax.transAxes)
 
@@ -1293,6 +1307,9 @@ def main(argv=None) -> int:
     last_sys = 0.0
     while True:
         hist.poll()
+        # dev 面板是训练内异步评测写 eval/history.json；必须每轮重读，
+        # 否则启动时还没有 eval 就会永远显示 0 次（2026-11-04 修复）。
+        dev = load_dev_evals(run)
         trainers = check_alerts(run, hist, dev, alerts, state, args)
         if not args.no_eval:
             process_points(run, hist, points, alerts, args)

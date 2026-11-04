@@ -46,8 +46,20 @@ nohup python scripts/stage_monitor.py --run runs/az_stage300m_b01 \
 bash scripts/resume_stage300m.sh    # 从最新 snapshot 精确续训；按已完成 decisions 计算剩余预算
 ```
 
-## 5. 吞吐与 ETA
+## 5. 吞吐与 ETA（实测，2026-11-04 10:42）
 
-基准（`docs/THROUGHPUT_300M.md`）：C 臂 8.9k dec/s；实测本 run 稳态 9.5–10.1k dec/s。
-300M ≈ **8.3–9.5 h**（含每 10M 的 dev + canonical 评测）；预计 2026-11-04 19:00–20:00 完成。
-外部负载（songwei 等）会带来 ±10–20% 波动。
+基准（`docs/THROUGHPUT_300M.md`）：C 臂稳态 8.9k dec/s（当时的机器负载下）。
+**本 run 实测**：前 10M 用时 ~34 min（含 ~4 min 启动），端到端 ≈ 5.5–7.5k dec/s，
+随外部负载波动；collect 侧 9.5–10.1k，update ~9.6s/iter 是主要瓶颈（pipeline 部分重叠）。
+按 ~7k 计，300M ≈ **11–15 h**，预计 **2026-11-05 凌晨** 完成（含每 10M 的 dev+canonical 评测）。
+
+### 5.1 第一个 10M 点（canonical，96 局 / seed 520000 / 5 席 p0.9 / full）
+
+| 点 | ckpt | rank | top4 | strength | tier≥4 | tier≥5@t15 | survive12 | 用时 | GPU |
+|---|---|---|---:|---:|---:|---:|---:|---:|---|
+| 10M | `ckpt_010026397.pt` | 6.271 | 12.5% | 287.5 | 60.4% | 4.69% | 13.5% | 176.5s | cuda:7 |
+
+训练内 dev 面板（seed 420000，96 局）：rank 6.385 / top4 10.4%。
+（10M 是 stage 早期的单点，与 s73 基线的比较需看后续 20M/30M… 点。）
+
+
