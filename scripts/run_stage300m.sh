@@ -45,7 +45,7 @@ die() { echo "[stage300m] ERROR: $*" >&2; exit 2; }
 [ -f "$CK" ] || die "missing checkpoint: $CK"
 [ -f "$TS" ] || die "missing trainer state: $TS"
 [ -f data/real_library/winner_library.jsonl ] || die "missing winner_library.jsonl"
-if pgrep -f 'train_entity_sync.py' >/dev/null 2>&1; then
+if pgrep -u "$(id -un)" -f 'train_entity_sync[.]py' >/dev/null 2>&1; then
   die "another train_entity_sync.py is already running"
 fi
 if [ -e "$OUT" ] && [ -n "$(ls -A "$OUT" 2>/dev/null || true)" ] && [ "$FORCE" != "1" ]; then
@@ -70,7 +70,8 @@ CK="$CK" TS="$TS" OUT="$OUT" SEED="$SEED" STOP_DECISIONS="$STOP_DECISIONS" \
 MINUTES="$MINUTES" PROCESSES="$PROCESSES" THREADS="$THREADS" \
 MINIBATCH="$MINIBATCH" GRAD_ACCUM="$GRAD_ACCUM" GAMES="$GAMES" \
 GPUS="$GPUS" DEVICE="$DEVICE" EVAL_DEVICE="$EVAL_DEVICE" EVAL_GAMES="$EVAL_GAMES" \
-SNAPSHOT_EVERY="$SNAPSHOT_EVERY" KEEP_SNAPSHOTS="$KEEP_SNAPSHOTS" TAG="$TAG" FORCE="$FORCE" \
+SNAPSHOT_EVERY="$SNAPSHOT_EVERY" KEEP_SNAPSHOTS="$KEEP_SNAPSHOTS" TAG="$TAG" \
+FORCE=1 \
 bash scripts/train_block_clean.sh >> "$LOG" 2>&1
 
 echo "[stage300m] trainer exited $(date -Is) log=$LOG" | tee -a "$LOG"

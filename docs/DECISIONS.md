@@ -375,6 +375,31 @@
 
 ---
 
+## D-20261104-08 · Stage-300M：单进程连续 300M PPO（吞吐配置 C；配方只改预算）
+
+- **日期**：2026-11-04 10:05 启动（`runs/az_stage300m_b01`）
+- **状态**：生效（长跑中）
+- **动机**：用户要求「优化吞吐之后再次开始 300M/stage 预期的大规模 PPO 训练，每 10M 计点绘图」。
+  此前所有 run 都是 20M 小块串行（且复评/记账有 bug）；需要一个连续 stage 检验缩放。
+- **改动**：
+  - 吞吐：4 臂基准（`docs/THROUGHPUT_300M.md`）选 **C**：32 procs / threads 2 / minibatch 2048 /
+    grad-accum 4（有效 batch 8192），端到端 +18% vs 24/3/1024×8；瓶颈已转 update。
+  - 预算：`--stop-at-decisions 300,000,000`，单进程连续；`--minutes 1500` 兜底；`--snapshot-every 100`
+    保留 8 份（崩溃可精确续训，`scripts/resume_stage300m.sh`）。
+  - 其余与 clean recipe 逐字相同（anchor 0.1 常数、max-updates 3000、lr-min 0.5、无 shaping/辅助头）。
+  - 监控：`scripts/stage_monitor.py` 每 10M 用 `eval_panel.sh`（96 局/seed 520000/5 席 p0.9/full）
+    打 canonical 点 + 16 面板 `curves.png` + `dashboard.md` + 60s 系统指标 + 告警。
+- **A/B**：无（用户明确当前不再做 A/B；本轮只改预算与吞吐参数，不改算法/奖励）。
+- **数字**：实测稳态 9.5–10.1k dec/s；300M ≈ 8.3–9.5 h（含每 10M 评测）。基准 C 8.9k dec/s。
+- **结论**：采纳。**已知限制**：anchor β=0.1 在整段保持（`anchor_iterations=100000`），
+  astra 认为 anchor 可能支配梯度；本轮不做 A/B，监控 `anchor_kl/entropy`，若出现平台/坍缩则
+  下一 stage 用 snapshot 回滚并改调度。
+- **是否回退**：回滚到 s73（`runs/az_entity_s73/model.pt`）；停跑 `pkill -f train_entity_sync`（需 Lead 批准）。
+- **链接**：[STAGE300M_RUN.md](STAGE300M_RUN.md)、[THROUGHPUT_300M.md](THROUGHPUT_300M.md)、
+  [STAGE300M_MONITOR.md](STAGE300M_MONITOR.md)
+
+---
+
 ## 模板（复制这一段新增）
 
 ```markdown
