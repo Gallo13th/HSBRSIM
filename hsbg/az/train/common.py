@@ -23,7 +23,7 @@ OBS_FLOATS = 3227
 OBS_CARDS = 124
 N_PLAYERS = 8
 N_RANKS = 8
-DATA_VERSION = "37.0.0.255790"
+DATA_VERSION = "37.0.2.256589"
 
 # ── 245 动作分段（闭区间，含端点）────────────────────────────────────────
 # EndTurn=0, Refresh=1, Freeze=2, Upgrade=3, HeroPower=4..5, DarkGift=6,
