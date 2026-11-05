@@ -453,7 +453,9 @@
   其中 3 席照旧 human-board 注入）。其余配方与 B03 逐字一致（单变量）。
   `train_block_clean.sh` / `run_stage300m.sh` 新增 `FROZEN_SEATS` / `FROZEN_OPPONENT` 环境变量（空=旧行为逐位一致）。
 - **A/B**：无并行双臂；与 B03（同 300M 预算、同课程、同评测口径）作历史对照，判据 ≥768 局。
-- **数字（待）**：吞吐实测 9.0s → **12.5s/iter**（≈5.6k dec/s，−35%），ETA ≈15h；
+- **数字**：吞吐（5 分钟 pilot，见 THROUGHPUT_300M.md §5）：3 卡 **5288 dec/s / 13.2 s/iter**；
+  **4 卡（3,4,5,6）6366 dec/s / 11.0 s/iter（+20%，采纳）**；`--leaf-wait-ms 3`（5154）与 `--processes 48`（5220）均负收益。
+  ETA ≈13–14h；
   判据：长强 win ≥26.7%（n≥24）、bot rank ≤1.75、human 不劣化 >0.10。
 - **为什么不 `--opponent self`**：7 席全冻结 ≈ **慢 25×**（每席位每决策一次 net forward），300M 不可行。
 - **结论**：进行中；若 200M 仍无长强改善，下一步 `FROZEN_SEATS=3` 或改「每 75M 一阶梯刷新冻结 ckpt」。

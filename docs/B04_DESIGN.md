@@ -35,8 +35,9 @@ FROZEN_OPPONENT=runs/az_stage300m_b03/model.pt   # 起跑时与 learner 同代�
 ### 为什么不用 `--opponent self`（8 席全自对弈）
 
 `--frozen-seats` 的帮助文本已经量化过：**7 席全冻结 ≈ 慢 25×**（每个席位每次决策都要一次 net forward），
-300M 会从 ~15h 变成数天。`--frozen-seats 2` 的代价实测约 **−35% 吞吐**（9s→12.5s/iter，≈5.6k dec/s），
-是当前唯一可行的「对手升级」形态。
+300M 会从 ~15h 变成数天。`--frozen-seats 2` 的代价实测约 **−30% 吞吐**（3 卡 5288 dec/s → 4 卡 6366 dec/s，
+见 [THROUGHPUT_300M.md](THROUGHPUT_300M.md) §5），是当前唯一可行的「对手升级」形态。
+B04 默认使用 **actor 卡 3,4,5,6（4 张）**；`--leaf-wait-ms` 与 `--processes 48` 实测均为负收益。
 
 ### 联赛阶梯（下一步，不在本 run 内）
 

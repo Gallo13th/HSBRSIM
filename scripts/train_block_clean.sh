@@ -60,6 +60,9 @@ COMP_FIT_T9_BONUS="${COMP_FIT_T9_BONUS:-0}"
 COMP_TRINKET_COEF="${COMP_TRINKET_COEF:-0}"
 # 0 = 不按「已用显存 > 阈值」剔除 actor 卡（默认；邻居只占 5GB 时仍可用）
 GPU_FREE_CHECK="${GPU_FREE_CHECK:-0}"
+# leaf 批等待（ms）：0=不等待（默认，旧行为逐位等价）；>0 让并发 worker 的叶子评估攒批，
+# 提高 GPU batch_fill（吞吐优化，不影响算法）。见 docs/THROUGHPUT_300M.md
+LEAF_WAIT_MS="${LEAF_WAIT_MS:-0.0}"
 # 固定阵容脚本席（1..3；0=关闭）。脚本席 = hybrid 对手：阵容动作优先、其余引擎 bot 兜底。
 SCRIPT_SEATS="${SCRIPT_SEATS:-0}"
 SCRIPT_COMPS="${SCRIPT_COMPS:-auto}"
@@ -138,7 +141,7 @@ CMD=("$PY" scripts/train_entity_sync.py
   --adv-estimator gae --power-alpha 0.25 --power-kappa 10.0 --power-normalize 1
   --power-cutoff 0 --credit-timebase decision --baseline-action-dependent 0
   --max-grad-norm 1.0 --grad-accum "$GRAD_ACCUM"
-  --leaf-compile 0 --leaf-amp off --leaf-wait-ms 0.0 --rc-threads 8
+  --leaf-compile 0 --leaf-amp off --leaf-wait-ms "$LEAF_WAIT_MS" --rc-threads 8
   --rust-collector 0 --frozen-seats "$FROZEN_SEATS" --trajectory-p 0.0
   --mirror-seats 0 --mirror-p 0.0 --mirror-sample p50 --mirror-seat-random 0
   --human-boards data/real_library/winner_library.jsonl

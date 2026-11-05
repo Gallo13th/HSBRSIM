@@ -62,3 +62,23 @@ $PY scripts/train_entity_sync.py \
 ```
 产物：`runs/_bench300_{A,B,C,D}/`（各 ~503 MB：history.jsonl / train.log / summary.json /
 model.pt / trainer.pt / _nvidia_smi.csv / _arm.csv），保留供核查。
+
+---
+
+## 5. B04 冻结对手席下的吞吐（2026-11-06）
+
+背景：B04 让 2 个 bot 席由冻结 net 驱动（每席每决策一次 forward），actor 侧算力需求从「1 席 net」变成「3 席 net」，
+基线吞吐从 B03 的 ~7.4k dec/s 掉到 **5.3k dec/s**。用 5 分钟 pilot 扫了三类旋钮（只改吞吐，不改算法）：
+
+| 配置 | actor 卡 | dec/s | s/iter | 结论 |
+|---|---|---:|---:|---|
+| P32 T2 wait0（基线） | 3,4,5 | **5288** | 13.20 | 参照 |
+| P32 T2 wait3 | 3,4,5 | 5154 | 13.50 | ❌ `--leaf-wait-ms` 攒批无效（宿主 CPU 抢不过隔壁作业） |
+| P32 T2 wait10 | 3,4,5 | — | — | 未跑（wait3 已负收益） |
+| **P32 T2 wait0** | **3,4,5,6** | **6366** | **11.00** | ✅ **+20%**，采纳为 B04 默认 |
+| P48 T2 wait3 | 3,4,5,6 | 5220 | 13.38 | ❌ 48 procs 在 load 100+ 的宿主上反而更慢 |
+
+- 结论：**actor 卡数是唯一有效杠杆**（10–11 worker/GPU → 8 worker/GPU，单次 forward 更快）；
+  加进程/加攒批在这个宿主（load 100–166，隔壁 cmscan/diamond 占满 CPU）上均为负收益。
+- 余量：actor util 98–99% 但功耗仅 ~150W/350W ⇒ 仍然是「小批次、延迟受限」；`batch_fill` ≈0.13。
+  真正解法是 Rust 采集器（`--rust-collector`）或把叶子评估批更大，两者都还没做（当前 Rust 采集器不支持冻结席/human-board 注入）。
