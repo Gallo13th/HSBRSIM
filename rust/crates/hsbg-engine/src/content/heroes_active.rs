@@ -94,18 +94,22 @@ pub fn scripts() -> Vec<(&'static str, Script)> {
             "BG20_HERO_301p",
             Script {
                 hero_power: Some(|c, me, t| {
-                    let Some((_, i)) = c.locate(t) else { return };
-                    let (a, h) = (c.boards[me.side][i].atk, c.boards[me.side][i].max_hp);
+                    let Some((side, i)) = c.locate(t) else { return };
+                    // 只处理本方战团；索引越界放弃（见 Ctx::sell_minion 防御说明）。
+                    if side != me.side || i >= c.boards[side].len() {
+                        return;
+                    }
+                    let (a, h) = (c.boards[side][i].atk, c.boards[side][i].max_hp);
                     // Nightmare Ectoplasm: spit onto 1 (golden: 2) extra minions.
                     let extra = {
-                        let m = &c.boards[me.side][i];
+                        let m = &c.boards[side][i];
                         if m.is_card("BG20_HERO_301_Buddy") {
                             if m.golden { 2 } else { 1 }
                         } else {
                             0
                         }
                     };
-                    c.sell_minion(me.side, i);
+                    c.sell_minion(side, i);
                     let mut others = c.friendly(me.side);
                     c.g.rng.shuffle(&mut others);
                     for t in others.into_iter().take(1 + extra) {

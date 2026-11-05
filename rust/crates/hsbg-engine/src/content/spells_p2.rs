@@ -378,9 +378,13 @@ pub fn scripts() -> Vec<(&'static str, Script)> {
         (
             "EBG_Spell_032",
             target_spell(TargetSpec::Friendly, |c, me, t| {
-                let Some((_, i)) = c.locate(t) else { return };
-                let (a, h) = (c.boards[me.side][i].atk, c.boards[me.side][i].max_hp);
-                c.sell_minion(me.side, i);
+                let Some((side, i)) = c.locate(t) else { return };
+                // 只卖本方战团上的目标；索引越界直接放弃（见 Ctx::sell_minion 的防御说明）。
+                if side != me.side || i >= c.boards[side].len() {
+                    return;
+                }
+                let (a, h) = (c.boards[side][i].atk, c.boards[side][i].max_hp);
+                c.sell_minion(side, i);
                 if let Some(x) = c.random_friendly(me.side, |_| true) {
                     spell_buff(c, me, x, a, h);
                 }

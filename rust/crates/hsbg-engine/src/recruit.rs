@@ -629,6 +629,19 @@ impl Ctx<'_> {
 
     /// Sell the board minion at `idx` (gold, pool, "when you sell" effects, Sold event).
     pub fn sell_minion(&mut self, side: Side, idx: usize) {
+        // 防御：脚本给出的索引可能落在对侧战团、或在本方战团变化后过期。历史上这会
+        // 让 Vec::remove panic，直接把采集 worker 打死（B03 2026-11-05 的教训）。
+        // 这里记录不变量违例 + 回溯并跳过这次 sell，让训练继续；下一次出现时从
+        // stderr 的回溯定位真正调用方。
+        if idx >= self.boards[side].len() {
+            eprintln!(
+                "[BUG] sell_minion out of range side={side} idx={idx} len={} src={:?}\n{}",
+                self.boards[side].len(),
+                self.src,
+                std::backtrace::Backtrace::force_capture()
+            );
+            return;
+        }
         let value = self.g.cfg.sell_value;
         let who = self.who(side);
         let m = self.boards[side].remove(idx);

@@ -524,7 +524,7 @@ pub fn scripts() -> Vec<(&'static str, Script)> {
                 battlecry: Some(|c, me, t| {
                     // No other friendly minion to choose: nothing is sold.
                     let Some((side, i)) = c.locate(t) else { return };
-                    if t == 0 || side != me.side {
+                    if t == 0 || side != me.side || i >= c.boards[side].len() {
                         return;
                     }
                     let near = c.neighbors(t);

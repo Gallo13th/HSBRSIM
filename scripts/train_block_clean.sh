@@ -80,6 +80,8 @@ MAX_UPDATES="${MAX_UPDATES:-3000}"
 HB_RAMP="${HB_RAMP:-}"
 HB_QUANTILE_RAMP="${HB_QUANTILE_RAMP:-}"
 RAMP_MODE="${RAMP_MODE:-step}"
+# 续训时课程按「全局累计 decisions」求值：本进程 cum 从 0 开始，所以要传断点前的总量。
+RAMP_START="${RAMP_START:-0}"
 DRY_RUN="${DRY_RUN:-0}"
 TAG="${TAG:-$(basename "$OUT")}"
 EVAL_GAMES="${EVAL_GAMES:-96}"
@@ -167,7 +169,7 @@ CMD=("$PY" scripts/train_entity_sync.py
   "${HB_ARGS[@]}"
   --ramp-mode "$RAMP_MODE" --ramp-adaptive 0 --ramp-window 5
   --ramp-survive-threshold 0.25 --ramp-tier4-threshold 0.3
-  --ramp-delay-decisions 2M --ramp-max-forced-per-game 12.0 --ramp-start-decisions 0
+  --ramp-delay-decisions 2M --ramp-max-forced-per-game 12.0 --ramp-start-decisions "$RAMP_START"
   --shaping-coef 0.0 --shaping-w-str 1.0 --shaping-w-tier 0.5 --shaping-mode sigma
   --rank-utility-coef 1.0 --terminal-strength-coef 0.0
   --shaping-tier-bonus 0,0,20,60,150,400,900
@@ -283,7 +285,7 @@ say "start $(date '+%F %T %z') seed=$SEED stop=$STOP_DECISIONS out=$OUT"
   echo "gpus=$GPUS device=$DEVICE eval_device=$EVAL_DEVICE"
   echo "lr=$LR lr_min_ratio=$LR_MIN_RATIO max_updates=$MAX_UPDATES"
   echo "human_board_ramp=$HB_RAMP"
-  echo "human_board_quantile_ramp=$HB_QUANTILE_RAMP ramp_mode=$RAMP_MODE"
+  echo "human_board_quantile_ramp=$HB_QUANTILE_RAMP ramp_mode=$RAMP_MODE ramp_start=$RAMP_START"
   echo "comp_fit_coef=$COMP_FIT_COEF comp_fit_t9_bonus=$COMP_FIT_T9_BONUS comp_trinket_coef=$COMP_TRINKET_COEF"
   echo "gpu_snapshot_at_start:"
   gpu_snapshot | sed 's/^/  /'

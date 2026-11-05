@@ -2727,6 +2727,18 @@ fn tavern_spell_variety() {
 }
 
 #[test]
+fn sell_minion_out_of_range_is_skipped() {
+    // 防御回归：脚本索引越界时 Ctx::sell_minion 不能 panic（B03 2026-11-05 采集崩溃）。
+    let mut g = game(242);
+    set_board(&mut g, 0, &["BG28_633", "BG36_345"]);
+    let before = g.players[0].board.len();
+    g.with_recruit(0, |c| c.sell_minion(0, 99));
+    assert_eq!(g.players[0].board.len(), before, "越界 sell 必须被跳过");
+    g.with_recruit(0, |c| c.sell_minion(0, 1));
+    assert_eq!(g.players[0].board.len(), before - 1, "合法 sell 仍然生效");
+}
+
+#[test]
 fn tomb_turning_undead_dies_if_played_this_turn() {
     let seed = (243..400)
         .find(|s| {

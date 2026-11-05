@@ -83,6 +83,23 @@ python -m pytest ../tests/test_rust_engine.py -q
 - 依据与 A/B 判据：`docs/ECONOMY_CEILING.md` §5①（s28 系列：升本与盘子零和；A2 判据 t9 tier p50≥5、
   t9 Σ≥280、death≥11、human≤6.30）。
 
+## 2026-11-05 `sell_minion` 越界防御 + 目标侧校验（B03 采集崩溃修复）
+
+- 现象：B03（`runs/az_stage300m_b03`）在 77.69M decisions 时 `worker16` panic：
+  `crates/hsbg-engine/src/recruit.rs:634:35: removal index (is 6) should be < len (is 5)`，
+  发生在 `bot_play` 的招募阶段；训练进程 rc=1 退出。
+- 修复（`Ctx::sell_minion` 与三个脚本调用方）：
+  - `sell_minion` 在 `Vec::remove` 前检查 `idx < boards[side].len()`；越界时向 stderr 打印
+    不变量违例 + 调用点回溯（`std::backtrace::Backtrace::force_capture`）并**跳过**该次 sell，
+    不再 panic 打死采集 worker。
+  - `EBG_Spell_032`（Channel the Devourer）、`BG20_HERO_301p`（Nightmare Ectoplasm）改用
+    `locate` 返回的 `side`（原实现用 `me.side`），并校验 `i < boards[side].len()`；
+    `BG23_HERO_306_Buddy` 增加同样的界检查。
+- 回归：`tests/mechanics.rs::sell_minion_out_of_range_is_skipped`（越界 no-op、合法 sell
+  仍生效）；`cargo test --release -p hsbg-engine` 全绿（2026-11-05）。
+- 说明：触发该越界的唯一路径未定位（纯 bot fuzz 约 10 万局未复现），防御 + 回溯日志用于
+  下一次复现时定位；三种改法都不改变合法路径的行为。
+
 ## 2026-11-03 `gold_bonus_by_turn`（A/B 关卡，默认空 = 逐位等价）
 
 - `RulesConfig::gold_bonus_by_turn: Vec<(u32, i32)>`（默认空）：`start_turn_player` 时
