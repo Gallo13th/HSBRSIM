@@ -37,7 +37,7 @@ from hsbg.az.train.infer_search import (  # noqa: E402
 )
 from hsbg.az.train.model import load_checkpoint  # noqa: E402
 from hsbg.az.train.ppo import PPOEvaluator, PPOSelfPlayPolicy
-from hsbg.eval.metrics import weighted_eval_summary  # noqa: E402
+from hsbg.eval.metrics import long_strong_subset, weighted_eval_summary  # noqa: E402
 
 
 #: action aliases for --action-logit-bias (see hsbg/env/action_space_std.py)
@@ -708,6 +708,9 @@ def main() -> int:
                     help="对局长度在权重中的占比（默认 0.5）")
     ap.add_argument("--weight-beta", type=float, default=0.5,
                     help="对局强度（终局最强盘面 Σ）在权重中的占比（默认 0.5）")
+    ap.add_argument("--longstrong-quantile", type=float, default=0.75,
+                    help="长且强子集的分位阈值（默认 0.75 = turns 与强度都进前 25%%；"
+                         "输出 longstrong.n/mean_rank/top4/win）")
     # ── 对手强度（人类战团注入）：默认关闭 -> 与旧版逐位一致 ──
     #    与训练采集同一条注入路径（human_board_pool.inject_turn），用于对照
     #    「1 席 vs 2 席」「不同分位」下的存活率 / tier 分布（docs/BOARD_RAMP.md §4）。
@@ -1002,6 +1005,17 @@ def main() -> int:
                 num_players=8)
         except BaseException:  # noqa: BLE001 - 加权指标不阻塞主评测
             weighted_out = None
+    # ── 长且强子集（长度 + bot 强度都进前 25%）─────────────────────────────
+    longstrong_out = None
+    if rows and not (hb_pool is not None and float(args.human_board_p) > 0.0):
+        try:
+            longstrong_out = long_strong_subset(
+                [int(r["placement"]) for r in rows],
+                [float(r.get("game_turns") or 0) for r in rows],
+                [float(r.get("final_max_bot_strength") or 0) for r in rows],
+                quantile=float(getattr(args, "longstrong_quantile", 0.75) or 0.75))
+        except BaseException:  # noqa: BLE001 - 子集指标不阻塞主评测
+            longstrong_out = None
     max_tiers = [max((int(x["tier"]) for x in r["turns"]), default=0) for r in rows]
     tier_turn_hist: dict[int, int] = {}
     for r in rows:
@@ -1026,6 +1040,7 @@ def main() -> int:
            "policy": args.policy,
            "seed_base": int(args.seed_base),
            "weighted": weighted_out,
+           "longstrong": longstrong_out,
            "placements": [r["placement"] for r in rows],
            "mean_rank": float(np.mean([r["placement"] for r in rows])) if rows else None,
            "top4": float(np.mean([r["placement"] <= 4 for r in rows])) if rows else None,
@@ -1143,6 +1158,8 @@ def main() -> int:
         _show["weighted"] = weighted_out["weighted"]
         _show["weight_n_eff"] = weighted_out["n_eff"]
         _show["weight_stats"] = weighted_out["weight_stats"]
+    if longstrong_out is not None:
+        _show["longstrong"] = longstrong_out
     print(json.dumps(_show, ensure_ascii=False))
     return 0
 

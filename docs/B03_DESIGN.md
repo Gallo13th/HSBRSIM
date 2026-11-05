@@ -1,6 +1,7 @@
 # B03 详细设计：对手强度课程（human-board ladder）
 
-> 状态：**设计稿**，等 B02（37.0.2 固定配方基线）跑完后启动。
+> 状态：**已实现**。B02 已提前停止（floor-lr 空转，详见 `docs/STAGE300M_REPORT.md` §5）；
+> B03 从 B01 final 只加载 model.pt（fresh optimizer + lr 重新退火），见 §6.5。
 > 目标：在**相同起点/预算/数据/算法**下，只改「训练对手难度的时间分布」，检验
 > 「先弱后强」的对手课程能否比 B02 的固定强度更快/更好地把 bot 局 rank 与
 > 「长且强 bot 局 win」拉起来，同时 human 面板不退。
@@ -21,8 +22,9 @@
 
 | 项 | B02（基线） | B03（课程） |
 |---|---|---|
-| 起点 | B01 final `model.pt`+`trainer.pt` | **同 B01 final**（同一起点） |
+| 起点 | B01 final `model.pt`（**不加载 trainer-state**） | **同 B01 final**（同起点同初始化） |
 | seed | 27503 | **27503**（同 seed，减少差异） |
+| lr 排程 | 从 B01 续：updates>max_updates → 钉在 5.85e-7 | **fresh optimizer：1.17e-6 → 5.85e-7 退火 4500 updates** |
 | 引擎/数据 | 37.0.2.256589 | 同 |
 | 预算 | 300M decisions | 300M |
 | 采集 | 32 procs / threads 2 / mb 2048 / accum 4 | 同 |
@@ -117,6 +119,20 @@ B03-B 作为消融：
    `game_weights` 的 turns/bot-strength 百分位；输出 `longstrong_n/win/rank`），
    stage monitor 每 10M 记录，避免只在终局才知道。
 4. 单测：`tests/test_bot_longstrong.py`（纯函数）+ board-ramp 解析已有测试。
+
+## 6.5 lr 排程修复（B02 事故后新增，必须）
+
+B02 全段 lr 钉在退火下限 5.85e-7（`ppo_trainer.py` 的 LambdaLR 以 `max_updates=3000`
+退火，而 `--trainer-state` 恢复了 B01 的 `updates≈4472`，`step>max_updates` 后
+`max(lr_min_ratio, …)=0.5`）。B01 也在 update 3000（≈192M decisions）触底，于是
+B01 尾段 + B02 约 190M decisions 都是 floor-lr 空转（详见 `docs/STAGE300M_REPORT.md` §5）。
+
+因此 B03 **不加载 `trainer.pt`**：只 `--checkpoint` B01 final 模型 + fresh optimizer，
+`LR=1.17e-6 / LR_MIN_RATIO=0.5 / MAX_UPDATES=4500`（本段预计 ~4000 iters）。
+这属于 bug 修复而非新实验变量：不修则课程在 floor lr 下学不动。
+
+实现：`train_block_clean.sh` 允许空 `TS` 并透传 `LR/LR_MIN_RATIO/MAX_UPDATES`；
+`run_stage300m.sh` 同步透传；`run_stage300m_b03.sh` 把 `TS=""`。
 
 ## 7. 运行与成本
 

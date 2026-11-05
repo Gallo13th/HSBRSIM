@@ -136,6 +136,39 @@ def weighted_eval_summary(ranks: Sequence[int], turns: Sequence[float],
     return out
 
 
+def long_strong_subset(ranks: Sequence[int], turns: Sequence[float],
+                       strengths: Sequence[float], *, quantile: float = 0.75,
+                       num_players: int = 8) -> Dict[str, object]:
+    """「长且强」对局子集：turns 与 strengths 的平均秩百分位都 >= quantile。
+
+    用户口径：只看**长度和终局强度都排在前 (1-quantile)** 的 bot 对局，用模型在这些
+    局里的 rank/top4/win 判断「长且强的 bot 局」是否真能打；避免被大量短局稀释。
+    纯函数；空输入或长度不一致时返回 n=0 的空结果（不抛异常，评测不因它失败）。
+    """
+    n = len(ranks)
+    if n == 0 or len(turns) != n or len(strengths) != n:
+        return {"n": 0, "quantile": float(quantile), "mean_rank": None,
+                "top4": None, "win": None, "thresholds": None, "games": []}
+    u = percentile_ranks(turns)
+    v = percentile_ranks(strengths)
+    idx = [i for i in range(n) if u[i] >= quantile and v[i] >= quantile]
+    sel = [int(ranks[i]) for i in idx]
+    cut = max(1, num_players // 2)
+    thr = None
+    if idx:
+        thr = {"turns_min": min(float(turns[i]) for i in idx),
+               "strength_min": min(float(strengths[i]) for i in idx)}
+    return {
+        "n": len(idx),
+        "quantile": float(quantile),
+        "mean_rank": mean_rank(sel) if sel else None,
+        "top4": (sum(1 for r in sel if r <= cut) / len(sel)) if sel else None,
+        "win": (sum(1 for r in sel if r == 1) / len(sel)) if sel else None,
+        "thresholds": thr,
+        "games": idx,
+    }
+
+
 def rank_distribution(ranks: Sequence[int],
                       num_players: int = 8) -> Dict[int, float]:
     dist = {r: 0.0 for r in range(1, num_players + 1)}

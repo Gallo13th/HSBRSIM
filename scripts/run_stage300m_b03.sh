@@ -1,0 +1,43 @@
+#!/bin/bash
+# Stage-300M B03：37.0.2 引擎，从 B01 final（287M）开始，课程学习（human-board ramp）
+# + lr 排程修复（fresh optimizer：B02 的 trainer state 让 LambdaLR 从 update 4472 起钉在
+# lr 下限 5.85e-7，整段没有有效学习；B03 不加载 trainer-state，lr 从 1.17e-6 重新退火）。
+set -euo pipefail
+cd /home/data/users/gaoletian/projects/HSBRSIM
+export PYTHONPATH=rust/python:.
+CK=runs/az_stage300m_b01/model.pt
+TS=""
+OUT=runs/az_stage300m_b03
+SEED=27503
+STOP=300000000
+MINUTES=1500
+PROCESSES=32
+THREADS=2
+MINIBATCH=2048
+GRAD_ACCUM=4
+GAMES=384
+GPUS=3,4,5
+DEVICE=cuda:0
+EVAL_DEVICE=cuda:1
+EVAL_GAMES=96
+SNAPSHOT_EVERY=100
+KEEP_SNAPSHOTS=8
+TAG=az_stage300m_b03
+# lr 排程：整段预计 ~4000 iters（300M / ~75k），给 4500 步退火到 5.85e-7，避免提前触底。
+LR=1.17e-06
+LR_MIN_RATIO=0.5
+MAX_UPDATES=4500
+# 课程（docs/B03_DESIGN.md §3，B03-A 固定 step 档位）
+HB_RAMP="0:1:0.30, 15M:2:0.50, 40M:3:0.70, 80M:3:0.90"
+HB_QUANTILE_RAMP="0:p50, 40M:p75, 150M:p90"
+RAMP_MODE=step
+
+CK="$CK" TS="$TS" OUT="$OUT" SEED="$SEED" STOP_DECISIONS="$STOP" \
+MINUTES="$MINUTES" PROCESSES="$PROCESSES" THREADS="$THREADS" \
+MINIBATCH="$MINIBATCH" GRAD_ACCUM="$GRAD_ACCUM" GAMES="$GAMES" \
+GPUS="$GPUS" DEVICE="$DEVICE" EVAL_DEVICE="$EVAL_DEVICE" EVAL_GAMES="$EVAL_GAMES" \
+SNAPSHOT_EVERY="$SNAPSHOT_EVERY" KEEP_SNAPSHOTS="$KEEP_SNAPSHOTS" TAG="$TAG" \
+LR="$LR" LR_MIN_RATIO="$LR_MIN_RATIO" MAX_UPDATES="$MAX_UPDATES" \
+HB_RAMP="$HB_RAMP" HB_QUANTILE_RAMP="$HB_QUANTILE_RAMP" RAMP_MODE="$RAMP_MODE" \
+FORCE=1 \
+bash scripts/run_stage300m.sh

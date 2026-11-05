@@ -47,7 +47,7 @@
   **长且强 bot 局 0/6 胜**、强 bot 子集 0/64 —— 即 **遇到 bot 滚雪球的长局仍打不过**。
   这与 s73/40M/90M/140M 的结论一致（长且强 win 0–25%）。
 
-## 4. 结论
+## 4. 结论（B01）
 
 1. 300M stage 在 human 面板上没有可测提升（final 6.281 vs s73 ~6.2），最佳单点 200M 6.000；
    在 bot 面板上保持/略优于 s73（47.7% win / 1.73 rank），但 **长且强 bot 局仍 0 胜**。
@@ -57,3 +57,46 @@
    - 训练侧可 opt-in per-episode 权重（长度+bot 强度，loss 加权），当前不改；
    - human 面板继续保留作参考，但 bot 局 rank/长且强 win 作为主要判据；
    - 若下一段仍无提升，按 P2（anchor 调度）做单变量实验，不再混其它改动。
+
+## 5. B02：floor-lr 空转，提前停止（2026-11-05）
+
+- run：`runs/az_stage300m_b02`；起点 = B01 final（model + trainer）；seed 27503；STOP 300M；
+  human-board 固定 3 席 / p0.9 / p75（与 B01 相同）。
+- 00:41 启动 → 04:33 在 92.12M 崩溃（采集空 mask）→ 07:16 从 `step_005701` 精确续训
+  → 07:59 人工停止，本 run **101.10M / 300M**（iter 5823）。
+- 9 个 canonical 点（10–90M）human rank **6.010–6.448（均值 6.288）**，与 B01 final 6.281
+  同档；bot 面板 rank 2.02–2.25 / top4 92–100% / win 23–35%，只有噪声、无趋势。
+- 统一 **guard=1** 口径（96 局 / seed 620000）复核：
+
+  | ckpt | rank | top4 | win |
+  |---|---:|---:|---:|
+  | B01 final | **1.823** | 97.9% | **41.7%** |
+  | B02 10M | 1.917 | 96.9% | 41.7% |
+  | B02 90M | 1.969 | 94.8% | 35.4% |
+
+  ⇒ 多训 92M 没有提升（方向略差，约 1 SE）。
+- **根因**：lr 排程在整个 B02 阶段钉在退火下限 5.85e-7。`ppo_trainer.py` 的 LambdaLR 为
+  `lr = base * max(min_ratio, 1 - (1-min_ratio)*step/max_updates)`，`max_updates=3000`
+  来自 `train_block_clean.sh`，而 `--trainer-state` 恢复了 B01 的 `updates≈4472`，于是
+  `step > max_updates` → lr 恒为 5.85e-7。B01 也在 update 3000（≈192M decisions）触底，
+  所以 **B01 尾段 + B02 全部约 190M decisions 都是 floor-lr 空转**；对应每步 policy
+  KL≈0.0005、ratio≈1.0、clip≈0.3–0.9%，anchor_kl 从 0.0004 单调爬到 0.010（72M→92M），
+  而 rank/value 指标完全不动。
+- 处置：最佳起点仍为 **B01 final**（`runs/az_stage300m_b01/model.pt`）；最新权重
+  `runs/az_stage300m_b02/snapshots/step_005801`；9 点数据保留作证据，明细见
+  `runs/az_stage300m_b02/STOP.txt`。
+- 另修：`stage_monitor.py` 的 bot 面板此前没传 `--move-guard`（JSON 里 `move_guard=false`），
+  与 B01 final 的 guard=1 不可比；已加 `--bot-panel-guard`（默认 1）。
+- 影响：B03 **不能沿用 `--trainer-state`**（否则同样 floor-lr）；新 stage 用 fresh optimizer
+  + `LR/MAX_UPDATES` 重新退火（见 `docs/B03_DESIGN.md` §6.5）。
+
+## 6. 后续（B03）
+
+- B03 = 课程学习（human-board 席数/概率/分位 ramp，`docs/B03_DESIGN.md`）；
+  起点 B01 final；seed 27503；300M。
+- 与 B02 的唯一工程差异：**fresh optimizer + lr 重新退火**（`LR=1.17e-6`、
+  `MAX_UPDATES=4500`），修复 §5 的 floor-lr；课程参数通过
+  `HB_RAMP` / `HB_QUANTILE_RAMP` / `RAMP_MODE` 透传。
+- 评测：每 10M human 96 + 8-bot 96（现在 bot 面板默认 `--move-guard 1`，并新增
+  长且强子集 `bot_ls_n/rank/win`）。
+- 判定与早停规则见 `docs/B03_DESIGN.md` §5。

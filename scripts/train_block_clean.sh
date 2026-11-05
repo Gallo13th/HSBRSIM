@@ -15,7 +15,13 @@
 #
 # 环境变量（默认值 = 今晚正式配置）：
 #   CK               runs/az_entity_s61/eval/ckpt_020026719.pt  模型权重
-#   TS               runs/az_entity_s61/trainer.pt              trainer 状态（必须同时给）
+#   TS               runs/az_entity_s61/trainer.pt              trainer 状态；给空 = 新 stage（fresh optimizer）
+#   LR               1.17e-06                                  基础学习率
+#   LR_MIN_RATIO     0.5                                       退火下限比例
+#   MAX_UPDATES      3000                                      退火步数；必须 >= 本段预计 updates，否则 lr 提前触底
+#   HB_RAMP          ""                                        例 "0:1:0.30, 15M:2:0.50, 40M:3:0.70"（空=固定档）
+#   HB_QUANTILE_RAMP ""                                        例 "0:p50, 40M:p75, 150M:p90"
+#   RAMP_MODE        step                                      step|linear
 #   OUT              runs/az_entity_s73                         输出目录
 #   SEED             27301                                      seed
 #   STOP_DECISIONS   20000000                                   本块 decisions 上限
@@ -39,7 +45,7 @@ cd "$ROOT"
 PY="${PYTHON:-/home/data/users/gaoletian/.conda/envs/hiermolgen/bin/python}"
 
 CK="${CK:-runs/az_entity_s61/eval/ckpt_020026719.pt}"
-TS="${TS:-runs/az_entity_s61/trainer.pt}"
+TS="${TS-runs/az_entity_s61/trainer.pt}"
 OUT="${OUT:-runs/az_entity_s73}"
 SEED="${SEED:-27301}"
 STOP_DECISIONS="${STOP_DECISIONS:-20000000}"
@@ -63,6 +69,17 @@ GPU_FREE_CHECK="${GPU_FREE_CHECK:-0}"
 # 固定阵容脚本席（1..3；0=关闭）。脚本席 = hybrid 对手：阵容动作优先、其余引擎 bot 兜底。
 SCRIPT_SEATS="${SCRIPT_SEATS:-0}"
 SCRIPT_COMPS="${SCRIPT_COMPS:-auto}"
+# lr 排程（默认 = 原 clean recipe；B03 起可覆盖）。
+# 注意：--trainer-state 会恢复 state 里的 max_updates/updates；若续训的 updates 已 >= 
+# max_updates，LambdaLR 会钉在 lr_min_ratio 下限（B02 全段 5.85e-7 的根因）。
+# 新 stage 请给空 TS（fresh optimizer）并用 MAX_UPDATES 覆盖整段预计 updates。
+LR="${LR:-1.17e-06}"
+LR_MIN_RATIO="${LR_MIN_RATIO:-0.5}"
+MAX_UPDATES="${MAX_UPDATES:-3000}"
+# 对手强度课程（human-board ramp，B03）；空 = 保持固定档位（逐位等价旧行为）
+HB_RAMP="${HB_RAMP:-}"
+HB_QUANTILE_RAMP="${HB_QUANTILE_RAMP:-}"
+RAMP_MODE="${RAMP_MODE:-step}"
 DRY_RUN="${DRY_RUN:-0}"
 TAG="${TAG:-$(basename "$OUT")}"
 EVAL_GAMES="${EVAL_GAMES:-96}"
@@ -89,7 +106,9 @@ unset CUDA_VISIBLE_DEVICES || true
 # ---------------------------------------------------------------- 前置检查
 [ -x "$PY" ] || die "python 不存在: $PY"
 [ -f "$CK" ] || die "CK 不存在: $CK"
-[ -f "$TS" ] || die "TS 不存在: $TS（精确续训必须同时给 --checkpoint 与 --trainer-state）"
+if [ -n "$TS" ]; then
+  [ -f "$TS" ] || die "TS 不存在: $TS（精确续训必须同时给 --checkpoint 与 --trainer-state；新 stage 可给空 TS 走 fresh optimizer）"
+fi
 [ -f scripts/train_entity_sync.py ] || die "缺 scripts/train_entity_sync.py"
 [ -f scripts/eval_panel.sh ] || die "缺 scripts/eval_panel.sh"
 [ "$STOP_DECISIONS" -ge 1000000 ] 2>/dev/null || die "STOP_DECISIONS 非法: $STOP_DECISIONS"
@@ -117,8 +136,13 @@ if [ -e "$OUT" ] && [ -n "$(ls -A "$OUT" 2>/dev/null || true)" ] && [ "$FORCE" !
 fi
 
 # ---------------------------------------------------------------- 最终命令（逐字基线：runs/next_block.sh）
+TS_ARGS=()
+if [ -n "$TS" ]; then TS_ARGS=(--trainer-state "$TS"); fi
+HB_ARGS=()
+if [ -n "$HB_RAMP" ]; then HB_ARGS+=(--human-board-ramp "$HB_RAMP"); fi
+if [ -n "$HB_QUANTILE_RAMP" ]; then HB_ARGS+=(--human-board-quantile-ramp "$HB_QUANTILE_RAMP"); fi
 CMD=("$PY" scripts/train_entity_sync.py
-  --checkpoint "$CK" --trainer-state "$TS"
+  --checkpoint "$CK" "${TS_ARGS[@]}"
   --device "$DEVICE" --gpus "$GPUS" --processes "$PROCESSES" --threads "$THREADS"
   --minutes "$MINUTES" --seed "$SEED" --stop-at-decisions "$STOP_DECISIONS"
   --out "$OUT" --iterations 8000 --games "$GAMES"
@@ -129,7 +153,7 @@ CMD=("$PY" scripts/train_entity_sync.py
   --behavior-mix-eps 0.0 --behavior-mix-when carrier_or_spell
   --behavior-mix-max-per-turn 6 --behavior-mix-topk 8 --behavior-mix-turns 1
   --behavior-mix-max-ms 500.0 --behavior-mix-exact 1
-  --epochs 1 --minibatch "$MINIBATCH" --lr 1.17e-06 --lr-min-ratio 0.5 --max-updates 3000
+  --epochs 1 --minibatch "$MINIBATCH" --lr "$LR" --lr-min-ratio "$LR_MIN_RATIO" --max-updates "$MAX_UPDATES"
   --clip 0.2 --target-kl 0.02 --lam 0.995 --gamma 1.0
   --adv-estimator gae --power-alpha 0.25 --power-kappa 10.0 --power-normalize 1
   --power-cutoff 0 --credit-timebase decision --baseline-action-dependent 0
@@ -140,7 +164,8 @@ CMD=("$PY" scripts/train_entity_sync.py
   --human-boards data/real_library/winner_library.jsonl
   --human-board-p 0.9 --human-board-seats 3 --human-board-sample auto
   --human-board-set-tier 1 --human-board-fidelity board --human-board-fast-inject 1
-  --ramp-mode step --ramp-adaptive 0 --ramp-window 5
+  "${HB_ARGS[@]}"
+  --ramp-mode "$RAMP_MODE" --ramp-adaptive 0 --ramp-window 5
   --ramp-survive-threshold 0.25 --ramp-tier4-threshold 0.3
   --ramp-delay-decisions 2M --ramp-max-forced-per-game 12.0 --ramp-start-decisions 0
   --shaping-coef 0.0 --shaping-w-str 1.0 --shaping-w-tier 0.5 --shaping-mode sigma
@@ -224,6 +249,8 @@ if [ "$DRY_RUN" = "1" ]; then
   say "OUT=$OUT  TAG=$TAG  SEED=$SEED  STOP_DECISIONS=$STOP_DECISIONS  GAMES=$GAMES"
   say "PROCESSES=$PROCESSES  GPUS=$GPUS  DEVICE=$DEVICE  EVAL_DEVICE=$EVAL_DEVICE  GPU_FREE_CHECK=$GPU_FREE_CHECK  SCRIPT_SEATS=$SCRIPT_SEATS  SCRIPT_COMPS=$SCRIPT_COMPS"
   say "COMP_FIT_COEF=$COMP_FIT_COEF  COMP_FIT_T9_BONUS=$COMP_FIT_T9_BONUS  COMP_TRINKET_COEF=$COMP_TRINKET_COEF"
+  say "LR=$LR  LR_MIN_RATIO=$LR_MIN_RATIO  MAX_UPDATES=$MAX_UPDATES"
+  say "HB_RAMP=$HB_RAMP  HB_QUANTILE_RAMP=$HB_QUANTILE_RAMP  RAMP_MODE=$RAMP_MODE"
   say "=== 最终训练命令 ==="
   printf '%s ' "${CMD[@]}"; printf '\n'
   say "=== 训练结束后 ==="
@@ -244,10 +271,19 @@ say "start $(date '+%F %T %z') seed=$SEED stop=$STOP_DECISIONS out=$OUT"
   echo "git_head=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
   echo "ckpt=$CK"
   echo "ckpt_sha256=$(sha256sum "$CK" | cut -d' ' -f1)"
-  echo "trainer_state=$TS"
-  echo "trainer_state_sha256=$(sha256sum "$TS" | cut -d' ' -f1)"
+  if [ -n "$TS" ]; then
+    echo "trainer_state=$TS"
+    echo "trainer_state_sha256=$(sha256sum "$TS" | cut -d' ' -f1)"
+  else
+    echo "trainer_state="
+    echo "trainer_state_sha256="
+    echo "fresh_optimizer=1"
+  fi
   echo "seed=$SEED stop_decisions=$STOP_DECISIONS games=$GAMES processes=$PROCESSES"
   echo "gpus=$GPUS device=$DEVICE eval_device=$EVAL_DEVICE"
+  echo "lr=$LR lr_min_ratio=$LR_MIN_RATIO max_updates=$MAX_UPDATES"
+  echo "human_board_ramp=$HB_RAMP"
+  echo "human_board_quantile_ramp=$HB_QUANTILE_RAMP ramp_mode=$RAMP_MODE"
   echo "comp_fit_coef=$COMP_FIT_COEF comp_fit_t9_bonus=$COMP_FIT_T9_BONUS comp_trinket_coef=$COMP_TRINKET_COEF"
   echo "gpu_snapshot_at_start:"
   gpu_snapshot | sed 's/^/  /'

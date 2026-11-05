@@ -18,7 +18,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROOT="$(pwd)"
 
 CK="${CK:-runs/az_entity_s73/model.pt}"
-TS="${TS:-runs/az_entity_s73/trainer.pt}"
+TS="${TS-runs/az_entity_s73/trainer.pt}"
 OUT="${OUT:-runs/az_stage300m_b01}"
 SEED="${SEED:-27501}"
 STOP_DECISIONS="${STOP_DECISIONS:-300000000}"
@@ -44,7 +44,9 @@ LOG="$OUT/train.log"
 die() { echo "[stage300m] ERROR: $*" >&2; exit 2; }
 
 [ -f "$CK" ] || die "missing checkpoint: $CK"
-[ -f "$TS" ] || die "missing trainer state: $TS"
+if [ -n "$TS" ]; then
+  [ -f "$TS" ] || die "missing trainer state: $TS（新 stage 可给 TS="" 走 fresh optimizer）"
+fi
 [ -f data/real_library/winner_library.jsonl ] || die "missing winner_library.jsonl"
 if pgrep -u "$(id -un)" -f 'train_entity_sync[.]py' >/dev/null 2>&1; then
   die "another train_entity_sync.py is already running"
@@ -73,6 +75,8 @@ MINIBATCH="$MINIBATCH" GRAD_ACCUM="$GRAD_ACCUM" GAMES="$GAMES" \
 GPUS="$GPUS" DEVICE="$DEVICE" EVAL_DEVICE="$EVAL_DEVICE" EVAL_GAMES="$EVAL_GAMES" \
 EVAL_FIRST_DECISIONS="$EVAL_FIRST_DECISIONS" \
 SNAPSHOT_EVERY="$SNAPSHOT_EVERY" KEEP_SNAPSHOTS="$KEEP_SNAPSHOTS" TAG="$TAG" \
+LR="${LR:-1.17e-06}" LR_MIN_RATIO="${LR_MIN_RATIO:-0.5}" MAX_UPDATES="${MAX_UPDATES:-3000}" \
+HB_RAMP="${HB_RAMP:-}" HB_QUANTILE_RAMP="${HB_QUANTILE_RAMP:-}" RAMP_MODE="${RAMP_MODE:-step}" \
 FORCE=1 \
 bash scripts/train_block_clean.sh >> "$LOG" 2>&1
 

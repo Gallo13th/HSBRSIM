@@ -537,6 +537,8 @@ def bot_panel_eval(run: str, point: int, ckpt: str, gpu: str, args):
                "--checkpoint", os.path.abspath(ckpt), "--device", gpu,
                "--games", str(int(args.bot_panel_games)),
                "--seed-base", str(int(args.bot_panel_seed))]
+        if int(getattr(args, "bot_panel_guard", 1)):
+            cmd += ["--move-guard", "1", "--move-cap", "3", "--move-repeat-limit", "2"]
         try:
             with open(out_json, "w", encoding="utf-8") as fo, \
                     open(err_log, "w", encoding="utf-8") as fe:
@@ -550,6 +552,7 @@ def bot_panel_eval(run: str, point: int, ckpt: str, gpu: str, args):
     if d is None:
         return {"bot_status": "failed", "bot_reason": _tail(err_log)}
     w = d.get("weighted") or {}
+    ls = d.get("longstrong") or {}
     return {
         "bot_status": "ok",
         "bot_games": _int(d.get("games"), args.bot_panel_games),
@@ -560,6 +563,10 @@ def bot_panel_eval(run: str, point: int, ckpt: str, gpu: str, args):
         "bot_w_top4": _num(w.get("top4") if isinstance(w, dict) else None),
         "bot_w_win": _num(w.get("win") if isinstance(w, dict) else None),
         "bot_w_n_eff": _num(d.get("weight_n_eff")),
+        "bot_ls_n": _int(ls.get("n"), 0) if isinstance(ls, dict) else 0,
+        "bot_ls_rank": _num(ls.get("mean_rank") if isinstance(ls, dict) else None),
+        "bot_ls_top4": _num(ls.get("top4") if isinstance(ls, dict) else None),
+        "bot_ls_win": _num(ls.get("win") if isinstance(ls, dict) else None),
     }
 
 
@@ -1111,10 +1118,10 @@ def write_dashboard(run, paths, hist, dev, points, alerts, args, status):
     if int(getattr(args, "bot_panel_games", 0) or 0) > 0:
         lines += [
             "",
-            "## bot 面板（8 席全 bot；加权 = 长度 + bot 强度）",
+            "## bot 面板（8 席全 bot；human-board 关闭；加权 = 长度 + bot 强度）",
             "",
-            "| 点(M) | bot_rank | bot_top4 | bot_win | bot_w_rank | bot_w_win |",
-            "|---|---|---|---|---|---|",
+            "| 点(M) | bot_rank | bot_top4 | bot_win | bot_w_rank | bot_w_win | ls_n | ls_rank | ls_win |",
+            "|---|---|---|---|---|---|---|---|---|",
         ]
         any_bot = False
         for e in ok[-16:]:
@@ -1124,9 +1131,10 @@ def write_dashboard(run, paths, hist, dev, points, alerts, args, status):
             lines.append(f"| {int((e.get('point_decisions') or 0) / 1e6)} | "
                          f"{_fmt(e.get('bot_rank'), 3)} | {_fmt(e.get('bot_top4'), 3)} | "
                          f"{_fmt(e.get('bot_win'), 3)} | {_fmt(e.get('bot_w_rank'), 3)} | "
-                         f"{_fmt(e.get('bot_w_win'), 3)} |")
+                         f"{_fmt(e.get('bot_w_win'), 3)} | {e.get('bot_ls_n') or '-'} | "
+                         f"{_fmt(e.get('bot_ls_rank'), 3)} | {_fmt(e.get('bot_ls_win'), 3)} |")
         if not any_bot:
-            lines.append("| — | 尚无 bot 面板 | | | | |")
+            lines.append("| — | 尚无 bot 面板 | | | | | | | |")
     lines += [
         "",
         "## dev 面板（训练内，seed 420000）",
@@ -1334,6 +1342,9 @@ def build_args(argv=None):
                          "用于持续监控 bot 局 rank（human 面板看不出好坏）")
     ap.add_argument("--bot-panel-seed", type=int, default=620000,
                     help="8-bot 面板 seed（默认 620000）")
+    ap.add_argument("--bot-panel-guard", type=int, default=1, choices=[0, 1],
+                    help="bot 面板是否 --move-guard 1（默认 1，与训练配置一致；"
+                         "0 仅供与历史 move_guard=false 的点对比）")
     ap.add_argument("--eval-timeout", type=int, default=2400, help="单次评测超时秒")
     ap.add_argument("--min-free-mib", type=int, default=2500,
                     help="评测卡最低空闲显存（默认 2500 MiB）")
