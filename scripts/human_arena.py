@@ -1960,253 +1960,333 @@ INDEX_HTML = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HSBRSIM 人类对战 · 官方酒馆布局 V2</title>
+<title>HSBRSIM 人类对战</title>
 <style>
-:root{--bg:#0f1118;--panel:#191d29;--panel2:#202636;--line:#2c3245;--fg:#e8ecf5;--dim:#93a0bd;
-      --gold:#f2c14e;--hp:#e05a5a;--good:#5ad18a;--bad:#e07070;--spell:#8f7ff0;--drop:#5ad18a}
+:root{
+  --bg:#0b0e14;--panel:#141922;--panel2:#1b2230;--line:#28303f;
+  --fg:#e9eef7;--dim:#8b98ad;--accent:#5b9dff;--danger:#e06c6c;
+  --gold:#f0c674;--good:#67c98a;--hp:#ff8a8a;
+}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--fg)}
-body{font:14px/1.45 "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
-body.dragging{cursor:grabbing}
-body.pointer-dragging{touch-action:none;overscroll-behavior:none}
-body.busy .card,body.busy button,body.busy .slot{pointer-events:none;opacity:.72}
-header{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line);
-       background:#151923;position:sticky;top:0;z-index:20}
-header .hero{font-size:18px;font-weight:700;color:var(--gold)}
-header .pill{background:#232838;border:1px solid var(--line);border-radius:999px;padding:3px 10px;white-space:nowrap}
-header .hp{color:var(--hp);font-weight:700}
-header .gold{color:var(--gold);font-weight:700}
-header .dim{color:var(--dim)}
-.battle-layout{display:grid;grid-template-columns:minmax(0,1fr) 145px;gap:10px;align-items:stretch}
-.battle-layout #boardrow{min-width:0}
-#sellrow .sellzone{height:100%;min-height:150px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;text-align:center}
-main.arena{display:flex;flex-direction:column;gap:10px;padding:12px;max-width:1680px;margin:0 auto}
-.arena-row{min-width:0}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
-.ptitle{display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--dim);
-        font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px}
-.ptitle b{color:var(--fg);letter-spacing:0}
-.mini{color:var(--dim);font-size:11px;margin-top:2px}
-.dim{color:var(--dim)}
-.good{color:var(--good)}.bad{color:var(--bad)}
-.slots{min-width:0}
-.shopgrid{display:grid;grid-template-columns:repeat(8,minmax(112px,1fr));gap:7px;overflow-x:auto;padding-bottom:4px}
-.boardgrid{display:grid;grid-template-columns:repeat(7,minmax(126px,1fr));gap:8px;overflow-x:auto;padding-bottom:4px}
-.handgrid{display:grid;grid-template-columns:repeat(10,minmax(104px,1fr));gap:6px;overflow-x:auto;padding-bottom:4px}
-.slot{position:relative;min-height:132px;border:1px dashed #333b52;border-radius:8px;padding:4px;
-      transition:border-color .1s,background .1s;background:#151924}
-.slot.empty{display:flex;align-items:center;justify-content:center;color:#4b5674;font-size:11px}
-.slot.dragover{border-color:var(--drop);background:#1c2a22;box-shadow:0 0 0 1px var(--drop) inset}
-.slot.dragover-bad{border-color:var(--bad);background:#2a1b1b;box-shadow:0 0 0 1px var(--bad) inset}
-.slot.sell{border-color:#8a4242;background:#2a1717}
-.card{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px;
-      min-height:124px;cursor:grab;transition:border-color .1s,transform .1s,box-shadow .1s;user-select:none;touch-action:manipulation}
+body{font:13px/1.45 "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;padding-bottom:64px}
+body.busy .card,body.busy button,body.busy .slot{pointer-events:none;opacity:.7}
+button,a,input{font:inherit}
+button{cursor:pointer}
+.bad{color:var(--danger)}.good{color:var(--good)}.gold{color:var(--gold)}.dim{color:var(--dim)}
+.mini{font-size:12px;color:var(--dim);line-height:1.4}
+h2{margin:0;font-size:15px;font-weight:700}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+kbd{font:12px/1 "Segoe UI",sans-serif;background:#0e131b;border:1px solid var(--line);border-radius:8px;padding:0 8px;color:var(--fg)}
+
+/* ── 顶部 HUD（固定一行 + 提示行） ─────────────────────────── */
+header#hud{position:sticky;top:0;z-index:40;background:var(--bg);border-bottom:1px solid var(--line)}
+.hudrow{display:flex;align-items:center;gap:8px;padding:8px 16px;min-height:48px;overflow:hidden;white-space:nowrap}
+.brand{font-size:20px;font-weight:700;color:var(--accent);margin-right:8px;flex-shrink:0}
+.brand small{font-size:12px;color:var(--dim);font-weight:400;margin-left:8px}
+#hudstats{display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+#hudstats::-webkit-scrollbar{display:none}
+#endturnbtn{flex-shrink:0}
+.hstat{display:inline-flex;align-items:baseline;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px}
+.hstat i{font-size:12px;color:var(--dim);font-style:normal}
+.hstat b{font-size:15px;font-weight:700;color:var(--fg)}
+.hstat.hp b{color:var(--hp)}.hstat.gold b{color:var(--gold)}
+.hud-hero{font-size:15px;font-weight:700;color:var(--fg);margin-right:8px}
+.hintrow{display:flex;align-items:center;gap:8px;padding:0 16px 8px;min-height:24px}
+#hintline{font-size:13px;color:#b9c6da;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:900px){#hintline{white-space:normal}}
+
+/* ── 主布局 ─────────────────────────────────────────────────── */
+main.arena{max-width:1760px;margin:0 auto;padding:16px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;align-items:start}
+.left,.right{display:flex;flex-direction:column;gap:16px;min-width:0}
+.right{display:flex;flex-direction:column;gap:16px;min-width:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+.phead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.phead .hint{font-size:12px;color:var(--dim);font-weight:400}
+.pill{display:inline-flex;gap:8px;align-items:baseline;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;color:var(--dim)}
+.pill i{font-style:normal}
+.pill b{font-size:13px;color:var(--fg)}
+.chips-line{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+
+/* ── 卡牌网格 ───────────────────────────────────────────────── */
+.grid{display:grid;gap:8px;overflow-x:auto;padding-bottom:8px}
+.shop-grid{grid-template-columns:repeat(8,minmax(92px,1fr))}
+.board-grid{grid-template-columns:repeat(7,minmax(108px,1fr))}
+.hand-grid{grid-template-columns:repeat(10,minmax(88px,1fr))}
+.slot{position:relative;min-height:168px;border:1px dashed var(--line);border-radius:8px;padding:8px;background:#10151e;transition:border-color .1s,background .1s,box-shadow .1s}
+.slot.empty{display:flex;align-items:center;justify-content:center;color:#556176;font-size:12px;text-align:center}
+.slot.play-target{border:2px dashed var(--accent);background:rgba(91,157,255,.1);box-shadow:inset 0 0 0 1px rgba(91,157,255,.25)}
+.slot.mag-target{border:2px dashed var(--good);background:rgba(103,201,138,.08)}
+.slot.move-target{border:2px dashed var(--accent);background:rgba(91,157,255,.06)}
+.slot.dragover{border-color:var(--good);background:#16251d}
+.slot.dragover-bad{border-color:var(--danger);background:#2a1a1a}
+.card{display:flex;flex-direction:column;height:100%;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;cursor:pointer;user-select:none;overflow:hidden;transition:border-color .1s,box-shadow .1s,transform .1s;touch-action:manipulation}
+.card:hover{border-color:var(--accent)}
 .card:active{cursor:grabbing}
-.card.clickable{cursor:pointer}
-.card.clickable:hover{border-color:var(--gold);transform:translateY(-1px)}
-.card.golden{border-color:#b8860b;box-shadow:0 0 0 1px #b8860b inset}
-.card.dragging{opacity:.45;transform:scale(.97)}
-.card.shake{animation:shake .38s linear}
-@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}40%{transform:translateX(5px)}
-  60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
-.dragghost{position:fixed;z-index:80;pointer-events:none;width:132px;opacity:.88;
-           box-shadow:0 12px 30px rgba(0,0,0,.55);transform:translate(-50%,-50%) rotate(1deg)}
-.art{position:relative;height:52px;background:#171b26;border:1px solid var(--line);border-radius:6px;
-     margin:0 0 5px;overflow:hidden;display:flex;align-items:center;justify-content:center}
-.art img{position:absolute;inset:0;margin:auto;max-height:100%;max-width:100%;object-fit:contain}
-.artph{color:#46506b;font-size:15px;font-weight:700;letter-spacing:.06em;user-select:none}
-.card .tier-badge{position:absolute;left:7px;top:7px;background:#1a1e2b;border:1px solid #4a5470;
-     border-radius:6px;padding:0 5px;font-size:10px;color:var(--gold);z-index:3}
-.card .cname{font-weight:700;font-size:13px;line-height:1.25;margin-bottom:2px}
-.card .raceline{color:#9fb0d6;font-size:10px;margin:1px 0}
-.card .cmeta{display:flex;justify-content:space-between;align-items:center;color:var(--dim);font-size:10px}
-.card .atk-hp{font-weight:700;font-size:13px}
-.card .atk-hp .a{color:#f0b95a}.card .atk-hp .h{color:var(--hp)}
-.card .spell{color:var(--spell);font-size:10px}
-.kwchips{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
-.kw{background:#2a3550;border:1px solid #3d4c6e;border-radius:5px;padding:0 5px;font-size:10px;color:#bcd0ff}
-.kw.card-kw{background:#3a2f4e;border-color:#5a4478;color:#d8c4ff}
-.kw.golden-kw{background:#4a3a12;border-color:#8a6d20;color:var(--gold)}
-details{margin-top:4px}
-details>summary{list-style:none;cursor:pointer;color:#8fc1ff;font-size:10px;line-height:1.35}
+.card.golden{border-color:#8a6d20}
+.card.golden .cname{color:var(--gold)}
+.card.buyable{border-color:var(--good)}
+.card.muted{opacity:.6}
+.card.unavailable{opacity:.45}
+.card.selected{border-color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent)}
+.card.dragging{opacity:.4;transform:scale(.97)}
+.card.shake{animation:shake .35s linear}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}50%{transform:translateX(4px)}75%{transform:translateX(-2px)}}
+.dragghost{position:fixed;z-index:80;pointer-events:none;width:132px;opacity:.9;box-shadow:0 12px 30px rgba(0,0,0,.55);transform:translate(-50%,-50%) rotate(1deg)}
+.ctop{display:flex;align-items:center;gap:8px;margin-bottom:8px;min-height:20px}
+.tier{border:1px solid var(--line);border-radius:8px;padding:0 8px;font-size:12px;color:var(--fg);background:#0e131b}
+.tag{font-size:12px;border:1px solid var(--line);border-radius:8px;padding:0 8px;color:var(--dim);background:#0e131b}
+.tag.gold{color:var(--gold);border-color:#8a6d20}
+.tag.accent{color:var(--accent);border-color:var(--accent)}
+.tag.danger{color:var(--danger);border-color:var(--danger)}
+.price{margin-left:auto;font-size:13px;font-weight:700;color:var(--gold);white-space:nowrap}
+.cname{font-size:13px;font-weight:700;line-height:1.3;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.crace{font-size:12px;color:var(--dim);margin-bottom:8px}
+.ctext{font-size:12px;color:#b9c4d4;line-height:1.4;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;flex:1}
+.cfoot{margin-top:auto;display:flex;align-items:center;gap:8px;padding-top:8px}
+.cstats{display:inline-flex;align-items:center;gap:8px;background:#0e131b;border:1px solid var(--line);border-radius:8px;padding:0 8px;font-size:13px}
+.cstats .atk{color:#ffd479;font-weight:700}
+.cstats .hp{color:var(--hp);font-weight:700}
+.cstats .slash{color:var(--dim)}
+.stat-mini{font-size:12px;color:var(--dim)}
+.kwchips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.kw{font-size:12px;background:#1e2a3d;border:1px solid #31435f;border-radius:8px;padding:0 8px;color:#bcd0ff}
+.kw.gold{background:#2d2512;border-color:#6f5a1d;color:var(--gold)}
+.cnote{font-size:12px;color:var(--gold);margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.details-inline{font-size:12px;color:var(--dim);margin-top:8px}
+details>summary{cursor:pointer;list-style:none;font-size:12px;color:var(--accent)}
 details>summary::-webkit-details-marker{display:none}
-details>summary::before{content:"▸ ";color:var(--dim)}
-details[open]>summary::before{content:"▾ "}
-details.fx .quote{color:#8d99b5;font-size:11px;line-height:1.32;margin-top:3px}
-details.attach>summary{color:#d8c4ff}
-.attachlist{display:flex;flex-direction:column;gap:4px;margin-top:3px}
-.attachitem{border-left:2px solid #5a4478;padding-left:5px;font-size:10px;color:#c8d2e8}
-.attachitem .src{color:#8d99b5}
-details.bd>summary{color:#9fb0d6}
-.card .badge{position:absolute;right:6px;bottom:5px;background:#2c3245;border-radius:6px;padding:1px 6px;font-size:10px;color:var(--gold)}
-.card .frozen{position:absolute;left:7px;top:5px;color:#7fd1ff;font-size:11px;z-index:4}
-.card .reason{color:#e0a06a;font-size:10px;margin-top:3px;line-height:1.25}
-.chips{display:flex;flex-wrap:wrap;gap:3px;margin-top:5px;position:relative;z-index:2}
-.chip{background:#2c3245;border:1px solid #3a4258;color:var(--fg);border-radius:6px;padding:1px 6px;
-      font-size:10px;cursor:pointer;line-height:1.5}
-.chip:hover{border-color:var(--gold)}
-.chip.on{background:#3b4a25;border-color:#7bb43f}
-.taverninfo{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:7px}
-.taverninfo .pill{background:#232838;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:12px}
-.btns{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
-.btns .bwrap{display:flex;flex-direction:column;gap:2px}
-.btns .bwrap .reason{color:#e0a06a;font-size:10px;max-width:220px}
-button{background:#2a3146;color:var(--fg);border:1px solid #3a4258;border-radius:8px;padding:6px 11px;font-size:13px;cursor:pointer}
-button:hover:not(:disabled){border-color:var(--gold)}
-button:disabled{opacity:.35;cursor:not-allowed}
-button.primary{background:#3b4a25;border-color:#6f9c3c}
-button.end{background:#5a2b2b;border-color:#8a4242}
-button.new{background:#2b3d5a;border-color:#45608a}
-.droprow{display:flex;gap:8px;margin-top:6px}
-.dropzone{border:1px dashed #4a5470;border-radius:8px;padding:8px 10px;color:var(--dim);font-size:12px;min-height:38px;
-          display:flex;align-items:center;justify-content:center;flex:1}
-.dropzone.dragover{border-color:var(--drop);background:#1c2a22;color:var(--good)}
-.dropzone.dragover-bad{border-color:var(--bad);background:#2a1b1b;color:var(--bad)}
-.sellzone{border:1px solid #8a4242;background:#2a1717;border-radius:10px;padding:10px 14px;color:#ffb3b3;
-          text-align:center;font-size:13px;min-height:44px;display:flex;align-items:center;justify-content:center;gap:8px}
-.sellzone.dragover{border-color:var(--drop);background:#1c2a22;color:var(--good)}
-.sellzone.dragover-bad{border-color:var(--bad);background:#2a1b1b}
-.lower{display:grid;grid-template-columns:minmax(320px,.9fr) minmax(360px,1.25fr);gap:10px;align-items:start}
-.sidebar,.bottom{display:flex;flex-direction:column;gap:10px;min-width:0}
-.opp{display:flex;flex-direction:column;gap:5px;max-height:360px;overflow:auto}
-.opprow{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 8px;border-bottom:1px dashed var(--line);padding:4px 0;font-size:12px}
-.opprow>span{white-space:nowrap}
-.opprow.dead{opacity:.45;text-decoration:line-through}
-.trinket{display:flex;flex-direction:column;gap:2px;border-bottom:1px dashed var(--line);padding:4px 0}
-.trinket .tname{font-weight:700;font-size:12px}
-.dg{display:flex;flex-direction:column;gap:5px;border:1px solid #4a3d6b;border-radius:8px;padding:8px;background:#241f33}
-.dg .dgline{font-size:12px}
-.dg .reason{color:#e0a06a;font-size:11px}
-.deity{border:1px solid #5a4478;border-radius:8px;padding:8px;background:#241f33;display:flex;flex-direction:column;gap:5px}
+details>summary::before{content:"+ ";color:var(--dim)}
+details[open]>summary::before{content:"- "}
+.quote{font-size:12px;color:#b9c4d4;line-height:1.45;margin-top:8px;white-space:pre-wrap}
+
+/* ── 拖放区 / 按钮 / 撤回 ───────────────────────────────────── */
+.droprow{display:flex;gap:8px;margin-top:8px}
+#sellrow{display:flex;flex:0 0 200px}
+#sellzone{width:100%}
+.dropzone{flex:1;border:1px dashed var(--line);border-radius:8px;padding:8px;color:var(--dim);font-size:12px;min-height:40px;display:flex;align-items:center;justify-content:center;text-align:center}
+.dropzone.danger{border-color:#6f3a3a;color:#e6a0a0;background:#1c1216}
+.dropzone.dragover{border-color:var(--good);background:#16251d;color:var(--good)}
+.dropzone.dragover-bad{border-color:var(--danger);background:#2a1a1a;color:var(--danger)}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.btn{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 16px;font-size:13px;line-height:1.2;display:inline-flex;align-items:center;gap:8px}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:#1d3557;border-color:var(--accent);color:#fff;font-weight:700}
+.btn.ghost{background:transparent}
+.btn.danger{background:#3a1e1e;border-color:var(--danger);color:#ffd0d0}
+.btn.small{padding:8px;font-size:12px}
+.undoline{display:flex;align-items:center;gap:8px;margin-top:8px;min-height:24px}
+.undoline .mini{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── 选中操作条 ─────────────────────────────────────────────── */
+.selbar{display:flex;flex-direction:column;gap:8px;background:#16202f;border:1px solid var(--accent);border-radius:8px;padding:16px;position:sticky;top:80px;z-index:35}
+.selbar.hidden{display:none}
+.selhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.selname{font-size:15px;font-weight:700}
+.selacts{display:flex;flex-wrap:wrap;gap:8px}
+.seldetails{margin-top:8px}
+
+/* ── 右侧信息 ───────────────────────────────────────────────── */
+.opp{display:flex;flex-direction:column;gap:8px}
+.opprow{padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+.opprow:last-child{border-bottom:0}
+.opphead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.opphead b{font-size:13px}
+.opphead .mini{margin-left:auto}
+.opprow.dead{opacity:.5;text-decoration:line-through}
+.lineitem{padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;display:flex;flex-direction:column;gap:8px}
+.lineitem:last-child{border-bottom:0}
+.lineitem .lhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mycombat{border-left:3px solid var(--line);padding-left:8px;margin-bottom:8px}
+.mycombat.win{border-color:var(--good)}.mycombat.loss{border-color:var(--danger)}.mycombat.tie{border-color:var(--gold)}
+.frames{max-height:220px;overflow:auto;font-size:12px}
+.frames .fr{border-bottom:1px solid var(--line);padding:8px 0}
+.eventline{font-size:12px;border-bottom:1px solid var(--line);padding:8px 0}
+.deity{border-left:3px solid #5a4478;padding-left:8px;display:flex;flex-direction:column;gap:8px}
 .deity .dname{font-size:15px}
-.deity .dmeta{color:#93a0bd;font-size:11px}
-.deity .dtrig{font-size:12px;line-height:1.4;margin-top:3px}
+.deity .dmeta{font-size:12px;color:var(--dim)}
+.deity .dtrig{font-size:12px;line-height:1.4}
 .deity .dtrig b{color:var(--gold)}
-.deity .src{color:#8d99b5;font-size:10px}
-.deity .dnumline{display:flex;flex-wrap:wrap;gap:5px;font-size:11px;color:#c8d2e8}
-.deity .dnum{background:#2c3245;border:1px solid #3a4258;border-radius:6px;padding:1px 6px}
-.deity .dempty{color:#93a0bd;font-size:12px}
-.mycombat{border-left:3px solid var(--line);padding-left:8px;margin-bottom:4px}
-.mycombat.win{border-color:var(--good)}.mycombat.loss{border-color:var(--bad)}.mycombat.tie{border-color:var(--gold)}
-.frames{max-height:220px;overflow:auto;font-size:11px}
-.frames .fr{border-bottom:1px dashed var(--line);padding:3px 0}
-.eventline{font-size:12px;border-bottom:1px dashed var(--line);padding:2px 0}
-#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#3a2222;border:1px solid #8a4242;
-       color:#fff;padding:9px 18px;border-radius:9px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:100;max-width:88vw}
-#toast.show{opacity:1}
-#toast.ok{background:#1d3325;border-color:#3f7a52}
-#loading{position:fixed;top:12px;right:14px;background:#2b3d5a;border:1px solid #45608a;color:#dce9ff;
-         border-radius:8px;padding:6px 12px;font-size:12px;z-index:90;display:none}
-body.busy #loading{display:block}
-#newgame{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
-#newgame input{width:110px;background:#202636;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px}
-#newgame a{color:#8fc1ff;font-size:12px}
-#legal{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;max-height:190px;overflow:auto}
-#legal span{background:#202636;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:11px;color:var(--dim)}
-#statetext{white-space:pre-wrap;font-size:11px;line-height:1.35;color:#c8d2e8;max-height:360px;overflow:auto;margin:0}
-#overlay{position:fixed;inset:0;background:rgba(8,10,16,.8);display:flex;align-items:center;justify-content:center;z-index:60}
+.deity .src{color:var(--dim);font-size:12px}
+.dnumline{display:flex;flex-wrap:wrap;gap:8px}
+.dnum{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:0 8px;font-size:12px}
+
+/* ── 数据 / 开发折叠区 ─────────────────────────────────────── */
+.data-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.data-cell{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:8px}
+.data-cell i{font-size:12px;color:var(--dim);font-style:normal}
+.data-cell b{font-size:15px}
+.data-cell.wide{grid-column:1 / -1}
+.data-cell b.file{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.newgame{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+#seed{width:120px;background:#0e131b;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px}
+.devpanel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}
+.devpanel>summary{font-size:13px;color:var(--dim)}
+#connhint{margin:8px 0}
+#legal{display:flex;flex-wrap:wrap;gap:8px;max-height:200px;overflow:auto}
+#legal span{font-size:12px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:0 8px;color:var(--dim)}
+#statetext{white-space:pre-wrap;font-size:12px;line-height:1.4;color:#c8d2e8;max-height:360px;overflow:auto;margin:8px 0 0;background:#0e131b;border:1px solid var(--line);border-radius:8px;padding:8px}
+
+/* ── 浮层 / 菜单 / 提示 ─────────────────────────────────────── */
+#overlay{position:fixed;inset:0;background:rgba(6,9,14,.82);display:flex;align-items:center;justify-content:center;z-index:60;padding:16px}
 #overlay.hidden{display:none}
-.pbox{background:var(--panel);border:1px solid #4a5470;border-radius:14px;padding:18px;max-width:min(920px,94vw);max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.55)}
-.pbox h2{margin:0 0 4px;font-size:20px}
-.pbox .sub{color:var(--dim);margin-bottom:10px}
-.popts{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin:10px 0}
-.popts .card{min-height:124px}
-#menubox{position:fixed;inset:0;background:rgba(8,10,16,.72);display:flex;align-items:center;justify-content:center;z-index:70}
+.pbox{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:24px;max-width:min(960px,94vw);max-height:88vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.55)}
+.pbox h2{font-size:20px;margin-bottom:8px}
+.pbox .sub{font-size:13px;color:var(--dim);margin-bottom:8px}
+.popts{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin:16px 0}
+.optcard{position:relative;display:flex;flex-direction:column;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:16px;cursor:pointer;user-select:none}
+.optcard:hover{border-color:var(--accent)}
+.optcard.disabled{opacity:.45;cursor:not-allowed}
+.optcard .optcta{font-size:13px;font-weight:700;color:var(--accent);margin-top:auto}
+.optcard .ctext{-webkit-line-clamp:unset;display:block;overflow:visible}
+#menubox{position:fixed;inset:0;background:rgba(6,9,14,.75);display:flex;align-items:center;justify-content:center;z-index:70;padding:16px}
 #menubox.hidden{display:none}
-.menu{background:var(--panel);border:1px solid #4a5470;border-radius:12px;padding:14px;max-width:min(520px,92vw);max-height:80vh;overflow:auto}
-.menu h3{margin:0 0 8px;font-size:16px}
-.menu .mbtn{display:block;width:100%;text-align:left;margin:5px 0}
-@media (max-width:980px){
-  main.arena{padding:8px;gap:8px}
-  .lower{grid-template-columns:1fr}
-  .shopgrid{grid-template-columns:repeat(8,118px)}
-  .boardgrid{grid-template-columns:repeat(7,136px)}
-  .handgrid{grid-template-columns:repeat(10,112px)}
-  header{padding:8px 10px;gap:6px}
+.menu{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;max-width:min(560px,92vw);max-height:80vh;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.menu h3{margin:0 0 8px;font-size:15px}
+#toast{position:fixed;left:50%;bottom:56px;transform:translateX(-50%);background:#3a1e1e;border:1px solid var(--danger);color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:100;max-width:88vw;text-align:center}
+#toast.show{opacity:1}
+#toast.ok{background:#17301f;border-color:var(--good)}
+#loading{position:fixed;top:64px;right:16px;background:#1d3557;border:1px solid var(--accent);color:#dce9ff;border-radius:8px;padding:8px 16px;font-size:12px;z-index:90;display:none}
+body.busy #loading{display:block}
+#shortcuts{position:fixed;right:8px;bottom:8px;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 16px;font-size:12px;color:var(--dim);display:flex;flex-wrap:wrap;gap:8px;max-width:calc(100vw - 16px);pointer-events:none}
+#shortcuts b{color:var(--fg);font-weight:400}
+
+/* ── 响应式：≥1280 双栏，≤900 单列 ─────────────────────────── */
+@media(max-width:900px){
+  main.arena{padding:8px}
+  .layout{grid-template-columns:1fr}
+  .right{position:static;max-height:none;overflow:visible;padding-right:0}
+  .shop-grid{grid-template-columns:repeat(8,104px)}
+  .board-grid{grid-template-columns:repeat(7,120px)}
+  .hand-grid{grid-template-columns:repeat(10,96px)}
+  .hudrow{padding:8px}
+  .hintrow{padding:0 8px 8px}
+  .brand small{display:none}
+  #sellrow{flex:0 0 140px}
+  .panel{padding:8px}
+  .data-grid{grid-template-columns:1fr}
+  .data-cell.wide{grid-column:auto}
 }
 </style>
 </head>
 <body>
-<header id="hud"><span class="dim">加载中…</span></header>
-<main class="arena">
-  <section id="shoprow" class="arena-row panel">
-    <div class="ptitle"><span><b>第一行 · 鲍勃酒馆</b>（8 槽）</span><span id="tavernhint" class="mini"></span></div>
-    <div id="taverninfo" class="taverninfo"></div>
-    <div id="shop" class="shopgrid slots" aria-label="鲍勃酒馆"></div>
-    <div id="buttons" class="btns"></div>
-    <button id="undobtn" disabled>撤回（Ctrl/Cmd+Z）</button> <span id="undoreason" class="mini"></span>
-    <div class="mini dim">拖动商店卡到战场/购买区 = Buy（只购买，卡进入手牌并提示“已购买”，需再拖手牌打出）</div>
-  </section>
-  <div class="battle-layout">
-  <section id="boardrow" class="arena-row panel">
-    <div class="ptitle"><span><b>第二行 · 我方战场</b>（7 槽，拖动排序）</span><span id="boardhint" class="mini"></span></div>
-    <div id="board" class="boardgrid slots" aria-label="我方战场"></div>
-    <div class="droprow">
-      <div id="activatezone" class="dropzone activatezone" data-drop="activate">拖到此处发动技能/效果（Activate = 23+槽位）</div>
-    </div>
-  </section>
+<header id="hud">
+  <div class="hudrow">
+    <div class="brand">HSBRSIM<small>人类对战</small></div>
+    <div id="hudstats"></div>
+    <button id="endturnbtn" class="btn primary" disabled>结束回合</button>
   </div>
-  <section id="handrow" class="arena-row panel">
-    <div class="ptitle"><span><b>第三行 · 手牌</b>（10 格）</span><span id="handhint" class="mini"></span></div>
-    <div id="hand" class="handgrid slots" aria-label="手牌"></div>
-    <div class="mini dim">拖到战场空槽 = Play；拖到已有机械/随从 = Magnetize；点卡片上的快捷按钮或按 Enter 也可操作</div>
-  </section>
-  <aside id="sellrow"><div id="sellzone" class="sellzone" data-drop="sell"><b>出售区</b><br>拖到此处出售（Sell = 16+槽位）</div></aside>
-  <div class="lower">
-    <aside class="sidebar">
-      <div class="panel">
-        <div class="ptitle"><span>对手（公开信息）</span><span id="opphint" class="mini"></span></div>
+  <div class="hintrow"><span id="hintline">加载中…</span></div>
+</header>
+
+<main class="arena">
+  <div id="selbar" class="selbar hidden"></div>
+  <div class="layout">
+    <div class="left">
+      <section id="shoprow" class="panel">
+        <div class="phead"><h2>鲍勃酒馆</h2><span id="tavernhint" class="hint"></span></div>
+        <div id="taverninfo" class="chips-line"></div>
+        <div id="shop" class="grid shop-grid" aria-label="鲍勃酒馆"></div>
+        <div class="btns" id="buttons"></div>
+        <div class="undoline">
+          <button id="undobtn" class="btn" disabled>撤回</button>
+          <span id="undoreason" class="mini"></span>
+        </div>
+      </section>
+
+      <section id="boardrow" class="panel">
+        <div class="phead"><h2>我方战场</h2><span id="boardhint" class="hint"></span></div>
+        <div id="board" class="grid board-grid" aria-label="我方战场"></div>
+        <div class="droprow">
+          <div id="activatezone" class="dropzone" data-drop="activate">拖到这里发动技能</div>
+          <div id="sellrow"><div id="sellzone" class="dropzone danger" data-drop="sell">拖到这里出售</div></div>
+        </div>
+      </section>
+
+      <section id="handrow" class="panel">
+        <div class="phead"><h2>手牌</h2><span id="handhint" class="hint"></span></div>
+        <div id="hand" class="grid hand-grid" aria-label="手牌"></div>
+      </section>
+    </div>
+
+    <aside class="right">
+      <section class="panel">
+        <div class="phead"><h2>对手</h2><span id="opphint" class="hint"></span></div>
         <div id="opp" class="opp"></div>
-      </div>
-      <div class="panel">
-        <div class="ptitle"><span>饰品 / 黑暗之赐 / 持续效果</span><span id="trinkethint" class="mini"></span></div>
+      </section>
+
+      <section class="panel">
+        <div class="phead"><h2>饰品与效果</h2><span id="trinkethint" class="hint"></span></div>
         <div id="trinkets" class="mini"></div>
         <div id="darkgift" style="margin-top:8px"></div>
-        <div id="effects" class="mini" style="margin-top:6px"></div>
-      </div>
-      <div class="panel">
-        <div class="ptitle"><span>神明（Deity，独立于赐福）</span><span id="deityhint" class="mini"></span></div>
+        <div id="effects" class="mini" style="margin-top:8px"></div>
+      </section>
+
+      <section class="panel">
+        <div class="phead"><h2>神明</h2><span id="deityhint" class="hint"></span></div>
         <div id="deity"></div>
-      </div>
-    </aside>
-    <section class="bottom">
-      <div class="panel">
-        <div class="ptitle"><span>我的上轮战果</span><span id="combathint" class="mini"></span></div>
+      </section>
+
+      <section class="panel">
+        <div class="phead"><h2>上轮战果</h2><span id="combathint" class="hint"></span></div>
         <div id="mycombat"></div>
-        <details data-key="all-combats"><summary>最近战斗（全部座位）▸</summary><div id="combats" class="mini"></div></details>
-      </div>
-      <div class="panel">
-        <div class="ptitle"><span>日志 / 本回合事件</span></div>
+        <details data-key="all-combats"><summary>最近战斗</summary><div id="combats" class="mini"></div></details>
+      </section>
+
+      <section class="panel">
+        <div class="phead"><h2>本回合事件</h2></div>
         <div id="events" class="mini"></div>
-      </div>
-      <div class="panel">
-        <div class="ptitle"><span>对局 / 连接 / 新开一局</span></div>
-        <div id="newgame">
-          <input id="seed" type="number" placeholder="seed" title="留空 = 当前 seed">
-          <button id="newbtn" class="new">新开一局</button>
-          <a id="replaylink" href="/replay">下载 replay</a>
-          <span id="replaymeta" class="mini"></span>
+      </section>
+
+      <section class="panel">
+        <div class="phead"><h2>数据采集</h2><span id="replaymeta" class="hint"></span></div>
+        <div class="data-grid">
+          <div class="data-cell"><i>已记录</i><b id="decCount">0</b></div>
+          <div class="data-cell"><i>撤回次数</i><b id="undoCount">0</b></div>
+          <div class="data-cell wide"><i>可撤回深度</i><b id="undoDepth">0 / 0</b></div>
         </div>
-        <div class="mini" id="connhint">/state 真源 · /act 唯一提交入口 · 拖拽失败会回滚且不提交</div>
-      </div>
-      <details data-key="legal"><summary>合法动作掩码（点击展开）▸</summary><div id="legal"></div></details>
-      <details data-key="snapshot"><summary>中局状态文本（/snapshot.txt）▸</summary>
+        <a id="replaylink" href="/replay" download>下载 replay</a>
+        <div id="newgame" class="newgame">
+          <input id="seed" type="number" placeholder="seed" title="留空 = 当前 seed">
+          <button id="newbtn" class="btn">新开一局</button>
+        </div>
+      </section>
+
+      <details class="devpanel" id="devpanel">
+        <summary>开发信息</summary>
+        <div id="connhint" class="mini">状态源 /state · 提交入口 /act</div>
+        <div id="legal"></div>
         <!--SNAPSHOT_TEXT-->
       </details>
-    </section>
+    </aside>
   </div>
 </main>
+
 <div id="overlay" class="hidden"></div>
 <div id="menubox" class="hidden"></div>
 <div id="toast"></div>
 <div id="loading">处理中…</div>
+<div id="shortcuts">
+  <span><kbd>Enter</kbd> <b>确认/结束</b></span>
+  <span><kbd>Ctrl+Z</kbd> <b>撤回</b></span>
+  <span><kbd>Esc</kbd> <b>取消选中</b></span>
+  <span><kbd>1-8</kbd> <b>选商店格</b></span>
+</div>
+
 <script>
 "use strict";
 let S = /*STATE_JSON*/null;
+const INITIAL_S = !!S;
 let toastTimer = 0;
-let BUSY = false;   /* 请求中锁定提交，避免双击产生第二次（非法）动作 */
-const DRAG = {payload:null, sourceEl:null, ghost:null, targetEl:null, snapshot:null,
-              timer:0, pointer:null, suppressClick:false};
+let BUSY = false;
+let UNDO_COUNT = 0;
+let SEL = {kind: null, index: null};
+let MENU = {acts: []};
+const DRAG = {payload:null, sourceEl:null, ghost:null, targetEl:null,
+              timer:0, pointer:null, suppressClickUntil:0};
 
 const $ = (id) => document.getElementById(id);
 function esc(s) {
@@ -2214,14 +2294,29 @@ function esc(s) {
     {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 }
 function evText(e) { return typeof e === "string" ? e : JSON.stringify(e); }
+function basename(p) { return String(p || "").split("/").pop(); }
+function fmtKB(b) { return (Number(b || 0) / 1024).toFixed(1) + " KB"; }
+function cardName(c) { return c ? (c.name_zh || c.name || "?") : "?"; }
+function heroName(h) { return h ? (h.name_zh || h.name) : "选择英雄"; }
+
 function toast(msg, ok) {
   const t = $("toast");
+  if (!t) return;
   t.textContent = msg;
   t.classList.toggle("ok", !!ok);
   t.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove("show"), 2800);
 }
+function setConn(ok, msg) {
+  const el = $("connhint");
+  if (!el) return;
+  el.className = "mini" + (ok ? "" : " bad");
+  el.textContent = ok
+    ? "已连接 · 状态源 /state · 提交入口 /act"
+    : ("连接异常" + (msg ? "：" + msg : "") + " · 提交未确认");
+}
+
 async function api(path, body, label) {
   const opt = body === undefined ? {} : {
     method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)
@@ -2230,32 +2325,39 @@ async function api(path, body, label) {
   try {
     res = await fetch(path, opt);
   } catch (e) {
-    toast("连接失败，未确认提交：" + e);
+    setConn(false, String(e));
+    toast("连接失败，提交未确认", false);
     return null;
   }
   try { data = await res.json(); } catch (e) { data = {error: "响应不是 JSON"}; }
   if (!res.ok) {
-    toast((label ? label + "：" : "") + (data.error || ("HTTP " + res.status)));
+    setConn(true);
+    const err = data.error || ("HTTP " + res.status);
+    toast(label ? (label + " · 未提交：" + err) : ("读取状态失败：" + err), false);
     return null;
   }
+  setConn(true);
   return data;
 }
+
 async function refresh() {
   const data = await api("/state");
   if (data) { S = data; render(); }
 }
 async function act(action, okMsg) {
   if (action === null || action === undefined) { toast("该操作当前不可用"); return; }
-  if (!S || BUSY) { if (BUSY) toast("请求处理中，请稍候"); return; }
+  if (!S) { toast("状态尚未加载"); return; }
+  if (BUSY) { toast("请求处理中，请稍候"); return; }
   BUSY = true;
   document.body.classList.add("busy");
   try {
     const data = await api("/act", {action: action}, "动作 " + action);
     if (data) {
-      S = data; render();
+      S = data;
+      SEL = {kind: null, index: null};
+      render();
       if (okMsg) toast(okMsg, true);
     } else {
-      /* HTTP 400/断网都视为未确认状态：先 GET /state 校正，不自动重试 */
       await refresh();
     }
   } finally {
@@ -2265,170 +2367,870 @@ async function act(action, okMsg) {
 }
 async function undo() {
   if (!S || BUSY) return;
-  if (!S.undo || !S.undo.enabled) { toast(S.undo?.reason || "不可撤回"); return; }
-  BUSY = true; document.body.classList.add("busy");
-  try {
-    const data = await api("/undo", {}, "撤回");
-    if (data) { S = data; render(); toast("已撤回一步", true); }
-    else await refresh();
-  } finally { BUSY = false; document.body.classList.remove("busy"); }
-}
-async function newGame() {
-  if (BUSY) { toast("请求处理中，请稍候"); return; }
+  if (!S.undo || !S.undo.enabled) { toast((S.undo && S.undo.reason) || "不可撤回，未提交"); return; }
   BUSY = true;
   document.body.classList.add("busy");
   try {
-    const raw = $("seed").value.trim();
-    const body = raw === "" ? {} : {seed: Number(raw)};
-    const data = await api("/new", body, "新开一局");
-    if (data) { S = data; render(); toast("新开一局：seed " + data.seed, true); }
+    const data = await api("/undo", {}, "撤回");
+    if (data) {
+      UNDO_COUNT += 1;
+      S = data;
+      SEL = {kind: null, index: null};
+      render();
+      toast("已撤回一步", true);
+    } else {
+      await refresh();
+    }
   } finally {
     BUSY = false;
     document.body.classList.remove("busy");
   }
 }
+async function newGame(seedArg) {
+  if (BUSY) { toast("请求处理中，请稍候"); return; }
+  let body = {};
+  if (seedArg === "random") {
+    body = {};
+  } else if (typeof seedArg === "number") {
+    body = {seed: seedArg};
+  } else {
+    const raw = $("seed").value.trim();
+    if (raw !== "") {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || !Number.isInteger(n)) { toast("seed 需为整数", false); return; }
+      body = {seed: n};
+    }
+  }
+  BUSY = true;
+  document.body.classList.add("busy");
+  try {
+    const data = await api("/new", body, "新开一局");
+    if (data) {
+      S = data;
+      UNDO_COUNT = 0;
+      SEL = {kind: null, index: null};
+      render();
+      toast("新开一局：seed " + data.seed, true);
+    }
+  } finally {
+    BUSY = false;
+    document.body.classList.remove("busy");
+  }
+}
+function endTurn() {
+  if (!S) return;
+  const b = (S.buttons || []).find((x) => x.key === "end");
+  if (!b) { toast("结束回合不可用，未提交"); return; }
+  if (!b.enabled) { toast(b.reason || "当前不能结束回合", false); return; }
+  act(b.action, "已结束回合");
+}
 
-/* ── 渲染基础 ─────────────────────────────────────────────────── */
-function heroName(h) { return h ? (h.name_zh || h.name) : "选择英雄"; }
-function artHTML(c) {
-  const name = c.name_zh || c.name || "?";
-  const ph = '<span class="artph">' + esc(String(name).slice(0, 2)) + '</span>';
-  if (!c.art) return '<div class="art">' + ph + '</div>';
-  /* 在线卡图失败时移除 img，露出底层文字占位；不阻塞任何操作 */
-  return '<div class="art">' + ph +
-    '<img loading="lazy" alt="" src="' + esc(c.art) +
-    '" onload="this.previousElementSibling.style.display=\'none\'" onerror="this.remove()"></div>';
+/* ── 选择状态 ───────────────────────────────────────────────── */
+function currentCard() {
+  if (!S || !SEL.kind) return null;
+  const list = SEL.kind === "shop" ? S.shop : (SEL.kind === "hand" ? S.hand : S.board);
+  return (list || [])[SEL.index] || null;
+}
+function clearSel() {
+  SEL = {kind: null, index: null};
+  applySelection();
+  updateHint();
+}
+function selectCard(kind, index) {
+  if (!S || S.over) { toast("对局结束，未提交"); return; }
+  if (S.pending) { toast("先完成选择面板"); return; }
+  SEL = {kind: kind, index: index};
+  applySelection();
+  updateHint();
+  const el = document.querySelector('.card[data-kind="' + kind + '"][data-index="' + index + '"]');
+  if (el) el.scrollIntoView({block: "nearest", inline: "nearest"});
+}
+function updateHint() {
+  const el = $("hintline");
+  if (!el) return;
+  let msg = "点卡选中，再点按钮或战场空位";
+  if (S) {
+    if (S.over) msg = "对局结束，可开新局或下载 replay";
+    else if (S.pending) msg = "先完成弹出面板中的选择";
+    else if (SEL.kind === "shop") msg = "已选商店卡，点购买或再点一次卡";
+    else if (SEL.kind === "hand") msg = "点战场蓝色空位打出手牌";
+    else if (SEL.kind === "board") msg = "点出售、发动或目标位置换位";
+    else if (S.hero_select) msg = "先选择本局英雄";
+  }
+  el.textContent = msg;
+}
+function applySelection() {
+  document.querySelectorAll(".card.selected, .slot.play-target, .slot.mag-target, .slot.move-target")
+    .forEach((el) => el.classList.remove("selected", "play-target", "mag-target", "move-target"));
+  const bar = $("selbar");
+  if (!bar) return;
+  if (!S || S.pending || S.over || !SEL.kind) {
+    SEL = {kind: null, index: null};
+    bar.classList.add("hidden");
+    bar.innerHTML = "";
+    return;
+  }
+  const c = currentCard();
+  if (!c) {
+    SEL = {kind: null, index: null};
+    bar.classList.add("hidden");
+    bar.innerHTML = "";
+    return;
+  }
+  const card = document.querySelector('.card[data-kind="' + SEL.kind + '"][data-index="' + SEL.index + '"]');
+  if (card) card.classList.add("selected");
+  if (SEL.kind === "hand") {
+    document.querySelectorAll("#board .slot").forEach((slot) => {
+      const i = Number(slot.dataset.index);
+      const occupied = !!(S.board || [])[i];
+      if (!occupied && (c.play || []).some((p) => p.pos === i)) slot.classList.add("play-target");
+      else if (occupied && (c.magnetize || []).some((m) => m.board === i)) slot.classList.add("mag-target");
+    });
+  } else if (SEL.kind === "board") {
+    document.querySelectorAll("#board .slot").forEach((slot) => {
+      const i = Number(slot.dataset.index);
+      if ((c.move || []).some((m) => m.to === i)) slot.classList.add("move-target");
+    });
+  }
+  renderSelbar(c);
+  updateHint();
+}
+
+/* ── 选中操作条 ─────────────────────────────────────────────── */
+function actionButton(label, action, opts) {
+  opts = opts || {};
+  const dis = action === null || action === undefined || opts.disabled;
+  const title = opts.title || opts.reason || "";
+  return '<button class="btn ' + (opts.cls || "") + '"' +
+    (dis ? " disabled" : ' data-act="' + action + '"') +
+    (opts.ok ? ' data-ok="' + esc(opts.ok) + '"' : "") +
+    (title ? ' title="' + esc(title) + '"' : "") + ">" + esc(label) + "</button>";
+}
+function cardDetailsHTML(c) {
+  const bits = [];
+  if (c.text) bits.push('<div class="quote">[卡面] ' + esc(c.text) + "</div>");
+  if (c.golden_text) bits.push('<div class="quote">[金卡] ' + esc(c.golden_text) + "</div>");
+  for (const a of (c.attached || [])) {
+    bits.push('<div class="quote"><b>' + esc(a.name_zh || a.name || "?") + "</b> " +
+      esc(a.kind_label || "附件") + (a.text ? "：" + esc(a.text) : "") + "</div>");
+  }
+  if (c.breakdown_text) bits.push('<div class="quote">属性来源：' + esc(c.breakdown_text) + "</div>");
+  if (!bits.length) return "";
+  return '<details class="seldetails" data-key="sel-details"><summary>卡面详情</summary>' +
+    bits.join("") + "</details>";
+}
+function renderSelbar(c) {
+  const bar = $("selbar");
+  if (!bar) return;
+  const bits = [];
+  bits.push('<div class="selhead"><span class="selname">' + esc(cardName(c)) + "</span>");
+  if (c.tier) bits.push('<span class="tag">T' + esc(c.tier) + "</span>");
+  if (c.golden) bits.push('<span class="tag gold">金色</span>');
+  bits.push("</div>");
+  bits.push('<div class="selacts">');
+  if (SEL.kind === "shop") {
+    bits.push(actionButton("购买" + (c.price_label ? " · " + c.price_label : ""), c.buy,
+      {reason: c.buy_reason, ok: "已购买：" + cardName(c)}));
+    const rb = (S.buttons || []).find((b) => b.key === "refresh");
+    bits.push(actionButton("刷新" + (rb && rb.price !== null && rb.price !== undefined ? " · " + rb.price + "金" : ""),
+      rb && rb.enabled ? rb.action : null, {reason: rb && rb.reason, cls: "ghost"}));
+  } else if (SEL.kind === "hand") {
+    const plays = c.play || [];
+    const mags = c.magnetize || [];
+    for (const p of plays) {
+      bits.push(actionButton("打到 " + (p.pos + 1) + " 号位", p.action, {ok: "已打出：" + cardName(c)}));
+    }
+    for (const m of mags) {
+      bits.push(actionButton("磁力→" + (m.board + 1), m.action, {ok: "已磁力吸附：" + cardName(c), cls: "ghost"}));
+    }
+    if (!plays.length && !mags.length) bits.push('<span class="mini bad">' + esc(c.play_reason || "当前不能打出") + "</span>");
+  } else if (SEL.kind === "board") {
+    if (c.sell !== null && c.sell !== undefined) {
+      bits.push(actionButton("出售", c.sell, {ok: "已出售：" + cardName(c), cls: "danger"}));
+    }
+    if (c.activate !== null && c.activate !== undefined) {
+      bits.push(actionButton("发动" + (c.activate_cost !== null && c.activate_cost !== undefined ? " · " + c.activate_cost + "金" : ""),
+        c.activate, {ok: "已发动：" + cardName(c)}));
+    }
+    for (const m of (c.move || [])) {
+      bits.push(actionButton("换到 " + (m.to + 1), m.action, {ok: "已换位：" + cardName(c), cls: "ghost"}));
+    }
+    bits.push('<button class="btn ghost" data-menu="1">更多</button>');
+  }
+  if (SEL.kind === "hand" && ((c.play || []).length || (c.magnetize || []).length)) {
+    bits.push('<button class="btn ghost" data-menu="1">更多</button>');
+  }
+  bits.push('<button class="btn ghost" data-selclear="1">取消</button>');
+  bits.push("</div>");
+  bits.push(cardDetailsHTML(c));
+  bar.innerHTML = bits.join("");
+  bar.classList.remove("hidden");
+}
+
+/* ── 渲染 ───────────────────────────────────────────────────── */
+function collectOpen() {
+  const m = {};
+  document.querySelectorAll("details[data-key]").forEach((d) => { m[d.dataset.key] = d.open; });
+  return m;
+}
+function restoreOpen(m) {
+  document.querySelectorAll("details[data-key]").forEach((d) => { if (m[d.dataset.key]) d.open = true; });
+}
+function hudStat(label, value, cls) {
+  return '<span class="hstat' + (cls ? " " + cls : "") + '"><i>' + esc(label) +
+    "</i><b>" + esc(String(value)) + "</b></span>";
+}
+function renderHud() {
+  const h = S.hud || {};
+  const end = (S.buttons || []).find((b) => b.key === "end") || null;
+  const bits = [
+    '<span class="hud-hero">' + esc(heroName(h.hero)) + "</span>",
+    hudStat("回合", S.turn ?? "?"),
+    hudStat("血量", (h.health ?? "?") + (h.armor ? " +" + h.armor : ""), "hp"),
+    hudStat("金币", (h.gold ?? "?") + "/" + (h.max_gold ?? "?"), "gold"),
+    hudStat("等级", "T" + (h.tier ?? "?")),
+    hudStat("升本", (h.upgrade_price ?? "-") + " 金"),
+    hudStat("已记录", (S.decisions ?? 0) + " 条")
+  ];
+  $("hudstats").innerHTML = bits.join("");
+  const b = $("endturnbtn");
+  b.disabled = !end || !end.enabled || !!S.over;
+  b.textContent = S.over ? "对局结束" : "结束回合";
+  b.title = (end && (end.reason || end.hint)) || "结束回合";
+  if (end && end.enabled && !S.over) b.dataset.act = String(end.action);
+  else delete b.dataset.act;
+}
+function renderTavern() {
+  const h = S.hud || {};
+  $("tavernhint").textContent = "槽位 " + ((S.shop || []).length) + "/8";
+  $("taverninfo").innerHTML = [
+    '<span class="pill"><i>刷新</i><b>' + esc((h.refresh_price ?? "?") + " 金") + "</b></span>",
+    '<span class="pill"><i>升本</i><b>' + esc((h.upgrade_price ?? "?") + " 金 → T" + ((h.tier || 0) + 1)) + "</b></span>",
+    '<span class="pill"><i>冻结</i><b>' + esc(h.frozen ? "是" : "否") + "</b></span>"
+  ].join("");
+}
+function statsHTML(c) {
+  if (!c.is_minion) return '<span class="stat-mini">' + esc(c.kind_label || "") + "</span>";
+  const max = (c.max_hp !== null && c.max_hp !== undefined && c.max_hp !== c.hp)
+    ? '<span class="stat-mini">上限 ' + esc(c.max_hp) + "</span>" : "";
+  return '<span class="cstats"><b class="atk">' + esc(c.atk ?? "-") + '</b><span class="slash">/</span>' +
+    '<b class="hp">' + esc(c.hp ?? "-") + "</b></span>" + max;
 }
 function kwHTML(c) {
   const out = [];
-  for (const k of c.keyword_labels || []) out.push('<span class="kw">' + esc(k) + '</span>');
-  for (const k of c.card_keyword_labels || []) out.push('<span class="kw card-kw">卡面·' + esc(k) + '</span>');
-  return out.length ? '<div class="kwchips">' + out.join("") + '</div>' : "";
+  for (const k of (c.keyword_labels || []).slice(0, 4)) out.push('<span class="kw">' + esc(k) + "</span>");
+  if ((c.keyword_labels || []).length > 4) out.push('<span class="kw">+' + (c.keyword_labels.length - 4) + "</span>");
+  return out.length ? '<div class="kwchips">' + out.join("") + "</div>" : "";
 }
-function statsHTML(c) {
-  if (!c.is_minion) return "";
-  let s = '<span class="atk-hp"><span class="a">' + (c.atk ?? "") + '</span>/' +
-          '<span class="h">' + (c.hp ?? "") + '</span></span>';
-  if (c.max_hp !== null && c.max_hp !== undefined && c.max_hp !== c.hp) {
-    s += ' <span class="dim">(上限 ' + c.max_hp + ')</span>';
-  }
-  return s;
+function cardHTML(c, opts) {
+  opts = opts || {};
+  const bits = [];
+  const tierText = c.tier ? ("T" + c.tier) : (c.kind_label || "—");
+  bits.push('<div class="ctop">');
+  bits.push('<span class="tier">' + esc(tierText) + "</span>");
+  if (c.golden) bits.push('<span class="tag gold">金色</span>');
+  if (opts.price) bits.push('<span class="price">' + esc(opts.price) + "</span>");
+  bits.push("</div>");
+  bits.push('<div class="cname">' + esc(cardName(c)) + "</div>");
+  const race = c.is_minion ? (c.race_text || "无") : (c.kind_label || c.race_text || "");
+  if (race && race !== tierText) bits.push('<div class="crace">' + esc(race) + "</div>");
+  bits.push(kwHTML(c));
+  if (c.text) bits.push('<div class="ctext" title="' + esc(c.text) + '">' + esc(c.text) + "</div>");
+  if (opts.note) bits.push('<div class="cnote">' + esc(opts.note) + "</div>");
+  bits.push('<div class="cfoot">' + statsHTML(c) + "</div>");
+  return bits.join("");
 }
-function attachedHTML(items, key) {
-  const n = (items || []).length;
-  if (!n) return "";
-  const rows = items.map((a) =>
-    '<div class="attachitem"><b>' + esc(a.name_zh || a.name || "?") + '</b> ' +
-    '<span class="kw">' + esc(a.kind_label || "附件") + '</span>' +
-    (a.text ? '<div class="mini">' + esc(a.text) + '</div>' : "") +
-    '<div class="src">来源 ' + esc(a.card_id || "未知") +
-    (a.cost !== null && a.cost !== undefined ? ' · 费用 ' + esc(a.cost) : "") + '</div></div>').join("");
-  return '<details class="attach" data-key="attach-' + esc(key || "x") + '">' +
-    '<summary>+' + n + ' 附件 ▸</summary><div class="attachlist">' + rows + '</div></details>';
+function makeCard(c, opts) {
+  opts = opts || {};
+  const el = document.createElement("div");
+  el.className = "card" + (opts.state ? " " + opts.state : "");
+  if (c.golden) el.classList.add("golden");
+  if (opts.full) el.classList.add("fulltext");
+  el.dataset.kind = opts.kind;
+  el.dataset.index = String(opts.index);
+  el.dataset.dragKind = opts.kind;
+  el.dataset.dragIndex = String(opts.index);
+  el.dataset.dragName = cardName(c);
+  el.setAttribute("draggable", "true");
+  el.setAttribute("aria-grabbed", "false");
+  el.tabIndex = 0;
+  el.innerHTML = cardHTML(c, opts);
+  el.title = (c.card_id || "") + (opts.title ? "  " + opts.title : "");
+  return el;
 }
-/* 卡面效果默认完整展示；属性来源与附件默认折叠。 */
-function cardHTML(c, extra, key) {
-  const name = c.name_zh || c.name || "?";
-  const k = key || c.card_id || name;
-  const parts = [];
-  parts.push(artHTML(c));
-  parts.push('<div class="tier-badge">' + esc(c.tier_label || ("★" + (c.tier || 0))) + '</div>');
-  parts.push('<div class="cname">' + esc(name) +
-    (c.golden ? ' <span class="kw golden-kw">金色</span>' : '') + '</div>');
-  parts.push('<div class="raceline">' + esc(c.race_text || "无") +
-    (c.kind_label && !c.is_minion ? ' · ' + esc(c.kind_label) : '') + '</div>');
-  parts.push('<div class="cmeta"><span>' + statsHTML(c) + '</span><span class="spell">' +
-    (c.activate_cost !== null && c.activate_cost !== undefined ? '发动 ' + c.activate_cost + ' 金' : '') +
-    '</span></div>');
-  parts.push(kwHTML(c));
-  if (c.text) {
-    parts.push('<details class="fx" data-key="fx-' + esc(k) + '"><summary>卡面效果 ▸</summary>' +
-      '<div class="quote">[卡面] ' + esc(c.text) + '</div></details>');
+function shopState(c) {
+  if (c.buy !== null && c.buy !== undefined) return "buyable";
+  const r = String(c.buy_reason || "");
+  if (r.indexOf("金币不足") >= 0 || r.indexOf("手牌已满") >= 0) return "muted";
+  return "unavailable";
+}
+function renderShop() {
+  const n = (S.action_space && S.action_space.N_SHOP) || 8;
+  const box = $("shop");
+  box.innerHTML = "";
+  for (let i = 0; i < n; i++) {
+    const slot = document.createElement("div");
+    slot.className = "slot shop-slot";
+    slot.dataset.drop = "shop";
+    slot.dataset.index = String(i);
+    const c = (S.shop || [])[i];
+    if (c) {
+      slot.appendChild(makeCard(c, {
+        kind: "shop", index: i, state: shopState(c),
+        price: c.price_label || "", note: c.frozen ? "已冻结" : (c.owned ? "已持有 " + c.owned + (c.triple_need ? "/" + c.triple_need : "") : ""),
+        title: c.buy_reason || ""
+      }));
+    } else {
+      slot.classList.add("empty");
+      slot.textContent = "空槽";
+    }
+    box.appendChild(slot);
   }
-  if (c.golden_text) {
-    parts.push('<details class="fx" data-key="gfx-' + esc(k) + '"><summary>金卡效果 ▸</summary>' +
-      '<div class="quote">[金卡卡面] ' + esc(c.golden_text) + '</div></details>');
+}
+function renderHand() {
+  const n = (S.action_space && S.action_space.N_HAND) || 10;
+  const box = $("hand");
+  box.innerHTML = "";
+  for (let i = 0; i < n; i++) {
+    const slot = document.createElement("div");
+    slot.className = "slot hand-slot";
+    slot.dataset.drop = "hand";
+    slot.dataset.index = String(i);
+    const c = (S.hand || [])[i];
+    if (c) {
+      const usable = (c.play || []).length || (c.magnetize || []).length;
+      const note = [c.play_cost_label, c.locked_label, c.temporary ? "临时牌" : ""].filter(Boolean).join(" · ");
+      slot.appendChild(makeCard(c, {
+        kind: "hand", index: i, state: usable ? "" : "unavailable",
+        note: note, title: c.play_reason || ""
+      }));
+    } else {
+      slot.classList.add("empty");
+      slot.textContent = "空手牌位";
+    }
+    box.appendChild(slot);
   }
-  if (c.attached && c.attached.length) parts.push(attachedHTML(c.attached, k));
-  if (c.breakdown_text) {
-    parts.push('<details class="bd" data-key="bd-' + esc(k) + '"><summary>属性来源 ▸</summary>' +
-      '<div class="mini">' + esc(c.breakdown_text) + '</div></details>');
+  const h = S.hud || {};
+  $("handhint").textContent = (S.hand || []).length + " / " + (h.hand_limit ?? 10) +
+    (h.hand_queue_len ? " · 队列 " + h.hand_queue_len : "");
+}
+function renderBoard() {
+  const n = (S.action_space && S.action_space.N_BOARD) || 7;
+  const box = $("board");
+  box.innerHTML = "";
+  for (let i = 0; i < n; i++) {
+    const slot = document.createElement("div");
+    slot.className = "slot board-slot";
+    slot.dataset.drop = "board";
+    slot.dataset.index = String(i);
+    const c = (S.board || [])[i];
+    if (c) {
+      slot.appendChild(makeCard(c, {
+        kind: "board", index: i, note: (c.attached_names || []).length ? "附件 " + c.attached_names.length : "",
+        title: c.sell_reason || ""
+      }));
+    } else {
+      slot.classList.add("empty");
+      slot.textContent = (i + 1) + " 号空位";
+    }
+    box.appendChild(slot);
   }
-  return parts.join("") + (extra || "");
+  $("boardhint").textContent = (S.board || []).length + " / 7 随从";
+}
+function renderButtons() {
+  const box = $("buttons");
+  box.innerHTML = "";
+  for (const b of (S.buttons || [])) {
+    if (b.key === "end") continue;
+    const el = document.createElement("button");
+    el.className = "btn" + (b.key === "dark_gift" ? " primary" : "");
+    el.textContent = b.label + (b.price ? " · " + b.price + "金" : "");
+    el.disabled = !b.enabled || !!S.over || b.action === null || b.action === undefined;
+    if (!el.disabled) el.dataset.act = String(b.action);
+    el.title = [b.hint, b.reason].filter(Boolean).join(" · ");
+    box.appendChild(el);
+  }
+}
+function renderTrinkets() {
+  const h = S.hud || {};
+  const ts = h.trinkets || [];
+  $("trinkethint").textContent = "已获得 " + ts.length + " 个";
+  $("trinkets").innerHTML = ts.length ? ts.map((t) => (
+    '<div class="lineitem"><div class="lhead"><span class="tag">' + esc(t.slot_tag || "饰品") + "</span>" +
+    "<b>" + esc(cardName(t)) + "</b></div>" +
+    (t.text ? '<details data-key="trinket-' + esc(t.card_id || cardName(t)) + '"><summary>效果</summary>' +
+      '<div class="quote">' + esc(t.text) + "</div></details>" : "") + "</div>"
+  )).join("") : '<div class="mini dim">尚未获得饰品</div>';
+  const dg = h.dark_gift;
+  if (!dg) {
+    $("darkgift").innerHTML = '<div class="mini dim">无黑暗之赐</div>';
+  } else {
+    $("darkgift").innerHTML = '<div class="lineitem"><div class="lhead"><span class="tag">黑暗之赐</span>' +
+      '<span class="mini">' + esc(dg.cost_label || "?") + " · 已用 " + esc(dg.uses_label || "0") + "</span></div>" +
+      '<div class="mini">可选星级 ' + esc(dg.tiers_label || "—") + " · 下回合 " + esc(dg.next_tiers_label || "—") + "</div>" +
+      '<div class="selacts">' + actionButton("使用黑暗之赐", (!dg.enabled || S.over) ? null : dg.action,
+        {reason: dg.reason, ok: "已使用黑暗之赐"}) + "</div></div>";
+  }
+  const effects = h.effects || [];
+  $("effects").innerHTML = effects.map((e) => {
+    const card = e.card || {};
+    return '<div class="mini">持续效果：' + esc(cardName(card)) + " x" + esc(e.stacks) + "</div>";
+  }).join("");
+}
+function renderDeity() {
+  const d = (S.hud || {}).deity || {};
+  $("deityhint").textContent = d.present ? ("门槛 " + d.threshold + " 只") : "本局无神明";
+  if (!d.present) {
+    $("deity").innerHTML = '<div class="mini dim">' + esc(d.hint || "本局大厅无畸变怪") + "</div>";
+    return;
+  }
+  const trigs = (d.triggers || []).map((t, i) => (
+    '<div class="dtrig">' + (i + 1) + ") <b>" + esc(t.phase_label || t.phase) + "</b> · " +
+    esc(t.condition) + " · " + esc(t.effect) + " <span class=\"src\">" + esc(t.source) + "</span></div>"
+  )).join("");
+  const nums = (d.numbers || []).map((n) => (
+    '<span class="dnum">' + esc(n.label) + " " + esc(n.value) + " <span class=\"src\">" + esc(n.source) + "</span></span>"
+  )).join("");
+  const dstats = (d.atk !== null && d.atk !== undefined)
+    ? '<span class="cstats"><b class="atk">' + esc(d.atk) + '</b><span class="slash">/</span><b class="hp">' + esc(d.hp ?? "-") + "</b></span>"
+    : "";
+  $("deity").innerHTML = '<div class="deity">' +
+    '<div class="dname"><b>' + esc(cardName(d)) + "</b> " + dstats + "</div>" +
+    '<div class="dmeta">' + esc(d.tier_label || "") + " · " + esc(d.race_text || "") + "</div>" +
+    (d.text ? '<details data-key="deity-text"><summary>卡面效果</summary><div class="quote">' + esc(d.text) + "</div></details>" : "") +
+    (trigs ? '<details data-key="deity-triggers"><summary>触发 ' + (d.triggers || []).length + " 条</summary>" + trigs + "</details>" : "") +
+    (nums ? '<details data-key="deity-nums"><summary>数值与来源</summary><div class="dnumline">' + nums + "</div></details>" : "") +
+    "</div>";
+}
+function renderOpponents() {
+  $("opphint").textContent = "存活 " + (S.alive ?? "?") + "/8";
+  $("opp").innerHTML = (S.opponents || []).map((o) => {
+    const oh = o.hero || {};
+    const name = oh.name_zh || oh.name || "未知英雄";
+    const status = o.alive
+      ? ("生命 " + o.health + " · 护甲 " + (o.armor ?? 0) + " · T" + o.tier)
+      : ("淘汰 #" + (o.placement || "?"));
+    const seen = (o.seen_board || []).length
+      ? ('<details data-key="seen-' + esc(o.id) + '"><summary>曾见 ' + o.seen_board.length + " 随从</summary>" +
+         '<div class="mini">' + o.seen_board.map((m) => esc(cardName(m)) + " " + esc(m.atk ?? "") + "/" + esc(m.hp ?? "") +
+           (m.golden ? " 金" : "")).join("、") + "</div></details>")
+      : '<div class="mini dim">' + esc(o.seen_label || "从未交战") + "</div>";
+    const tr = (o.trinket_names || []).length
+      ? '<div class="mini">饰品：' + esc(o.trinket_names.join("、")) + "</div>" : "";
+    return '<div class="opprow' + (o.alive ? "" : " dead") + '"><div class="opphead">' +
+      "<b>" + esc(name) + "</b>" + (o.is_next ? '<span class="tag accent">下位</span>' : "") +
+      '<span class="mini">' + esc(status) + "</span></div>" + seen + tr + "</div>";
+  }).join("");
+}
+function renderCombat() {
+  const mc = S.my_combat || {};
+  $("combathint").textContent = mc.mine ? ((mc.result_label || "") + (mc.damage !== null && mc.damage !== undefined ? " · 伤害 " + mc.damage : "")) : "尚未交战";
+  $("mycombat").innerHTML = '<div class="mycombat ' + esc(mc.result || "") + '">' +
+    "<div>" + esc(mc.summary || "本局还没有自己的战斗记录") + "</div>" +
+    (mc.cached ? '<div class="mini dim">缓存：本局最后一次所见</div>' : "") +
+    (mc.truncated ? '<div class="mini bad">战斗被截断</div>' : "") +
+    ((mc.frames && mc.frames.length)
+      ? '<details data-key="combat-frames"><summary>战斗帧 ' + mc.frames.length + "/" + (mc.frame_count || mc.frames.length) + "</summary>" +
+        '<div class="frames">' + mc.frames.map((f, i) => (
+          '<div class="fr"><b>帧 ' + (i + 1) + "</b> " + esc((f.log || []).join("；")) +
+          ((f.boards && f.boards.length)
+            ? '<div class="mini">' + f.boards.map((bd) => bd.map((m) => esc(cardName(m)) + " " + esc(m.atk ?? "") + "/" + esc(m.hp ?? "")).join("、")).join(" vs ") + "</div>"
+            : "") + "</div>"
+        )).join("") + "</div></details>"
+      : '<div class="mini dim">无战斗帧</div>') + "</div>";
+  $("combats").innerHTML = (S.combats || []).length ? S.combats.map((c) => {
+    const bName = (c.b === null || c.b === undefined) ? "幽灵" : ("座位 " + c.b);
+    const win = c.winner === 0 ? ("座位 " + c.a + " 胜") : (c.winner === 1 ? (bName + " 胜") : "平");
+    return esc((c.mine ? "下位 " : "") + "T" + c.turn + "：座位 " + c.a + " vs " + bName + " → " + win + "，伤害 " + c.damage);
+  }).join("<br>") : '<span class="dim">暂无</span>';
+}
+function renderEvents() {
+  const evs = S.events || [];
+  if (!evs.length) { $("events").innerHTML = '<span class="dim">暂无</span>'; return; }
+  const latest = evText(evs[evs.length - 1]);
+  const rest = evs.slice(0, -1).reverse().map((e) => '<div class="eventline">' + esc(evText(e)) + "</div>").join("");
+  $("events").innerHTML = '<div class="eventline">' + esc(latest) + "</div>" +
+    (rest ? '<details data-key="events-more"><summary>更多日志</summary>' + rest + "</details>" : "");
+}
+function renderData() {
+  $("decCount").textContent = String(S.decisions ?? 0);
+  $("undoCount").textContent = String(UNDO_COUNT);
+  $("undoDepth").textContent = (S.undo && S.undo.depth !== undefined ? S.undo.depth : 0) + " / " +
+    (S.undo && S.undo.limit !== undefined ? S.undo.limit : 0);
+  const rp = S.replay || {};
+  $("replaymeta").textContent = rp.path ? (basename(rp.path) + " · " + fmtKB(rp.bytes)) : "—";
+  $("replaymeta").title = rp.path || "";
+  $("replaylink").href = "/replay?ts=" + Date.now();
+  const ub = $("undobtn");
+  ub.disabled = !(S.undo && S.undo.enabled);
+  $("undoreason").textContent = (S.undo && S.undo.enabled)
+    ? ("可撤回 " + (S.undo.depth || 0) + " 步")
+    : ((S.undo && S.undo.reason) || "不可撤回");
+}
+function renderLegal() {
+  $("legal").innerHTML = (S.legal || []).map((a, i) => (
+    "<span>" + a + " " + esc((S.legal_names || [])[i] || "") + "</span>"
+  )).join("");
+}
+async function loadDevText() {
+  const box = $("devpanel");
+  if (!box || !box.open || INITIAL_S) return;  /* /snapshot 已由服务端注入 */
+  let pre = $("statetext");
+  if (!pre) {
+    pre = document.createElement("pre");
+    pre.id = "statetext";
+    box.appendChild(pre);
+  }
+  try {
+    const res = await fetch("/snapshot.txt?ts=" + Date.now());
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    pre.textContent = await res.text();
+  } catch (e) {
+    pre.textContent = "快照文本不可用：" + e;
+  }
 }
 
-/* ── 拖拽：HTML5 DnD + Pointer Events，复用同一 dispatchDrop ───── */
+/* ── 浮层（pending / 对局结束） ─────────────────────────────── */
+function pendingTitle(kind) {
+  return {hero: "选择英雄", discover: "发现", trinket: "选择饰品", choose_one: "抉择",
+          target: "选择目标", hero_power: "选择英雄技能", timewarp: "时空扭曲酒馆", quest: "选择任务"}[kind] || ("选择：" + kind);
+}
+function optionHTML(o, p) {
+  const ok = o.action !== null && o.action !== undefined;
+  const extra = [];
+  if (p.kind === "hero") {
+    extra.push('<div class="mini">护甲 ' + esc(o.armor ?? 0) + " · 生命 " + esc(o.hp ?? 30) + "</div>");
+    if (o.power) extra.push('<div class="mini">技能：' + esc(o.power.name_zh || "") + (o.power.text ? " · " + esc(o.power.text) : "") + "</div>");
+  }
+  if (p.kind === "trinket") {
+    extra.push('<div class="mini">' + (p.free ? "免费" : (o.price_label || "价格未知")) + "</div>");
+  }
+  if (p.kind === "timewarp" && o.cost !== undefined && o.cost !== null) extra.push('<div class="mini">' + esc(o.cost) + " 金</div>");
+  if (o.chronum_cost !== undefined && o.chronum_cost !== null) extra.push('<div class="mini">' + esc(o.chronum_cost) + " 时空币</div>");
+  if (o.weight !== undefined && o.weight !== null) extra.push('<div class="mini">权重 ' + esc(o.weight) + "%</div>");
+  if (o.branch_label) extra.push('<div class="mini">' + esc(o.branch_label) + "</div>");
+  if (o.goal) extra.push('<div class="mini">目标：' + esc(o.goal) + "</div>");
+  if (o.reward) extra.push('<div class="mini">奖励：' + esc(cardName(o.reward)) + "</div>");
+  return '<div class="optcard' + (ok ? "" : " disabled") + '"' +
+    (ok ? ' data-act="' + o.action + '" data-ok="已选择：' + esc(cardName(o)) + '"' : "") +
+    ' role="button" tabindex="' + (ok ? "0" : "-1") + '">' +
+    cardHTML(o, {full: true}) + extra.join("") +
+    (ok ? '<div class="optcta">选择</div>' : '<div class="mini bad">' + esc(o.action_reason || "当前不可选") + "</div>") +
+    "</div>";
+}
+function renderOverlay() {
+  const ov = $("overlay");
+  if (!ov) return;
+  if (S.over) {
+    ov.classList.remove("hidden");
+    ov.innerHTML = '<div class="pbox"><h2>对局结束</h2>' +
+      '<div class="sub">名次 <b class="good">' + esc(S.placement) + "</b> / 8 · 已记录 " + esc(S.decisions) + " 条决策</div>" +
+      '<div class="mini">' + esc(basename((S.replay || {}).path || "")) + " · " + fmtKB((S.replay || {}).bytes) + "</div>" +
+      '<div class="btns" style="margin-top:16px">' +
+      '<button class="btn primary" data-newgame="same">同 seed 再来</button>' +
+      '<button class="btn" data-newgame="random">随机新局</button>' +
+      '<a class="btn" href="/replay?ts=' + Date.now() + '" download>下载 replay</a></div></div>';
+    return;
+  }
+  const p = S.pending;
+  if (!p) { ov.classList.add("hidden"); ov.innerHTML = ""; return; }
+  ov.classList.remove("hidden");
+  const bits = [];
+  bits.push('<div class="pbox"><h2>' + esc(p.kind_label || pendingTitle(p.kind)) + "</h2>");
+  if (p.hint) bits.push('<div class="sub">' + esc(p.hint) + "</div>");
+  if (p.source && (p.source.name_zh || p.source.name)) {
+    bits.push('<div class="sub">来源：' + esc(cardName(p.source)) + (p.source.text ? " · " + esc(p.source.text) : "") + "</div>");
+  }
+  if (p.replace) bits.push('<div class="sub">替换：' + esc(cardName(p.replace)) + "</div>");
+  bits.push('<div class="popts">');
+  if (p.kind === "target") {
+    for (const t of (p.targets || [])) {
+      const ok = t.action !== null && t.action !== undefined;
+      bits.push('<div class="optcard' + (ok ? "" : " disabled") + '"' +
+        (ok ? ' data-act="' + t.action + '" data-ok="已选择目标"' : "") + ' role="button" tabindex="' + (ok ? "0" : "-1") + '">' +
+        '<div class="cname">' + esc(t.name) + "</div>" +
+        '<div class="mini">目标 ' + esc(t.index) + "</div>" +
+        (ok ? '<div class="optcta">选择</div>' : '<div class="mini bad">' + esc(t.action_reason || "不可选") + "</div>") + "</div>");
+    }
+  } else {
+    for (const o of (p.options || [])) bits.push(optionHTML(o, p));
+  }
+  bits.push("</div>");
+  if (p.chronum !== null && p.chronum !== undefined) bits.push('<div class="mini">时空币：' + esc(p.chronum) + "</div>");
+  bits.push('<div class="btns">');
+  if (p.leave_action !== null && p.leave_action !== undefined) {
+    bits.push('<button class="btn" data-act="' + p.leave_action + '">离开时空酒馆</button>');
+  }
+  if (p.cancel_action !== null && p.cancel_action !== undefined) {
+    bits.push('<button class="btn ghost" data-act="' + p.cancel_action + '">取消选择</button>');
+  }
+  bits.push("</div></div>");
+  ov.innerHTML = bits.join("");
+}
+
+function render() {
+  if (!S) return;
+  if (S.pending) SEL = {kind: null, index: null};
+  const open = collectOpen();
+  renderHud();
+  renderTavern();
+  renderShop();
+  renderHand();
+  renderBoard();
+  renderButtons();
+  renderTrinkets();
+  renderDeity();
+  renderOpponents();
+  renderCombat();
+  renderEvents();
+  renderData();
+  renderLegal();
+  restoreOpen(open);
+  renderOverlay();
+  applySelection();
+  updateHint();
+}
+
+/* ── 键盘菜单 ───────────────────────────────────────────────── */
+function menuActions(payload) {
+  const out = [];
+  const i = payload.index;
+  if (payload.kind === "shop") {
+    const c = (S.shop || [])[i];
+    if (c && c.buy !== null && c.buy !== undefined) out.push({label: "购买 " + cardName(c), action: c.buy, toast: "已购买：" + cardName(c)});
+  } else if (payload.kind === "hand") {
+    const c = (S.hand || [])[i] || {};
+    for (const p of (c.play || [])) out.push({label: "打到 " + (p.pos + 1) + " 号位", action: p.action, toast: "已打出：" + cardName(c)});
+    for (const m of (c.magnetize || [])) out.push({label: "磁力→随从 " + (m.board + 1), action: m.action, toast: "已磁力吸附：" + cardName(c)});
+  } else if (payload.kind === "board") {
+    const b = (S.board || [])[i] || {};
+    if (b.sell !== null && b.sell !== undefined) out.push({label: "出售", action: b.sell, toast: "已出售：" + cardName(b)});
+    if (b.activate !== null && b.activate !== undefined) out.push({label: "发动", action: b.activate, toast: "已发动：" + cardName(b)});
+    for (const m of (b.move || [])) out.push({label: "换到 " + (m.to + 1) + " 号位", action: m.action, toast: "已换位：" + cardName(b)});
+  }
+  return out;
+}
+function showActionMenu(payload) {
+  const acts = menuActions(payload);
+  if (!acts.length) { toast("该卡当前没有可执行动作"); return; }
+  MENU.acts = acts;
+  const box = $("menubox");
+  box.classList.remove("hidden");
+  box.innerHTML = '<div class="menu"><h3>更多操作 · ' + esc(payload.name || "") + "</h3>" +
+    acts.map((a, i) => '<button class="btn" data-mi="' + i + '">' + esc(a.label) + "</button>").join("") +
+    '<button class="btn ghost" data-menu-close="1">关闭</button></div>';
+}
+function hideMenu() {
+  const box = $("menubox");
+  if (box) { box.classList.add("hidden"); box.innerHTML = ""; }
+  MENU.acts = [];
+}
+function showMenuForSelection() {
+  const c = currentCard();
+  if (!c) return;
+  showActionMenu({kind: SEL.kind, index: SEL.index, name: cardName(c)});
+}
+function primaryAction() {
+  if (!S || S.pending || S.over) return;
+  if (SEL.kind === "shop") {
+    const c = (S.shop || [])[SEL.index];
+    if (!c) return;
+    if (c.buy === null || c.buy === undefined) { toast(c.buy_reason || "当前不能购买，未提交"); return; }
+    act(c.buy, "已购买：" + cardName(c));
+  } else if (SEL.kind === "hand") {
+    const c = (S.hand || [])[SEL.index] || {};
+    const p = (c.play || [])[0];
+    if (p) { act(p.action, "已打出：" + cardName(c)); return; }
+    const m = (c.magnetize || [])[0];
+    if (m) { act(m.action, "已磁力吸附：" + cardName(c)); return; }
+    toast(c.play_reason || "当前不能打出，未提交");
+  } else if (SEL.kind === "board") {
+    showMenuForSelection();
+  }
+}
+
+/* ── 点击 / 键盘 / 菜单（事件委托） ─────────────────────────── */
+function onCardClick(kind, index) {
+  if (!S || S.over) { toast("对局结束，未提交"); return; }
+  if (S.pending) { toast("先完成选择面板"); return; }
+  if (kind === "board" && SEL.kind === "hand") {
+    const h = (S.hand || [])[SEL.index] || {};
+    const m = (h.magnetize || []).find((x) => x.board === index);
+    if (m) { act(m.action, "已磁力吸附：" + cardName(h)); return; }
+  }
+  if (kind === "board" && SEL.kind === "board" && SEL.index !== index) {
+    const b = (S.board || [])[SEL.index] || {};
+    const mv = (b.move || []).find((x) => x.to === index);
+    if (mv) { act(mv.action, "已换位：" + cardName(b)); return; }
+  }
+  if (SEL.kind === kind && SEL.index === index) {
+    if (kind === "shop") primaryAction();
+    else showMenuForSelection();
+    return;
+  }
+  selectCard(kind, index);
+}
+function onSlotClick(slot) {
+  if (!S || S.pending || S.over) return;
+  if (slot.dataset.drop !== "board") return;
+  const i = Number(slot.dataset.index);
+  if (SEL.kind === "hand") {
+    const c = (S.hand || [])[SEL.index] || {};
+    const p = (c.play || []).find((x) => x.pos === i);
+    if (p) { act(p.action, "已打出：" + cardName(c)); return; }
+    const m = (c.magnetize || []).find((x) => x.board === i);
+    if (m) { act(m.action, "已磁力吸附：" + cardName(c)); return; }
+    toast("该位置不能打出，未提交");
+  } else if (SEL.kind === "board") {
+    const b = (S.board || [])[SEL.index] || {};
+    const mv = (b.move || []).find((x) => x.to === i);
+    if (mv) act(mv.action, "已换位：" + cardName(b));
+    else toast("不能移到该位置，未提交");
+  } else if (!(S.board || [])[i]) {
+    toast("先点一张手牌");
+  }
+}
+document.addEventListener("click", (ev) => {
+  const t = ev.target;
+  if (t.closest("[data-selclear]")) { clearSel(); return; }
+  const mi = t.closest("[data-mi]");
+  if (mi) {
+    const a = MENU.acts[Number(mi.dataset.mi)];
+    hideMenu();
+    if (a) act(a.action, a.toast);
+    return;
+  }
+  if (t.closest("[data-menu-close]")) { hideMenu(); return; }
+  if (t.closest("[data-menu]")) { showMenuForSelection(); return; }
+  if (t.closest("#undobtn")) { undo(); return; }
+  if (t.closest("#endturnbtn")) {
+    const b = t.closest("#endturnbtn");
+    if (b.dataset.act) act(Number(b.dataset.act), "已结束回合");
+    return;
+  }
+  if (t.closest("#newbtn")) { newGame(); return; }
+  const ng = t.closest("[data-newgame]");
+  if (ng) {
+    const mode = ng.dataset.newgame;
+    if (mode === "same") newGame(Number(S.seed));
+    else newGame("random");
+    return;
+  }
+  const actEl = t.closest("[data-act]");
+  if (actEl) {
+    if (actEl.disabled) return;
+    if (Date.now() < DRAG.suppressClickUntil) return;
+    act(Number(actEl.dataset.act), actEl.dataset.ok || undefined);
+    return;
+  }
+  if (Date.now() < DRAG.suppressClickUntil) return;
+  const card = t.closest(".card[data-kind]");
+  if (card) {
+    if (t.closest("details, summary, a, input, button, select, textarea")) return;
+    onCardClick(card.dataset.kind, Number(card.dataset.index));
+    return;
+  }
+  const slot = t.closest(".slot[data-drop]");
+  if (slot) onSlotClick(slot);
+});
+document.addEventListener("keydown", (ev) => {
+  const t = ev.target;
+  if (t.closest("input, textarea, select, [contenteditable]")) return;
+  if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && ev.key.toLowerCase() === "z") {
+    ev.preventDefault();
+    undo();
+    return;
+  }
+  if (ev.key === "Escape") {
+    hideMenu();
+    clearSel();
+    return;
+  }
+  if (ev.key === "Enter" || ev.key === " ") {
+    if (t.closest("button, a")) return;
+    const focusAct = t.closest("[data-act]");
+    if (focusAct) { ev.preventDefault(); focusAct.click(); return; }
+    const focusCard = t.closest(".card[data-kind]");
+    if (focusCard && !BUSY) {
+      ev.preventDefault();
+      onCardClick(focusCard.dataset.kind, Number(focusCard.dataset.index));
+      return;
+    }
+    if (ev.key !== "Enter") return;
+    if (!S || BUSY || S.pending) return;
+    if (SEL.kind) { ev.preventDefault(); primaryAction(); }
+    else if (!S.over) { ev.preventDefault(); endTurn(); }
+    return;
+  }
+  if (/^[1-8]$/.test(ev.key) && S && !S.pending && !S.over && !BUSY) {
+    if (!$("menubox").classList.contains("hidden")) return;
+    const i = Number(ev.key) - 1;
+    if ((S.shop || [])[i]) selectCard("shop", i);
+    else toast("该商店槽为空");
+  }
+});
+
+/* ── 拖拽（保留原有 DnD，事件委托） ─────────────────────────── */
 function canDrag() { return !!(S && !S.over && !BUSY && !S.pending); }
 function num(v) { return (v === null || v === undefined || Number.isNaN(Number(v))) ? null : Number(v); }
+function mkPlan(ok, action, reason, label, okMsg) {
+  return {ok: ok, action: action, reason: reason, label: label, toast: okMsg};
+}
 function planDrop(src, dst) {
-  const mk = (ok, action, reason, label, okMsg) => ({ok, action, reason, label, toast: okMsg});
-  if (!S) return mk(false, null, "状态尚未加载");
-  if (S.over) return mk(false, null, "对局已结束，不能再操作");
-  if (S.pending) return mk(false, null, "选择面板打开时先完成选择/取消，拖拽已暂停");
-  if (BUSY) return mk(false, null, "请求处理中，请稍候");
-  if (!src || !dst) return mk(false, null, "没有识别到拖拽源/目标");
+  if (!S) return mkPlan(false, null, "状态尚未加载");
+  if (S.over) return mkPlan(false, null, "对局已结束");
+  if (S.pending) return mkPlan(false, null, "先完成选择面板");
+  if (BUSY) return mkPlan(false, null, "请求处理中，请稍候");
+  if (!src || !dst) return mkPlan(false, null, "没有识别到拖拽源/目标");
   const sk = src.kind, si = num(src.index), dk = dst.kind, di = num(dst.index);
   if (sk === "shop") {
     if (dk !== "hand" && dk !== "board" && dk !== "buy") {
-      return mk(false, null, "商店卡只能拖到购买区/战场：只触发 Buy，购买后进入手牌");
+      return mkPlan(false, null, "商店卡只能拖到购买区或战场");
     }
     const c = (S.shop || [])[si];
-    if (!c) return mk(false, null, "该酒馆槽位为空，不能购买");
+    if (!c) return mkPlan(false, null, "该酒馆槽位为空");
     const a = num(c.buy);
-    if (a === null) return mk(false, null, c.buy_reason || "该酒馆槽位当前不能购买");
-    return mk(true, a, "", "购买 " + (c.name_zh || c.name) + " -> Buy(" + si + ") = " + a,
-      "已购买：" + (c.name_zh || c.name) + "，已进入手牌；请从手牌拖到战场打出");
+    if (a === null) return mkPlan(false, null, c.buy_reason || "该槽当前不能购买");
+    return mkPlan(true, a, "", "购买 " + cardName(c), "已购买：" + cardName(c) + "，已进入手牌");
   }
   if (sk === "hand") {
-    if (dk !== "board") return mk(false, null, "手牌只能拖到我方战场槽位（Play 或 Magnetize）");
+    if (dk !== "board") return mkPlan(false, null, "手牌只能拖到战场槽位");
     const c = (S.hand || [])[si];
-    if (!c) return mk(false, null, "该手牌槽位为空");
+    if (!c) return mkPlan(false, null, "该手牌槽位为空");
     const npos = (S.action_space && S.action_space.N_POS) || 8;
-    if (di === null || di < 0 || di >= npos) return mk(false, null, "战场位置越界");
+    if (di === null || di < 0 || di >= npos) return mkPlan(false, null, "战场位置越界");
     const board = S.board || [];
     if (di < board.length) {
       const mag = (c.magnetize || []).find((m) => num(m.board) === di);
-      if (mag) {
-        return mk(true, mag.action, "",
-          "磁力 " + (c.name_zh || c.name) + " -> 随从 " + (di + 1) + "：Magnetize = " + mag.action,
-          "已磁力吸附：" + (c.name_zh || c.name));
-      }
-      return mk(false, null, c.magnetize_reason || "该牌不能磁力吸附到这个随从");
+      if (mag) return mkPlan(true, mag.action, "", "磁力 " + cardName(c), "已磁力吸附：" + cardName(c));
+      return mkPlan(false, null, c.magnetize_reason || "不能磁力吸附到该随从");
     }
     const play = (c.play || []).find((p) => num(p.pos) === di);
-    if (play) {
-      return mk(true, play.action, "",
-        "打出 " + (c.name_zh || c.name) + " 到 " + (di + 1) + " 号位：Play = " + play.action,
-        "已打出：" + (c.name_zh || c.name));
-    }
-    return mk(false, null, c.play_reason || "现在不能打出到这个位置");
+    if (play) return mkPlan(true, play.action, "", "打出 " + cardName(c), "已打出：" + cardName(c));
+    return mkPlan(false, null, c.play_reason || "现在不能打出到该位置");
   }
   if (sk === "board") {
     const b = (S.board || [])[si];
-    if (!b) return mk(false, null, "该战场槽位为空");
+    if (!b) return mkPlan(false, null, "该战场槽位为空");
     if (dk === "board") {
-      if (di === si) return mk(false, null, "随从已在原位，未提交");
+      if (di === si) return mkPlan(false, null, "随从已在原位");
       const mv = (b.move || []).find((m) => num(m.to) === di);
-      if (mv) return mk(true, mv.action, "",
-        "移动 " + si + " -> " + di + "：Move = " + mv.action,
-        "已移动：" + (b.name_zh || b.name) + " 到 " + (di + 1) + " 号位");
-      return mk(false, null, "该位置不能移动（以引擎 move 掩码为准）");
+      if (mv) return mkPlan(true, mv.action, "", "移动 " + cardName(b), "已换位：" + cardName(b));
+      return mkPlan(false, null, "该位置不能移动");
     }
     if (dk === "sell") {
       const a = num(b.sell);
-      if (a === null) return mk(false, null, b.sell_reason || "当前不能出售");
-      return mk(true, a, "", "出售 " + (b.name_zh || b.name) + "：Sell = " + a,
-        "已出售：" + (b.name_zh || b.name));
+      if (a === null) return mkPlan(false, null, b.sell_reason || "当前不能出售");
+      return mkPlan(true, a, "", "出售 " + cardName(b), "已出售：" + cardName(b));
     }
     if (dk === "activate") {
       const a = num(b.activate);
-      if (a === null) return mk(false, null, b.activate_reason || "该随从没有可发动技能");
-      return mk(true, a, "", "发动 " + (b.name_zh || b.name) + "：Activate = " + a,
-        "已发动：" + (b.name_zh || b.name));
+      if (a === null) return mkPlan(false, null, b.activate_reason || "该随从没有可发动技能");
+      return mkPlan(true, a, "", "发动 " + cardName(b), "已发动：" + cardName(b));
     }
-    return mk(false, null, "战场随从只能拖到战场槽位/出售区/发动区");
+    return mkPlan(false, null, "战场随从只能拖到战场、出售区或发动区");
   }
-  return mk(false, null, "未知拖拽源");
+  return mkPlan(false, null, "未知拖拽源");
 }
 function clearTarget() {
   if (DRAG.targetEl) {
@@ -2453,7 +3255,6 @@ function dropTargetAt(x, y) {
 function beginDrag(payload, el, ev) {
   DRAG.payload = payload;
   DRAG.sourceEl = el;
-  DRAG.snapshot = el.cloneNode(true);
   el.classList.add("dragging");
   el.setAttribute("aria-grabbed", "true");
   document.body.classList.add("dragging");
@@ -2471,26 +3272,21 @@ function endDrag() {
   clearTarget();
   DRAG.payload = null;
   DRAG.sourceEl = null;
-  DRAG.snapshot = null;
   document.body.classList.remove("dragging");
 }
 function rollbackDrag(reason, sourceEl) {
-  const el = sourceEl || DRAG.sourceEl;
-  toast(reason || "该操作不合法，已回滚");
-  if (el) {
-    el.classList.remove("dragging");
-    el.classList.add("shake");
-    setTimeout(() => el.classList.remove("shake"), 450);
-  }
-  /* 拖拽期间从不修改数组/DOM；源卡保持原位。快照只用于异常兜底。 */
-  if (DRAG.snapshot && el && el.parentNode && !el.parentNode.contains(DRAG.snapshot)) {
-    /* 不替换正常节点，避免破坏 keyed 槽位；仅保留快照语义 */
+  toast((reason || "操作不合法") + "，已回滚", false);
+  if (sourceEl) {
+    sourceEl.classList.remove("dragging");
+    sourceEl.classList.add("shake");
+    setTimeout(() => sourceEl.classList.remove("shake"), 450);
   }
   endDrag();
 }
 function dispatchDrop(dst, payload, srcEl) {
   const plan = planDrop(payload, dst);
   if (!plan.ok) { rollbackDrag(plan.reason || plan.label, srcEl); return; }
+  DRAG.suppressClickUntil = Date.now() + 300;
   endDrag();
   act(plan.action, plan.toast || plan.label);
 }
@@ -2511,9 +3307,9 @@ function moveGhost(x, y) {
   DRAG.ghost.style.top = y + "px";
 }
 function startPointerDrag(ev, el, payload) {
-  if (ev.pointerType === "mouse") return;  /* 桌面走 HTML5 DnD */
+  if (ev.pointerType === "mouse") return;
   if (!canDrag()) return;
-  if (ev.target.closest("button,.chip,summary,a,input,select,textarea")) return;
+  if (ev.target.closest("button, summary, a, input, select, textarea")) return;
   const sx = ev.clientX, sy = ev.clientY;
   const timer = setTimeout(() => {
     if (!canDrag() || !DRAG.pointer) return;
@@ -2545,12 +3341,12 @@ function startPointerDrag(ev, el, payload) {
   function finish(e) {
     if (DRAG.pointer && DRAG.pointer.active) {
       e.preventDefault();
-      DRAG.suppressClick = true;
+      DRAG.suppressClickUntil = Date.now() + 300;
       const z = dropTargetAt(e.clientX, e.clientY);
       const pl = DRAG.pointer.payload, src = DRAG.pointer.el;
       cleanup();
       if (z) dispatchDrop(z, pl, src);
-      else rollbackDrag("拖到了无效区域，已回滚", src);
+      else rollbackDrag("拖到了无效区域", src);
       return;
     }
     cleanup();
@@ -2558,524 +3354,26 @@ function startPointerDrag(ev, el, payload) {
   function cancel() {
     const p = DRAG.pointer;
     cleanup();
-    if (p && p.active) rollbackDrag("拖拽取消，已回滚", p.el);
+    if (p && p.active) rollbackDrag("拖拽取消", p.el);
   }
   document.addEventListener("pointermove", move, {passive: false});
   document.addEventListener("pointerup", finish);
   document.addEventListener("pointercancel", cancel);
 }
-function bindCard(el, payload) {
-  el.dataset.kind = payload.kind;
-  el.dataset.index = String(payload.index);
-  el.dataset.dragKind = payload.kind;
-  el.dataset.dragIndex = String(payload.index);
-  el.dataset.dragName = payload.name || "";
-  el.setAttribute("draggable", "true");
-  el.setAttribute("aria-grabbed", "false");
-  el.tabIndex = 0;
-  el.addEventListener("dragstart", (ev) => {
-    if (!canDrag()) { ev.preventDefault(); return; }
-    DRAG.suppressClick = false;
-    beginDrag(payload, el, ev);
-  });
-  el.addEventListener("dragend", () => endDrag());
-  el.addEventListener("pointerdown", (ev) => startPointerDrag(ev, el, payload));
-  el.addEventListener("keydown", (ev) => {
-    if ((ev.key === "Enter" || ev.key === " ") &&
-        !ev.target.closest("button,summary,a,input,select,textarea")) {
-      ev.preventDefault();
-      showActionMenu(payload);
-    }
-  });
+function payloadOf(el) {
+  return {kind: el.dataset.dragKind, index: Number(el.dataset.dragIndex), name: el.dataset.dragName || ""};
 }
-
-/* ── 卡牌工厂 ─────────────────────────────────────────────────── */
-function makeCardEl(c, cls, key, extra) {
-  const el = document.createElement("div");
-  el.className = "card " + (cls || "") + (c.golden ? " golden" : "");
-  el.innerHTML = cardHTML(c, extra, key);
-  el.querySelectorAll(".chip").forEach((ch) => {
-    ch.onclick = (e) => { e.stopPropagation(); act(Number(ch.dataset.a)); };
-  });
-  el.querySelectorAll("details").forEach((d) => d.addEventListener("click", (e) => e.stopPropagation()));
-  return el;
-}
-function shopCard(c, i) {
-  const buyable = c.buy !== null && c.buy !== undefined;
-  const el = makeCardEl(c, (buyable ? "clickable" : ""), "shop-" + i,
-    '<div class="badge">' + esc(c.price_label || "价格未知") + '</div>' +
-    (c.frozen ? '<div class="frozen">❄</div>' : '') +
-    (c.owned ? '<div class="mini">已持有 ' + esc(c.owned) + (c.triple_need ? '/' + esc(c.triple_need) : '') + '</div>' : '') +
-    (buyable ? '' : '<div class="reason">不可购买：' + esc(c.buy_reason || "") + '</div>'));
-  bindCard(el, {kind: "shop", index: i, name: c.name_zh || c.name || ""});
-  if (buyable) {
-    el.addEventListener("click", (ev) => {
-      if (ev.target.closest("details,summary,button,a,input")) return;
-      if (DRAG.suppressClick) { DRAG.suppressClick = false; return; }
-      act(c.buy, "已购买：" + (c.name_zh || c.name) + "，已进入手牌；请从手牌拖到战场打出");
-    });
-  }
-  el.title = (c.card_id || "") + (buyable
-    ? ("  拖动/点击购买 = Buy(" + c.slot + ") = action " + c.buy + "，价格 " + (c.price_label || ""))
-    : ("  不可购买：" + (c.buy_reason || ""))) + "  （拖到战场也只触发购买，不会自动打出）";
-  return el;
-}
-function handCard(c, i) {
-  const ok = (c.play && c.play.length) || (c.magnetize && c.magnetize.length);
-  const chips = [];
-  for (const p of (c.play || [])) {
-    chips.push('<span class="chip" data-a="' + p.action + '">打出到 ' + (p.pos + 1) + ' 号位 · [' + p.action + ']</span>');
-  }
-  for (const m of (c.magnetize || [])) {
-    chips.push('<span class="chip" data-a="' + m.action + '">磁力→随从' + (m.board + 1) + ' · [' + m.action + ']</span>');
-  }
-  const el = makeCardEl(c, (ok ? "legal" : ""), "hand-" + i,
-    '<div class="mini">' + esc(c.play_cost_label || "") + (c.locked_label ? ' · ' + esc(c.locked_label) : '') +
-    (c.temporary ? ' · 临时牌' : '') + '</div>' +
-    '<div class="chips">' + chips.join("") + '</div>' +
-    (!ok ? '<div class="reason">' + esc(c.play_reason || "当前不能打出") + '</div>' : ''));
-  bindCard(el, {kind: "hand", index: i, name: c.name_zh || c.name || ""});
-  el.title = (c.card_id || "") + "  手牌 #" + i + "（拖到战场空槽=Play，拖到已有随从=Magnetize）";
-  return el;
-}
-function boardCard(c, i) {
-  const chips = [];
-  if (c.sell !== null && c.sell !== undefined) chips.push('<span class="chip" data-a="' + c.sell + '">出售 · [' + c.sell + ']</span>');
-  if (c.activate !== null && c.activate !== undefined) {
-    chips.push('<span class="chip" data-a="' + c.activate + '">发动' +
-      (c.activate_cost !== null && c.activate_cost !== undefined ? '（' + c.activate_cost + '金）' : '') +
-      ' · [' + c.activate + ']</span>');
-  }
-  const moves = (c.move || []).map((m) =>
-    '<span class="chip" data-a="' + m.action + '">移到 ' + (m.to + 1) + ' 号位 · [' + m.action + ']</span>').join("");
-  let reason = "";
-  if (c.sell === null || c.sell === undefined) reason = c.sell_reason || "当前不能出售";
-  else if ((c.activate === null || c.activate === undefined) && c.activate_reason) reason = c.activate_reason;
-  const el = makeCardEl(c, "", "board-" + (c.eid !== null && c.eid !== undefined ? c.eid : i),
-    '<div class="chips">' + chips.join("") + '</div>' +
-    (moves ? '<details data-key="moves-' + esc(i) + '"><summary>移动到 ▸</summary><div class="chips">' + moves + '</div></details>' : "") +
-    (reason ? '<div class="reason">' + esc(reason) + '</div>' : ''));
-  bindCard(el, {kind: "board", index: i, name: c.name_zh || c.name || ""});
-  el.title = (c.card_id || "") + "  " + (c.position_label || "") + "（左右拖动排序；拖到出售区=出售）";
-  return el;
-}
-
-/* ── 各面板渲染 ───────────────────────────────────────────────── */
-function renderShop() {
-  const n = (S.action_space && S.action_space.N_SHOP) || 8;
-  const box = $("shop");
-  box.innerHTML = "";
-  for (let i = 0; i < n; i++) {
-    const slot = document.createElement("div");
-    slot.className = "slot shop-slot";
-    slot.dataset.drop = "shop";
-    slot.dataset.index = String(i);
-    const c = (S.shop || [])[i];
-    if (c) slot.appendChild(shopCard(c, i));
-    else { slot.classList.add("empty"); slot.textContent = "空槽"; }
-    box.appendChild(slot);
-  }
-}
-function renderHand() {
-  const n = (S.action_space && S.action_space.N_HAND) || 10;
-  const box = $("hand");
-  box.innerHTML = "";
-  for (let i = 0; i < n; i++) {
-    const slot = document.createElement("div");
-    slot.className = "slot hand-slot";
-    slot.dataset.drop = "hand";
-    slot.dataset.index = String(i);
-    const c = (S.hand || [])[i];
-    if (c) slot.appendChild(handCard(c, i));
-    else { slot.classList.add("empty"); slot.textContent = "空手牌位"; }
-    box.appendChild(slot);
-  }
-}
-function renderBoard() {
-  const n = (S.action_space && S.action_space.N_BOARD) || 7;
-  const box = $("board");
-  box.innerHTML = "";
-  for (let i = 0; i < n; i++) {
-    const slot = document.createElement("div");
-    slot.className = "slot board-slot";
-    slot.dataset.drop = "board";
-    slot.dataset.index = String(i);
-    const c = (S.board || [])[i];
-    if (c) slot.appendChild(boardCard(c, i));
-    else { slot.classList.add("empty"); slot.textContent = (i + 1) + " 号空位"; }
-    box.appendChild(slot);
-  }
-}
-function renderButtons() {
-  $("undobtn").disabled = !S.undo?.enabled;
-  $("undobtn").title = S.undo?.reason || "撤回上一步";
-  $("undoreason").textContent = S.undo?.reason || ("可撤回 " + S.undo.depth + " 步");
-  const box = $("buttons");
-  box.innerHTML = "";
-  for (const b of (S.buttons || [])) {
-    const wrap = document.createElement("div");
-    wrap.className = "bwrap";
-    const el = document.createElement("button");
-    el.innerHTML = '<b>' + esc(b.label) + '</b>' +
-      (b.price ? ' <span class="gold">' + b.price + ' 金</span>' : '') +
-      (b.action !== null ? ' <span class="dim">[' + b.action + ']</span>' : '');
-    el.disabled = !b.enabled || S.over;
-    el.onclick = () => act(b.action);
-    el.title = (b.key || "") + " = action " + b.action +
-      (b.hint ? " · " + b.hint : "") + (b.reason ? " · 不可用：" + b.reason : "");
-    if (b.key === "end") el.classList.add("end");
-    wrap.appendChild(el);
-    if (String(b.key).startsWith("power")) {
-      const p = (S.hero_powers || []).find(p => "power" + p.slot === b.key);
-      if (p && p.text) {
-        const d = document.createElement("details"); d.className = "power-description";
-        d.innerHTML = '<summary>技能描述 ▸</summary><div class="quote">' + esc(p.text) + '</div>';
-        wrap.appendChild(d);
-      }
-    }
-    if (!b.enabled && b.reason) {
-      const r = document.createElement("span");
-      r.className = "reason";
-      r.textContent = b.reason;
-      wrap.appendChild(r);
-    }
-    box.appendChild(wrap);
-  }
-}
-function trinketHTML(t, i) {
-  return '<div class="trinket"><span class="tname">[' + esc(t.slot_tag || t.kind_label || "饰品") + '] ' +
-    esc(t.name_zh || t.name) + '</span>' +
-    (t.text ? '<details class="fx" data-key="trinket-' + i + '"><summary>效果 ▸</summary>' +
-      '<span>' + esc(t.text) + '</span></details>' : '') +
-    (t.tier ? '<span class="mini">T' + t.tier + '</span>' : '') + '</div>';
-}
-function renderTrinkets() {
-  const h = S.hud || {};
-  const ts = h.trinkets || [];
-  $("trinkethint").textContent = "已获得 " + ts.length + " 个";
-  $("trinkets").innerHTML = ts.length ? ts.map(trinketHTML).join("")
-    : '<div class="dim">尚未获得饰品（第 6 回合小饰品 / 第 9 回合大饰品的四选一会走 pending 弹窗）</div>';
-  const dg = h.dark_gift;
-  if (!dg) {
-    $("darkgift").innerHTML = '<div class="dim">无黑暗之赐数据</div>';
-  } else {
-    $("darkgift").innerHTML = '<div class="dg">' +
-      '<div class="dgline"><b>黑暗之赐</b> · 费用 ' + esc(dg.cost_label || "?") +
-      ' · 已用 ' + esc(dg.uses_label || "0") +
-      ' · 本回合' + (dg.used_this_turn ? "已用" : "未用") +
-      ' · 可选星级 ' + esc(dg.tiers_label || "—") +
-      '（下回合 ' + esc(dg.next_tiers_label || "—") + '，第 ' + esc(dg.unlock_turn) + ' 回合解锁）</div>' +
-      '<div><button data-a-dark="' + dg.action + '" class="primary"' +
-      ((!dg.enabled || S.over) ? ' disabled' : '') + '>使用黑暗之赐 [' + dg.action + ']</button></div>' +
-      (dg.reason ? '<div class="reason">不可用：' + esc(dg.reason) + '</div>' : '') +
-      '</div>';
-    const btn = $("darkgift").querySelector("[data-a-dark]");
-    if (btn) btn.onclick = () => act(Number(btn.dataset.aDark));
-  }
-  const effects = h.effects || [];
-  $("effects").innerHTML = effects.map((e) => {
-    const card = e.card || {};
-    return '<div>持续效果：' + esc(card.name_zh || card.name) + ' ×' + esc(e.stacks) + '</div>';
-  }).join("");
-}
-function deityHTML(d) {
-  if (!d || !d.present) {
-    return '<div class="dempty">本局无神明</div>' +
-      '<div class="dmeta">' + esc((d && d.hint) || "大厅没有畸变怪时不会出现神明") + '</div>';
-  }
-  const badges = [];
-  if (d.golden) badges.push('<span class="kw golden-kw">金色</span>');
-  if (d.reborn) badges.push('<span class="kw">复生</span>');
-  const trigs = (d.triggers || []).map((t, i) =>
-    '<div class="dtrig">' + (i + 1) + ') <b>阶段：' + esc(t.phase_label || t.phase) + '</b>' +
-    ' · 条件：' + esc(t.condition) + ' · 效果：' + esc(t.effect) +
-    ' <span class="src">[' + esc(t.source) + ']</span></div>').join("");
-  const nums = (d.numbers || []).map((n) =>
-    '<span class="dnum"><b>' + esc(n.label) + '</b> ' + esc(n.value) +
-    ' <span class="src">[' + esc(n.source) + ']</span></span>').join("");
-  return '<div class="dname"><b>' + esc(d.name_zh || d.name) + '</b> ' +
-    '<span class="atk-hp"><span class="a">' + (d.atk ?? "") + '</span>/' +
-    '<span class="h">' + (d.hp ?? "") + '</span></span> ' + badges.join(" ") + '</div>' +
-    '<div class="dmeta">' + esc(d.tier_label || "") + ' · ' + esc(d.race_text || "") +
-    ' · ' + esc(d.card_id || "") + '</div>' +
-    (d.text ? '<details class="fx" data-key="deity-text"><summary>卡面效果 ▸</summary>' +
-      '<div class="dtext">[' + esc(d.text_note || "卡面") + '] ' + esc(d.text) + '</div></details>' : '') +
-    '<details class="deitytrig" data-key="deity-triggers"><summary>神明触发：' +
-      (d.triggers || []).length + ' 条 ▸</summary>' + trigs + '</details>' +
-    (nums ? '<details data-key="deity-nums"><summary>数值与来源 ▸</summary><div class="dnumline">' + nums + '</div></details>' : '') +
-    (d.hint ? '<div class="mini">' + esc(d.hint) + '</div>' : '');
-}
-function renderDeity() {
-  const d = (S.hud || {}).deity || {};
-  $("deityhint").textContent = d.present ? ("唤醒门槛 ≥ " + d.threshold + " 只畸变怪死亡")
-    : "本局大厅无畸变怪";
-  $("deity").innerHTML = deityHTML(d);
-}
-function renderOpponents() {
-  $("opphint").textContent = "存活 " + (S.alive ?? "?") + "/8";
-  $("opp").innerHTML = (S.opponents || []).map((o) => {
-    const oh = o.hero || {};
-    const head = '<div class="opprow' + (o.alive ? '' : ' dead') + '">' +
-      '<span>' + (o.is_next ? '▶ ' : '') + esc(oh.name_zh || oh.name || "未知英雄") + '</span>' +
-      '<span>' + (o.alive
-        ? ('生命 <b class="hp">' + o.health + '</b> · 护甲 ' + (o.armor ?? 0) + ' · T' + o.tier +
-           (o.win_streak ? ' · 连胜 ' + o.win_streak : ''))
-        : ('淘汰 #' + (o.placement || "?"))) + '</span></div>';
-    let seen;
-    if (o.seen_board && o.seen_board.length) {
-      seen = '<details data-key="seen-' + esc(o.id) + '"><summary>' + esc(o.seen_label || "上次所见") +
-        ' · ' + o.seen_board.length + ' 随从 ▸</summary><div class="mini">' +
-        o.seen_board.map((m) => esc(m.name_zh || m.name) + ' ' + (m.atk ?? '') + '/' + (m.hp ?? '') +
-          (m.golden ? '★' : '') + (m.race_text ? '[' + esc(m.race_text) + ']' : '')).join('、') +
-        '</div></details>';
-    } else {
-      seen = '<div class="mini dim">' + esc(o.seen_label || "从未交战（未知阵容）") + '</div>';
-    }
-    const tr = (o.trinket_names && o.trinket_names.length)
-      ? '<div class="mini">饰品：' + esc(o.trinket_names.join('、')) + '</div>' : '';
-    return head + seen + tr;
-  }).join("");
-}
-function renderCombat() {
-  const mc = S.my_combat || {};
-  $("combathint").textContent = mc.mine ? ((mc.result_label || "") + " · 伤害 " + mc.damage) : "尚未交战";
-  $("mycombat").innerHTML = '<div class="mycombat ' + (mc.result || '') + '">' +
-    '<div>' + esc(mc.summary || "本局还没有自己的战斗记录") + '</div>' +
-    ((mc.cached) ? '<div class="mini dim">缓存：本局最后一次见到的己方战斗</div>' : '') +
-    ((mc.truncated) ? '<div class="mini bad">战斗被截断</div>' : '') +
-    ((mc.frames && mc.frames.length)
-      ? '<details data-key="combat-frames"><summary>战斗帧 ' + mc.frames.length + '/' + (mc.frame_count || mc.frames.length) + ' ▸</summary>' +
-        '<div class="frames">' + mc.frames.map((f, i) =>
-          '<div class="fr"><b>帧 ' + (i + 1) + '</b> ' + esc((f.log || []).join('；')) +
-          ((f.boards && f.boards.length)
-            ? '<div class="mini">场面：' + f.boards.map((bd) => bd.map((m) =>
-                (m.name_zh || m.name) + ' ' + (m.atk ?? '') + '/' + (m.hp ?? '')).join('、')).join('  ⚔  ') + '</div>'
-            : '') + '</div>').join('') + '</div></details>'
-      : '<div class="mini dim">无战斗帧（引擎未记录 frames）</div>') +
-    '</div>';
-  $("combats").innerHTML = (S.combats || []).length
-    ? S.combats.map((c) => {
-        const bName = c.b === null || c.b === undefined ? '幽灵' : ('座位 ' + c.b);
-        const win = c.winner === 0 ? ('座位 ' + c.a + ' 胜')
-          : (c.winner === 1 ? (bName + ' 胜') : '平');
-        return (c.mine ? '▶ ' : '') + 'T' + c.turn + '：座位 ' + c.a + ' vs ' + bName + ' → ' + win +
-          '，伤害 ' + c.damage + (c.truncated ? '（截断）' : '');
-      }).join('<br>')
-    : '<span class="dim">暂无</span>';
-}
-function renderEvents() {
-  const evs = S.events || [];
-  if (!evs.length) { $("events").innerHTML = '<span class="dim">暂无</span>'; return; }
-  const latest = evText(evs[evs.length - 1]);
-  const rest = evs.slice(0, -1).reverse().map((e) => '<div class="eventline">' + esc(evText(e)) + '</div>').join("");
-  $("events").innerHTML = '<div class="eventline">' + esc(latest) + '</div>' +
-    (rest ? '<details data-key="events-more"><summary>更多日志 ▸</summary>' + rest + '</details>' : "");
-}
-function collectOpen() {
-  const m = {};
-  document.querySelectorAll("details[data-key]").forEach((d) => { m[d.dataset.key] = d.open; });
-  return m;
-}
-function restoreOpen(m) {
-  document.querySelectorAll("details[data-key]").forEach((d) => { if (m[d.dataset.key]) d.open = true; });
-}
-function render() {
-  /* 卡面效果默认完整展示；附件/技能描述仍由 details 保持折叠。 */
-  if (!S) return;
-  const open = collectOpen();
-  const h = S.hud || {};
-  const races = (h.lobby_races_zh && h.lobby_races_zh.length ? h.lobby_races_zh : h.lobby_races) || [];
-  $("hud").innerHTML =
-    '<span class="hero">' + esc(heroName(h.hero)) + '</span>' +
-    '<span class="pill">生命 <span class="hp">' + (h.health ?? "?") + '</span></span>' +
-    '<span class="pill">护甲 ' + (h.armor ?? 0) + '</span>' +
-    '<span class="pill">金币 <span class="gold">' + (h.gold ?? "?") + '</span>/' + (h.max_gold ?? "?") + '</span>' +
-    '<span class="pill">等级 T' + (h.tier ?? "?") + '</span>' +
-    '<span class="pill">回合 ' + (S.turn ?? "?") + ' · ' + esc(S.phase_label || S.phase) + '</span>' +
-    '<span class="pill">存活 ' + (S.alive ?? "?") + '/8</span>' +
-    '<span class="pill">名次 ' + (S.over ? ('<b class="good">' + S.placement + '</b>') : (h.placement || "-")) + '</span>' +
-    '<span class="pill">本局种族 ' + esc(races.join("/") || "无") + '</span>' +
-    (h.next_is_ghost ? '<span class="pill bad">下位对手：幽灵局</span>' : '') +
-    (h.hero_power ? '<span class="pill">技能：' + esc(h.hero_power.name_zh || h.hero_power.name) + '</span>' : '') +
-    '<span class="pill dim">seed ' + S.seed + ' · 决策 ' + S.decisions + '</span>' +
-    (S.over ? '<span class="pill bad">对局结束</span>' : '');
-
-  $("tavernhint").textContent = "刷新 " + h.refresh_price + " 金" +
-    (h.free_refreshes ? "（免费 " + h.free_refreshes + "）" : "") +
-    " · 升级 " + h.upgrade_price + " 金 → T" + ((h.tier || 0) + 1) +
-    " · 冻结 " + (h.frozen ? "开" : "关");
-  $("taverninfo").innerHTML =
-    '<span class="pill">金币 <b class="gold">' + (h.gold ?? "?") + '</b>/' + (h.max_gold ?? "?") + '</span>' +
-    '<span class="pill">等级 <b>T' + (h.tier ?? "?") + '</b></span>' +
-    '<span class="pill">酒馆槽位 ' + (S.shop || []).length + '/8</span>' +
-    '<span class="pill">冻结 <b>' + (h.frozen ? "是" : "否") + '</b></span>' +
-    '<span class="pill">刷新 ' + (h.refresh_price ?? "?") + ' 金</span>' +
-    '<span class="pill">升本 ' + (h.upgrade_price ?? "?") + ' 金</span>';
-
-  renderShop();
-  renderHand();
-  renderBoard();
-  $("boardhint").textContent = (S.board || []).length + " / 7 个随从（左右拖动排序）";
-  $("handhint").textContent = (S.hand || []).length + " / " + (h.hand_limit ?? 10) +
-    (h.hand_queue_len ? " · 队列 " + h.hand_queue_len : "");
-  renderButtons();
-  document.querySelectorAll("details.fx").forEach(d => { d.open = true; });
-  renderTrinkets();
-  renderDeity();
-  renderOpponents();
-  renderCombat();
-  renderEvents();
-  $("legal").innerHTML = (S.legal || []).map((a, i) => '<span>' + a + ' ' + esc((S.legal_names || [])[i]) + '</span>').join("");
-  if (S.replay) {
-    $("replaymeta").textContent = (S.replay.bytes / 1024).toFixed(1) + " KB · " + String(S.replay.path || "").split("/").pop();
-    $("replaylink").href = "/replay?ts=" + Date.now();
-  }
-  restoreOpen(open);
-  renderOverlay();
-}
-
-/* ── 选择面板 / 键盘菜单 ───────────────────────────────────────── */
-function pendingTitle(kind) {
-  return {hero: "选择英雄", discover: "发现（Discover）", trinket: "选择饰品", choose_one: "抉择",
-          target: "选择目标", hero_power: "选择英雄技能", timewarp: "时空扭曲酒馆", quest: "选择任务"}[kind] || ("选择：" + kind);
-}
-function renderOverlay() {
-  const ov = $("overlay");
-  if (S.over) {
-    ov.classList.remove("hidden");
-    ov.innerHTML = '<div class="pbox"><h2>对局结束</h2>' +
-      '<div class="sub">seed ' + S.seed + ' · 名次 <b class="good">' + S.placement + '</b> / 8 · 共 ' + S.decisions + ' 个决策</div>' +
-      '<div class="mini">placements（座位→名次）：' + esc((S.placements || []).join(", ")) + '</div>' +
-      '<div class="btns" style="margin-top:14px"><button class="new" id="again">再来一局（同 seed）</button>' +
-      '<button id="again2">随机新 seed</button></div></div>';
-    $("again").onclick = () => api("/new", {seed: S.seed}).then((d) => { if (d) { S = d; render(); } });
-    $("again2").onclick = () => api("/new", {}).then((d) => { if (d) { S = d; render(); } });
-    return;
-  }
-  const p = S.pending;
-  if (!p) { ov.classList.add("hidden"); ov.innerHTML = ""; return; }
-  ov.classList.remove("hidden");
-  const parts = [];
-  parts.push('<div class="pbox"><h2>' + esc(p.kind_label || pendingTitle(p.kind)) + '</h2>');
-  /* Discover/抉择说明默认折叠；点击 summary 只展开说明，不提交动作 */
-  if (p.kind === "discover" || p.kind === "choose_one") {
-    const head = p.kind === "discover"
-      ? ("发现：" + ((p.options || []).length === 3 ? "三选一" : ((p.options || []).length + " 选一")) + " ▸")
-      : "抉择：选项1/2 ▸";
-    parts.push('<details class="pendinginfo" data-key="pending-info"><summary>' + head + '</summary>');
-    if (p.hint) parts.push('<div class="sub">' + esc(p.hint) + '</div>');
-    if (p.source && (p.source.name_zh || p.source.name)) {
-      parts.push('<div class="sub">来源：' + esc(p.source.name_zh || p.source.name) +
-        (p.source.text ? ' — [卡面] ' + esc(p.source.text) : '') + '</div>');
-    }
-    parts.push('</details>');
-  } else {
-    if (p.hint) parts.push('<div class="sub">' + esc(p.hint) + '</div>');
-    if (p.source && (p.source.name_zh || p.source.name)) {
-      parts.push('<div class="sub">来源：' + esc(p.source.name_zh || p.source.name) +
-        (p.source.text ? ' — [卡面] ' + esc(p.source.text) : '') + '</div>');
-    }
-  }
-  if (p.kind === "target") {
-    parts.push('<div class="sub">点击一个目标（action = 30 + 序号）</div><div class="popts">');
-    for (const t of (p.targets || [])) {
-      parts.push('<div class="card' + (t.action !== null ? ' clickable' : '') + '" data-a="' + t.action + '">' +
-        '<div class="cname">' + esc(t.name) + '</div>' +
-        '<div class="mini">eid ' + esc(t.eid) + ' · 目标 ' + t.index + '</div>' +
-        '<div class="chips"><span class="chip">选择 · [' + t.action + ']</span></div>' +
-        (t.action_reason ? '<div class="reason">' + esc(t.action_reason) + '</div>' : '') + '</div>');
-    }
-    parts.push('</div>');
-  } else if (p.kind === "hero") {
-    parts.push('<div class="sub">选择本局英雄（技能与护甲随英雄而定）</div><div class="popts">');
-    for (const o of (p.options || [])) {
-      const ok = o.action !== null && o.action !== undefined;
-      parts.push('<div class="card' + (ok ? ' clickable' : '') + '" data-a="' + o.action + '">' +
-        cardHTML(o, '<div class="cmeta"><span>护甲 ' + (o.armor ?? 0) + '</span><span>生命 ' + (o.hp ?? 30) + '</span></div>' +
-          (o.power ? '<details class="fx"><summary>技能效果 ▸</summary><div class="attach">技能：' +
-            esc(o.power.name_zh || "") + (o.power.text ? '<br>[卡面] ' + esc(o.power.text) : '') + '</div></details>' : '') +
-          '<div class="chips"><span class="chip">选择 · [' + o.action + ']</span></div>' +
-          (ok ? '' : '<div class="reason">' + esc(o.action_reason || "") + '</div>'), "pending-hero-" + o.action) + '</div>');
-    }
-    parts.push('</div>');
-  } else {
-    if (p.kind === "trinket") {
-      parts.push('<div class="sub">' + (p.free ? "免费饰品" : "购买一个饰品") +
-        (p.replace ? '（替换现有饰品：' + esc(p.replace.name_zh || p.replace.name) + '）' : '') +
-        ' · 四选一，回合数（第 6/9 回合）≠ 酒馆星级</div>');
-    }
-    parts.push('<div class="popts">');
-    for (const o of (p.options || [])) {
-      const ok = o.action !== null && o.action !== undefined;
-      const priceBits = [];
-      if (o.price_label) priceBits.push(o.price_label);
-      else if (o.cost !== undefined && o.cost !== null && (p.kind === "trinket" || p.kind === "timewarp")) {
-        priceBits.push(o.cost + ' 金');
-      }
-      if (o.chronum_cost !== undefined && o.chronum_cost !== null) priceBits.push(o.chronum_cost + ' 时空币');
-      if (o.weight !== undefined && o.weight !== null) priceBits.push('出价权重 ' + o.weight + '%');
-      parts.push('<div class="card' + (ok ? ' clickable' : '') + '" data-a="' + o.action + '">' +
-        cardHTML(o, '<div class="mini">' + (o.branch_label ? esc(o.branch_label) + ' · ' : '') +
-          (o.goal ? '目标：' + esc(o.goal) + ' ' : '') +
-          (o.reward ? '奖励：' + esc(o.reward.name_zh || o.reward.name) : '') + '</div>' +
-          (priceBits.length ? '<div class="badge">' + esc(priceBits.join(' · ')) + '</div>' : '') +
-          '<div class="chips"><span class="chip">选择 · [' + o.action + ']</span></div>' +
-          (ok ? '' : '<div class="reason">' + esc(o.action_reason || "当前不可选") + '</div>'), "pending-opt-" + o.action) + '</div>');
-    }
-    parts.push('</div>');
-  }
-  if (p.leave_action !== null && p.leave_action !== undefined) {
-    parts.push('<button data-a="' + p.leave_action + '">离开时空酒馆（' + p.leave_action + '）</button> ');
-  }
-  if (p.chronum !== null && p.chronum !== undefined) parts.push('<span class="mini">时空币：' + p.chronum + ' · </span>');
-  if (p.cancel_action !== null && p.cancel_action !== undefined) {
-    parts.push('<button data-a="' + p.cancel_action + '">取消（' + p.cancel_action + '）</button>');
-  }
-  parts.push('</div>');
-  ov.innerHTML = parts.join("");
-  ov.querySelectorAll("[data-a]").forEach((el) => {
-    if (el.dataset.a === "null") { el.style.opacity = ".55"; return; }
-    el.onclick = () => act(Number(el.dataset.a));
-    el.style.cursor = "pointer";
-  });
-  ov.querySelectorAll("details").forEach((d) => d.addEventListener("click", (e) => e.stopPropagation()));
-}
-function menuActions(payload) {
-  const out = [];
-  const i = payload.index;
-  if (payload.kind === "shop") {
-    const c = (S.shop || [])[i];
-    if (c && c.buy !== null && c.buy !== undefined) {
-      out.push({label: "购买 " + (c.name_zh || c.name) + "（Buy " + c.buy + "）", action: c.buy,
-        toast: "已购买：" + (c.name_zh || c.name) + "，已进入手牌"});
-    }
-  } else if (payload.kind === "hand") {
-    const c = (S.hand || [])[i] || {};
-    for (const p of (c.play || [])) out.push({label: "打出到 " + (p.pos + 1) + " 号位（Play " + p.action + "）", action: p.action});
-    for (const m of (c.magnetize || [])) out.push({label: "磁力→随从" + (m.board + 1) + "（Magnetize " + m.action + "）", action: m.action});
-  } else if (payload.kind === "board") {
-    const b = (S.board || [])[i] || {};
-    if (b.sell !== null && b.sell !== undefined) out.push({label: "出售（Sell " + b.sell + "）", action: b.sell});
-    if (b.activate !== null && b.activate !== undefined) out.push({label: "发动（Activate " + b.activate + "）", action: b.activate});
-    for (const m of (b.move || [])) out.push({label: "移到 " + (m.to + 1) + " 号位（Move " + m.action + "）", action: m.action});
-  }
-  return out;
-}
-function showActionMenu(payload) {
-  const acts = menuActions(payload);
-  if (!acts.length) { toast("该卡当前没有可执行动作"); return; }
-  const box = $("menubox");
-  box.classList.remove("hidden");
-  box.innerHTML = '<div class="menu"><h3>键盘操作 · ' + esc(payload.name || "") + '</h3>' +
-    acts.map((a, i) => '<button class="mbtn" data-mi="' + i + '">' + esc(a.label) + '</button>').join("") +
-    '<button class="mbtn" data-close="1">关闭</button></div>';
-  box.querySelectorAll("[data-mi]").forEach((b) => {
-    b.onclick = () => { const a = acts[Number(b.dataset.mi)]; box.classList.add("hidden"); act(a.action, a.toast); };
-  });
-  box.querySelector("[data-close]").onclick = () => box.classList.add("hidden");
-}
-
-/* ── 全局事件 ─────────────────────────────────────────────────── */
+document.addEventListener("dragstart", (ev) => {
+  const el = ev.target.closest(".card[data-drag-kind]");
+  if (!el) return;
+  if (!canDrag()) { ev.preventDefault(); return; }
+  beginDrag(payloadOf(el), el, ev);
+});
+document.addEventListener("dragend", () => endDrag());
+document.addEventListener("pointerdown", (ev) => {
+  const el = ev.target.closest(".card[data-drag-kind]");
+  if (el) startPointerDrag(ev, el, payloadOf(el));
+});
 document.addEventListener("dragover", (ev) => {
   if (!DRAG.payload) return;
   ev.preventDefault();
@@ -3091,20 +3389,15 @@ document.addEventListener("drop", (ev) => {
   ev.preventDefault();
   const z = dropTargetAt(ev.clientX, ev.clientY);
   const payload = DRAG.payload, src = DRAG.sourceEl;
-  if (!z) { rollbackDrag("拖到了无效区域，已回滚", src); return; }
+  if (!z) { rollbackDrag("拖到了无效区域", src); return; }
   dispatchDrop(z, payload, src);
 });
-document.addEventListener("dragend", () => endDrag());
-document.addEventListener("keydown", (ev) => {
-  if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && ev.key.toLowerCase() === "z" &&
-      !ev.target.closest("input,textarea,[contenteditable]")) {
-    ev.preventDefault(); undo();
-  }
-  if (ev.key === "Escape") { $("menubox").classList.add("hidden"); }
+
+$("devpanel").addEventListener("toggle", () => {
+  if ($("devpanel").open) loadDevText();
 });
-$("newbtn").onclick = newGame;
-$("undobtn").onclick = undo;
-if (S) { render(); } else { refresh(); }
+
+if (S) { setConn(true); render(); } else { refresh(); }
 </script>
 </body>
 </html>
