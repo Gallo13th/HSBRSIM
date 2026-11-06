@@ -295,6 +295,18 @@ class BatchLeafServer:
         mask_np = np.asarray(m, dtype=bool)
         if not bool(mask_np.any(axis=1).all()):
             bad = np.flatnonzero(~mask_np.any(axis=1))[:8].tolist()
+            # 引擎空 mask 是潜在 bug（B02/B05/B06 各撞过一次）：先把现场落盘再抛，
+            # 便于事后用 state_json 复现（见 docs/EMPTY_MASK.md）。
+            try:
+                import os as _os, time as _t
+                _d = "/tmp/emptymask_dumps"
+                _os.makedirs(_d, exist_ok=True)
+                np.savez_compressed(
+                    _os.path.join(_d, "mask_%d.npz" % int(_t.time())),
+                    features=np.asarray(f, dtype=np.float32)[bad],
+                    mask=mask_np[bad], rows=np.asarray(bad, dtype=np.int32))
+            except BaseException:  # noqa: BLE001
+                pass
             raise ValueError(f"存在无合法动作的行（mask 全 False）：rows={bad}")
         mask_t = torch.from_numpy(mask_np).to(dev)
         t = torch.from_numpy(temps).to(dev).unsqueeze(1)
