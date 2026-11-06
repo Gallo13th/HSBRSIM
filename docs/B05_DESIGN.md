@@ -94,3 +94,18 @@ DRY_RUN=1 OUT=/tmp/dry bash scripts/run_stage300m_b05.sh   # 只打印命令
   （human 面 6.344→6.177→**6.073**→6.219，强度 318→340→**395**→398）
 - 学习信号：`approx_kl` 均 0.0072、`clip_frac` 0.063、`kl_early_stopped` 6.3%、entropy 0.66–0.71 区间震荡（未塌）
 - 吞吐 8.3–8.4k dec/s（比 B03/B04 快，无冻结席 + 宿主负载下降）⇒ 300M ≈ 19:00–19:30
+
+### 2026-11-06 10:59 崩溃（collector 空 mask，非本配方引入）
+
+- **现象**：`iter 752 / 56.69M` 时 `RuntimeError: worker7 采集失败: ValueError('存在无合法动作的行（mask 全 False）：rows=[4]')`，
+  栈底在 `batch_eval._act_batched`（策略前向时某一行 legal mask 全 False）→ trainer rc=1。
+- **性质**：**引擎级潜在 bug**（某个游戏状态没有任何合法动作，但局没结束）。B02 在 92.12M 也撞过同类错误，
+  与 B05 的 lr/配方无关；B05 只是把策略打得更开，更容易走到那个罕见状态。`docs/RUST_COLLECTOR.md` 记载
+  空 mask 在 Rust 采集器里是显式 `ValueError`，没有 fallback。
+- **恢复**：11:14:33 从 `snapshots/step_000701`（cum **52,805,615**）续训：
+  `STOP=247,194,385`、`EVAL_FIRST=7,194,385`（下一个 60M 点）、`RAMP_START=52,805,615`、`seed 27704`；
+  lr 从 2.75e-6 继续（`loaded updates=701`）。损失 3.88M（1.3%）。
+- **监视器**：`--dev-offset 52805615` + `relabel_b05.sh`；已知偏差同 B04（history 含崩溃前行，`cum` 高估 3.88M）。
+- **待办（不阻塞当前 run）**：① 在 `collect_ppo_lockstep` 里对空 mask 加 **dump state_json + 丢弃该局** 的兜底
+  （把 run-killer 变成可复现样本）；② 加 **崩溃自动重启 supervisor**（按快照自动算 DONE/STOP/EVAL_FIRST/RAMP_START），
+  把每次崩溃的代价从 ≤30 分钟压到 ~5 分钟。
