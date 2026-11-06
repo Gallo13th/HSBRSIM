@@ -74,3 +74,36 @@ bash scripts/eval_bot_panel.sh runs/az_stage300m_b04/model.pt b04_300M_bot768 76
 2. **吞吐**：−35% 使 ETA 从 9.5h 变 ~15h；宿主 load 高时更慢（B03 曾低到 0.35M/min）。
 3. **长局样本仍然少**：冻结席只有 2/7，长局占比提升有限；若 200M 仍无长强改善，下一步加 `FROZEN_SEATS=3`
    或直接上阶梯。
+
+## 6. 运行事故记录
+
+### 2026-11-06 06:50 崩溃（宿主 OOM，非引擎/训练代码问题）
+
+- **现象**：`06:50:25` trainer `rc=1`，`RuntimeError: worker19 采集失败: TimeoutError('batch leaf timeout')`。
+- **根因**：宿主**全局 OOM**——隔壁用户的 `cds_ncRNA_train_v4.py` 进程（anon-RSS **176 GB**）触发
+  `oom-kill:constraint=CONSTRAINT_NONE, global_oom`，随之 actor 侧决策服务被饿死/回收，报 leaf timeout。
+  （`dmesg` 有 `Out of memory: Killed process ... (python)` 记录。）
+- **影响**：最后 iter 1979，累计 118.82M；最近快照 `step_001901`（cum 113,359,086）⇒ **损失 5.46M（1.8%）**。
+- **恢复**：`07:14:39` 从 `step_001901`（model+trainer）续训：
+  `STOP_DECISIONS=186,640,914`（=300M−DONE）、`EVAL_FIRST_DECISIONS=6,640,914`（下一个 120M 点）、
+  `RAMP_START_DECISIONS=113,359,086`、`seed=27604`；lr 从 7.99e-7 继续、updates 1901。
+- **监视器**：`stage_monitor.py --dev-offset 113359086 --dev-resume-epoch <resume>` +
+  `/tmp/relabel_b04.sh`（local ckpt 名 → global 名硬链接）。
+  **已知偏差**：history.jsonl 保留了崩溃前的行，monitor 的 `cum`/点标签会**高估 5.46M**；
+  判定用的 150/250/300M 384 局面板走 ckpt 文件（global 名），不受此影响。
+- **教训**：宿主有 176GB 级邻居作业时，`batch leaf timeout` 是外部 OOM 的次生症状，别当引擎 bug 查；
+  续训必须以**快照的 cum**（不是崩溃点的 cum）为 DONE，否则 RAMP/EVAL 偏移会错位。
+
+### 2026-11-06 09:00 B04 停止（判定无效，比 B03 更差）
+
+| 点（384 局，seed 620000） | B03 | B04 | Δ |
+|---|---:|---:|---:|
+| rank | **1.784** | **2.003** | +0.219 |
+| top4 | 98.7% | 95.8% | −2.9pp |
+| win | 47.9% | 39.8% | −8.1pp |
+| 加权 rank / win | 1.855 / 42.4% | 2.091 / 33.9% | +0.236 / −8.5pp |
+| 长强 n / win / rank | 22 / **18.2%** / 2.182 | 29 / **10.3%** / 2.414 | −7.9pp / +0.232 |
+
+⇒ 2 席冻结克隆**明确拖累**了 bot 面与长强子集（human 面也无改善）。在 157M（真实）处停止，不再跑满 300M。
+事后发现两个脚本 confound（见 [B05_DESIGN.md](B05_DESIGN.md) §6）：B04 实际 `max_updates=3000`（B03 是 4500），
+且加载了 s61 的 trainer state（非 fresh）——即 B04 的 lr 比 B03 低约 20%，但不足以解释 0.22 rank 的差距。

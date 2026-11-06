@@ -39,7 +39,9 @@ cd "$ROOT"
 PY="${PYTHON:-/home/data/users/gaoletian/.conda/envs/hiermolgen/bin/python}"
 
 CK="${CK:-runs/az_entity_s61/eval/ckpt_020026719.pt}"
-TS="${TS:-runs/az_entity_s61/trainer.pt}"
+# 注意：用 `-` 而不是 `:-` —— 显式传 TS="" 表示 **不加载 trainer state**（fresh optimizer）；
+# 只有调用方完全没设 TS 时才回落到 s61（历史默认）。B05 起必须能真正 fresh。
+TS="${TS-runs/az_entity_s61/trainer.pt}"
 OUT="${OUT:-runs/az_entity_s73}"
 SEED="${SEED:-27301}"
 STOP_DECISIONS="${STOP_DECISIONS:-20000000}"
@@ -63,6 +65,15 @@ GPU_FREE_CHECK="${GPU_FREE_CHECK:-0}"
 # leaf 批等待（ms）：0=不等待（默认，旧行为逐位等价）；>0 让并发 worker 的叶子评估攒批，
 # 提高 GPU batch_fill（吞吐优化，不影响算法）。见 docs/THROUGHPUT_300M.md
 LEAF_WAIT_MS="${LEAF_WAIT_MS:-0.0}"
+# 优化器强度（B05 起可调；默认值 = 旧硬编码，未设时命令行逐字不变）
+LR="${LR:-1.17e-06}"
+LR_MIN_RATIO="${LR_MIN_RATIO:-0.5}"
+MAX_UPDATES="${MAX_UPDATES:-3000}"
+EPOCHS="${EPOCHS:-1}"
+CLIP="${CLIP:-0.2}"
+TARGET_KL="${TARGET_KL:-0.02}"
+ENTROPY_COEF="${ENTROPY_COEF:-0.001}"
+MAX_GRAD_NORM="${MAX_GRAD_NORM:-1.0}"
 # 固定阵容脚本席（1..3；0=关闭）。脚本席 = hybrid 对手：阵容动作优先、其余引擎 bot 兜底。
 SCRIPT_SEATS="${SCRIPT_SEATS:-0}"
 SCRIPT_COMPS="${SCRIPT_COMPS:-auto}"
@@ -96,7 +107,10 @@ unset CUDA_VISIBLE_DEVICES || true
 # ---------------------------------------------------------------- 前置检查
 [ -x "$PY" ] || die "python 不存在: $PY"
 [ -f "$CK" ] || die "CK 不存在: $CK"
-[ -f "$TS" ] || die "TS 不存在: $TS（精确续训必须同时给 --checkpoint 与 --trainer-state）"
+# TS 为空 = fresh optimizer（不加载 trainer state）；只有给了路径才校验存在性
+if [ -n "$TS" ]; then
+  [ -f "$TS" ] || die "TS 不存在: $TS（精确续训必须同时给 --checkpoint 与 --trainer-state）"
+fi
 [ -f scripts/train_entity_sync.py ] || die "缺 scripts/train_entity_sync.py"
 [ -f scripts/eval_panel.sh ] || die "缺 scripts/eval_panel.sh"
 [ "$STOP_DECISIONS" -ge 1000000 ] 2>/dev/null || die "STOP_DECISIONS 非法: $STOP_DECISIONS"
@@ -136,11 +150,11 @@ CMD=("$PY" scripts/train_entity_sync.py
   --behavior-mix-eps 0.0 --behavior-mix-when carrier_or_spell
   --behavior-mix-max-per-turn 6 --behavior-mix-topk 8 --behavior-mix-turns 1
   --behavior-mix-max-ms 500.0 --behavior-mix-exact 1
-  --epochs 1 --minibatch "$MINIBATCH" --lr 1.17e-06 --lr-min-ratio 0.5 --max-updates 3000
-  --clip 0.2 --target-kl 0.02 --lam 0.995 --gamma 1.0
+  --epochs "$EPOCHS" --minibatch "$MINIBATCH" --lr "$LR" --lr-min-ratio "$LR_MIN_RATIO" --max-updates "$MAX_UPDATES"
+  --clip "$CLIP" --target-kl "$TARGET_KL" --lam 0.995 --gamma 1.0
   --adv-estimator gae --power-alpha 0.25 --power-kappa 10.0 --power-normalize 1
   --power-cutoff 0 --credit-timebase decision --baseline-action-dependent 0
-  --max-grad-norm 1.0 --grad-accum "$GRAD_ACCUM"
+  --max-grad-norm "$MAX_GRAD_NORM" --grad-accum "$GRAD_ACCUM"
   --leaf-compile 0 --leaf-amp off --leaf-wait-ms "$LEAF_WAIT_MS" --rc-threads 8
   --rust-collector 0 --frozen-seats "$FROZEN_SEATS" --trajectory-p 0.0
   --mirror-seats 0 --mirror-p 0.0 --mirror-sample p50 --mirror-seat-random 0
@@ -171,7 +185,7 @@ CMD=("$PY" scripts/train_entity_sync.py
   --gold-curriculum 0 --curriculum-stage none --curriculum-gold-mult 1.0
   --curriculum-anneal-decisions 10000000
   --teacher-bc-coef 0.0 --process-value-coef 0.0
-  --entropy-coef 0.001 --max-actions-per-turn 40 --max-steps 20000
+  --entropy-coef "$ENTROPY_COEF" --max-actions-per-turn 40 --max-steps 20000
   --log-every 10 --workers 1 --batch-size 64
   --gpu-free-check "$GPU_FREE_CHECK" --gpu-free-mib 1024
   --records-dtype fp32 --ipc-mode shm --ipc-shm-slots 2 --collect-sha 0
@@ -240,6 +254,7 @@ if [ "$DRY_RUN" = "1" ]; then
   say "OUT=$OUT  TAG=$TAG  SEED=$SEED  STOP_DECISIONS=$STOP_DECISIONS  GAMES=$GAMES"
   say "PROCESSES=$PROCESSES  GPUS=$GPUS  DEVICE=$DEVICE  EVAL_DEVICE=$EVAL_DEVICE  GPU_FREE_CHECK=$GPU_FREE_CHECK  SCRIPT_SEATS=$SCRIPT_SEATS  SCRIPT_COMPS=$SCRIPT_COMPS"
   say "FROZEN_SEATS=$FROZEN_SEATS  FROZEN_OPPONENT=$FROZEN_OPPONENT"
+  say "LR=$LR  LR_MIN_RATIO=$LR_MIN_RATIO  MAX_UPDATES=$MAX_UPDATES  EPOCHS=$EPOCHS  MINIBATCH=$MINIBATCH  GRAD_ACCUM=$GRAD_ACCUM  CLIP=$CLIP  TARGET_KL=$TARGET_KL  ENTROPY_COEF=$ENTROPY_COEF  MAX_GRAD_NORM=$MAX_GRAD_NORM"
   say "COMP_FIT_COEF=$COMP_FIT_COEF  COMP_FIT_T9_BONUS=$COMP_FIT_T9_BONUS  COMP_TRINKET_COEF=$COMP_TRINKET_COEF"
   say "=== 最终训练命令 ==="
   printf '%s ' "${CMD[@]}"; printf '\n'
