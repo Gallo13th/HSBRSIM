@@ -387,6 +387,7 @@ class History:
     def series(self, key):
         return self.ser.get(key) or []
 
+    @property
     def cum_eff(self) -> int:
         """有效累计 decisions（扣掉续训造成的 history 超前量）。"""
         return int(self.cum) - int(getattr(self, "cum_offset", 0))
