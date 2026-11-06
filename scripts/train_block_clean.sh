@@ -74,6 +74,7 @@ CLIP="${CLIP:-0.2}"
 TARGET_KL="${TARGET_KL:-0.02}"
 ENTROPY_COEF="${ENTROPY_COEF:-0.001}"
 MAX_GRAD_NORM="${MAX_GRAD_NORM:-1.0}"
+RAMP_START="${RAMP_START:-0}"
 # 固定阵容脚本席（1..3；0=关闭）。脚本席 = hybrid 对手：阵容动作优先、其余引擎 bot 兜底。
 SCRIPT_SEATS="${SCRIPT_SEATS:-0}"
 SCRIPT_COMPS="${SCRIPT_COMPS:-auto}"
@@ -163,7 +164,7 @@ CMD=("$PY" scripts/train_entity_sync.py
   --human-board-set-tier 1 --human-board-fidelity board --human-board-fast-inject 1
   --ramp-mode step --ramp-adaptive 0 --ramp-window 5
   --ramp-survive-threshold 0.25 --ramp-tier4-threshold 0.3
-  --ramp-delay-decisions 2M --ramp-max-forced-per-game 12.0 --ramp-start-decisions 0
+  --ramp-delay-decisions 2M --ramp-max-forced-per-game 12.0 --ramp-start-decisions "$RAMP_START"
   --shaping-coef 0.0 --shaping-w-str 1.0 --shaping-w-tier 0.5 --shaping-mode sigma
   --rank-utility-coef 1.0 --terminal-strength-coef 0.0
   --shaping-tier-bonus 0,0,20,60,150,400,900

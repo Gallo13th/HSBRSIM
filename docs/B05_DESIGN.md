@@ -109,3 +109,16 @@ DRY_RUN=1 OUT=/tmp/dry bash scripts/run_stage300m_b05.sh   # 只打印命令
 - **待办（不阻塞当前 run）**：① 在 `collect_ppo_lockstep` 里对空 mask 加 **dump state_json + 丢弃该局** 的兜底
   （把 run-killer 变成可复现样本）；② 加 **崩溃自动重启 supervisor**（按快照自动算 DONE/STOP/EVAL_FIRST/RAMP_START），
   把每次崩溃的代价从 ≤30 分钟压到 ~5 分钟。
+
+### 2026-11-06 10:59 崩溃 #1（mask 全 False）+ 课程偏移回归
+
+- **现象**：worker7 `ValueError('存在无合法动作的行（mask 全 False）：rows=[4]')` → collect 失败 → rc=1，
+  最后 iter 752 / 真实累计 **56.69M**。与 B02 在 92.12M 的崩溃**同一类**（当时也只续训未修根因）。
+- **恢复**：从 `snapshots/step_000701`（cum **52,805,615**）续训，`STOP=247,194,385`、
+  `EVAL_FIRST=7,194,385`（下一个 60M）、**`RAMP_START=52,805,615`**、seed 27705（代价：丢 3.9M ≈ 1.3%）。
+- **回归（重要）**：`train_block_clean.sh` 把 `--ramp-start-decisions` 写死为 0，`run_stage300m.sh`
+  传的 `RAMP_START` 被吞 ⇒ 第一次自动续训把课程重置回「1 席 p0.30 / p50」，已回滚重跑。
+  这是 a188c20 那次"从过期本地镜像整文件回写"造成的第 4 处环境变量失联（前 3 处：LR/MAX_UPDATES、TS、LEAF_WAIT）。
+  **教训：任何"环境变量透传"都必须用 dry-run 打印最终命令来验证，不能只看脚本里写了什么。**
+- **待办**：`mask 全 False` 的根因未修（B02/B05 各出现 1 次，约每 50–100M 一次）；
+  当前靠续训兜底。下一步要么在 collect 侧丢弃该行并记录 state，要么定位到具体 action 掩码构造。
