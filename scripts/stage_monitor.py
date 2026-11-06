@@ -318,11 +318,14 @@ class JsonlTail:
 class History:
     """history.jsonl 的增量解析 + 派生序列（X 轴=本 run 累计 decisions）。"""
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, cum_offset: int = 0):
         self.path = path
         self.tail = JsonlTail(path)
         self.rows = []
         self.new = []
+        #: 崩溃/续训后 history.jsonl 会保留崩溃前的行 ⇒ 其累加值比真实全局决策数**超前**
+        #: ``cum_offset``（= 崩溃前 history 总和 − 续训落点）。所有判点/显示都减掉它。
+        self.cum_offset = int(cum_offset or 0)
         self.cum = 0
         self.ser = {}
         self.iter = 0
@@ -339,7 +342,7 @@ class History:
         self.cum += dec
         vals = {
             "dec": float(dec),
-            "cum_m": self.cum / 1e6,
+            "cum_m": (self.cum - int(getattr(self, "cum_offset", 0))) / 1e6,
             "dps": _num(c.get("decisions_per_s"), 0.0),
             "collect_s": _num(p.get("collect_s"), 0.0),
             "ppo_s": _num(p.get("ppo_s"), 0.0),
@@ -383,6 +386,10 @@ class History:
 
     def series(self, key):
         return self.ser.get(key) or []
+
+    def cum_eff(self) -> int:
+        """有效累计 decisions（扣掉续训造成的 history 超前量）。"""
+        return int(self.cum) - int(getattr(self, "cum_offset", 0))
 
     def cum_m(self):
         return self.series("cum_m")
@@ -442,6 +449,21 @@ class Points:
 
     def done(self, point: int) -> bool:
         return int(point) in self.keys
+
+    def should_retry(self, point: int, max_tries: int = 4) -> bool:
+        """「ckpt 缺失」被跳过、且之后 ckpt 可能已出现的点允许重试。"""
+        prev = [e for e in self.entries
+                if int(_num(e.get("point_decisions")) or -1) == int(point)]
+        if not prev:
+            return False
+        if any(str(e.get("status")) == "ok" for e in prev):
+            return False
+        last = prev[-1]
+        if str(last.get("status")) != "skipped":
+            return False
+        if "ckpt" not in str(last.get("reason") or ""):
+            return False
+        return len(prev) < int(max_tries)
 
     def add(self, entry) -> None:
         entry.setdefault("ts", _iso())
@@ -1083,7 +1105,7 @@ def point_targets(until: int, every: int):
 def write_dashboard(run, paths, hist, dev, points, alerts, args, status):
     os.makedirs(os.path.dirname(os.path.abspath(paths["dash"])) or ".", exist_ok=True)
     targets = point_targets(args.until_decisions, args.point_every)
-    crossed = [p for p in targets if p <= hist.cum]
+    crossed = [p for p in targets if p <= hist.cum_eff]
     ok = [e for e in points.entries if e.get("status") == "ok"]
     skipped = [e for e in points.entries if e.get("status") == "skipped"]
     failed = [e for e in points.entries if e.get("status") == "failed"]
@@ -1093,7 +1115,7 @@ def write_dashboard(run, paths, hist, dev, points, alerts, args, status):
         f"- 生成时间：{_now()}",
         f"- 状态：{status.get('state', '?')}"
         + (f"（PID {status.get('pids')}）" if status.get("pids") else ""),
-        f"- iter：{hist.iter}；本 run 累计 decisions：{hist.cum:,}（{hist.cum / 1e6:.2f} M"
+        f"- iter：{hist.iter}；本 run 累计 decisions：{hist.cum_eff:,}（{hist.cum_eff / 1e6:.2f} M"
         f" / {args.until_decisions / 1e6:.0f} M）",
         f"- 计点：已跨过 {len(crossed)} 个 / 共 {len(targets)} 个；"
         f"canonical 成功 {len(ok)}、跳过 {len(skipped)}、失败 {len(failed)}",
@@ -1200,10 +1222,12 @@ def process_points(run: str, hist: History, points: Points, alerts: Alerts, args
     """为所有已跨过且未记录的点打 canonical 面板；返回新增点记录数。"""
     added = 0
     for point in point_targets(args.until_decisions, args.point_every):
-        if point > hist.cum:
+        if point > hist.cum_eff:
             break
         if points.done(point):
-            continue
+            if not (int(getattr(args, "retry_skipped", 1)) and points.should_retry(point)):
+                continue
+            print(f"[{_now()}] point {int(point / 1e6)}M RETRY（此前 ckpt 缺失）", flush=True)
         ck = _wait_ckpt(run, point, args)
         if ck is None:
             points.add({
@@ -1355,6 +1379,11 @@ def build_args(argv=None):
     ap.add_argument("--poll", type=int, default=30, help="主循环轮询秒")
     ap.add_argument("--system-every", type=int, default=60, help="系统采样间隔秒")
     ap.add_argument("--redraw-every", type=int, default=300, help="重绘间隔秒")
+    ap.add_argument("--cum-offset", type=int, default=0,
+                    help="history.jsonl 累加值相对真实全局决策数的超前量（崩溃续训后需给；"
+                         "= 崩溃前 history 总和 − 续训快照 cum）。判点与 cum 显示都减掉它。")
+    ap.add_argument("--retry-skipped", type=int, default=1, choices=[0, 1],
+                    help="1=对「ckpt 缺失」导致的 skipped 点重试（默认 1；最多 4 次）")
     ap.add_argument("--dev-offset", type=int, default=0,
                     help="断点续训后 dev eval 的全局 offset（0=不改）")
     ap.add_argument("--dev-offset-from-index", type=int, default=0,
@@ -1403,7 +1432,8 @@ def main(argv=None) -> int:
     for key in ("points", "system", "alerts", "png", "dash"):
         os.makedirs(os.path.dirname(os.path.abspath(paths[key])) or ".", exist_ok=True)
 
-    hist = History(os.path.join(run, "history.jsonl")).load_all()
+    hist = History(os.path.join(run, "history.jsonl"),
+                   cum_offset=int(getattr(args, "cum_offset", 0) or 0)).load_all()
     dev = load_dev_evals(run, args.dev_offset, args.dev_offset_from_index,
                      args.dev_resume_epoch)
     points = Points(paths["points"])
