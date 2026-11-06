@@ -1945,6 +1945,17 @@ def main() -> int:
     ap.add_argument("--shaping-mode", default="sigma", choices=["sigma", "log_strength"],
                     help="塑形强度口径：sigma（默认，原始 Σ）/ log_strength（L(Σ)，与"
                          "沙盒/推理期叶值同曲线；整局望远镜和 = shaping_coef·L(Σ_T)）")
+    ap.add_argument("--game-weight-mode", default="none", choices=["none", "adv"],
+                    help="per-episode 长强加权：none=关闭（默认，旧路径逐位等价）；"
+                         "adv=按(对局长度,对手最强盘面)缩放 advantage（alpha=beta=0.5，均值归一到 1）")
+    ap.add_argument("--game-weight-alpha", type=float, default=0.5,
+                    help="长度分位的混合权重（默认 0.5）")
+    ap.add_argument("--game-weight-beta", type=float, default=0.5,
+                    help="对手强度分位的混合权重（默认 0.5）")
+    ap.add_argument("--game-weight-floor", type=float, default=0.5,
+                    help="原始权重下限（默认 0.5，见 hsbg/eval/metrics.game_weights）")
+    ap.add_argument("--game-weight-cap", type=float, default=2.0,
+                    help="原始权重上限（默认 2.0）")
     ap.add_argument("--rank-utility-coef", type=float, default=1.0,
                     help="终局名次效用系数（默认 1.0=旧行为）。混合奖励用："
                          "0.3 = 0.7·强度 + 0.3·名次")
@@ -3723,7 +3734,13 @@ def main() -> int:
             behavior_mix_topk=int(args.behavior_mix_topk),
             behavior_mix_turns=int(args.behavior_mix_turns),
             behavior_mix_max_ms=float(args.behavior_mix_max_ms),
-            behavior_mix_exact=int(args.behavior_mix_exact))
+            behavior_mix_exact=int(args.behavior_mix_exact),
+            # 长强局加权（默认 none -> 采集/建批逐位等价旧路径）
+            game_weight_mode=str(args.game_weight_mode),
+            game_weight_alpha=float(args.game_weight_alpha),
+            game_weight_beta=float(args.game_weight_beta),
+            game_weight_floor=float(args.game_weight_floor),
+            game_weight_cap=float(args.game_weight_cap))
         t_c = time.time()
         if pool is not None:
             batch, collect_meta = pool.collect(
@@ -3737,6 +3754,11 @@ def main() -> int:
                 credit_timebase=str(args.credit_timebase),
                 rank_utility_coef=float(args.rank_utility_coef),
                 terminal_strength_coef=float(args.terminal_strength_coef),
+                game_weight_mode=str(args.game_weight_mode),
+                game_weight_alpha=float(args.game_weight_alpha),
+                game_weight_beta=float(args.game_weight_beta),
+                game_weight_floor=float(args.game_weight_floor),
+                game_weight_cap=float(args.game_weight_cap),
                 weights_version=(published["version"] if wv is None else wv),
                 weights_path=(published["path"] if wp is None else wp))
         elif args.workers > 1:

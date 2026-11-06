@@ -74,6 +74,12 @@ CLIP="${CLIP:-0.2}"
 TARGET_KL="${TARGET_KL:-0.02}"
 ENTROPY_COEF="${ENTROPY_COEF:-0.001}"
 MAX_GRAD_NORM="${MAX_GRAD_NORM:-1.0}"
+# per-episode 长强加权（B06）：none=关闭（默认，逐位等价旧行为）；adv=缩放 advantage
+GAME_WEIGHT_MODE="${GAME_WEIGHT_MODE:-none}"
+GAME_WEIGHT_ALPHA="${GAME_WEIGHT_ALPHA:-0.5}"
+GAME_WEIGHT_BETA="${GAME_WEIGHT_BETA:-0.5}"
+GAME_WEIGHT_FLOOR="${GAME_WEIGHT_FLOOR:-0.5}"
+GAME_WEIGHT_CAP="${GAME_WEIGHT_CAP:-2.0}"
 RAMP_START="${RAMP_START:-0}"
 # 固定阵容脚本席（1..3；0=关闭）。脚本席 = hybrid 对手：阵容动作优先、其余引擎 bot 兜底。
 SCRIPT_SEATS="${SCRIPT_SEATS:-0}"
@@ -228,6 +234,15 @@ CMD=("$PY" scripts/train_entity_sync.py
   --script-seats "$SCRIPT_SEATS" --script-comps "$SCRIPT_COMPS"
   --dyn-threshold 0.1 --dyn-hold-decisions 10000000.0 --dyn-quality-games 96)
 
+# 长强局加权（默认 none -> 不加任何参数，命令行逐字不变）
+if [ "$GAME_WEIGHT_MODE" != "none" ]; then
+  CMD+=(--game-weight-mode "$GAME_WEIGHT_MODE"
+        --game-weight-alpha "$GAME_WEIGHT_ALPHA"
+        --game-weight-beta "$GAME_WEIGHT_BETA"
+        --game-weight-floor "$GAME_WEIGHT_FLOOR"
+        --game-weight-cap "$GAME_WEIGHT_CAP")
+fi
+
 # 冻结对手（非空时才加，保证空值路径与旧命令逐位一致）
 if [ -n "$FROZEN_OPPONENT" ] && [ "$FROZEN_SEATS" -gt 0 ] 2>/dev/null; then
   [ -f "$FROZEN_OPPONENT" ] || die "FROZEN_OPPONENT 不存在: $FROZEN_OPPONENT"
@@ -255,6 +270,7 @@ if [ "$DRY_RUN" = "1" ]; then
   say "OUT=$OUT  TAG=$TAG  SEED=$SEED  STOP_DECISIONS=$STOP_DECISIONS  GAMES=$GAMES"
   say "PROCESSES=$PROCESSES  GPUS=$GPUS  DEVICE=$DEVICE  EVAL_DEVICE=$EVAL_DEVICE  GPU_FREE_CHECK=$GPU_FREE_CHECK  SCRIPT_SEATS=$SCRIPT_SEATS  SCRIPT_COMPS=$SCRIPT_COMPS"
   say "FROZEN_SEATS=$FROZEN_SEATS  FROZEN_OPPONENT=$FROZEN_OPPONENT"
+  say "GAME_WEIGHT_MODE=$GAME_WEIGHT_MODE  alpha=$GAME_WEIGHT_ALPHA beta=$GAME_WEIGHT_BETA floor=$GAME_WEIGHT_FLOOR cap=$GAME_WEIGHT_CAP"
   say "LR=$LR  LR_MIN_RATIO=$LR_MIN_RATIO  MAX_UPDATES=$MAX_UPDATES  EPOCHS=$EPOCHS  MINIBATCH=$MINIBATCH  GRAD_ACCUM=$GRAD_ACCUM  CLIP=$CLIP  TARGET_KL=$TARGET_KL  ENTROPY_COEF=$ENTROPY_COEF  MAX_GRAD_NORM=$MAX_GRAD_NORM"
   say "COMP_FIT_COEF=$COMP_FIT_COEF  COMP_FIT_T9_BONUS=$COMP_FIT_T9_BONUS  COMP_TRINKET_COEF=$COMP_TRINKET_COEF"
   say "=== 最终训练命令 ==="

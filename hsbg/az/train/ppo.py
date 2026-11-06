@@ -36,6 +36,7 @@ MCTS visit ``π``。按 ``(game_id, seat)`` 分组计算 GAE(λ) 与 reward-to-g
 from __future__ import annotations
 
 from hsbg.az.train.game_rules import game_config_json as _game_cfg
+from hsbg.eval.metrics import game_weights  # 长强局加权（仅 --game-weight-mode != none）
 
 import contextlib
 import json
@@ -1049,6 +1050,14 @@ class PPOConfig:
     #: 终局强度奖励系数（默认 0 = 关闭）：末步额外加 ``coef·L(Σ_末决策)``。
     #: 与 ``rank_utility_coef`` 一起构成「0.7·强度 + 0.3·名次」的目标奖励。
     terminal_strength_coef: float = 0.0
+    #: ── per-episode 长强加权（``--game-weight-mode``）──
+    #: ``none``（默认）= 关闭（旧路径逐位等价）；``adv`` = 按 (对局长度, 对手最强盘面)
+    #: 给每局算权重（``hsbg.eval.metrics.game_weights``，均值归一到 1），只缩放 advantage。
+    game_weight_mode: str = "none"
+    game_weight_alpha: float = 0.5
+    game_weight_beta: float = 0.5
+    game_weight_floor: float = 0.5
+    game_weight_cap: float = 2.0
     entropy_coef: float = 0.01
     value_coef: float = 0.5
     #: MCTS visit π 辅助交叉熵权重 alpha（0 = 关闭，退化为纯 PPO）
@@ -1618,6 +1627,50 @@ def _group_order(records: List[Dict[str, Any]]) -> List[int]:
     return sorted(range(len(records)), key=lambda i: keys[i])
 
 
+def _episode_advantage_weights(game_ids: Any, seats: Any, turns: Any,
+                               strengths: Any, *, alpha: float = 0.5,
+                               beta: float = 0.5, floor: float = 0.5,
+                               cap: float = 2.0) -> Tuple[np.ndarray, Dict[str, Any]]:
+    """按 episode（game_id, seat）算「对局长度 + 对手强度」权重（均值归一到 1）。
+
+    - 长度 = 该局最大 turn；强度 = 该局对手最强盘面 Σ（采集端挂在每条记录的
+      ``game_bot_strength`` 上）。
+    - 权重规则完全复用 ``hsbg.eval.metrics.game_weights``（评测口径），保证训练/评测一致。
+    - 返回 (per-decision 权重, 统计 dict)；mode 关闭时调用方不会进这里。
+    """
+    gid = np.asarray(game_ids, dtype=np.int64).reshape(-1)
+    sea = np.asarray(seats, dtype=np.int64).reshape(-1)
+    trn = np.asarray(turns, dtype=np.float32).reshape(-1)
+    strg = np.asarray(strengths, dtype=np.float32).reshape(-1)
+    n = int(gid.size)
+    if n == 0 or sea.size != n or trn.size != n or strg.size != n:
+        return np.ones(max(n, 0), dtype=np.float32), {"n_episodes": 0, "skipped": 1}
+    key = gid * np.int64(256) + sea
+    change = np.empty(n, dtype=bool)
+    change[0] = True
+    change[1:] = key[1:] != key[:-1]
+    ep_index = np.cumsum(change) - 1
+    n_ep = int(ep_index[-1]) + 1
+    ep_turns = np.zeros(n_ep, dtype=np.float64)
+    ep_str = np.zeros(n_ep, dtype=np.float64)
+    np.maximum.at(ep_turns, ep_index, trn.astype(np.float64))
+    np.maximum.at(ep_str, ep_index, strg.astype(np.float64))
+    w = np.asarray(game_weights(ep_turns.tolist(), ep_str.tolist(),
+                                alpha=float(alpha), beta=float(beta),
+                                floor=float(floor), cap=float(cap)),
+                   dtype=np.float32)
+    stats = {
+        "mode": "adv", "n_episodes": int(n_ep),
+        "alpha": float(alpha), "beta": float(beta),
+        "floor": float(floor), "cap": float(cap),
+        "w_mean": float(w.mean()), "w_min": float(w.min()), "w_max": float(w.max()),
+        "turns_p50": float(np.median(ep_turns)),
+        "strength_p50": float(np.median(ep_str)),
+        "strength_all_zero": bool(float(ep_str.max()) <= 0.0),
+    }
+    return w[ep_index].astype(np.float32), stats
+
+
 def build_batch_from_records(records: List[Dict[str, Any]], *,
                              gamma: float = 1.0, lam: float = 0.95,
                              step_penalty: float = 0.0,
@@ -1630,7 +1683,12 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
                              power_cutoff: int = 0,
                              credit_timebase: str = "decision",
                              rank_utility_coef: float = 1.0,
-                             terminal_strength_coef: float = 0.0) -> PPOBatch:
+                             terminal_strength_coef: float = 0.0,
+                             game_weight_mode: str = "none",
+                             game_weight_alpha: float = 0.5,
+                             game_weight_beta: float = 0.5,
+                             game_weight_floor: float = 0.5,
+                             game_weight_cap: float = 2.0) -> PPOBatch:
     """把决策记录列表整理成 ``PPOBatch``（奖励/GAE 均已计算）。
 
     ``records`` 每条至少包含::
@@ -1670,6 +1728,8 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
     game_ids = np.asarray([int(r["game_id"]) for r in recs], dtype=np.int64)
     ranks = np.asarray([int(r["rank"]) for r in recs], dtype=np.int64)
     turns = np.asarray([int(r.get("turn", -1)) for r in recs], dtype=np.int32)
+    _gstrength = np.asarray([float(r.get("game_bot_strength", 0.0) or 0.0)
+                              for r in recs], dtype=np.float32)
 
     forced = np.asarray([bool(r.get("forced", False)) for r in recs], dtype=bool)
     target_pi = np.zeros((n, N_ACTIONS), dtype=np.float32)
@@ -1772,6 +1832,13 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
         pi_logprobs = np.asarray(
             [float(r.get("logp_pi", r["old_logprob"])) for r in recs], dtype=np.float32)
         merged_meta["behavior_mix"] = True
+    if str(game_weight_mode) != "none":
+        _w, _wstats = _episode_advantage_weights(
+            game_ids, seats, turns, _gstrength,
+            alpha=float(game_weight_alpha), beta=float(game_weight_beta),
+            floor=float(game_weight_floor), cap=float(game_weight_cap))
+        advantages = (np.asarray(advantages, dtype=np.float32) * _w).astype(np.float32)
+        merged_meta["game_weight"] = _wstats
     return PPOBatch(
         features=features, cards=cards, masks=masks, actions=actions,
         old_logprobs=old_logprobs, values=values, rewards=rewards, dones=dones,
@@ -4091,6 +4158,7 @@ def pack_records_arrays(records: Sequence[Dict[str, Any]],
         "seats": np.empty(n, dtype=np.int32),
         "game_ids": np.empty(n, dtype=np.int64),
         "turns": np.empty(n, dtype=np.int32),
+        "game_bot_strength": np.zeros(n, dtype=np.float32),
         "forced": np.empty(n, dtype=bool),
         "has_pi": np.zeros(n, dtype=bool),
     }
@@ -4107,6 +4175,7 @@ def pack_records_arrays(records: Sequence[Dict[str, Any]],
         out["seats"][i] = int(r["seat"])
         out["game_ids"][i] = int(r["game_id"])
         out["turns"][i] = int(r.get("turn", -1))
+        out["game_bot_strength"][i] = float(r.get("game_bot_strength", 0.0) or 0.0)
         out["forced"][i] = bool(r.get("forced", False))
         pi = r.get("target_pi")
         if pi is not None and has_pi and not out["forced"][i]:
@@ -4160,7 +4229,12 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
                             power_cutoff: int = 0,
                             credit_timebase: str = "decision",
                             rank_utility_coef: float = 1.0,
-                            terminal_strength_coef: float = 0.0) -> "PPOBatch":
+                            terminal_strength_coef: float = 0.0,
+                            game_weight_mode: str = "none",
+                            game_weight_alpha: float = 0.5,
+                            game_weight_beta: float = 0.5,
+                            game_weight_floor: float = 0.5,
+                            game_weight_cap: float = 2.0) -> "PPOBatch":
     """SoA 数组 → PPOBatch（与 ``build_batch_from_records`` 等价，但零 dict）。
 
     可选字段 ``seq_target``（动作序列辅助标签）存在且形状正确时透传给批次；
@@ -4281,6 +4355,19 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
         _a = np.asarray(_pl, dtype=np.float32).reshape(-1)
         if _a.size == n:
             pi_logprobs = _a
+    if str(game_weight_mode) != "none":
+        _gs = t.get("game_bot_strength")
+        _gs_arr = (np.asarray(_gs, dtype=np.float32).reshape(-1)
+                   if _gs is not None and np.asarray(_gs).size == n else None)
+        if _gs_arr is None:
+            merged_meta["game_weight_missing_strength"] = True
+            _gs_arr = np.zeros(n, dtype=np.float32)
+        _w, _wstats = _episode_advantage_weights(
+            game_ids, seats, turns, _gs_arr,
+            alpha=float(game_weight_alpha), beta=float(game_weight_beta),
+            floor=float(game_weight_floor), cap=float(game_weight_cap))
+        advantages = (np.asarray(advantages, dtype=np.float32) * _w).astype(np.float32)
+        merged_meta["game_weight"] = _wstats
     return PPOBatch(
         features=t["features"], cards=t["cards"], masks=t["masks"],
         actions=t["actions"], old_logprobs=t["old_logprobs"], values=values,

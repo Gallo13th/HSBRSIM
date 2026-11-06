@@ -144,6 +144,13 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
         if game.is_over():
             rank = int(list(game.placements())[int(cfg.learner_seat)])
             _attach_rank(policy.records, rank)
+            # 长强局加权（--game-weight-mode != none）：每局记录长度与对手最强盘面
+            if str(getattr(cfg, "game_weight_mode", "none") or "none") != "none":
+                _gt = max((int(r.get("turn", 0) or 0) for r in policy.records), default=0)
+                _gs = _max_opp_strength(game, int(cfg.learner_seat), N_PLAYERS)
+                for _r in policy.records:
+                    _r["game_turns"] = int(_gt)
+                    _r["game_bot_strength"] = float(_gs)
             records.extend(policy.records)
             meta = {"game_id": policy.game_id, "seed": int(cfg.seed) + gi,
                     "steps": int(steps), "decisions": int(decisions),
@@ -272,7 +279,12 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
                                power_cutoff: int = 0,
                                credit_timebase: str = "decision",
                                rank_utility_coef: float = 1.0,
-                               terminal_strength_coef: float = 0.0) -> Tuple[PPOBatch, Dict[str, Any]]:
+                               terminal_strength_coef: float = 0.0,
+                               game_weight_mode: str = "none",
+                               game_weight_alpha: float = 0.5,
+                               game_weight_beta: float = 0.5,
+                               game_weight_floor: float = 0.5,
+                               game_weight_cap: float = 2.0) -> Tuple[PPOBatch, Dict[str, Any]]:
     t0 = time.time()
     records, meta_out = collect_ppo_records_parallel(
         model, config, workers=workers, search_fn=search_fn,
@@ -289,7 +301,14 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
                                      power_cutoff=power_cutoff,
                                      credit_timebase=credit_timebase,
                                      rank_utility_coef=rank_utility_coef,
-                                     terminal_strength_coef=terminal_strength_coef)
+                                     terminal_strength_coef=terminal_strength_coef,
+                                     game_weight_mode=str(
+                                         game_weight_mode if str(game_weight_mode) != "none"
+                                         else getattr(config, "game_weight_mode", "none")),
+                                     game_weight_alpha=float(game_weight_alpha),
+                                     game_weight_beta=float(game_weight_beta),
+                                     game_weight_floor=float(game_weight_floor),
+                                     game_weight_cap=float(game_weight_cap))
     batch.meta.update({"collect_seconds": time.time() - t0,
                        "collect": {k: v for k, v in meta_out.items()
                                    if k != "games_meta"}})
@@ -297,6 +316,27 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
 
 
 __all__ = ["collect_ppo_records_parallel", "collect_ppo_batch_parallel"]
+
+
+def _max_opp_strength(game: Any, learner_seat: int, n_players: int) -> float:
+    """对手（非 learner 座位）终局最强盘面 Σ(atk+hp)，用于 --game-weight-mode 的长强加权。"""
+    best = 0.0
+    for s in range(int(n_players)):
+        if int(s) == int(learner_seat):
+            continue
+        try:
+            pj = json.loads(game.player_json(int(s)))
+        except BaseException:  # noqa: BLE001
+            continue
+        tot = 0.0
+        for m in (pj.get("board") or []):
+            try:
+                tot += float(m.get("atk", 0) or 0) + float(m.get("hp", 0) or 0)
+            except BaseException:  # noqa: BLE001
+                continue
+        if tot > best:
+            best = tot
+    return best
 
 
 def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,

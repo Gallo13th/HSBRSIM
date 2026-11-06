@@ -799,7 +799,12 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                         credit_timebase=str(task.get("credit_timebase", "decision")),
                         rank_utility_coef=float(task.get("rank_utility_coef", 1.0)),
                         terminal_strength_coef=float(
-                            task.get("terminal_strength_coef", 0.0))))
+                            task.get("terminal_strength_coef", 0.0)),
+                        game_weight_mode=str(task.get("game_weight_mode", "none")),
+                        game_weight_alpha=float(task.get("game_weight_alpha", 0.5)),
+                        game_weight_beta=float(task.get("game_weight_beta", 0.5)),
+                        game_weight_floor=float(task.get("game_weight_floor", 0.5)),
+                        game_weight_cap=float(task.get("game_weight_cap", 2.0))))
                 else:
                     packed = pack_records_arrays(
                         records, seq_aux=bool(getattr(cfg, "seq_aux", False)))
@@ -815,7 +820,12 @@ def _worker_main(payload: Dict[str, Any], task_q: Any, result_q: Any) -> None:
                             credit_timebase=str(task.get("credit_timebase", "decision")),
                             rank_utility_coef=float(task.get("rank_utility_coef", 1.0)),
                             terminal_strength_coef=float(
-                                task.get("terminal_strength_coef", 0.0))))
+                                task.get("terminal_strength_coef", 0.0)),
+                            game_weight_mode=str(task.get("game_weight_mode", "none")),
+                            game_weight_alpha=float(task.get("game_weight_alpha", 0.5)),
+                            game_weight_beta=float(task.get("game_weight_beta", 0.5)),
+                            game_weight_floor=float(task.get("game_weight_floor", 0.5)),
+                            game_weight_cap=float(task.get("game_weight_cap", 2.0))))
                     except BaseException:  # noqa: BLE001 - 回退到父进程构建
                         _arrays = dict(packed)
                 shm_meta = _emit_records(
@@ -1185,6 +1195,11 @@ class ProcessActorPool:
                 credit_timebase: str = "decision",
                 rank_utility_coef: float = 1.0,
                 terminal_strength_coef: float = 0.0,
+                game_weight_mode: str = "none",
+                game_weight_alpha: float = 0.5,
+                game_weight_beta: float = 0.5,
+                game_weight_floor: float = 0.5,
+                game_weight_cap: float = 2.0,
                 weights_version: Optional[int] = None,
                 weights_path: Optional[str] = None) -> Tuple[PPOBatch, Dict[str, Any]]:
         n = max(1, int(games))
@@ -1215,6 +1230,12 @@ class ProcessActorPool:
                 "credit_timebase": str(credit_timebase),
                 "rank_utility_coef": float(rank_utility_coef),
                 "terminal_strength_coef": float(terminal_strength_coef),
+                "game_weight_mode": str(game_weight_mode or getattr(
+                    cfg, "game_weight_mode", "none") or "none"),
+                "game_weight_alpha": float(game_weight_alpha),
+                "game_weight_beta": float(game_weight_beta),
+                "game_weight_floor": float(game_weight_floor),
+                "game_weight_cap": float(game_weight_cap),
                 "weights_version": weights_version, "weights_path": weights_path,
                 "lockstep": bool(getattr(cfg, "lockstep", False)),
                 "cfg": {**asdict(cfg), "games": gcount,
@@ -1501,7 +1522,12 @@ class ProcessActorPool:
                 power_cutoff=int(power_cutoff),
                 credit_timebase=str(credit_timebase),
                 rank_utility_coef=float(rank_utility_coef),
-                terminal_strength_coef=float(terminal_strength_coef))
+                terminal_strength_coef=float(terminal_strength_coef),
+                game_weight_mode=str(game_weight_mode),
+                game_weight_alpha=float(game_weight_alpha),
+                game_weight_beta=float(game_weight_beta),
+                game_weight_floor=float(game_weight_floor),
+                game_weight_cap=float(game_weight_cap))
         else:
             batch = build_batch_from_records(
                 records, gamma=float(gamma), lam=float(lam), meta=meta,
@@ -1512,7 +1538,12 @@ class ProcessActorPool:
                 power_cutoff=int(power_cutoff),
                 credit_timebase=str(credit_timebase),
                 rank_utility_coef=float(rank_utility_coef),
-                terminal_strength_coef=float(terminal_strength_coef))
+                terminal_strength_coef=float(terminal_strength_coef),
+                game_weight_mode=str(game_weight_mode),
+                game_weight_alpha=float(game_weight_alpha),
+                game_weight_beta=float(game_weight_beta),
+                game_weight_floor=float(game_weight_floor),
+                game_weight_cap=float(game_weight_cap))
         build_batch_s = time.time() - t_b0
         # 拼接/建批都是**拷贝**（np.concatenate / v[order]）；清掉 packed_all 里的 shm 视图
         # 之后再释放段，否则 numpy 视图还引用着 buf（close 会抛 BufferError）。
