@@ -80,6 +80,15 @@ GAME_WEIGHT_ALPHA="${GAME_WEIGHT_ALPHA:-0.5}"
 GAME_WEIGHT_BETA="${GAME_WEIGHT_BETA:-0.5}"
 GAME_WEIGHT_FLOOR="${GAME_WEIGHT_FLOOR:-0.5}"
 GAME_WEIGHT_CAP="${GAME_WEIGHT_CAP:-2.0}"
+# 人类盘面注入：库 / 保真度 / 席数（B07 起可切到与评测同构）
+HB_LIB="${HB_LIB:-data/real_library/winner_library.jsonl}"
+HB_FIDELITY="${HB_FIDELITY:-board}"
+HB_SEATS="${HB_SEATS:-3}"
+# 人类盘面课程 ramp（空 = 不传 -> 用 --human-board-sample auto 的"按回合难度曲线"）
+HB_RAMP="${HB_RAMP:-}"
+HB_QUANTILE_RAMP="${HB_QUANTILE_RAMP:-}"
+RAMP_MODE="${RAMP_MODE:-step}"
+RAMP_START="${RAMP_START:-0}"
 RAMP_START="${RAMP_START:-0}"
 # 固定阵容脚本席（1..3；0=关闭）。脚本席 = hybrid 对手：阵容动作优先、其余引擎 bot 兜底。
 SCRIPT_SEATS="${SCRIPT_SEATS:-0}"
@@ -165,9 +174,9 @@ CMD=("$PY" scripts/train_entity_sync.py
   --leaf-compile 0 --leaf-amp off --leaf-wait-ms "$LEAF_WAIT_MS" --rc-threads 8
   --rust-collector 0 --frozen-seats "$FROZEN_SEATS" --trajectory-p 0.0
   --mirror-seats 0 --mirror-p 0.0 --mirror-sample p50 --mirror-seat-random 0
-  --human-boards data/real_library/winner_library.jsonl
-  --human-board-p 0.9 --human-board-seats 3 --human-board-sample auto
-  --human-board-set-tier 1 --human-board-fidelity board --human-board-fast-inject 1
+  --human-boards "$HB_LIB"
+  --human-board-p 0.9 --human-board-seats "$HB_SEATS" --human-board-sample auto
+  --human-board-set-tier 1 --human-board-fidelity "$HB_FIDELITY" --human-board-fast-inject 1
   --ramp-mode step --ramp-adaptive 0 --ramp-window 5
   --ramp-survive-threshold 0.25 --ramp-tier4-threshold 0.3
   --ramp-delay-decisions 2M --ramp-max-forced-per-game 12.0 --ramp-start-decisions "$RAMP_START"
@@ -234,6 +243,17 @@ CMD=("$PY" scripts/train_entity_sync.py
   --script-seats "$SCRIPT_SEATS" --script-comps "$SCRIPT_COMPS"
   --dyn-threshold 0.1 --dyn-hold-decisions 10000000.0 --dyn-quality-games 96)
 
+# 人类盘面课程 ramp（空 -> 不加参数；非空才覆盖 sample 的按回合曲线）
+if [ -n "$HB_RAMP" ]; then
+  CMD+=(--human-board-ramp "$HB_RAMP")
+fi
+if [ -n "$HB_QUANTILE_RAMP" ]; then
+  CMD+=(--human-board-quantile-ramp "$HB_QUANTILE_RAMP")
+fi
+if [ -n "$HB_RAMP" ] || [ -n "$HB_QUANTILE_RAMP" ]; then
+  CMD+=(--ramp-mode "$RAMP_MODE" --ramp-start-decisions "$RAMP_START")
+fi
+
 # 长强局加权（默认 none -> 不加任何参数，命令行逐字不变）
 if [ "$GAME_WEIGHT_MODE" != "none" ]; then
   CMD+=(--game-weight-mode "$GAME_WEIGHT_MODE"
@@ -271,6 +291,8 @@ if [ "$DRY_RUN" = "1" ]; then
   say "PROCESSES=$PROCESSES  GPUS=$GPUS  DEVICE=$DEVICE  EVAL_DEVICE=$EVAL_DEVICE  GPU_FREE_CHECK=$GPU_FREE_CHECK  SCRIPT_SEATS=$SCRIPT_SEATS  SCRIPT_COMPS=$SCRIPT_COMPS"
   say "FROZEN_SEATS=$FROZEN_SEATS  FROZEN_OPPONENT=$FROZEN_OPPONENT"
   say "GAME_WEIGHT_MODE=$GAME_WEIGHT_MODE  alpha=$GAME_WEIGHT_ALPHA beta=$GAME_WEIGHT_BETA floor=$GAME_WEIGHT_FLOOR cap=$GAME_WEIGHT_CAP"
+  say "HB_LIB=$HB_LIB  HB_FIDELITY=$HB_FIDELITY  HB_SEATS=$HB_SEATS"
+  say "HB_RAMP=$HB_RAMP  HB_QUANTILE_RAMP=$HB_QUANTILE_RAMP  RAMP_MODE=$RAMP_MODE  RAMP_START=$RAMP_START"
   say "LR=$LR  LR_MIN_RATIO=$LR_MIN_RATIO  MAX_UPDATES=$MAX_UPDATES  EPOCHS=$EPOCHS  MINIBATCH=$MINIBATCH  GRAD_ACCUM=$GRAD_ACCUM  CLIP=$CLIP  TARGET_KL=$TARGET_KL  ENTROPY_COEF=$ENTROPY_COEF  MAX_GRAD_NORM=$MAX_GRAD_NORM"
   say "COMP_FIT_COEF=$COMP_FIT_COEF  COMP_FIT_T9_BONUS=$COMP_FIT_T9_BONUS  COMP_TRINKET_COEF=$COMP_TRINKET_COEF"
   say "=== 最终训练命令 ==="

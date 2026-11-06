@@ -49,7 +49,11 @@ if [ -n "$TS" ]; then
 fi
 [ -f data/real_library/winner_library.jsonl ] || die "missing winner_library.jsonl"
 if pgrep -u "$(id -un)" -f 'train_entity_sync[.]py' >/dev/null 2>&1; then
-  die "another train_entity_sync.py is already running"
+  if [ "${DRY_RUN:-0}" = "1" ]; then
+    echo "[stage300m][warn] 已有 trainer 在跑，但 DRY_RUN=1 只打印命令" >&2
+  else
+    die "another train_entity_sync.py is already running"
+  fi
 fi
 if [ -e "$OUT" ] && [ -n "$(ls -A "$OUT" 2>/dev/null || true)" ] && [ "$FORCE" != "1" ]; then
   die "OUT 非空: $OUT（断点重跑请用 scripts/resume_stage300m.sh 或 FORCE=1）"
@@ -84,6 +88,7 @@ DRY_RUN="${DRY_RUN:-0}" \
 EPOCHS="${EPOCHS:-1}" CLIP="${CLIP:-0.2}" TARGET_KL="${TARGET_KL:-0.02}" \
 GAME_WEIGHT_MODE="${GAME_WEIGHT_MODE:-none}" GAME_WEIGHT_ALPHA="${GAME_WEIGHT_ALPHA:-0.5}" GAME_WEIGHT_BETA="${GAME_WEIGHT_BETA:-0.5}" \
 GAME_WEIGHT_FLOOR="${GAME_WEIGHT_FLOOR:-0.5}" GAME_WEIGHT_CAP="${GAME_WEIGHT_CAP:-2.0}" \
+HB_LIB="${HB_LIB:-data/real_library/winner_library.jsonl}" HB_FIDELITY="${HB_FIDELITY:-board}" HB_SEATS="${HB_SEATS:-3}" \
 ENTROPY_COEF="${ENTROPY_COEF:-0.001}" MAX_GRAD_NORM="${MAX_GRAD_NORM:-1.0}" \
 FORCE=1 \
 bash scripts/train_block_clean.sh >> "$LOG" 2>&1

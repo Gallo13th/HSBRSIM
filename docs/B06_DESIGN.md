@@ -106,3 +106,10 @@ entropy 0.001 / clip 0.2 / target-kl 0.02 / 同一课程 ramp / 无冻结席）�
 | 加权把 entropy 推高/推低 | 盯 entropy 近 20 均值；<0.66 加 `entropy-coef 0.003`，>0.82 降到 0 |
 | 长强 win 反而下降 | 150M 时若 <30%（低于 B05@250M 的 40%）且 rank >1.65 → 停，改用 α=0.3/β=0.7（更偏强度）或 cap 1.5 |
 | 崩溃 | watchdog 自动续训（已泛化：会同步 monitor 的 `--cum-offset`，避免 B05 那种计点全断） |
+
+## 7. 事后更正（2026-11-07）：B06 也没有课程 ramp
+
+与 B05 相同，B06 的完整命令行里没有 `--human-board-ramp` / `--human-board-quantile-ramp`：
+实际场地是「固定 3 席 p0.90 + `sample=auto`（按回合难度曲线）+ `fidelity=board`」。
+因此 B06 vs B05 的唯一差异**确实**只有 `--game-weight-mode adv`（这一点成立）；
+但两轮都不是文档里描述的"p50→p75→p90 分档课程"。
