@@ -779,7 +779,28 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         # 等级进度奖励：本回合第一条 learner decision 前检查一次 tier（同 turn 幂等）
         tier_deltas = ([st["tier_target"].observe(st["game"], seat) for st in pending]
                        if tier_on else [])
-        decisions = policy.decide_batch([(st["game"], seat, st["gid"]) for st in pending])
+        try:
+            decisions = policy.decide_batch(
+                [(st["game"], seat, st["gid"]) for st in pending])
+        except ValueError as _exc:
+            # 引擎空 mask 是潜在 bug（B02/B05/B06 多次撞到）：把 pending 各局的
+            # state_json 落盘，事后可用 Game.from_json 精确复现（见 docs/EMPTY_MASK.md）。
+            if "无合法动作" in str(_exc) or "mask" in str(_exc).lower():
+                try:
+                    import os as _os
+                    _d = "/tmp/emptymask_dumps"
+                    _os.makedirs(_d, exist_ok=True)
+                    _ts = int(time.time())
+                    for _k, _st in enumerate(pending):
+                        _g = _st["game"]
+                        _p = _os.path.join(_d, f"state_{_ts}_{_k}.json")
+                        with open(_p, "w", encoding="utf-8") as _f:
+                            _f.write(_g.state_json())
+                    print(f"[empty_mask] dumped {len(pending)} states -> {_d} "
+                          f"(ts={_ts}, err={_exc})", flush=True)
+                except BaseException as _e2:  # noqa: BLE001
+                    print(f"[empty_mask] dump failed: {_e2!r}", flush=True)
+            raise
         for k, (st, dec) in enumerate(zip(pending, decisions)):
             g = st["game"]
             if _teacher_on:
