@@ -56,3 +56,53 @@ bash scripts/run_stage300m_b06.sh                     # 300M（B05 300M 权重�
 DRY_RUN=1 OUT=/tmp/dry bash scripts/train_block_clean.sh ...   # 只打印命令
 pytest tests/test_game_weight_adv.py -q               # 4 条单测
 ```
+
+## 6. 运行计划（2026-11-06 18:45 定稿）
+
+### 6.1 起点与预算
+
+- 起点：**B05 300M 权重** `runs/az_stage300m_b05/model.pt`，`TS=""`（fresh optimizer）
+- 预算：300M decisions，8 卡里用 4 张 actor（3,4,5,6）+ learner 0 + dev eval 1 + canonical eval 7
+- 吞吐：与 B05 同配置（8.3k dec/s）⇒ **≈10h**（若 20:00 起跑，次日 06:00 左右到 300M）
+
+### 6.2 唯一变量
+
+`--game-weight-mode adv --game-weight-alpha 0.5 --game-weight-beta 0.5 --game-weight-floor 0.5
+--game-weight-cap 2.0`；其余与 B05 逐字一致（lr 3e-6 / mb 1024 / accum 2 / max_updates 4300 /
+entropy 0.001 / clip 0.2 / target-kl 0.02 / 同一课程 ramp / 无冻结席）。
+
+### 6.3 判据（基线换成 B05@250M）
+
+| 指标 | B05@250M（384 局） | B06 目标 |
+|---|---:|---|
+| bot rank | 1.578 | ≤1.55 |
+| bot win | 55.2% | ≥57% |
+| **长强子集 win（n≥24）** | **40.0%**（n=25） | ≥45% |
+| 长强 rank | 1.640 | ≤1.55 |
+| tier5@t15 | 28.0% | ≥32% |
+| human 96 局 | 5.906（200M）/ 5.948（230M） | 不劣化 >0.10 |
+
+> 注：B06 的原始动机是修 B05@150M 的 11.1% 长强缺口；B05 后半段已自然补到 40.0%，
+> 所以 B06 的定位变成「在长局上继续加码」，判据相应上调。
+
+### 6.4 步骤（含 pilot）
+
+1. **Pilot（5 分钟）**：`MINUTES=5 STOP=200000000 OUT=runs/az_stage300m_b06_pilot bash scripts/run_stage300m_b06.sh`
+   - 检查：`history.jsonl` 的 `meta.game_weight` 出现且 `w_mean≈1`、`strength_p50>0`、`strength_all_zero=false`
+   - 检查：吞吐下降 ≤10%（每局多 7 次 `player_json`）；`illegal/truncated` 不变；entropy/KL 正常
+2. **正式跑**：`bash scripts/run_stage300m_b06.sh`（300M）
+3. **监护三件套**：
+   - `tools/relabel_b06.sh <DONE> <SINCE>`：local ckpt → global 名硬链接（续训后 DONE 由 watchdog 给出）
+   - `stage_monitor.py --cum-offset <Σhistory−DONE> --retry-skipped 1 --retry-min-decisions <DONE>`
+   - `tools/watchdog_b06.py`：崩溃后自动续训 + 自动重算 offset + 重启 monitor/relabeler
+4. **判读面板**：`tools/eval_b06_panels.sh`（150/250/300M 各 384 局）；300M 后补 768 局
+5. **收尾**：300M 后跑 768 局 bot 面板 + human 96 局 + `scripts/tier_probe.py`，与 B05/B03 同口径对比
+
+### 6.5 风险与止损
+
+| 风险 | 处理 |
+|---|---|
+| `game_bot_strength` 采集开销过大（>10%） | pilot 测出的吞吐 <7.5k dec/s 就把权重上限从 cap=2.0 降到 1.5（减少极端权重），或改用在 collector 里缓存 `player_json` 的最简字段 |
+| 加权把 entropy 推高/推低 | 盯 entropy 近 20 均值；<0.66 加 `entropy-coef 0.003`，>0.82 降到 0 |
+| 长强 win 反而下降 | 150M 时若 <30%（低于 B05@250M 的 40%）且 rank >1.65 → 停，改用 α=0.3/β=0.7（更偏强度）或 cap 1.5 |
+| 崩溃 | watchdog 自动续训（已泛化：会同步 monitor 的 `--cum-offset`，避免 B05 那种计点全断） |
