@@ -1226,7 +1226,10 @@ def process_points(run: str, hist: History, points: Points, alerts: Alerts, args
         if point > hist.cum_eff:
             break
         if points.done(point):
-            if not (int(getattr(args, "retry_skipped", 1)) and points.should_retry(point)):
+            _retry_ok = (int(getattr(args, "retry_skipped", 1))
+                         and int(point) >= int(getattr(args, "retry_min_decisions", 0) or 0)
+                         and points.should_retry(point))
+            if not _retry_ok:
                 continue
             print(f"[{_now()}] point {int(point / 1e6)}M RETRY（此前 ckpt 缺失）", flush=True)
         ck = _wait_ckpt(run, point, args)
@@ -1342,7 +1345,7 @@ def check_alerts(run: str, hist: History, dev, alerts: Alerts, state: dict, args
 def render(run, paths, hist, dev, points, samples, alerts, args, status):
     png = draw(run, paths, hist, dev, points, samples, alerts, args, status)
     dash = write_dashboard(run, paths, hist, dev, points, alerts, args, status)
-    print(f"[{_now()}] draw iters={len(hist.rows)} cum={hist.cum / 1e6:.2f}M "
+    print(f"[{_now()}] draw iters={len(hist.rows)} cum={hist.cum_eff / 1e6:.2f}M "
           f"dev={len(dev)} points={len(points.entries)} -> {png} | {dash}", flush=True)
     return png, dash
 
@@ -1383,6 +1386,9 @@ def build_args(argv=None):
     ap.add_argument("--cum-offset", type=int, default=0,
                     help="history.jsonl 累加值相对真实全局决策数的超前量（崩溃续训后需给；"
                          "= 崩溃前 history 总和 − 续训快照 cum）。判点与 cum 显示都减掉它。")
+    ap.add_argument("--retry-min-decisions", type=int, default=0,
+                    help="只对 >= 该决策数的点做 skipped 重试（默认 0=全部；"
+                         "续训后设为当前 ckpt 附近可避免一次性回填几十个旧点）")
     ap.add_argument("--retry-skipped", type=int, default=1, choices=[0, 1],
                     help="1=对「ckpt 缺失」导致的 skipped 点重试（默认 1；最多 4 次）")
     ap.add_argument("--dev-offset", type=int, default=0,
@@ -1492,7 +1498,7 @@ def main(argv=None) -> int:
         time.sleep(max(1, args.poll))
 
     status = _status_text(hist, find_trainers(run), state, args, points)
-    print(f"[{_now()}] stage_monitor stop state={status['state']} cum={hist.cum / 1e6:.2f}M "
+    print(f"[{_now()}] stage_monitor stop state={status['state']} cum={hist.cum_eff / 1e6:.2f}M "
           f"points={len(points.entries)} png={paths['png']} dash={paths['dash']}", flush=True)
     return 0
 
