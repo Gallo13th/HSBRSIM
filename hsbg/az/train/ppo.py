@@ -331,6 +331,14 @@ class CollectConfig:
     behavior_mix_max_ms: float = 500.0
     #: 1=精确模式（每个关键决策都搜索 → logp_mu 在全部分支精确）；0=只在 ε 命中时搜索
     behavior_mix_exact: int = 1
+    #: ── per-episode 长强加权（``--game-weight-mode``）──
+    #: ``none``（默认）= 关闭（旧路径逐位等价）；``adv`` = 每局按 (对局长度, 对手最强盘面)
+    #: 算权重（``hsbg.eval.metrics.game_weights``，均值归一到 1），只缩放 advantage。
+    game_weight_mode: str = "none"
+    game_weight_alpha: float = 0.5
+    game_weight_beta: float = 0.5
+    game_weight_floor: float = 0.5
+    game_weight_cap: float = 2.0
     step_penalty: float = 0.0      # 每决策小惩罚（进入 reward）
     #: 单座位单回合决策数上限（超过且 EndTurn 合法则强制结束回合；0=关闭）。
     #: 未训练网络容易陷入 Play/Cancel 循环，默认 40 保证采集/评测能走到终局。
@@ -1050,14 +1058,7 @@ class PPOConfig:
     #: 终局强度奖励系数（默认 0 = 关闭）：末步额外加 ``coef·L(Σ_末决策)``。
     #: 与 ``rank_utility_coef`` 一起构成「0.7·强度 + 0.3·名次」的目标奖励。
     terminal_strength_coef: float = 0.0
-    #: ── per-episode 长强加权（``--game-weight-mode``）──
-    #: ``none``（默认）= 关闭（旧路径逐位等价）；``adv`` = 按 (对局长度, 对手最强盘面)
-    #: 给每局算权重（``hsbg.eval.metrics.game_weights``，均值归一到 1），只缩放 advantage。
-    game_weight_mode: str = "none"
-    game_weight_alpha: float = 0.5
-    game_weight_beta: float = 0.5
-    game_weight_floor: float = 0.5
-    game_weight_cap: float = 2.0
+
     entropy_coef: float = 0.01
     value_coef: float = 0.5
     #: MCTS visit π 辅助交叉熵权重 alpha（0 = 关闭，退化为纯 PPO）

@@ -160,6 +160,16 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
             meta = {"game_id": policy.game_id, "seed": int(cfg.seed) + gi,
                     "steps": int(steps), "decisions": int(decisions),
                     "truncated": 1, "records": 0, "rank": None}
+    global _GW_DBG_PRINTED
+    if (str(getattr(cfg, "game_weight_mode", "none") or "none") != "none"
+            and records and not _GW_DBG_PRINTED):
+        _GW_DBG_PRINTED = True
+        _gs = sorted(float(r.get("game_bot_strength") or 0.0) for r in records)
+        _gt = sorted(float(r.get("game_turns") or 0) for r in records)
+        _nz = sum(1 for x in _gs if x > 0.0)
+        print(f"[game_weight] shard ok: records={len(records)} "
+              f"bot_str_p50={_gs[len(_gs) // 2]:.0f} nonzero={_nz}/{len(_gs)} "
+              f"turns_p50={_gt[len(_gt) // 2]:.0f}", flush=True)
     meta["illegal_actions"] = int(illegal)
     meta["truncated"] = int(truncated)
     if illegal:
@@ -316,6 +326,9 @@ def collect_ppo_batch_parallel(model: Any, config: Optional[CollectConfig] = Non
 
 
 __all__ = ["collect_ppo_records_parallel", "collect_ppo_batch_parallel"]
+
+
+_GW_DBG_PRINTED = False
 
 
 def _max_opp_strength(game: Any, learner_seat: int, n_players: int) -> float:
@@ -852,6 +865,13 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         rank = int(list(g.placements())[seat]) if g.is_over() else 0
         if recs and rank:
             _attach_rank(recs, rank)
+            # 长强局加权：每局记录长度与对手最强盘面（仅 mode != none）
+            if str(getattr(cfg, "game_weight_mode", "none") or "none") != "none":
+                _gt = max((int(r.get("turn", 0) or 0) for r in recs), default=0)
+                _gs = _max_opp_strength(g, seat, N_PLAYERS)
+                for _r in recs:
+                    _r["game_turns"] = int(_gt)
+                    _r["game_bot_strength"] = float(_gs)
         records.extend(recs)
         illegal += int(st["illegal"])
         truncated += int(st["truncated"])
@@ -939,4 +959,15 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     _bm = policy.behavior_mix_meta()
     if _bm:
         meta["behavior_mix"] = _bm
+    # 长强局加权：一次性打印每 shard 的采集侧统计（确认 game_turns/game_bot_strength 已挂上）
+    global _GW_DBG_PRINTED
+    if (str(getattr(cfg, "game_weight_mode", "none") or "none") != "none"
+            and records and not _GW_DBG_PRINTED):
+        _GW_DBG_PRINTED = True
+        _gs = sorted(float(r.get("game_bot_strength") or 0.0) for r in records)
+        _gt = sorted(float(r.get("game_turns") or 0) for r in records)
+        _nz = sum(1 for x in _gs if x > 0.0)
+        print(f"[game_weight] lockstep shard ok: records={len(records)} "
+              f"games={meta.get('games')} bot_str_p50={_gs[len(_gs) // 2]:.0f} "
+              f"nonzero={_nz}/{len(_gs)} turns_p50={_gt[len(_gt) // 2]:.0f}", flush=True)
     return records, meta
