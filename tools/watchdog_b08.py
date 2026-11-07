@@ -177,7 +177,9 @@ def launch(done, snap_iter, seed):
            "--retry-skipped", "1", "--retry-min-decisions", str(done)]
     subprocess.Popen(mon, cwd=ROOT, stdout=open("/tmp/b06_monitor.log", "a"),
                      stderr=subprocess.STDOUT, start_new_session=True,
-                     env=dict(os.environ, PYTHONPATH="rust/python:."))
+                     env=dict(os.environ, PYTHONPATH="rust/python:.",
+                              HSBRSIM_FORCE_UPGRADE=FORCED_UPGRADE,
+                              HSBRSIM_BAN_TRINKETS=BAN_TRINKETS))
     log("resume: snap=%d DONE=%d offset=%d eval_first=%d seed=%d" %
         (snap_iter, done, offset, eval_first, seed))
     # 续训后核对注入口径：模板丢失 env 会把训练场地悄悄换掉（B07 曾因此在 10:50 那次
