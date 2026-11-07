@@ -233,9 +233,15 @@ if __name__ == "__main__":
     elif "--dry-run" in sys.argv:
         main(dry=True)
     else:
+        # 心跳：每 5 分钟写一行，便于外部判断看门狗是否真的在跑
+        # （用 `ps -eo cmd | grep "[w]atchdog_b07"` 才不会被自己的 grep 骗到）
+        _hb = 0.0
         while True:
             try:
                 main()
             except Exception as e:  # noqa: BLE001
                 log("ERR %r" % (e,))
+            if time.time() - _hb >= 300:
+                _hb = time.time()
+                log("heartbeat alive %s" % ("(trainer running)" if trainer_alive() else "(trainer down)"))
             time.sleep(60)
