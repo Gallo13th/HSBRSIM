@@ -93,3 +93,22 @@ B06（`--game-weight-mode adv`, α=β=0.5）跑完后，三个独立面板点的
 
 ⇒ **B07 默认 `GAME_WEIGHT_MODE=none`**，把变量压回"分布对齐（5 席 + full）"这一项。
 B06 的 `--game-weight-mode adv` 实现与测试保留（`tests/test_game_weight_adv.py`），供后续需要时复测。
+
+## 8. 事故与修复：看门狗续训丢配置（2026-11-07 10:50）
+
+**现象**：B07 在 10:50 因引擎空 mask 崩溃，watchdog 自动续训，但续训模板里**没有带
+`HB_LIB/HB_FIDELITY/HB_SEATS`**，于是续训进程退回 `3 席 + board` 并**重新打开了长强加权**
+（模板里 `GAME_WEIGHT_MODE` 常量仍是 `adv`）。从 78.5M 到 89M 的约 25 分钟、≈10M 决策
+是在错误配方上跑的（熵、每 iter 决策数立刻从 0.48/54k 跳回 0.58/77k，这才被发现）。
+
+**修复**（`tools/watchdog_b07.py`）：
+1. 常量改为 B07 的真实配方：`GAME_WEIGHT_MODE="none"`、`HB_LIB=library_real_quasi_full.jsonl`、
+   `HB_FIDELITY=full`、`HB_SEATS=5`，并把这些 env 导出/透传到 `run_stage300m.sh`；
+2. 续训后 **45 秒主动核对**运行进程命令行里的 `--human-board-seats/-fidelity/库名/--game-weight-mode`，
+   不一致直接打 ERROR（日志 `/tmp/watchdog_b07.log`）；
+3. 11:15:42 从 `snap=1501 / DONE=86,417,075` 重新以正确配方续训，已确认
+   `seats 5 / fidelity full / 无 --game-weight-mode`。
+
+**教训（写进后续 run）**：续训模板必须与 launcher 的配方**同源**，最稳的做法是让 watchdog
+直接调用该 run 的 launcher（`scripts/run_stage300m_bNN.sh`）并把 CK/TS/STOP/RAMP_START/EVAL_FIRST
+作为覆盖项传进去，而不是各自维护一份模板。此项列为 B08 之前的技术债。

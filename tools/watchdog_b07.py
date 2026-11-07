@@ -26,7 +26,11 @@ PAUSE = "/tmp/watchdog_b07.pause"
 LOCK = "/tmp/watchdog_b07.lock"
 STOP_GLOBAL = 300_000_000
 SEED_BASE = 27910
-GAME_WEIGHT_MODE = "adv"
+GAME_WEIGHT_MODE = "none"      # B07：关闭长强加权
+# B07 的唯一变量：人盘 5 席 + full 保真（续训必须原样保留，否则等于换配方）
+HB_LIB = "data/real_library/library_real_quasi_full.jsonl"
+HB_FIDELITY = "full"
+HB_SEATS = "5"
 GAME_WEIGHT_ALPHA = "0.5"
 GAME_WEIGHT_BETA = "0.5"
 GAME_WEIGHT_FLOOR = "0.5"
@@ -115,26 +119,29 @@ EVAL_FIRST={eval_first}
 SNAPSHOT_EVERY=100; KEEP_SNAPSHOTS=8
 TAG={tag}
 LR=3.0e-06; LR_MIN_RATIO=0.5; MAX_UPDATES=4300
-HB_RAMP="0:1:0.30, 15M:2:0.50, 40M:3:0.70, 80M:3:0.90"
-HB_QUANTILE_RAMP="0:p50, 40M:p75, 150M:p90"
+HB_RAMP=""            # B07 用 sample=auto 的按回合曲线
+HB_QUANTILE_RAMP=""
 RAMP_MODE=step
 RAMP_START=$DONE
 export EPOCHS=1 CLIP=0.2 TARGET_KL=0.02 ENTROPY_COEF=0.001 MAX_GRAD_NORM=1.0
 export GAME_WEIGHT_MODE={gwm} GAME_WEIGHT_ALPHA={gwa} GAME_WEIGHT_BETA={gwb} \\
        GAME_WEIGHT_FLOOR={gwf} GAME_WEIGHT_CAP={gwc}
+export HB_LIB="{hb_lib}" HB_FIDELITY="{hb_fid}" HB_SEATS="{hb_seats}"
 CK="$CK" TS="$TS" OUT="$OUT" SEED="$SEED" STOP_DECISIONS="$STOP" \\
 MINUTES="$MINUTES" PROCESSES="$PROCESSES" THREADS="$THREADS" \\
 MINIBATCH="$MINIBATCH" GRAD_ACCUM="$GRAD_ACCUM" GAMES="$GAMES" \\
 GPUS="$GPUS" DEVICE="$DEVICE" EVAL_DEVICE="$EVAL_DEVICE" EVAL_GAMES="$EVAL_GAMES" \\
 EVAL_FIRST_DECISIONS="$EVAL_FIRST" SNAPSHOT_EVERY="$SNAPSHOT_EVERY" KEEP_SNAPSHOTS="$KEEP_SNAPSHOTS" TAG="$TAG" \\
 LR="$LR" LR_MIN_RATIO="$LR_MIN_RATIO" MAX_UPDATES="$MAX_UPDATES" \\
-HB_RAMP="$HB_RAMP" HB_QUANTILE_RAMP="$HB_QUANTILE_RAMP" RAMP_MODE="$RAMP_MODE" RAMP_START="$RAMP_START" \\
+HB_RAMP="$HB_RAMP" HB_QUANTILE_RAMP="$HB_QUANTILE_RAMP" RAMP_MODE="$RAMP_MODE" RAMP_START="$RAMP_START" \
+HB_LIB="$HB_LIB" HB_FIDELITY="$HB_FIDELITY" HB_SEATS="$HB_SEATS" \\
 FROZEN_SEATS=0 FROZEN_OPPONENT="" LEAF_WAIT_MS=0.0 FORCE=1 \\
 bash scripts/run_stage300m.sh
 """.format(root=ROOT, run=RUN, it=snap_iter, done=done, seed=seed,
            stop=STOP_GLOBAL, eval_first=eval_first, tag=TAG,
            gwm=GAME_WEIGHT_MODE, gwa=GAME_WEIGHT_ALPHA, gwb=GAME_WEIGHT_BETA,
-           gwf=GAME_WEIGHT_FLOOR, gwc=GAME_WEIGHT_CAP)
+           gwf=GAME_WEIGHT_FLOOR, gwc=GAME_WEIGHT_CAP,
+           hb_lib=HB_LIB, hb_fid=HB_FIDELITY, hb_seats=HB_SEATS)
 
 
 def launch(done, snap_iter, seed):
@@ -164,6 +171,31 @@ def launch(done, snap_iter, seed):
                      env=dict(os.environ, PYTHONPATH="rust/python:."))
     log("resume: snap=%d DONE=%d offset=%d eval_first=%d seed=%d" %
         (snap_iter, done, offset, eval_first, seed))
+    # 续训后核对注入口径：模板丢失 env 会把训练场地悄悄换掉（B07 曾因此在 10:50 那次
+    # 续训后变成 3 席 + board 跑了 25 分钟）。这里主动比对运行进程的命令行并告警。
+    time.sleep(45)
+    try:
+        r = subprocess.run(["pgrep", "-u", os.environ.get("USER", "gaoletian"),
+                            "-af", "train_entity_sync[.]py"],
+                           capture_output=True, text=True)
+        cmd = r.stdout
+        checks = {
+            "seats": '--human-board-seats %s' % HB_SEATS,
+            "fidelity": '--human-board-fidelity %s' % HB_FIDELITY,
+            "lib": os.path.basename(HB_LIB),
+        }
+        bad = [k for k, v in checks.items() if v not in cmd]
+        if GAME_WEIGHT_MODE == "none" and "--game-weight-mode" in cmd:
+            bad.append("game_weight")
+        if bad:
+            log("ERROR 续训口径不一致: %s（期望 seats=%s fidelity=%s lib=%s gw=%s）"
+                % (",".join(bad), HB_SEATS, HB_FIDELITY, os.path.basename(HB_LIB),
+                   GAME_WEIGHT_MODE))
+        else:
+            log("口径核对通过: seats=%s fidelity=%s lib=%s gw=%s"
+                % (HB_SEATS, HB_FIDELITY, os.path.basename(HB_LIB), GAME_WEIGHT_MODE))
+    except Exception as e:  # noqa: BLE001
+        log("口径核对失败(忽略): %r" % (e,))
 
 
 def main(dry=False):
