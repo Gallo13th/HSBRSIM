@@ -1,13 +1,14 @@
 #!/bin/bash
 # =============================================================================
-# run_stage300m_b08.sh — B08「信用分配 + 视野」实验（astra 建议的 A + C）
+# run_stage300m_b08.sh — B08「强制升本」单变量实验
 #
-# A（信用分配）：`--tier-spread 1` —— 未达标惩罚不再只落在回合第一条 decision，
-#   而是**均分到该回合所有 learner decision**（`hsbg/az/train/tier_target.py`）。
-#   目标曲线 7:4 / 9:5 / 12:6（真实 6k+ MMR 是 t8 到 5 本、t9 到 6 本，这里故意温和一档）。
-# C（视野）：`--lam 0.995 → 0.999`（终局奖励对早期决策权重更大；KL 门禁不变）。
+# 规则（docs/B08_DESIGN.md §A'）：本回合任一决策点，若
+#   gold > upgrade_price + 商店里当下最便宜的商品
+# 且升级合法，则**只允许升级**（mask 其余位清零）。用真实对局数据直接回答
+# "高本到底值不值"，绕开 PPO 在 13+ 回合延迟收益上的探索/信用分配难题。
 #
-# 其余完全沿用 B07：5 席 p0.90 full 人盘、无长强加权、禁用加重护手、lr 3e-6 恢复。
+# 其余完全沿用 B07：5 席 p0.90 full 人盘、无长强加权、禁用加重护手、lr 3e-6、λ=0.995。
+# 不开 tier-target（A）、不改 λ（C）——单变量优先，避免多臂并行拖慢出结果。
 #
 # 用法：
 #   bash scripts/run_stage300m_b08.sh
@@ -46,15 +47,18 @@ TARGET_KL="${TARGET_KL:-0.02}"
 ENTROPY_COEF="${ENTROPY_COEF:-0.001}"
 MAX_GRAD_NORM="${MAX_GRAD_NORM:-1.0}"
 
-# —— A：信用分配（spread）——
-TIER_COEF="${TIER_COEF:-5}"
-TIER_PENALTY="${TIER_PENALTY:-0.02}"
-TIER_BONUS="${TIER_BONUS:-0.5}"
-TIER_TABLE="${TIER_TABLE:-7:4,9:5,12:6}"
-TIER_SPREAD="${TIER_SPREAD:-1}"
+# —— 唯一变量：强制升本 ——
+FORCED_UPGRADE="${FORCED_UPGRADE:-1}"
+FORCED_UPGRADE_MARGIN="${FORCED_UPGRADE_MARGIN:-0}"
+export HSBRSIM_FORCE_UPGRADE="$FORCED_UPGRADE"
 
-# —— C：GAE 视野 ——
-LAM="${LAM:-0.999}"
+# A / C 关闭（单变量）
+TIER_COEF="${TIER_COEF:-0}"
+TIER_PENALTY="${TIER_PENALTY:-0.02}"
+TIER_BONUS="${TIER_BONUS:-0.0}"
+TIER_TABLE="${TIER_TABLE:-7:4,9:5,12:6}"
+TIER_SPREAD="${TIER_SPREAD:-0}"
+LAM="${LAM:-0.995}"
 
 # 场地 = B07（5 席 p0.90 full + 按回合曲线），禁用加重护手
 HB_LIB="${HB_LIB:-data/real_library/library_real_quasi_full.jsonl}"
@@ -78,8 +82,8 @@ export LAM TIER_COEF TIER_PENALTY TIER_BONUS TIER_TABLE TIER_SPREAD
 export LR LR_MIN_RATIO MAX_UPDATES EPOCHS CLIP TARGET_KL ENTROPY_COEF MAX_GRAD_NORM
 
 echo "[b08] CK=$CK OUT=$OUT SEED=$SEED stop=$STOP"
-echo "[b08] A 信用分配: tier_coef=$TIER_COEF spread=$TIER_SPREAD table=$TIER_TABLE bonus=$TIER_BONUS"
-echo "[b08] C 视野: lam=$LAM"
+echo "[b08] 强制升本: forced_upgrade=$FORCED_UPGRADE margin=$FORCED_UPGRADE_MARGIN"
+echo "[b08] A/C 关闭: tier_coef=$TIER_COEF spread=$TIER_SPREAD lam=$LAM"
 echo "[b08] 场地: $HB_SEATS 席 / $HB_FIDELITY / 库=$(basename "$HB_LIB")  禁用饰品=${HSBRSIM_BAN_TRINKETS:-无}"
 echo "[b08] 加权: $GAME_WEIGHT_MODE"
 
@@ -89,6 +93,7 @@ MINIBATCH="$MINIBATCH" GRAD_ACCUM="$GRAD_ACCUM" GAMES="$GAMES" \
 GPUS="$GPUS" DEVICE="$DEVICE" EVAL_DEVICE="$EVAL_DEVICE" EVAL_GAMES=96 \
 SNAPSHOT_EVERY="$SNAPSHOT_EVERY" KEEP_SNAPSHOTS="$KEEP_SNAPSHOTS" TAG="$TAG" \
 LR="$LR" LR_MIN_RATIO="$LR_MIN_RATIO" MAX_UPDATES="$MAX_UPDATES" \
+FORCED_UPGRADE="$FORCED_UPGRADE" FORCED_UPGRADE_MARGIN="$FORCED_UPGRADE_MARGIN" \
 LAM="$LAM" TIER_COEF="$TIER_COEF" TIER_PENALTY="$TIER_PENALTY" \
 TIER_BONUS="$TIER_BONUS" TIER_TABLE="$TIER_TABLE" TIER_SPREAD="$TIER_SPREAD" \
 HB_RAMP="$HB_RAMP" HB_QUANTILE_RAMP="$HB_QUANTILE_RAMP" RAMP_MODE="$RAMP_MODE" \

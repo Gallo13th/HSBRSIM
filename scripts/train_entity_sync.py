@@ -1965,6 +1965,10 @@ def main() -> int:
     ap.add_argument("--shaping-tier-bonus", default="0,0,20,60,150,400,900",
                     help="按 tier 直接索引的奖励表（逗号分隔；索引 0=占位，越界按 0）")
     # ---- 等级进度奖励（tier-target，默认关闭，见 docs/TIER_TARGET.md）----
+    ap.add_argument("--forced-upgrade", type=int, default=0, choices=[0, 1],
+                    help="1=强制升本：买得起「升级+最便宜商品」时只允许升级（默认 0）")
+    ap.add_argument("--forced-upgrade-margin", type=float, default=0.0,
+                    help="强制升本的额外金币余量（默认 0=严格大于）")
     ap.add_argument("--tier-spread", type=int, default=0, choices=[0, 1],
                     help="1=未达标惩罚均分到该回合全部 decision（默认 0=只在回合首条）")
     ap.add_argument("--tier-target-coef", type=float, default=0.0,
@@ -3720,6 +3724,8 @@ def main() -> int:
             shaping_mode=str(args.shaping_mode),
             shaping_tier_bonus=str(args.shaping_tier_bonus),
             # 等级进度奖励（默认 coef=0 -> 零影响）
+            forced_upgrade=bool(int(args.forced_upgrade)),
+            forced_upgrade_margin=float(args.forced_upgrade_margin),
             tier_target_coef=float(args.tier_target_coef),
             tier_spread=bool(int(args.tier_spread)),
             tier_penalty=float(args.tier_penalty),

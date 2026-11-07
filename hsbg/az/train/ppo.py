@@ -92,6 +92,7 @@ from .reward_shaping import RewardShaper
 from .tier_target import TierTargetTracker, aggregate_tier_target
 from .power_trace import compact_diagnostics, compute_credit
 from .process_value import process_value_loss
+from .forced_upgrade import ForcedUpgradeGuard
 from .process_value import consume_count as _consume_count
 from .process_value import process_target as _process_target
 from .curriculum import apply_turn_gold as _apply_turn_gold
@@ -435,6 +436,9 @@ class CollectConfig:
     #: 非 0 时在 learner 每个新回合起点按 ``tier_target_table`` 检查 tier：
     #: 未达标扣 ``coef*tier_penalty``，首次达标一次性加 ``coef*tier_bonus``。
     #: 未达标惩罚是否均分到整回合（默认 False = 只在回合第一条 decision 扣）
+    #: 强制升本守卫（默认 False）：买得起「升级 + 最便宜商品」时只允许升级。
+    forced_upgrade: bool = False
+    forced_upgrade_margin: float = 0.0
     tier_spread: bool = False
     tier_target_coef: float = 0.0
     #: 未达标惩罚（乘 coef；默认 0.02 ≈ 名次效用全距 2.0 的 1%）。
@@ -3697,6 +3701,8 @@ class PPOSelfPlayPolicy(Policy):
         self.search_calls = 0
         self.search_failures = 0
         # 换位去抖守卫（默认关闭 -> 不构造对象、零开销；见 docs/MOVE_GUARD.md）
+        # 强制升本守卫（默认关闭 -> 恒等，逐位不变）
+        self._fguard = ForcedUpgradeGuard(self.config)
         self._guard = (MoveGuard(cap=int(getattr(self.config, "move_cap",
                                                  DEFAULT_MOVE_CAP)),
                                  repeat_limit=int(getattr(
@@ -3827,6 +3833,8 @@ class PPOSelfPlayPolicy(Policy):
         """取观测与合法动作掩码（与 decide 一致）。"""
         f, c = obs_arrays(game.observe(int(seat)))
         mask = mask_from_bytes(game.legal_mask(int(seat)))
+        if self._fguard is not None and self._fguard.enabled:
+            mask, _forced = self._fguard.rewrite(f, mask)
         return f, c, mask
 
     def _turn_is_forced(self, game: Any, seat: int, mask: Any) -> bool:
