@@ -71,6 +71,12 @@ LR_MIN_RATIO="${LR_MIN_RATIO:-0.5}"
 MAX_UPDATES="${MAX_UPDATES:-3000}"
 EPOCHS="${EPOCHS:-1}"
 CLIP="${CLIP:-0.2}"
+LAM="${LAM:-0.995}"
+TIER_COEF="${TIER_COEF:-0.0}"
+TIER_PENALTY="${TIER_PENALTY:-0.02}"
+TIER_BONUS="${TIER_BONUS:-0.0}"
+TIER_TABLE="${TIER_TABLE:-7:4,9:5,12:6}"
+TIER_SPREAD="${TIER_SPREAD:-0}"
 TARGET_KL="${TARGET_KL:-0.02}"
 ENTROPY_COEF="${ENTROPY_COEF:-0.001}"
 MAX_GRAD_NORM="${MAX_GRAD_NORM:-1.0}"
@@ -167,7 +173,7 @@ CMD=("$PY" scripts/train_entity_sync.py
   --behavior-mix-max-per-turn 6 --behavior-mix-topk 8 --behavior-mix-turns 1
   --behavior-mix-max-ms 500.0 --behavior-mix-exact 1
   --epochs "$EPOCHS" --minibatch "$MINIBATCH" --lr "$LR" --lr-min-ratio "$LR_MIN_RATIO" --max-updates "$MAX_UPDATES"
-  --clip "$CLIP" --target-kl "$TARGET_KL" --lam 0.995 --gamma 1.0
+  --clip "$CLIP" --target-kl "$TARGET_KL" --lam "$LAM" --gamma 1.0
   --adv-estimator gae --power-alpha 0.25 --power-kappa 10.0 --power-normalize 1
   --power-cutoff 0 --credit-timebase decision --baseline-action-dependent 0
   --max-grad-norm "$MAX_GRAD_NORM" --grad-accum "$GRAD_ACCUM"
@@ -183,8 +189,8 @@ CMD=("$PY" scripts/train_entity_sync.py
   --shaping-coef 0.0 --shaping-w-str 1.0 --shaping-w-tier 0.5 --shaping-mode sigma
   --rank-utility-coef 1.0 --terminal-strength-coef 0.0
   --shaping-tier-bonus 0,0,20,60,150,400,900
-  --tier-target-coef 0.0 --tier-penalty 0.02 --tier-bonus 0.0
-  --tier-target-table 7:4,9:5,12:6
+  --tier-target-coef "$TIER_COEF" --tier-penalty "$TIER_PENALTY" --tier-bonus "$TIER_BONUS"
+  --tier-target-table "$TIER_TABLE" --tier-spread "$TIER_SPREAD"
   --library-p 0.0 --lockstep 1 --fast-act 1 --amp bf16
   --compile-train 1 --anchor-amp 1 --pi-coef 0.0
   --seq-coef 0.0 --seq-ramp-total-decisions 0.0
@@ -292,6 +298,7 @@ if [ "$DRY_RUN" = "1" ]; then
   say "FROZEN_SEATS=$FROZEN_SEATS  FROZEN_OPPONENT=$FROZEN_OPPONENT"
   say "GAME_WEIGHT_MODE=$GAME_WEIGHT_MODE  alpha=$GAME_WEIGHT_ALPHA beta=$GAME_WEIGHT_BETA floor=$GAME_WEIGHT_FLOOR cap=$GAME_WEIGHT_CAP"
   say "HB_LIB=$HB_LIB  HB_FIDELITY=$HB_FIDELITY  HB_SEATS=$HB_SEATS"
+  say "LAM=$LAM  TIER_COEF=$TIER_COEF TIER_PENALTY=$TIER_PENALTY TIER_BONUS=$TIER_BONUS TIER_TABLE=$TIER_TABLE TIER_SPREAD=$TIER_SPREAD"
   say "HB_RAMP=$HB_RAMP  HB_QUANTILE_RAMP=$HB_QUANTILE_RAMP  RAMP_MODE=$RAMP_MODE  RAMP_START=$RAMP_START"
   say "LR=$LR  LR_MIN_RATIO=$LR_MIN_RATIO  MAX_UPDATES=$MAX_UPDATES  EPOCHS=$EPOCHS  MINIBATCH=$MINIBATCH  GRAD_ACCUM=$GRAD_ACCUM  CLIP=$CLIP  TARGET_KL=$TARGET_KL  ENTROPY_COEF=$ENTROPY_COEF  MAX_GRAD_NORM=$MAX_GRAD_NORM"
   say "COMP_FIT_COEF=$COMP_FIT_COEF  COMP_FIT_T9_BONUS=$COMP_FIT_T9_BONUS  COMP_TRINKET_COEF=$COMP_TRINKET_COEF"

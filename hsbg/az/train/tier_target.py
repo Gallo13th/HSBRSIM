@@ -219,6 +219,11 @@ class TierTargetTracker:
     - ``pending``：``(record_index, game_id, delta)``，采集结束时统一加到 record。
     """
 
+    #: ``tier_spread=True`` 时「未达标惩罚」不再只落在回合第一条 decision 上，而是
+    #: **均分到该回合所有 learner decision**（docs/OBS_CREDIT_DISCUSSION.md 命题 2/§A：
+    #: 惩罚应该落在"没有选择升级/没有预留金币"的那一串动作上，而不是回合起点）。
+    #: 默认 False = 旧行为逐位不变。
+
     def __init__(self, cfg: Any = None, *, coef: Optional[float] = None,
                  penalty: Optional[float] = None, bonus: Optional[float] = None,
                  table: Any = None) -> None:
@@ -239,6 +244,14 @@ class TierTargetTracker:
             # coef=0：不解析、不校验（避免关闭状态下因 typo 改变旧路径行为）
             self.table = dict(DEFAULT_TIER_TARGET_TABLE)
         self.table_spec = format_tier_target_table(self.table)
+
+        #: 未达标惩罚是否均分到整回合（默认 False = 老行为）
+        self.spread = bool(_cfg_value(cfg, "tier_spread", None, False)) if self.enabled else False
+        #: 本回合待分摊惩罚的 turn 集合（只在命中目标且未达标时登记）
+        self.spread_turns: Set[int] = set()
+        #: turn -> 该回合的 record 索引列表（仅 spread 模式收集）
+        self.turn_rows: Dict[int, List[int]] = {}
+        self.spread_queued = 0
 
         self.evaluated: Set[int] = set()
         self.claimed: Set[int] = set()
@@ -290,6 +303,11 @@ class TierTargetTracker:
         delta = -self.coef * self.penalty
         self.penalty_sum += -delta
         self.reward_sum += delta
+        if self.spread:
+            # 不在回合起点扣，改由 close_turn() 均分到该回合的每条 decision
+            self.spread_turns.add(t)
+            self.turn_rows.setdefault(t, [])
+            return 0.0
         return delta
 
     def observe(self, game: Any, seat: int, turn: Optional[int] = None) -> float:
@@ -315,6 +333,43 @@ class TierTargetTracker:
         if t in self.evaluated:
             return 0.0
         return self.check(t, tier_from_obs(features))
+
+    # ── spread 模式：按回合收集/分摊 ─────────────────────────────────────
+    def note_decision(self, index: int, turn: Any) -> None:
+        """spread 模式：登记「该回合的一条 decision」的 record 索引。"""
+        if not self.enabled or not self.spread:
+            return
+        try:
+            t = int(turn)
+            idx = int(index)
+        except (TypeError, ValueError):
+            return
+        if t not in self.spread_turns or idx < 0:
+            return
+        self.turn_rows.setdefault(t, []).append(idx)
+
+    def close_turn(self, turn: Any, game_id: int) -> int:
+        """回合结束：若该回合未达标，把 ``-coef*penalty`` **均分**给它的每条 decision。
+
+        返回实际登记的条数；非 spread / 未命中 / 无记录时返回 0。
+        """
+        if not self.enabled or not self.spread:
+            return 0
+        try:
+            t = int(turn)
+        except (TypeError, ValueError):
+            return 0
+        if t not in self.spread_turns:
+            return 0
+        rows = self.turn_rows.pop(t, [])
+        self.spread_turns.discard(t)
+        if not rows:
+            return 0
+        per = (-self.coef * self.penalty) / float(len(rows))
+        for idx in rows:
+            self.queue(idx, int(game_id), per)
+        self.spread_queued += len(rows)
+        return len(rows)
 
     # ── 待应用增量 ──────────────────────────────────────────────────────
     def queue(self, index: int, game_id: int, delta: float) -> bool:
@@ -370,6 +425,8 @@ class TierTargetTracker:
             "tier_bonus_sum": float(self.bonus_sum),
             "tier_penalty_sum": float(self.penalty_sum),
             "tier_target_reward_sum": float(self.reward_sum),
+            "tier_spread": bool(self.spread),
+            "tier_spread_queued": int(self.spread_queued),
             "tier_target_applied": int(self.applied),
             "tier_target_dropped": int(self.dropped),
         }

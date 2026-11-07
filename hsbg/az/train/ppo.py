@@ -434,6 +434,8 @@ class CollectConfig:
     #: 系数：**0 = 关闭**（不读状态、不写 record、不新增 meta 键，旧路径逐位一致）。
     #: 非 0 时在 learner 每个新回合起点按 ``tier_target_table`` 检查 tier：
     #: 未达标扣 ``coef*tier_penalty``，首次达标一次性加 ``coef*tier_bonus``。
+    #: 未达标惩罚是否均分到整回合（默认 False = 只在回合第一条 decision 扣）
+    tier_spread: bool = False
     tier_target_coef: float = 0.0
     #: 未达标惩罚（乘 coef；默认 0.02 ≈ 名次效用全距 2.0 的 1%）。
     tier_penalty: float = 0.02

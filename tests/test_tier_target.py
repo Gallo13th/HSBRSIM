@@ -413,3 +413,65 @@ def test_train_entry_exposes_tier_target_flags():
     for flag in ("--tier-target-coef", "--tier-penalty", "--tier-bonus",
                  "--tier-target-table"):
         assert flag in proc.stdout, flag
+
+
+# ── A 方案：spread 模式（把 miss 惩罚均分到整回合） ─────────────────────
+def test_spread_mode_defers_penalty_and_splits_evenly():
+    from hsbg.az.train.tier_target import TierTargetTracker
+
+    class Cfg:
+        tier_target_coef = 5.0
+        tier_penalty = 0.02
+        tier_bonus = 0.15
+        tier_target_table = "7:4,9:5"
+        tier_spread = True
+
+    tr = TierTargetTracker(Cfg())
+    assert tr.enabled and tr.spread
+    # 回合 7 未达标（tier=3 < 4）：起点不再扣分
+    assert tr.check(7, 3) == 0.0
+    for i in (10, 11, 12, 13):
+        tr.note_decision(i, 7)
+    n = tr.close_turn(7, 99)
+    assert n == 4
+    total = sum(d for _, _, d in tr.pending)
+    assert abs(total + 5.0 * 0.02) < 1e-9, total          # 总额不变
+    assert all(abs(d - (-0.1 / 4)) < 1e-9 for _, _, d in tr.pending)  # 均分
+
+    records = [{"game_id": 99, "reward": 0.0} for _ in range(16)]
+    assert tr.flush(records) == 4
+    assert abs(records[10]["reward"] + 0.025) < 1e-9
+    assert records[0]["reward"] == 0.0
+
+
+def test_spread_mode_hit_still_paid_at_turn_start():
+    from hsbg.az.train.tier_target import TierTargetTracker
+
+    class Cfg:
+        tier_target_coef = 5.0
+        tier_penalty = 0.02
+        tier_bonus = 0.15
+        tier_target_table = "7:4"
+        tier_spread = True
+
+    tr = TierTargetTracker(Cfg())
+    # 达标奖励仍是 check() 的返回值（由采集端 queue 到该记录）
+    assert abs(tr.check(7, 4) - 5.0 * 0.15) < 1e-9
+    assert tr.close_turn(7, 1) == 0                    # 没有 miss -> 无需分摊
+    assert tr.pending == []
+
+
+def test_spread_off_is_identical_to_legacy():
+    from hsbg.az.train.tier_target import TierTargetTracker
+
+    class Cfg:
+        tier_target_coef = 5.0
+        tier_penalty = 0.02
+        tier_bonus = 0.15
+        tier_target_table = "7:4"
+        tier_spread = False
+
+    tr = TierTargetTracker(Cfg())
+    assert not tr.spread
+    assert abs(tr.check(7, 3) + 5.0 * 0.02) < 1e-9     # 旧行为：起点就扣
+    assert tr.close_turn(7, 1) == 0

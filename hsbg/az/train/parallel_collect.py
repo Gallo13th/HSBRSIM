@@ -777,6 +777,14 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         phi_now = ([shaper.potential(st["game"], seat) for st in pending]
                    if shaper.enabled else [])
         # 等级进度奖励：本回合第一条 learner decision 前检查一次 tier（同 turn 幂等）
+        if tier_on:
+            # spread 模式：回合切换时把上一回合的 miss 惩罚均分到它的每条 decision
+            for st in pending:
+                _t_now = int(st["game"].turn)
+                _t_prev = st.get("tt_turn")
+                if _t_prev is not None and _t_now != _t_prev:
+                    st["tier_target"].close_turn(_t_prev, int(st["gid"]))
+                st["tt_turn"] = _t_now
         tier_deltas = ([st["tier_target"].observe(st["game"], seat) for st in pending]
                        if tier_on else [])
         try:
@@ -843,9 +851,12 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
                                   float(st.get("shape_phi", 0.0)), phi_now[k])
                 st["shape_phi"] = phi_now[k]
                 st["shape_rec"] = int(st["rec_start"])
-            if tier_on and tier_deltas[k]:
-                st["tier_target"].queue(int(st["rec_start"]), int(st["gid"]),
-                                        tier_deltas[k])
+            if tier_on:
+                if tier_deltas[k]:
+                    st["tier_target"].queue(int(st["rec_start"]), int(st["gid"]),
+                                            tier_deltas[k])
+                # spread 模式：登记本条 decision，供回合结束时均分惩罚
+                st["tier_target"].note_decision(int(st["rec_start"]), st.get("tt_turn"))
             mask = mask_from_bytes(g.legal_mask(seat))
             a = int(dec.action)
             if not (0 <= a < N_ACTIONS and bool(mask[a])):
@@ -871,6 +882,10 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
     # tier-target 增量统一在势函数回填之后叠加（避免覆盖写互相踩）。
     if tier_on:
         for st in states:
+            # 局末：最后一个回合也要 close（否则它的 miss 惩罚会丢）
+            _t = st.get("tt_turn")
+            if _t is not None:
+                st["tier_target"].close_turn(_t, int(st["gid"]))
             st["tier_target"].flush(policy.records)
 
     records: List[Dict[str, Any]] = []
