@@ -197,8 +197,10 @@ CMD=("$PY" scripts/train_entity_sync.py
   --library-p 0.0 --lockstep 1 --fast-act 1 --amp bf16
   --compile-train 1 --anchor-amp 1 --pi-coef 0.0
   --seq-coef 0.0 --seq-ramp-total-decisions 0.0
-  --bc-coef 0.0 --bc-mmr-min 6000 --bc-mmr-boost 1.0
-  --bc-samples data/firestone_bc/bc_samples.jsonl.gz
+  --bc-coef "${BC_COEF:-0.0}" --bc-mmr-min "${BC_MMR_MIN:-6000}" --bc-mmr-boost "${BC_MMR_BOOST:-1.0}" \
+  --bc-type-weight "${BC_TYPE_WEIGHT:-1.0}" --bc-card-weight "${BC_CARD_WEIGHT:-0.5}" \
+  --bc-class-weight "${BC_CLASS_WEIGHT:-}" --bc-batch "${BC_BATCH:-128}" --bc-every "${BC_EVERY:-1}"
+  --bc-samples "${BC_SAMPLES:-data/firestone_bc/bc_samples.jsonl.gz}"
   --bc-batch 128 --bc-every 1 --bc-compile 1 --bc-type-weight 1.0 --bc-card-weight 0.5
   --dpo-coef 0.0 --dpo-beta 0.1 --dpo-batch 128 --dpo-every 4
   --dpo-samples data/firestone_bc/bc_samples.jsonl.gz
@@ -302,6 +304,7 @@ if [ "$DRY_RUN" = "1" ]; then
   say "GAME_WEIGHT_MODE=$GAME_WEIGHT_MODE  alpha=$GAME_WEIGHT_ALPHA beta=$GAME_WEIGHT_BETA floor=$GAME_WEIGHT_FLOOR cap=$GAME_WEIGHT_CAP"
   say "HB_LIB=$HB_LIB  HB_FIDELITY=$HB_FIDELITY  HB_SEATS=$HB_SEATS"
   say "FORCED_UPGRADE=$FORCED_UPGRADE margin=$FORCED_UPGRADE_MARGIN"
+  say "BC_COEF=${BC_COEF:-0} BC_MMR_MIN=${BC_MMR_MIN:-6000} BC_CARD_WEIGHT=${BC_CARD_WEIGHT:-0.5} BC_CLASS_WEIGHT=${BC_CLASS_WEIGHT:-}"
   say "LAM=$LAM  TIER_COEF=$TIER_COEF TIER_PENALTY=$TIER_PENALTY TIER_BONUS=$TIER_BONUS TIER_TABLE=$TIER_TABLE TIER_SPREAD=$TIER_SPREAD"
   say "HB_RAMP=$HB_RAMP  HB_QUANTILE_RAMP=$HB_QUANTILE_RAMP  RAMP_MODE=$RAMP_MODE  RAMP_START=$RAMP_START"
   say "LR=$LR  LR_MIN_RATIO=$LR_MIN_RATIO  MAX_UPDATES=$MAX_UPDATES  EPOCHS=$EPOCHS  MINIBATCH=$MINIBATCH  GRAD_ACCUM=$GRAD_ACCUM  CLIP=$CLIP  TARGET_KL=$TARGET_KL  ENTROPY_COEF=$ENTROPY_COEF  MAX_GRAD_NORM=$MAX_GRAD_NORM"
