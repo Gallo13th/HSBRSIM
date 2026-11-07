@@ -492,3 +492,27 @@ def test_empty_class_weight_overrides_bitwise_equivalent(bc_data):
     l_ones = bc_ce_loss(logits, target, class_ids=cls, class_counts=counts,
                         class_weight=torch.ones(2))
     assert torch.equal(l_none, l_ones)
+
+
+# ── B09: tier_min 过滤（只在高本决策上模仿人类复利） ────────────────────────
+def test_tier_min_filters_low_tier_samples(tmp_path):
+    import gzip, json
+    rows = [
+        {"action_type": "buy_minion", "action_index": 10, "mmr": 7000, "tier": 3,
+         "turn": 6, "card_id": "BG31_803", "shop_cards": "['BG31_803']",
+         "shop_pos": "[0]", "board_cards": "[]", "board_pos": "[]",
+         "hand_cards": "[]", "hand_pos": "[]", "hero": "TB_BaconShop_HERO_93_SKIN_D"},
+        {"action_type": "buy_minion", "action_index": 10, "mmr": 7000, "tier": 6,
+         "turn": 12, "card_id": "BG31_803", "shop_cards": "['BG31_803']",
+         "shop_pos": "[0]", "board_cards": "[]", "board_pos": "[]",
+         "hand_cards": "[]", "hand_pos": "[]", "hero": "TB_BaconShop_HERO_93_SKIN_D"},
+    ]
+    p = tmp_path / "s.jsonl.gz"
+    with gzip.open(p, "wt", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r) + "\n")
+    from hsbg.az.train.bc_aux import load_bc_samples
+    all_ = load_bc_samples(str(p), mmr_min=6000, tier_min=0)
+    hi = load_bc_samples(str(p), mmr_min=6000, tier_min=5)
+    assert len(all_) == 2 and len(hi) == 1
+    assert float(hi.tier[0]) == 6.0

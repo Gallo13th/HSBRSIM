@@ -2012,6 +2012,8 @@ def main() -> int:
     ap.add_argument("--bc-coef-ramp", default="",
                     help='BC 系数 ramp（与 --seq-coef-ramp 同语法），如 "0.005@0,0.02@0.3"；'
                          "按累计 decisions 求值后写回 bc_coef")
+    ap.add_argument("--bc-tier-min", type=int, default=0,
+                    help="只保留 tier>=N 的 BC 决策（0=不过滤；B09 用 5）")
     ap.add_argument("--bc-mmr-min", type=int, default=6000,
                     help="BC 样本 MMR 下限（低于该值丢弃；默认 6000）")
     ap.add_argument("--bc-mmr-boost", type=float, default=1.0,
@@ -2815,12 +2817,14 @@ def main() -> int:
             bc_pool = load_bc_samples(
                 str(args.bc_samples), mmr_min=int(args.bc_mmr_min),
                 mmr_boost=float(args.bc_mmr_boost),
-                class_weight_overrides=(bc_class_weights or None))
+                class_weight_overrides=(bc_class_weights or None),
+                tier_min=int(getattr(args, "bc_tier_min", 0) or 0))
             if len(bc_pool) == 0:
                 raise ValueError("过滤后样本数为 0（动作白名单/MMR 下限）")
             _sum = bc_pool_summary(bc_pool)
             print(f"[bc] 真实人类 BC 池: samples={len(bc_pool)} "
-                  f"mmr>={int(args.bc_mmr_min)} load={time.time() - _t_bc:.1f}s "
+                  f"mmr>={int(args.bc_mmr_min)} tier>={int(getattr(args, 'bc_tier_min', 0) or 0)} "
+                  f"load={time.time() - _t_bc:.1f}s "
                   f"path={bc_pool.path}", flush=True)
             print(f"[bc] class_counts={json.dumps(_sum['class_counts'], ensure_ascii=False)}",
                   flush=True)

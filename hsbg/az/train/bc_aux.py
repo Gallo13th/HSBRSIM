@@ -561,7 +561,8 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
                     cards_path: Optional[str] = None,
                     mmr_full: int = 8000,
                     mmr_boost: float = 1.0,
-                    class_weight_overrides: Optional[Mapping[str, float]] = None
+                    class_weight_overrides: Optional[Mapping[str, float]] = None,
+                    tier_min: int = 0
                     ) -> BCSamples:
     """加载并过滤 BC 样本。
 
@@ -570,7 +571,8 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
     1. ``action_type`` 在白名单（默认 :data:`DEFAULT_BC_ACTION_TYPES`，9 类；
        传 :data:`BC_ACTION_TYPES_WITH_REPOSITION` = 追加 ``reposition``，10 类）；
     2. ``action_index`` 是合法整数（``0 <= a < 245``），且在 ``actions`` 允许集合内；
-    3. ``mmr`` 可解析且 ``>= mmr_min``（缺失 MMR 视为不可用）。
+    3. ``mmr`` 可解析且 ``>= mmr_min``（缺失 MMR 视为不可用）；
+       ``tier_min>0`` 时再要求该决策 ``tier >= tier_min``（B09 只在高本模仿复利；缺失 tier 不通过）。
 
     ``gold/tier/health/turn/armor`` 缺失不丢样本：对应值填 0、``*_known=False``，
     编码时 mask 为假（部分观测）。``shop/hand/board`` 中的未知卡 id 直接跳过该槽。
@@ -621,7 +623,7 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
     total_lines = 0
     skipped = {k: 0 for k in (
         "bad_json", "action_type", "action_index", "action_not_allowed",
-        "mmr", "mmr_low")}
+        "mmr", "mmr_low", "tier_low")}
 
     with _open_text(path) as f:
         for line in f:
@@ -663,6 +665,11 @@ def load_bc_samples(path: str = DEFAULT_BC_SAMPLES_PATH, *,
                 skipped["mmr_low"] += 1
                 continue
 
+            if int(tier_min) > 0:
+                _tv = _int_or_none(r.get("tier"))
+                if _tv is None or int(_tv) < int(tier_min):
+                    skipped["tier_low"] += 1
+                    continue
             cls = int(class_map[atype])
             action_index.append(int(ai))
             action_class.append(cls)
