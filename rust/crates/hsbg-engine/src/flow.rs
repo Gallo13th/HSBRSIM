@@ -672,6 +672,8 @@ impl Game {
             .iter()
             .copied()
             .filter(|t| d.get(*t).kind == kind && self.trinket_eligible(p, *t))
+            .filter(|t| self.cfg.banned_trinkets.is_empty()
+                || !self.cfg.banned_trinkets.iter().any(|x| x == &d.get(*t).id))
             .map(|t| (t, typed(t) && !is_in(t)))
             // A typed trinket you're not in is only offered if it can be discounted.
             .filter(|(t, pivot)| !pivot || DISCOUNTABLE.contains(&d.get(*t).id.as_str()))

@@ -107,3 +107,11 @@ python -m pytest ../tests/test_rust_engine.py -q
   **只加指定回合的额外金币**，其余规则不变。依据：Firestone 真实成功组 p90 收入差额 t5 +1 / t7 +1 / t9 +3。
 - **默认空逐位等价**：`gold_bonus_by_turn_zero_is_default` 断言默认无加成；`_applies` 断言 t2 base 4 + 1 = 5。
 - 传播：训练入口 `--gold-bonus-turn "5:1,7:1,9:3"` → `HSBG_GOLD_BONUS_TURNS` → `game_config_json()` → 全部 `E.Game(config_json=...)`。
+- **2026-11-07 `RulesConfig::banned_trinkets: Vec<String>`（默认空）**：生成饰品报价时
+  `flow.rs::trinket_offer` 的候选集里直接剔除这些 card id（按 `CardDef.id` 字符串比对）。
+  用途：`docs/B07_DESIGN.md §9` 的「加重护手（`BG36_MagicItem_414`）禁用」对照实验——
+  该饰品回合结束 +1/+1 且每回合翻倍，会让低本阵容把属性滚到 5 倍以上，干扰"升本换核心"的评估。
+- 传播：环境变量 `HSBRSIM_BAN_TRINKETS="id1,id2"` → `hsbg/az/train/game_rules.banned_trinkets()`
+  → `game_config_json()` → 全部 `E.Game(config_json=...)`；训练/评测同时生效。
+- 测试：`tests/trinket_ban.rs`（禁用它后 24 个种子 × lesser/greater 报价均不含该 id；
+  禁掉全部 lesser 饰品时报价退化为空且不 panic）。

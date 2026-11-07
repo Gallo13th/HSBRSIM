@@ -31,6 +31,7 @@ GAME_WEIGHT_MODE = "none"      # B07：关闭长强加权
 HB_LIB = "data/real_library/library_real_quasi_full.jsonl"
 HB_FIDELITY = "full"
 HB_SEATS = "5"
+BAN_TRINKETS = "BG36_MagicItem_414"   # 禁用「加重护手」（引擎级报价剔除）
 GAME_WEIGHT_ALPHA = "0.5"
 GAME_WEIGHT_BETA = "0.5"
 GAME_WEIGHT_FLOOR = "0.5"
@@ -127,6 +128,7 @@ export EPOCHS=1 CLIP=0.2 TARGET_KL=0.02 ENTROPY_COEF=0.001 MAX_GRAD_NORM=1.0
 export GAME_WEIGHT_MODE={gwm} GAME_WEIGHT_ALPHA={gwa} GAME_WEIGHT_BETA={gwb} \\
        GAME_WEIGHT_FLOOR={gwf} GAME_WEIGHT_CAP={gwc}
 export HB_LIB="{hb_lib}" HB_FIDELITY="{hb_fid}" HB_SEATS="{hb_seats}"
+export HSBRSIM_BAN_TRINKETS="{ban_trinkets}"
 CK="$CK" TS="$TS" OUT="$OUT" SEED="$SEED" STOP_DECISIONS="$STOP" \\
 MINUTES="$MINUTES" PROCESSES="$PROCESSES" THREADS="$THREADS" \\
 MINIBATCH="$MINIBATCH" GRAD_ACCUM="$GRAD_ACCUM" GAMES="$GAMES" \\
@@ -135,13 +137,15 @@ EVAL_FIRST_DECISIONS="$EVAL_FIRST" SNAPSHOT_EVERY="$SNAPSHOT_EVERY" KEEP_SNAPSHO
 LR="$LR" LR_MIN_RATIO="$LR_MIN_RATIO" MAX_UPDATES="$MAX_UPDATES" \\
 HB_RAMP="$HB_RAMP" HB_QUANTILE_RAMP="$HB_QUANTILE_RAMP" RAMP_MODE="$RAMP_MODE" RAMP_START="$RAMP_START" \
 HB_LIB="$HB_LIB" HB_FIDELITY="$HB_FIDELITY" HB_SEATS="$HB_SEATS" \\
+HSBRSIM_BAN_TRINKETS="$HSBRSIM_BAN_TRINKETS" \\
 FROZEN_SEATS=0 FROZEN_OPPONENT="" LEAF_WAIT_MS=0.0 FORCE=1 \\
 bash scripts/run_stage300m.sh
 """.format(root=ROOT, run=RUN, it=snap_iter, done=done, seed=seed,
            stop=STOP_GLOBAL, eval_first=eval_first, tag=TAG,
            gwm=GAME_WEIGHT_MODE, gwa=GAME_WEIGHT_ALPHA, gwb=GAME_WEIGHT_BETA,
            gwf=GAME_WEIGHT_FLOOR, gwc=GAME_WEIGHT_CAP,
-           hb_lib=HB_LIB, hb_fid=HB_FIDELITY, hb_seats=HB_SEATS)
+           hb_lib=HB_LIB, hb_fid=HB_FIDELITY, hb_seats=HB_SEATS,
+           ban_trinkets=BAN_TRINKETS)
 
 
 def launch(done, snap_iter, seed):

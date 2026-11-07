@@ -36,6 +36,11 @@ pub struct RulesConfig {
     /// 不改收入/其他规则；用于 docs/ECONOMY_CEILING.md 的「降升级费」对照实验。
     #[serde(default)]
     pub tier_upgrade_discount: i32,
+    /// 禁用的饰品（按 card id 字符串，例如 `["BG36_MagicItem_414"]`）：生成饰品报价时
+    /// 直接从候选池剔除。用于「禁止某个饰品改变成长曲线」的对照实验/训练约束。
+    /// 空（默认）= 不改变任何行为。
+    #[serde(default)]
+    pub banned_trinkets: Vec<String>,
     /// 折扣作用范围：`"all"`（默认）或 `"tier5"`（只对「升到 tier5」这一档生效）。
     #[serde(default = "default_discount_scope")]
     pub tier_upgrade_discount_scope: String,
@@ -261,6 +266,7 @@ impl Default for RulesConfig {
             refresh_cost: 1,
             upgrade_costs: [5, 7, 8, 11, 11, 10],
             upgrade_discount_per_turn: 1,
+            banned_trinkets: Vec::new(),
             tier_upgrade_discount: 0,
             tier_upgrade_discount_scope: default_discount_scope(),
             gold_bonus_by_turn: vec![],

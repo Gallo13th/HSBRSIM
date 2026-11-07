@@ -37,6 +37,18 @@ def gold_bonus_turns() -> list[list[int]]:
     return out
 
 
+def banned_trinkets() -> list:
+    """``HSBRSIM_BAN_TRINKETS="BG36_MagicItem_414,BG36_..."`` -> 禁用饰品 id 列表。
+
+    引擎在生成饰品报价时直接剔除这些 id（`RulesConfig.banned_trinkets`），因此训练与评测
+    都不会再看到它们。空串 = 不改变行为（默认）。
+    """
+    raw = (os.environ.get("HSBRSIM_BAN_TRINKETS", "") or "").strip()
+    if not raw:
+        return []
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+
 def game_config_json() -> str | None:
     cfg: dict = {}
     d = tier_upgrade_discount()
@@ -48,4 +60,7 @@ def game_config_json() -> str | None:
     gb = gold_bonus_turns()
     if gb:
         cfg["gold_bonus_by_turn"] = gb
+    bt = banned_trinkets()
+    if bt:
+        cfg["banned_trinkets"] = bt
     return json.dumps(cfg) if cfg else None

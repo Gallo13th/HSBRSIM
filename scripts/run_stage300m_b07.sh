@@ -67,6 +67,11 @@ GAME_WEIGHT_BETA="${GAME_WEIGHT_BETA:-0.5}"
 GAME_WEIGHT_FLOOR="${GAME_WEIGHT_FLOOR:-0.5}"
 GAME_WEIGHT_CAP="${GAME_WEIGHT_CAP:-2.0}"
 
+# 禁用饰品（引擎级：报价里直接剔除）：默认禁「加重护手」——它让低本阵容靠每回合翻倍的
+# +1/+1 把属性滚高，掩盖了"不升本"的策略。设 BAN_TRINKETS="" 可关闭做对照。
+BAN_TRINKETS="${BAN_TRINKETS-BG36_MagicItem_414}"
+export HSBRSIM_BAN_TRINKETS="$BAN_TRINKETS"
+
 FROZEN_SEATS="${FROZEN_SEATS:-0}"
 FROZEN_OPPONENT="${FROZEN_OPPONENT:-}"
 
@@ -81,6 +86,7 @@ echo "[b07] CK=$CK OUT=$OUT SEED=$SEED stop=$STOP"
 echo "[b07] 优化器 = B05/B06：lr=$LR mb=$MINIBATCH accum=$GRAD_ACCUM max_updates=$MAX_UPDATES"
 echo "[b07] 唯一新增：人盘 5 席 + full 保真（库=$(basename "$HB_LIB")），sample=auto（按回合曲线），ramp='$HB_RAMP'/'$HB_QUANTILE_RAMP'"
 echo "[b07] 长强加权：$GAME_WEIGHT_MODE (alpha=$GAME_WEIGHT_ALPHA beta=$GAME_WEIGHT_BETA cap=$GAME_WEIGHT_CAP)"
+echo "[b07] 禁用饰品：${HSBRSIM_BAN_TRINKETS:-（无）}"
 
 CK="$CK" TS="$TS" OUT="$OUT" SEED="$SEED" STOP_DECISIONS="$STOP" \
 MINUTES="$MINUTES" PROCESSES="$PROCESSES" THREADS="$THREADS" \
