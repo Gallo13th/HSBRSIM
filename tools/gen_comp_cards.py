@@ -96,6 +96,39 @@ def name_to_ids() -> dict:
     return out
 
 
+def availability(n2i: dict, names, *, seeds: int = 40, cfg_json: str = "") -> dict:
+    """统计每张卡在 N 个大厅的卡池里出现的比例（引擎的 pool=universe 按大厅种族过滤）。
+
+    这一步是必要的：当前规则集的卡池只含**与大厅种族匹配**的随从，无种族的 T5 卡
+    （提图斯·瑞文戴尔 / 达卡莱附魔师 / 布莱恩·铜须）其实**从不出现在商店里**——
+    B11 前三轮"买放大器"完全空转就是因为它（见 docs/B11_DESIGN.md）。
+    """
+    sys.path.insert(0, os.path.join(ROOT, "rust", "python"))
+    import hsbg_engine as E  # noqa: PLC0415
+    try:
+        sys.path.insert(0, ROOT)
+        from hsbg.az.train.game_rules import game_config_json  # noqa: PLC0415
+        cfg = game_config_json()
+    except Exception:  # noqa: BLE001
+        cfg = cfg_json or "{}"
+    unis = []
+    for seed in range(1, int(seeds) + 1):
+        try:
+            st = json.loads(E.Game(seed, cfg).state_json())
+        except Exception:  # noqa: BLE001
+            continue
+        unis.append(set(int(x) for x in (st.get("universe") or [])))
+    out = {}
+    for nm in names:
+        ids = n2i.get(nm) or []
+        if not ids or not unis:
+            out[nm] = 0.0
+            continue
+        hit = sum(1 for u in unis if any(i in u for i in ids))
+        out[nm] = hit / len(unis)
+    return out
+
+
 def main() -> int:
     n2i = name_to_ids()
     comps, missing = [], []
@@ -115,23 +148,38 @@ def main() -> int:
         ids = sorted(n2i.get(nm) or [])
         if ids:
             bias.setdefault(cat, {})[nm] = ids
+    avail = availability(n2i, list(CAT.keys()))
+    # 只有"在当前规则集的卡池里真的会出现"的卡才值得作为买卡目标（avail>=0.4）
+    bias_avail: dict = {}
+    for nm, cat in CAT.items():
+        ids = sorted(n2i.get(nm) or [])
+        if ids and avail.get(nm, 0.0) >= 0.4:
+            bias_avail.setdefault(cat, {})[nm] = ids
+    bias_eff = bias_avail
     bias_ids = sorted({i for cat in ("MULT", "GROW", "ENGINE")
-                       for v in (bias.get(cat) or {}).values() for i in v})
+                       for v in (bias_eff.get(cat) or {}).values() for i in v})
     spec = {
         "source": "HSBG.md（31 套阵容攻略）",
+        "availability_note": "avail = 该卡在 40 个大厅卡池里出现的比例；bias 只保留 avail>=0.4 的卡，"
+                             "因为当前规则集的卡池按大厅种族过滤（无种族 T5 卡从不出现在商店）",
+        "avail": {k: round(v, 3) for k, v in sorted(avail.items(), key=lambda kv: -kv[1])},
         "note": "只收录依赖复利（乘算放大器 / 自身成长 / 触发引擎）的阵容；分级见 CAT",
         "comps": comps,
-        "bias": bias,
+        "bias": bias,                       # 全量（含当前卡池里没有的卡，供将来换规则集）
+        "bias_available": bias_eff,         # 只用"确实会出现"的卡
         "bias_ids": bias_ids,
-        "mult_ids": sorted({i for v in (bias.get("MULT") or {}).values() for i in v}),
-        "grow_ids": sorted({i for v in (bias.get("GROW") or {}).values() for i in v}),
-        "engine_ids": sorted({i for v in (bias.get("ENGINE") or {}).values() for i in v}),
-        "econ_ids": sorted({i for v in (bias.get("ECON") or {}).values() for i in v}),
+        "mult_ids": sorted({i for v in (bias_eff.get("MULT") or {}).values() for i in v}),
+        "grow_ids": sorted({i for v in (bias_eff.get("GROW") or {}).values() for i in v}),
+        "engine_ids": sorted({i for v in (bias_eff.get("ENGINE") or {}).values() for i in v}),
+        "econ_ids": sorted({i for v in (bias_eff.get("ECON") or {}).values() for i in v}),
     }
     out = os.path.join(ROOT, "data", "comp_cards.json")
     with open(out, "w", encoding="utf-8") as f:
         json.dump(spec, f, ensure_ascii=False, indent=1)
     print("[comp] 写出 %s" % out)
+    print("[comp] 可用性：>=40%% 的卡 %d / %d；MULT 可用 %d 张" % (
+        sum(1 for v in avail.values() if v >= 0.4), len(avail),
+        len((bias_eff.get("MULT") or {}))))
     print("[comp] 复利阵容 %d 套；MULT %d 张 / GROW %d 张 / ENGINE %d 张 / ECON %d 张；bias 合计 %d 张"
           % (len(comps), len(spec["mult_ids"]), len(spec["grow_ids"]),
              len(spec["engine_ids"]), len(spec["econ_ids"]), len(bias_ids)))
