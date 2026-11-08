@@ -70,7 +70,56 @@ def _ppo_metric(rec: Dict[str, Any], key: str) -> Optional[float]:
     return float(v) if isinstance(v, (int, float)) else None
 
 
+def _series(hist, dec, key, scale=1.0):
+    """取某个 ppo 指标序列（None 保留为空缺）。"""
+    out = []
+    for r in hist:
+        v = _ppo_metric(r, key)
+        out.append(None if v is None else float(v) * scale)
+    return out
+
+
+def _panel(ax, dec, series, *, title, xlabel="", logy=False, hline=None,
+           hline_label="") -> None:
+    """单指标单面板（**各自独立 y 轴**，避免不同量级互相压扁）。"""
+    any_data = False
+    for ys, label, color in series:
+        pairs = [(x, y) for x, y in zip(dec, ys) if y is not None]
+        if not pairs:
+            continue
+        any_data = True
+        xs = [p[0] for p in pairs]
+        yy = [p[1] for p in pairs]
+        ax.plot(xs, yy, lw=1.15, color=color, label=label)
+        if len(xs) >= 5:                      # 平滑趋势线（同色虚线）
+            k = max(3, len(yy) // 40)
+            sm = [sum(yy[max(0, i - k):i + 1]) / len(yy[max(0, i - k):i + 1])
+                  for i in range(len(yy))]
+            ax.plot(xs, sm, "--", lw=1.0, color=color, alpha=0.55)
+    if not any_data:
+        ax.text(0.5, 0.5, "（暂无数据）", ha="center", va="center",
+                transform=ax.transAxes, fontsize=9, alpha=0.6)
+    if hline is not None:
+        ax.axhline(hline, color="k", lw=0.8, ls=":")
+        if hline_label:
+            ax.text(0.01, hline, hline_label, fontsize=7, va="bottom", alpha=0.7,
+                    transform=ax.get_yaxis_transform())
+    if logy and any_data:
+        ax.set_yscale("log")
+    ax.set_title(title, fontsize=10)
+    ax.set_xlabel(xlabel or "累计 decisions (M)", fontsize=8)
+    ax.tick_params(labelsize=7)
+    ax.grid(alpha=.28)
+    if any_data and len(series) > 1:
+        ax.legend(fontsize=7, loc="best")
+
+
 def training_curves(run: str, out_png: str, *, baseline_label: str = "") -> Dict[str, Any]:
+    """训练曲线：**每个指标一个独立面板**（各自 y 轴）。
+
+    为什么这样做：不同指标量级差好几个数量级（policy≈1e-3、KL≈5e-3、value≈1.4、
+    clip≈0.03、熵≈0.40）。画在同一轴里必然互相压扁，或者要乘 100 而误导读者。
+    """
     hist = _read_jsonl(os.path.join(run, "history.jsonl"))
     pts = _read_jsonl(os.path.join(run, "points.jsonl"))
     # history 里没有累计字段：用每 iter 的 collect.decisions 前缀和
@@ -78,51 +127,54 @@ def training_curves(run: str, out_png: str, *, baseline_label: str = "") -> Dict
     for r in hist:
         _acc += float((r.get("collect") or {}).get("decisions") or 0.0)
         dec.append(_acc / 1e6)
-    _dec_ok = bool(dec) and dec[-1] > 0.0
-    if not _dec_ok:  # 兼容旧 run（可能带 cum_decisions）
+    if not (dec and dec[-1] > 0.0):  # 兼容旧 run（可能带 cum_decisions）
         dec = [float(r.get("cum_decisions") or r.get("iter") or 0) / 1e6 for r in hist]
-    keys = {"total": "总损失", "value_loss": "价值损失", "entropy": "熵",
-            "approx_kl": "approx_kl (x100)", "clip_frac": "clip 比例"}
-    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
-    ax = axes[0][0]
-    for k, label in (("total", "总损失"), ("value_loss", "价值损失")):
-        ys = [_ppo_metric(r, k) for r in hist]
-        ax.plot(dec, [y for y in ys], lw=1.2, label=label)
-    ax.set_xlabel("累计 decisions (M)"); ax.set_title("训练损失"); ax.grid(alpha=.3); ax.legend()
-    ax = axes[0][1]
-    for k, label, scale in (("approx_kl", "approx_kl", 100.0), ("clip_frac", "clip 比例", 100.0),
-                            ("entropy", "熵", 1.0)):
-        ys = [_ppo_metric(r, k) for r in hist]
-        if any(y is not None for y in ys):
-            ax.plot(dec, [None if y is None else y * scale for y in ys], lw=1.1, label=label)
-    ax.set_xlabel("累计 decisions (M)"); ax.set_title("学习信号（KL×100 / clip×100 / 熵）")
-    ax.grid(alpha=.3); ax.legend()
-    ax = axes[1][0]
-    pm = [int(p.get("point_decisions") or 0) / 1e6 for p in pts if p.get("status") == "ok"]
-    for field, label in (("bot_rank", "bot 面板 rank"), ("rank", "human 面板 rank")):
+
+    fig, axes = plt.subplots(5, 2, figsize=(15, 13.5))
+    A = axes.ravel()
+    _panel(A[0], dec, [(_series(hist, dec, "total"), "总损失", "#1f77b4")], title="总损失 total")
+    _panel(A[1], dec, [(_series(hist, dec, "policy_loss"), "policy 损失", "#ff7f0e")],
+           title="策略损失 policy（对数轴）", logy=True)
+    _panel(A[2], dec, [(_series(hist, dec, "value_loss"), "value 损失", "#d62728")],
+           title="价值损失 value（8 分类名次 CE）")
+    _panel(A[3], dec, [(_series(hist, dec, "entropy"), "熵", "#2ca02c")],
+           title="策略熵 entropy", hline=0.35, hline_label="0.35 警戒")
+    _panel(A[4], dec, [(_series(hist, dec, "approx_kl"), "approx_kl", "#9467bd")],
+           title="近似 KL（target 0.02）", hline=0.02, hline_label="0.02")
+    _panel(A[5], dec, [(_series(hist, dec, "clip_frac"), "clip 比例", "#8c564b")],
+           title="被裁剪比例（参考 0.15）", hline=0.15, hline_label="0.15")
+    ceil = _series(hist, dec, "ceiling_aux_loss")
+    if any(v is not None for v in ceil):
+        _panel(A[6], dec, [(ceil, "ceiling 辅助损失", "#17becf")],
+               title="B10 ceiling 头损失（log1p 强度 + tier/6）", logy=True)
+    else:
+        A[6].axis("off")
+    pdec = [float(p.get("point_decisions") or 0) / 1e6 for p in pts if p.get("status") == "ok"]
+    pser = []
+    for field, label, color in (("bot_rank", "bot 面板 rank", "#1f77b4"),
+                                ("rank", "human 面板 rank", "#d62728")):
         ys = [p.get(field) for p in pts if p.get("status") == "ok"]
-        ys = [float(y) if isinstance(y, (int, float)) else None for y in ys]
-        if any(y is not None for y in ys):
-            ax.plot(pm, ys, "o-", ms=3, lw=1.2, label=label)
-    ax.set_xlabel("累计 decisions (M)"); ax.set_title("面板名次（越小越好）"); ax.grid(alpha=.3)
-    if ax.get_legend_handles_labels()[0]: ax.legend()
-    ax = axes[1][1]
-    for field, label in (("bot_win", "bot 面板胜率"), ("tier_ge5_t15", "tier≥5@t15")):
+        pser.append(([float(y) if isinstance(y, (int, float)) else None for y in ys], label, color))
+    _panel(A[7], pdec, pser, title="面板名次（越小越好）")
+    A[9].axis("off")
+    pser2 = []
+    for field, label, color in (("bot_win", "bot 胜率", "#1f77b4"),
+                                ("tier_ge5_t15", "tier≥5@t15", "#2ca02c")):
         ys = [p.get(field) for p in pts if p.get("status") == "ok"]
-        ys = [float(y) if isinstance(y, (int, float)) else None for y in ys]
-        if any(y is not None for y in ys):
-            ax.plot(pm, ys, "o-", ms=3, lw=1.2, label=label)
-    ax.set_xlabel("累计 decisions (M)"); ax.set_title("胜率 / 升本率"); ax.grid(alpha=.3)
-    if ax.get_legend_handles_labels()[0]: ax.legend()
-    fig.suptitle("训练曲线 — %s%s" % (os.path.basename(run.rstrip('/')),
-                                      ("  |  " + baseline_label) if baseline_label else ""))
-    fig.tight_layout(rect=[0, 0, 1, 0.955])
+        pser2.append(([float(y) if isinstance(y, (int, float)) else None for y in ys], label, color))
+    _panel(A[8], pdec, pser2, title="胜率 / 升本率（0–1）")
+
+    fig.suptitle("训练曲线 — %s%s（每格独立 y 轴；虚线 = 平滑趋势）"
+                 % (os.path.basename(run.rstrip('/')),
+                    ("  |  " + baseline_label) if baseline_label else ""), fontsize=12)
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
     fig.savefig(out_png, dpi=140, bbox_inches="tight")
     plt.close(fig)
     last = pts[-1] if pts else {}
     return {"points": len([p for p in pts if p.get("status") == "ok"]),
             "bot_rank": last.get("bot_rank"), "bot_win": last.get("bot_win"),
-            "human_rank": last.get("rank"), "tier_ge5_t15": last.get("tier_ge5_t15")}
+            "human_rank": last.get("rank"), "tier_ge5_t15": last.get("tier_ge5_t15"),
+            "ceil_last": next((v for v in reversed(ceil) if v is not None), None)}
 
 
 def _curve_medians(path: str) -> List[tuple]:
