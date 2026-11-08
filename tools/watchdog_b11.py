@@ -81,7 +81,10 @@ def cum_at(entries, base_done, base_len, snap_iter):
             if it <= snap_iter:
                 idx = i
     if idx is None:
-        return None
+        # 快照比 history 基线**更旧**（崩溃发生在两次快照之间）时，按基线本身续训：
+        # 宁可把 DONE 记少一点（少算几十 k 决策），也不要让训练一直停着。
+        log("WARN cum_at 找不到 iter=%d（比基线旧）→ 退回 base_done=%d" % (snap_iter, base_done))
+        return base_done
     return base_done + sum(d for _, d in seg[: idx + 1])
 
 
@@ -140,6 +143,8 @@ export CEILING_AUX_COEF="{ceiling_aux_coef}" BC_COEF="0.0"
 export COMP_BUY_BIAS="{comp_buy_bias}" COMP_CARDS="{comp_cards}"
 export HSBRSIM_COMP_BUY_BIAS="{comp_buy_bias}"
 export HSBRSIM_COMP_BUY_INCLUDE="{comp_buy_include}"
+COMP_BUY_INCLUDE="{comp_buy_include}"
+COMP_BUY_MAX_COPIES="{comp_buy_max_copies}"
 export HSBRSIM_COMP_CARDS="{comp_cards}"
 export HSBRSIM_BAN_TRINKETS="{ban_trinkets}"
 export HSBRSIM_FORCE_UPGRADE="{forced_upgrade}"
@@ -244,6 +249,15 @@ def launch(done, snap_iter, seed):
             log("ERROR 续训口径不一致: %s（期望 seats=%s fidelity=%s lib=%s gw=%s）"
                 % (",".join(bad), HB_SEATS, HB_FIDELITY, os.path.basename(HB_LIB),
                    GAME_WEIGHT_MODE))
+            if "no_trainer_pid" in bad:
+                # 生成的续训脚本可能在 env/语法上失败（今天踩过两次）：重试一次
+                log("retry: 续训后 45s 仍无 trainer，重跑一次续训脚本")
+                try:
+                    subprocess.Popen(["bash", "/tmp/resume_b06_wd.sh"], cwd=ROOT,
+                                     stdout=open("/tmp/wd_retry.log", "a"),
+                                     stderr=subprocess.STDOUT, start_new_session=True)
+                except Exception as e:  # noqa: BLE001
+                    log("retry 失败: %r" % (e,))
         else:
             log("口径核对通过: seats=%s fidelity=%s lib=%s gw=%s"
                 % (HB_SEATS, HB_FIDELITY, os.path.basename(HB_LIB), GAME_WEIGHT_MODE))
