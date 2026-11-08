@@ -162,7 +162,6 @@ bash scripts/run_stage300m.sh
            hb_lib=HB_LIB, hb_fid=HB_FIDELITY, hb_seats=HB_SEATS,
            ban_trinkets=BAN_TRINKETS, forced_upgrade=FORCED_UPGRADE,
            ceiling_aux_coef=CEILING_AUX_COEF,
-           comp_buy_bias=COMP_BUY_BIAS, comp_cards=COMP_CARDS,
            forced_upgrade_max_tier=FORCED_UPGRADE_MAX_TIER,
            comp_buy_bias=COMP_BUY_BIAS, comp_cards=COMP_CARDS)
 

@@ -445,6 +445,11 @@ class CollectConfig:
     comp_buy_bias: float = 0.0
     #: 目标卡规格文件（默认 data/comp_cards.json）
     comp_cards: str = ""
+    #: 条件式买卡规则参数（B11 v2）：同一张核心卡最多囤几张、血量下限、开局血量门槛、后期回合
+    comp_buy_max_copies: int = 3
+    comp_buy_health_floor: float = 12.0
+    comp_buy_opening_health: float = 20.0
+    comp_buy_late_turn: int = 17
     #: 强制升本的**上限本数**：当前 tier >= 该值后不再强制（默认 5；<=0 = 不限）
     forced_upgrade_max_tier: int = 5
     tier_spread: bool = False

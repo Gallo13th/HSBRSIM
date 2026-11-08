@@ -1972,6 +1972,14 @@ def main() -> int:
                     help="强制升本的额外金币余量（默认 0=严格大于）")
     ap.add_argument("--comp-buy-bias", type=float, default=0.0,
                     help="B11 复利买卡偏置：1=商店出现核心卡时屏蔽其它购买（0=关闭）")
+    ap.add_argument("--comp-buy-max-copies", type=int, default=3,
+                    help="同一张核心卡最多囤几张（达到后恢复正常购买）")
+    ap.add_argument("--comp-buy-health-floor", type=float, default=12.0,
+                    help="血量 <= 该值时完全恢复正常（先保命）")
+    ap.add_argument("--comp-buy-opening-health", type=float, default=20.0,
+                    help="开局阶段血量低于该值就不做软偏置")
+    ap.add_argument("--comp-buy-late-turn", type=int, default=17,
+                    help="回合 > 该值后恢复正常（成长核心回不了本）")
     ap.add_argument("--comp-cards", default="data/comp_cards.json",
                     help="复利核心卡规格（tools/gen_comp_cards.py 生成）")
     ap.add_argument("--forced-upgrade-max-tier", type=int, default=5,
@@ -3758,6 +3766,10 @@ def main() -> int:
             forced_upgrade=bool(int(args.forced_upgrade)),
             forced_upgrade_max_tier=int(getattr(args, "forced_upgrade_max_tier", 5)),
             comp_buy_bias=float(getattr(args, "comp_buy_bias", 0.0) or 0.0),
+            comp_buy_max_copies=int(getattr(args, "comp_buy_max_copies", 3)),
+            comp_buy_health_floor=float(getattr(args, "comp_buy_health_floor", 12.0)),
+            comp_buy_opening_health=float(getattr(args, "comp_buy_opening_health", 20.0)),
+            comp_buy_late_turn=int(getattr(args, "comp_buy_late_turn", 17)),
             comp_cards=str(getattr(args, "comp_cards", "") or ""),
             forced_upgrade_margin=float(args.forced_upgrade_margin),
             tier_target_coef=float(args.tier_target_coef),
