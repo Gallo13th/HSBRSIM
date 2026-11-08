@@ -92,7 +92,10 @@ def name_to_ids() -> dict:
             continue
         for nm in (str(info[1] or ""), str(info[2] or "")):
             if nm:
-                out.setdefault(nm, set()).add(int(i))
+                # 统一存 **cid（0 基）**：`card_info(i)` 的 i = cid + 1，而 `universe` /
+                # `pool.counts` 都是按 cid 索引的。obs 的 `cards[]` 用的是 cid+1，
+                # 由消费端（hsbg/az/train/comp_buy.py）统一 +1。
+                out.setdefault(nm, set()).add(int(i) - 1)
     return out
 
 
@@ -124,7 +127,7 @@ def availability(n2i: dict, names, *, seeds: int = 40, cfg_json: str = "") -> di
         if not ids or not unis:
             out[nm] = 0.0
             continue
-        hit = sum(1 for u in unis if any(i in u for i in ids))
+        hit = sum(1 for u in unis if any(int(i) in u for i in ids))
         out[nm] = hit / len(unis)
     return out
 
