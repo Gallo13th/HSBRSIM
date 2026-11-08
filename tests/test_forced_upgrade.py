@@ -72,3 +72,34 @@ def test_env_switch_enables(monkeypatch):
     assert ForcedUpgradeGuard(_cfg(on=False)).enabled
     monkeypatch.delenv("HSBRSIM_FORCE_UPGRADE")
     assert not ForcedUpgradeGuard(_cfg(on=False)).enabled
+
+
+def test_no_force_at_max_tier():
+    """B10：到 5 本（默认封顶）之后不再强制；4 本仍强制。"""
+    def feat(gold, upgrade, tier, shops=(1,)):
+        f = _features(gold, upgrade, shops)
+        f[GLOBAL_FIELD_INDEX["tier"]] = tier / 6.0
+        return f
+    g = ForcedUpgradeGuard(_cfg())
+    assert g.max_tier == 5
+    _, f4 = g.rewrite(feat(20, 7, 4), _mask())
+    assert f4                                   # 4 本 -> 强制
+    _, f5 = g.rewrite(feat(20, 7, 5), _mask())
+    assert not f5                               # 5 本 -> 放手
+    _, f6 = g.rewrite(feat(20, 7, 6), _mask())
+    assert not f6
+    # max_tier<=0 = 不限
+    g2 = ForcedUpgradeGuard(type("C", (), {"forced_upgrade": True,
+                                           "forced_upgrade_margin": 0.0,
+                                           "forced_upgrade_max_tier": 0})())
+    _, fx = g2.rewrite(feat(20, 7, 6), _mask())
+    assert fx
+
+
+def test_env_max_tier(monkeypatch):
+    monkeypatch.setenv("HSBRSIM_FORCE_UPGRADE", "1")
+    monkeypatch.setenv("HSBRSIM_FORCE_UPGRADE_MAX_TIER", "4")
+    g = ForcedUpgradeGuard(_cfg(on=False))
+    assert g.enabled and g.max_tier == 4
+    monkeypatch.delenv("HSBRSIM_FORCE_UPGRADE_MAX_TIER")
+    assert ForcedUpgradeGuard(_cfg(on=False)).max_tier == 5

@@ -439,6 +439,8 @@ class CollectConfig:
     #: 强制升本守卫（默认 False）：买得起「升级 + 最便宜商品」时只允许升级。
     forced_upgrade: bool = False
     forced_upgrade_margin: float = 0.0
+    #: 强制升本的**上限本数**：当前 tier >= 该值后不再强制（默认 5；<=0 = 不限）
+    forced_upgrade_max_tier: int = 5
     tier_spread: bool = False
     tier_target_coef: float = 0.0
     #: 未达标惩罚（乘 coef；默认 0.02 ≈ 名次效用全距 2.0 的 1%）。

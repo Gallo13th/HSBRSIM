@@ -32,9 +32,24 @@
 | 项 | 值 |
 |---|---|
 | 起点 | **B08@150M**（`runs/az_stage300m_b08/eval/ckpt_150028307.pt`，384 局 1.505 的最佳点） |
-| 保留 | 强制升本 `=1`、5 席 p0.90 full 人盘、禁用「加重护手」、无长强加权、无 tier-target、λ=0.995、lr 3e-6 |
+| 保留 | 强制升本 `=1`（**但封顶：`tier >= 5` 后不再强制**，见下）、5 席 p0.90 full 人盘、禁用「加重护手」、无长强加权、无 tier-target、λ=0.995、lr 3e-6 |
 | 新增 | **`ceiling_aux_coef=0.02`**（唯一变量） |
 | 关闭 | 人类 BC（`bc_coef=0`，B09 已证伪） |
+
+
+## 3.1 强制升本的封顶（B10 修订）
+
+原规则"买得起就升"会一路推到 6 本，把"升 6 本之后怎么滚"也焊死成同一形态。B10 起：
+
+> 只有 **当前 tier < `forced_upgrade_max_tier`（默认 5）** 时才强制升级；到 5 本后**放手**，
+> 是否升 6、是否 roll 找核心、是否铺场，全部交回策略自己决定。
+
+- 配置：`--forced-upgrade-max-tier`（`CollectConfig.forced_upgrade_max_tier`），环境变量
+  `HSBRSIM_FORCE_UPGRADE_MAX_TIER`（评测侧与训练同源），`<=0` = 不限。
+- tier 从观测 global 块读取（`tier / 6.0` 归一），不读 `player_json`。
+- 单测：`tests/test_forced_upgrade.py::test_no_force_at_max_tier / test_env_max_tier`。
+- 语义：规则只负责"送上 5 本"，5 本之后是策略的自主选择——这样 ceiling 头才有可能把
+  "升 6 本值不值"学成真正的策略，而不是被规则顶上去。
 
 ## 4. 判据
 

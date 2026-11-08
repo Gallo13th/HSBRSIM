@@ -80,6 +80,7 @@ TIER_SPREAD="${TIER_SPREAD:-0}"
 FORCED_UPGRADE="${FORCED_UPGRADE:-0}"
 CEILING_AUX_COEF="${CEILING_AUX_COEF:-0}"
 BC_TIER_MIN="${BC_TIER_MIN:-0}"
+FORCED_UPGRADE_MAX_TIER="${FORCED_UPGRADE_MAX_TIER:-5}"
 FORCED_UPGRADE_MARGIN="${FORCED_UPGRADE_MARGIN:-0}"
 TARGET_KL="${TARGET_KL:-0.02}"
 ENTROPY_COEF="${ENTROPY_COEF:-0.001}"
@@ -193,7 +194,8 @@ CMD=("$PY" scripts/train_entity_sync.py
   --shaping-coef 0.0 --shaping-w-str 1.0 --shaping-w-tier 0.5 --shaping-mode sigma
   --rank-utility-coef 1.0 --terminal-strength-coef 0.0
   --shaping-tier-bonus 0,0,20,60,150,400,900
-  --forced-upgrade "$FORCED_UPGRADE" --forced-upgrade-margin "$FORCED_UPGRADE_MARGIN"
+  --forced-upgrade "$FORCED_UPGRADE" --forced-upgrade-margin "$FORCED_UPGRADE_MARGIN" \
+  --forced-upgrade-max-tier "$FORCED_UPGRADE_MAX_TIER"
   --tier-target-coef "$TIER_COEF" --tier-penalty "$TIER_PENALTY" --tier-bonus "$TIER_BONUS"
   --tier-target-table "$TIER_TABLE" --tier-spread "$TIER_SPREAD"
   --library-p 0.0 --lockstep 1 --fast-act 1 --amp bf16
