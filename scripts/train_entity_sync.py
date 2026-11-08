@@ -1970,6 +1970,10 @@ def main() -> int:
                     help="1=强制升本：买得起「升级+最便宜商品」时只允许升级（默认 0）")
     ap.add_argument("--forced-upgrade-margin", type=float, default=0.0,
                     help="强制升本的额外金币余量（默认 0=严格大于）")
+    ap.add_argument("--comp-buy-bias", type=float, default=0.0,
+                    help="B11 复利买卡偏置：1=商店出现核心卡时屏蔽其它购买（0=关闭）")
+    ap.add_argument("--comp-cards", default="data/comp_cards.json",
+                    help="复利核心卡规格（tools/gen_comp_cards.py 生成）")
     ap.add_argument("--forced-upgrade-max-tier", type=int, default=5,
                     help="强制升本的封顶本数：tier>=该值后不再强制（默认 5；<=0=不限）")
     ap.add_argument("--tier-spread", type=int, default=0, choices=[0, 1],
@@ -3753,6 +3757,8 @@ def main() -> int:
             # 等级进度奖励（默认 coef=0 -> 零影响）
             forced_upgrade=bool(int(args.forced_upgrade)),
             forced_upgrade_max_tier=int(getattr(args, "forced_upgrade_max_tier", 5)),
+            comp_buy_bias=float(getattr(args, "comp_buy_bias", 0.0) or 0.0),
+            comp_cards=str(getattr(args, "comp_cards", "") or ""),
             forced_upgrade_margin=float(args.forced_upgrade_margin),
             tier_target_coef=float(args.tier_target_coef),
             tier_spread=bool(int(args.tier_spread)),

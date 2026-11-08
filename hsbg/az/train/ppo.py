@@ -93,6 +93,7 @@ from .tier_target import TierTargetTracker, aggregate_tier_target
 from .power_trace import compact_diagnostics, compute_credit
 from .process_value import process_value_loss
 from .forced_upgrade import ForcedUpgradeGuard
+from .comp_buy import CompBuyBias
 from .process_value import consume_count as _consume_count
 from .process_value import process_target as _process_target
 from .curriculum import apply_turn_gold as _apply_turn_gold
@@ -439,6 +440,11 @@ class CollectConfig:
     #: 强制升本守卫（默认 False）：买得起「升级 + 最便宜商品」时只允许升级。
     forced_upgrade: bool = False
     forced_upgrade_margin: float = 0.0
+    #: **复利买卡偏置**（B11）：商店里出现 `data/comp_cards.json` 的目标卡时，屏蔽其它购买
+    #: （并禁止卖掉已上场核心），让轨迹里充满"买到核心之后怎么滚"的数据。0=关闭。
+    comp_buy_bias: float = 0.0
+    #: 目标卡规格文件（默认 data/comp_cards.json）
+    comp_cards: str = ""
     #: 强制升本的**上限本数**：当前 tier >= 该值后不再强制（默认 5；<=0 = 不限）
     forced_upgrade_max_tier: int = 5
     tier_spread: bool = False
@@ -3773,6 +3779,7 @@ class PPOSelfPlayPolicy(Policy):
         # 换位去抖守卫（默认关闭 -> 不构造对象、零开销；见 docs/MOVE_GUARD.md）
         # 强制升本守卫（默认关闭 -> 恒等，逐位不变）
         self._fguard = ForcedUpgradeGuard(self.config)
+        self._cguard = CompBuyBias(self.config)
         self._guard = (MoveGuard(cap=int(getattr(self.config, "move_cap",
                                                  DEFAULT_MOVE_CAP)),
                                  repeat_limit=int(getattr(
@@ -3905,6 +3912,8 @@ class PPOSelfPlayPolicy(Policy):
         mask = mask_from_bytes(game.legal_mask(int(seat)))
         if self._fguard is not None and self._fguard.enabled:
             mask, _forced = self._fguard.rewrite(f, mask)
+        if self._cguard is not None and self._cguard.enabled:
+            mask, _biased = self._cguard.rewrite(f, c, mask)
         return f, c, mask
 
     def _turn_is_forced(self, game: Any, seat: int, mask: Any) -> bool:
