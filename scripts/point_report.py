@@ -73,7 +73,14 @@ def _ppo_metric(rec: Dict[str, Any], key: str) -> Optional[float]:
 def training_curves(run: str, out_png: str, *, baseline_label: str = "") -> Dict[str, Any]:
     hist = _read_jsonl(os.path.join(run, "history.jsonl"))
     pts = _read_jsonl(os.path.join(run, "points.jsonl"))
-    dec = [int(r.get("cum_decisions") or 0) / 1e6 for r in hist]
+    # history 里没有累计字段：用每 iter 的 collect.decisions 前缀和
+    dec, _acc = [], 0.0
+    for r in hist:
+        _acc += float((r.get("collect") or {}).get("decisions") or 0.0)
+        dec.append(_acc / 1e6)
+    _dec_ok = bool(dec) and dec[-1] > 0.0
+    if not _dec_ok:  # 兼容旧 run（可能带 cum_decisions）
+        dec = [float(r.get("cum_decisions") or r.get("iter") or 0) / 1e6 for r in hist]
     keys = {"total": "总损失", "value_loss": "价值损失", "entropy": "熵",
             "approx_kl": "approx_kl (x100)", "clip_frac": "clip 比例"}
     fig, axes = plt.subplots(2, 2, figsize=(14, 8))
@@ -97,14 +104,16 @@ def training_curves(run: str, out_png: str, *, baseline_label: str = "") -> Dict
         ys = [float(y) if isinstance(y, (int, float)) else None for y in ys]
         if any(y is not None for y in ys):
             ax.plot(pm, ys, "o-", ms=3, lw=1.2, label=label)
-    ax.set_xlabel("累计 decisions (M)"); ax.set_title("面板名次（越小越好）"); ax.grid(alpha=.3); ax.legend()
+    ax.set_xlabel("累计 decisions (M)"); ax.set_title("面板名次（越小越好）"); ax.grid(alpha=.3)
+    if ax.get_legend_handles_labels()[0]: ax.legend()
     ax = axes[1][1]
     for field, label in (("bot_win", "bot 面板胜率"), ("tier_ge5_t15", "tier≥5@t15")):
         ys = [p.get(field) for p in pts if p.get("status") == "ok"]
         ys = [float(y) if isinstance(y, (int, float)) else None for y in ys]
         if any(y is not None for y in ys):
             ax.plot(pm, ys, "o-", ms=3, lw=1.2, label=label)
-    ax.set_xlabel("累计 decisions (M)"); ax.set_title("胜率 / 升本率"); ax.grid(alpha=.3); ax.legend()
+    ax.set_xlabel("累计 decisions (M)"); ax.set_title("胜率 / 升本率"); ax.grid(alpha=.3)
+    if ax.get_legend_handles_labels()[0]: ax.legend()
     fig.suptitle("训练曲线 — %s%s" % (os.path.basename(run.rstrip('/')),
                                       ("  |  " + baseline_label) if baseline_label else ""))
     fig.tight_layout(rect=[0, 0, 1, 0.955])
