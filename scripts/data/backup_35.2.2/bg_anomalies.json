@@ -1,0 +1,731 @@
+[
+  {
+    "id": "BG27_Anomaly_000",
+    "dbf_id": 101954,
+    "name": "Money Match",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_001",
+    "dbf_id": 101959,
+    "name": "Finicky Hourglass",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_002",
+    "dbf_id": 101986,
+    "name": "Prudence of Amitus",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_005",
+    "dbf_id": 101992,
+    "name": "Mimiron's Clockwork Stadium",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_006",
+    "dbf_id": 101994,
+    "name": "Curse of Aggramar",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_100",
+    "dbf_id": 102986,
+    "name": "Big League",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_101",
+    "dbf_id": 102987,
+    "name": "What Are the Odds?",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_102",
+    "dbf_id": 102988,
+    "name": "How to Even??",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_103",
+    "dbf_id": 102991,
+    "name": "Tavern Special",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_104t",
+    "dbf_id": 102992,
+    "name": "Oops, All Beasts!",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_104t10",
+    "dbf_id": 103248,
+    "name": "Oops, All Pirates!",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_104t2",
+    "dbf_id": 103204,
+    "name": "Oops, All Demons!",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_104t3",
+    "dbf_id": 103205,
+    "name": "Oops, All Dragons!",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_104t4",
+    "dbf_id": 103206,
+    "name": "Oops, All Elementals!",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_104t5",
+    "dbf_id": 103207,
+    "name": "Oops, All Mechs!",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_104t6",
+    "dbf_id": 103208,
+    "name": "Oops, All Murlocs!",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_104t7",
+    "dbf_id": 103209,
+    "name": "Oops, All Naga!",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_104t8",
+    "dbf_id": 103210,
+    "name": "Oops, All Quilboar!",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_104t9",
+    "dbf_id": 103211,
+    "name": "Oops, All Undead!",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_301",
+    "dbf_id": 102075,
+    "name": "False Idols",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_302",
+    "dbf_id": 102076,
+    "name": "Bring Home the Bacon",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_303",
+    "dbf_id": 102085,
+    "name": "Grapnel of the Titans",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_307",
+    "dbf_id": 102931,
+    "name": "Oops, All EVIL!",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_501",
+    "dbf_id": 102971,
+    "name": "Temperance of Aman'Thul",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_502",
+    "dbf_id": 102972,
+    "name": "Blood of Sargeras",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_503",
+    "dbf_id": 102976,
+    "name": "The Yogg-iseum",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_504",
+    "dbf_id": 103078,
+    "name": "Secrets of Norgannon",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_505",
+    "dbf_id": 103198,
+    "name": "Reckless Enhancement",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_555",
+    "dbf_id": 106438,
+    "name": "No Place Like Holmes",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_556",
+    "dbf_id": 106443,
+    "name": "Valuation Inflation",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_558",
+    "dbf_id": 106468,
+    "name": "Feline Fortune",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_559",
+    "dbf_id": 106470,
+    "name": "Treasure Hoard",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_560",
+    "dbf_id": 106498,
+    "name": "Anomalous Twin",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_561",
+    "dbf_id": 106499,
+    "name": "Anomalous Bribe",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_562",
+    "dbf_id": 106500,
+    "name": "Anomalous Wisdomball",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_570",
+    "dbf_id": 106507,
+    "name": "Treasure Hoard",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_571",
+    "dbf_id": 106508,
+    "name": "Treasure Hoard",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_572",
+    "dbf_id": 106510,
+    "name": "Treasure Hoard",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_573",
+    "dbf_id": 109379,
+    "name": "Treasure Hoard",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_575",
+    "dbf_id": 106633,
+    "name": "Eleventh Hour",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_577",
+    "dbf_id": 106631,
+    "name": "No Face, No Case",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_580",
+    "dbf_id": 107226,
+    "name": "Audience's Choice",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_711",
+    "dbf_id": 102046,
+    "name": "Double Header",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_714",
+    "dbf_id": 102412,
+    "name": "Everything's on Fire!",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_715",
+    "dbf_id": 102455,
+    "name": "Gladiator's Spoils",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_716",
+    "dbf_id": 102459,
+    "name": "Up-Prizing",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_718",
+    "dbf_id": 102457,
+    "name": "Overseer's Orb",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_720",
+    "dbf_id": 102748,
+    "name": "Nguyen's Shifting Disks",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_721",
+    "dbf_id": 102792,
+    "name": "Uncompensated Upset",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_723",
+    "dbf_id": 102875,
+    "name": "Summoning of Champions",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_726",
+    "dbf_id": 102908,
+    "name": "Blessed or Blighted",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_750",
+    "dbf_id": 102083,
+    "name": "Packed Stands",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_751",
+    "dbf_id": 102084,
+    "name": "Perfected Alchemy",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_754",
+    "dbf_id": 102092,
+    "name": "Path of the Treasure-Seeker",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_755",
+    "dbf_id": 102093,
+    "name": "A Faire Reward",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_800",
+    "dbf_id": 102006,
+    "name": "Little League",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_801",
+    "dbf_id": 102090,
+    "name": "The Golden Arena",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_802",
+    "dbf_id": 102177,
+    "name": "Echoes of Argus",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_803",
+    "dbf_id": 102982,
+    "name": "Anomalous Evidence",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_805",
+    "dbf_id": 102989,
+    "name": "Match Fixing",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_810",
+    "dbf_id": 103541,
+    "name": "Bring in the Buddies",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_820",
+    "dbf_id": 103111,
+    "name": "Deep Blue Sooner",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_822",
+    "dbf_id": 103113,
+    "name": "Denathrius' Anima Reserves",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_900",
+    "dbf_id": 102005,
+    "name": "Golganneth's Tempest",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_Buddies",
+    "dbf_id": 106692,
+    "name": "Buddies",
+    "card_set": 1453,
+    "card_type": 43,
+    "buddy_enabled": true
+  },
+  {
+    "id": "BG27_Anomaly_Prizes2",
+    "dbf_id": 129427,
+    "name": "Darkmoon Faire Prizes",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG27_Anomaly_Quests",
+    "dbf_id": 106694,
+    "name": "Quests",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_101",
+    "dbf_id": 118680,
+    "name": "Lay of the Land",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_102",
+    "dbf_id": 118697,
+    "name": "Continuing Education",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_104",
+    "dbf_id": 118733,
+    "name": "Rising Current",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_105",
+    "dbf_id": 118688,
+    "name": "Sin'dorei Mirror",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_106",
+    "dbf_id": 118669,
+    "name": "Marin's Treasure Box",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_109",
+    "dbf_id": 118671,
+    "name": "Mystical Blossom",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_111",
+    "dbf_id": 118734,
+    "name": "Elven Elite",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_112",
+    "dbf_id": 118700,
+    "name": "Incubation Mutation",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_114",
+    "dbf_id": 118670,
+    "name": "Factory Line",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_115",
+    "dbf_id": 118674,
+    "name": "Magic Shop",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_116",
+    "dbf_id": 118673,
+    "name": "Light the Way",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_117",
+    "dbf_id": 118676,
+    "name": "Emergency Landing",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_120",
+    "dbf_id": 119092,
+    "name": "Scout's Honor",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_123",
+    "dbf_id": 119094,
+    "name": "Cosmic Duality",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_124",
+    "dbf_id": 119044,
+    "name": "Golden Arrow",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_126",
+    "dbf_id": 119748,
+    "name": "Planar Alignment",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG31_Anomaly_127",
+    "dbf_id": 119749,
+    "name": "Instant Warband",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG32_Anomaly_001",
+    "dbf_id": 122788,
+    "name": "Greater Pouches",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG32_Anomaly_002",
+    "dbf_id": 122789,
+    "name": "Lesser Pouches",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG32_Anomaly_003",
+    "dbf_id": 122790,
+    "name": "Impressive Foresight",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG33_Anomaly_001",
+    "dbf_id": 123021,
+    "name": "Summoning Pact",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG33_Anomaly_002",
+    "dbf_id": 123022,
+    "name": "Spirit of Friendship",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG33_Anomaly_003",
+    "dbf_id": 123081,
+    "name": "Third Nature",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG33_Anomaly_005",
+    "dbf_id": 123086,
+    "name": "Colorful Camaraderie",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG33_Anomaly_008",
+    "dbf_id": 123078,
+    "name": "Partner in Crime",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG33_Anomaly_009",
+    "dbf_id": 123083,
+    "name": "Amicable Amendment",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG34_Anomaly_800",
+    "dbf_id": 128740,
+    "name": "Major Goldthorn Potion",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG34_Anomaly_800t",
+    "dbf_id": 129082,
+    "name": "Minor Goldthorn Potion",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG34_Anomaly_801",
+    "dbf_id": 128739,
+    "name": "Boon of Chronum",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG34_Anomaly_802",
+    "dbf_id": 128741,
+    "name": "Major Waygate",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG34_Anomaly_804",
+    "dbf_id": 128889,
+    "name": "Twisting Hourglass",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG34_Anomaly_805",
+    "dbf_id": 128772,
+    "name": "Oathstone's Summoning",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BG34_Anomaly_809",
+    "dbf_id": 128775,
+    "name": "Unforeseen Portal",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BGDUO_Anomaly_003",
+    "dbf_id": 119157,
+    "name": "Golden Friendship",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BGDUO_Anomaly_005",
+    "dbf_id": 119142,
+    "name": "All Bottled Up",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BGDUO_Anomaly_006",
+    "dbf_id": 119093,
+    "name": "Line in the Sand",
+    "card_set": 1453,
+    "card_type": 43
+  },
+  {
+    "id": "BGDUO_Anomaly_007",
+    "dbf_id": 119143,
+    "name": "Pooled Resources",
+    "card_set": 1453,
+    "card_type": 43
+  }
+]

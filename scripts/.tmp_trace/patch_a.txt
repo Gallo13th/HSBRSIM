@@ -1,0 +1,2 @@
+    a = [g['turn'][t]['buy'] for t in range(5, 9) if t in g['turn'] and g['turn'][t]['upg'] > 0]
+    b = [g['turn'][t]['buy'] for t in range(5, 9) if t in g['turn'] and g['turn'][t]['upg'] == 0]

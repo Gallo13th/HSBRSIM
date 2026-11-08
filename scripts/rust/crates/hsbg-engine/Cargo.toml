@@ -1,0 +1,12 @@
+[package]
+name = "hsbg-engine"
+description = "HSbg Engine: a Hearthstone Battlegrounds solo-mode simulator with a reinforcement-learning interface (HSBRSIM fork of TavernGym, MIT)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive", "rc"] }
+serde_json = "1.0.151"

@@ -1,0 +1,601 @@
+{
+  "created_at": "2026-10-31T14:56:20+0800",
+  "checkpoint": "/home/data/users/gaoletian/projects/HSBRSIM/runs/az_entity_s14/model.pt",
+  "checkpoint_sha256": "640b7e8d9d5663b26d4d22e9caf66582808cb8b0bcf87504c7596a592189a971",
+  "checkpoint_meta": {
+    "arch": "entity",
+    "loaded": 1
+  },
+  "games_requested": 32,
+  "games_finished": 32,
+  "games_meta": [
+    {
+      "game_id": 0,
+      "seed": 20100,
+      "decisions": 1836,
+      "truncated": 0,
+      "placements": [
+        8,
+        3,
+        6,
+        4,
+        1,
+        5,
+        2,
+        7
+      ],
+      "elapsed_s": 37.80796146392822,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 1,
+      "seed": 20101,
+      "decisions": 1820,
+      "truncated": 0,
+      "placements": [
+        2,
+        4,
+        8,
+        7,
+        5,
+        3,
+        1,
+        6
+      ],
+      "elapsed_s": 37.2901132106781,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 2,
+      "seed": 20102,
+      "decisions": 1532,
+      "truncated": 0,
+      "placements": [
+        2,
+        6,
+        4,
+        1,
+        5,
+        3,
+        7,
+        8
+      ],
+      "elapsed_s": 31.119555950164795,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 3,
+      "seed": 20103,
+      "decisions": 1488,
+      "truncated": 0,
+      "placements": [
+        7,
+        8,
+        3,
+        4,
+        6,
+        1,
+        2,
+        5
+      ],
+      "elapsed_s": 30.33623695373535,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 4,
+      "seed": 20104,
+      "decisions": 1717,
+      "truncated": 0,
+      "placements": [
+        2,
+        5,
+        8,
+        7,
+        1,
+        6,
+        3,
+        4
+      ],
+      "elapsed_s": 36.524088621139526,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 5,
+      "seed": 20105,
+      "decisions": 1535,
+      "truncated": 0,
+      "placements": [
+        6,
+        3,
+        4,
+        5,
+        1,
+        7,
+        8,
+        2
+      ],
+      "elapsed_s": 32.23457598686218,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 6,
+      "seed": 20106,
+      "decisions": 1721,
+      "truncated": 0,
+      "placements": [
+        3,
+        6,
+        4,
+        8,
+        7,
+        1,
+        2,
+        5
+      ],
+      "elapsed_s": 36.35993576049805,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 7,
+      "seed": 20107,
+      "decisions": 1402,
+      "truncated": 0,
+      "placements": [
+        3,
+        2,
+        4,
+        5,
+        1,
+        7,
+        6,
+        8
+      ],
+      "elapsed_s": 28.959291458129883,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 8,
+      "seed": 20108,
+      "decisions": 1510,
+      "truncated": 0,
+      "placements": [
+        2,
+        7,
+        4,
+        8,
+        5,
+        3,
+        1,
+        6
+      ],
+      "elapsed_s": 31.449849605560303,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 9,
+      "seed": 20109,
+      "decisions": 1974,
+      "truncated": 0,
+      "placements": [
+        1,
+        8,
+        7,
+        2,
+        3,
+        6,
+        5,
+        4
+      ],
+      "elapsed_s": 40.7996780872345,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 10,
+      "seed": 20110,
+      "decisions": 1810,
+      "truncated": 0,
+      "placements": [
+        8,
+        1,
+        3,
+        7,
+        5,
+        4,
+        2,
+        6
+      ],
+      "elapsed_s": 37.55868697166443,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 11,
+      "seed": 20111,
+      "decisions": 1502,
+      "truncated": 0,
+      "placements": [
+        4,
+        5,
+        3,
+        2,
+        7,
+        1,
+        8,
+        6
+      ],
+      "elapsed_s": 30.833816289901733,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 12,
+      "seed": 20112,
+      "decisions": 1542,
+      "truncated": 0,
+      "placements": [
+        4,
+        7,
+        6,
+        2,
+        1,
+        8,
+        3,
+        5
+      ],
+      "elapsed_s": 33.35256886482239,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 13,
+      "seed": 20113,
+      "decisions": 1557,
+      "truncated": 0,
+      "placements": [
+        6,
+        1,
+        5,
+        7,
+        2,
+        3,
+        4,
+        8
+      ],
+      "elapsed_s": 33.12990355491638,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 14,
+      "seed": 20114,
+      "decisions": 1586,
+      "truncated": 0,
+      "placements": [
+        4,
+        2,
+        3,
+        5,
+        1,
+        8,
+        7,
+        6
+      ],
+      "elapsed_s": 33.16310715675354,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 15,
+      "seed": 20115,
+      "decisions": 1914,
+      "truncated": 0,
+      "placements": [
+        3,
+        7,
+        8,
+        4,
+        1,
+        2,
+        6,
+        5
+      ],
+      "elapsed_s": 39.184778928756714,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 16,
+      "seed": 20116,
+      "decisions": 1576,
+      "truncated": 0,
+      "placements": [
+        1,
+        7,
+        6,
+        5,
+        4,
+        8,
+        3,
+        2
+      ],
+      "elapsed_s": 33.43795704841614,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 17,
+      "seed": 20117,
+      "decisions": 1519,
+      "truncated": 0,
+      "placements": [
+        1,
+        5,
+        2,
+        3,
+        6,
+        7,
+        8,
+        4
+      ],
+      "elapsed_s": 31.96075177192688,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 18,
+      "seed": 20118,
+      "decisions": 1464,
+      "truncated": 0,
+      "placements": [
+        4,
+        7,
+        6,
+        5,
+        1,
+        3,
+        8,
+        2
+      ],
+      "elapsed_s": 30.202003955841064,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 19,
+      "seed": 20119,
+      "decisions": 1556,
+      "truncated": 0,
+      "placements": [
+        2,
+        6,
+        5,
+        3,
+        1,
+        8,
+        7,
+        4
+      ],
+      "elapsed_s": 32.20824146270752,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 20,
+      "seed": 20120,
+      "decisions": 1897,
+      "truncated": 0,
+      "placements": [
+        2,
+        5,
+        4,
+        8,
+        6,
+        3,
+        7,
+        1
+      ],
+      "elapsed_s": 39.71945762634277,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 21,
+      "seed": 20121,
+      "decisions": 1729,
+      "truncated": 0,
+      "placements": [
+        7,
+        1,
+        8,
+        5,
+        3,
+        4,
+        2,
+        6
+      ],
+      "elapsed_s": 35.87383460998535,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 22,
+      "seed": 20122,
+      "decisions": 1782,
+      "truncated": 0,
+      "placements": [
+        2,
+        7,
+        4,
+        6,
+        1,
+        5,
+        3,
+        8
+      ],
+      "elapsed_s": 36.6461820602417,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 23,
+      "seed": 20123,
+      "decisions": 1595,
+      "truncated": 0,
+      "placements": [
+        2,
+        3,
+        1,
+        8,
+        6,
+        4,
+        5,
+        7
+      ],
+      "elapsed_s": 32.91121029853821,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 24,
+      "seed": 20124,
+      "decisions": 1738,
+      "truncated": 0,
+      "placements": [
+        1,
+        7,
+        4,
+        2,
+        3,
+        6,
+        5,
+        8
+      ],
+      "elapsed_s": 35.695467710494995,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 25,
+      "seed": 20125,
+      "decisions": 1567,
+      "truncated": 0,
+      "placements": [
+        7,
+        3,
+        5,
+        2,
+        1,
+        6,
+        4,
+        8
+      ],
+      "elapsed_s": 32.08283257484436,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 26,
+      "seed": 20126,
+      "decisions": 1544,
+      "truncated": 0,
+      "placements": [
+        5,
+        1,
+        4,
+        8,
+        7,
+        6,
+        2,
+        3
+      ],
+      "elapsed_s": 31.620821952819824,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 27,
+      "seed": 20127,
+      "decisions": 1702,
+      "truncated": 0,
+      "placements": [
+        2,
+        1,
+        6,
+        8,
+        3,
+        7,
+        4,
+        5
+      ],
+      "elapsed_s": 34.70466351509094,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 28,
+      "seed": 20128,
+      "decisions": 1932,
+      "truncated": 0,
+      "placements": [
+        7,
+        2,
+        8,
+        5,
+        3,
+        6,
+        4,
+        1
+      ],
+      "elapsed_s": 42.926475048065186,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 29,
+      "seed": 20129,
+      "decisions": 1962,
+      "truncated": 0,
+      "placements": [
+        6,
+        1,
+        8,
+        5,
+        4,
+        2,
+        7,
+        3
+      ],
+      "elapsed_s": 44.23865294456482,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 30,
+      "seed": 20130,
+      "decisions": 1327,
+      "truncated": 0,
+      "placements": [
+        1,
+        7,
+        4,
+        2,
+        6,
+        5,
+        3,
+        8
+      ],
+      "elapsed_s": 30.14636754989624,
+      "illegal_actions": 0
+    },
+    {
+      "game_id": 31,
+      "seed": 20131,
+      "decisions": 2057,
+      "truncated": 0,
+      "placements": [
+        1,
+        2,
+        4,
+        7,
+        3,
+        8,
+        6,
+        5
+      ],
+      "elapsed_s": 43.50427198410034,
+      "illegal_actions": 0
+    }
+  ],
+  "episodes": 256,
+  "decisions": 53393,
+  "seed": 20100,
+  "workers": 8,
+  "threads_per_worker": 2,
+  "device": "cpu",
+  "move_guard": 1,
+  "opponent": "self (8 seats, s14 policy, no human/mirror injection)",
+  "elapsed_s": 163.39,
+  "path": "/home/data/users/gaoletian/projects/HSBRSIM/runs/adv_estimators/records_s14_32g.jsonl.gz",
+  "sha256": "7d32059472af234d3721d73d2562507f2c73513f141ff3e8f5b4248c0001c71a",
+  "note": "trainer 不落盘 records；本转储只保留 estimator replay 需要的标量字段（turn/action/value/old_logprob/rank），不含 features/cards/mask。"
+}

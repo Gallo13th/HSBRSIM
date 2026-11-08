@@ -1,0 +1,29 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+runs/
+checkpoints/
+.pt
+*.pth
+*.ckpt
+*.npz
+*.jsonl
+.venv/
+
+# 原始 hsdata（数据更新时使用；不入库）
+reversed/hsdata_*/
+
+# 打包/下载产物
+*.log
+*.zip
+*.pkl
+
+# Rust 构建产物 / PyO3 扩展
+rust/target/
+rust/python/**/*.so
+*.so
+
+# 竞技场密钥（本地，不进库）
+.arena_key
+*.arena_key

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hsbg-agent"
+version = "1.0.0"
+description = "Hearthstone Battlegrounds AlphaZero project on the AutoTavern TavernGym engine (37.0.0.255790): imperfect-information MCTS + self-play + PPO"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+torch = ["torch>=2.0"]
+train = ["torch>=2.0", "matplotlib>=3.5"]
+dev = ["pytest>=7.0"]
+plot = ["matplotlib>=3.5"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["hsbg*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,0 +1,626 @@
+{
+ "panel": [
+  {
+   "arm": "real_opp",
+   "casts_per_turn": 1.697,
+   "casts_per_turn_p90": 4.0,
+   "dstr_per_turn": 63.48,
+   "str_per_cast": {
+    "n_games": 200,
+    "n_obs": 2152,
+    "slope": 20.51,
+    "ci": [
+     17.0228,
+     23.6113
+    ],
+    "r2_within": 0.0331,
+    "mean_dx": 1.697,
+    "sd_dx": 1.67,
+    "mean_dstr": 63.477
+   },
+   "str_per_golden": {
+    "n_games": 200,
+    "n_obs": 2152,
+    "slope": 8.1364,
+    "ci": [
+     -11.3948,
+     21.9671
+    ],
+    "r2_within": 0.0003,
+    "mean_dx": 0.17,
+    "sd_dx": 0.413,
+    "mean_dstr": 63.477
+   },
+   "str_per_tavern_buff": {
+    "n_games": 200,
+    "n_obs": 2152,
+    "slope": 6.0422,
+    "ci": [
+     4.7403,
+     7.852
+    ],
+    "r2_within": 0.0038,
+    "mean_dx": 0.27,
+    "sd_dx": 1.99,
+    "mean_dstr": 63.477
+   },
+   "str_per_bought": {
+    "n_games": 200,
+    "n_obs": 2152,
+    "slope": 25.0887,
+    "ci": [
+     5.6911,
+     36.2671
+    ],
+    "r2_within": 0.0214,
+    "mean_dx": 1.322,
+    "sd_dx": 1.115,
+    "mean_dstr": 63.477
+   },
+   "str_per_cast_ctrl_bought": {
+    "n_games": 200,
+    "n_obs": 2152,
+    "slope": 17.1059,
+    "coef": 17.1059,
+    "ci": [
+     14.656,
+     19.6939
+    ],
+    "control": "bought"
+   }
+  },
+  {
+   "arm": "dose_g12",
+   "casts_per_turn": 2.274,
+   "casts_per_turn_p90": 5.0,
+   "dstr_per_turn": 82.76,
+   "str_per_cast": {
+    "n_games": 60,
+    "n_obs": 716,
+    "slope": 23.5381,
+    "ci": [
+     18.8241,
+     29.0863
+    ],
+    "r2_within": 0.1853,
+    "mean_dx": 2.274,
+    "sd_dx": 1.914,
+    "mean_dstr": 82.764
+   },
+   "str_per_golden": {
+    "n_games": 60,
+    "n_obs": 716,
+    "slope": 9.6062,
+    "ci": [
+     -3.7277,
+     22.5842
+    ],
+    "r2_within": 0.0018,
+    "mean_dx": 0.18,
+    "sd_dx": 0.442,
+    "mean_dstr": 82.764
+   },
+   "str_per_tavern_buff": {
+    "n_games": 60,
+    "n_obs": 716,
+    "slope": 4.3887,
+    "ci": [
+     -2.023,
+     11.2627
+    ],
+    "r2_within": 0.0027,
+    "mean_dx": 0.297,
+    "sd_dx": 1.187,
+    "mean_dstr": 82.764
+   },
+   "str_per_bought": {
+    "n_games": 60,
+    "n_obs": 716,
+    "slope": 15.1868,
+    "ci": [
+     7.5536,
+     22.5327
+    ],
+    "r2_within": 0.0334,
+    "mean_dx": 2.306,
+    "sd_dx": 1.235,
+    "mean_dstr": 82.764
+   },
+   "str_per_cast_ctrl_bought": {
+    "n_games": 60,
+    "n_obs": 716,
+    "slope": 23.2836,
+    "coef": 23.2836,
+    "ci": [
+     18.6886,
+     28.5634
+    ],
+    "control": "bought"
+   }
+  },
+  {
+   "arm": "dose_g15",
+   "casts_per_turn": 2.395,
+   "casts_per_turn_p90": 5.0,
+   "dstr_per_turn": 102.95,
+   "str_per_cast": {
+    "n_games": 60,
+    "n_obs": 737,
+    "slope": 18.3931,
+    "ci": [
+     13.7177,
+     22.9694
+    ],
+    "r2_within": 0.0623,
+    "mean_dx": 2.395,
+    "sd_dx": 1.93,
+    "mean_dstr": 102.954
+   },
+   "str_per_golden": {
+    "n_games": 60,
+    "n_obs": 737,
+    "slope": 21.6503,
+    "ci": [
+     -6.1441,
+     46.2956
+    ],
+    "r2_within": 0.0046,
+    "mean_dx": 0.16,
+    "sd_dx": 0.434,
+    "mean_dstr": 102.954
+   },
+   "str_per_tavern_buff": {
+    "n_games": 60,
+    "n_obs": 737,
+    "slope": 1.6439,
+    "ci": [
+     -2.7111,
+     5.459
+    ],
+    "r2_within": 0.0003,
+    "mean_dx": 0.285,
+    "sd_dx": 1.404,
+    "mean_dstr": 102.954
+   },
+   "str_per_bought": {
+    "n_games": 60,
+    "n_obs": 737,
+    "slope": 12.5996,
+    "ci": [
+     2.2971,
+     21.3882
+    ],
+    "r2_within": 0.0157,
+    "mean_dx": 3.005,
+    "sd_dx": 1.442,
+    "mean_dstr": 102.954
+   },
+   "str_per_cast_ctrl_bought": {
+    "n_games": 60,
+    "n_obs": 737,
+    "slope": 17.773,
+    "coef": 17.773,
+    "ci": [
+     13.2472,
+     22.2493
+    ],
+    "control": "bought"
+   }
+  },
+  {
+   "arm": "dose_g20",
+   "casts_per_turn": 2.915,
+   "casts_per_turn_p90": 6.0,
+   "dstr_per_turn": 120.39,
+   "str_per_cast": {
+    "n_games": 60,
+    "n_obs": 740,
+    "slope": 21.5517,
+    "ci": [
+     15.6254,
+     28.8808
+    ],
+    "r2_within": 0.0985,
+    "mean_dx": 2.915,
+    "sd_dx": 2.284,
+    "mean_dstr": 120.388
+   },
+   "str_per_golden": {
+    "n_games": 60,
+    "n_obs": 740,
+    "slope": 33.1026,
+    "ci": [
+     9.7605,
+     59.0381
+    ],
+    "r2_within": 0.0097,
+    "mean_dx": 0.174,
+    "sd_dx": 0.451,
+    "mean_dstr": 120.388
+   },
+   "str_per_tavern_buff": {
+    "n_games": 60,
+    "n_obs": 740,
+    "slope": 2.0318,
+    "ci": [
+     -3.8697,
+     7.0391
+    ],
+    "r2_within": 0.0004,
+    "mean_dx": 0.362,
+    "sd_dx": 1.6,
+    "mean_dstr": 120.388
+   },
+   "str_per_bought": {
+    "n_games": 60,
+    "n_obs": 740,
+    "slope": 18.5306,
+    "ci": [
+     12.8724,
+     24.8378
+    ],
+    "r2_within": 0.0505,
+    "mean_dx": 4.212,
+    "sd_dx": 1.953,
+    "mean_dstr": 120.388
+   },
+   "str_per_cast_ctrl_bought": {
+    "n_games": 60,
+    "n_obs": 740,
+    "slope": 22.7306,
+    "coef": 22.7306,
+    "ci": [
+     17.0295,
+     29.7095
+    ],
+    "control": "bought"
+   }
+  },
+  {
+   "arm": "dose_g30",
+   "casts_per_turn": 3.11,
+   "casts_per_turn_p90": 7.0,
+   "dstr_per_turn": 228.17,
+   "str_per_cast": {
+    "n_games": 60,
+    "n_obs": 773,
+    "slope": -7.2546,
+    "ci": [
+     -19.8991,
+     3.9856
+    ],
+    "r2_within": 0.0023,
+    "mean_dx": 3.11,
+    "sd_dx": 2.388,
+    "mean_dstr": 228.173
+   },
+   "str_per_golden": {
+    "n_games": 60,
+    "n_obs": 773,
+    "slope": 21.1207,
+    "ci": [
+     -54.5667,
+     99.7616
+    ],
+    "r2_within": 0.0006,
+    "mean_dx": 0.15,
+    "sd_dx": 0.401,
+    "mean_dstr": 228.173
+   },
+   "str_per_tavern_buff": {
+    "n_games": 60,
+    "n_obs": 773,
+    "slope": -11.9753,
+    "ci": [
+     -26.9254,
+     -2.6401
+    ],
+    "r2_within": 0.0027,
+    "mean_dx": 0.384,
+    "sd_dx": 1.567,
+    "mean_dstr": 228.173
+   },
+   "str_per_bought": {
+    "n_games": 60,
+    "n_obs": 773,
+    "slope": 27.0682,
+    "ci": [
+     13.9825,
+     42.4482
+    ],
+    "r2_within": 0.0321,
+    "mean_dx": 5.915,
+    "sd_dx": 2.294,
+    "mean_dstr": 228.173
+   },
+   "str_per_cast_ctrl_bought": {
+    "n_games": 60,
+    "n_obs": 773,
+    "slope": -4.4899,
+    "coef": -4.4899,
+    "ci": [
+     -17.5004,
+     6.9638
+    ],
+    "control": "bought"
+   }
+  },
+  {
+   "arm": "dose_g50",
+   "casts_per_turn": 3.682,
+   "casts_per_turn_p90": 7.0,
+   "dstr_per_turn": 191.84,
+   "str_per_cast": {
+    "n_games": 60,
+    "n_obs": 767,
+    "slope": 9.1912,
+    "ci": [
+     1.7183,
+     15.7452
+    ],
+    "r2_within": 0.0121,
+    "mean_dx": 3.682,
+    "sd_dx": 2.623,
+    "mean_dstr": 191.841
+   },
+   "str_per_golden": {
+    "n_games": 60,
+    "n_obs": 767,
+    "slope": 15.1046,
+    "ci": [
+     -22.5104,
+     60.7223
+    ],
+    "r2_within": 0.001,
+    "mean_dx": 0.176,
+    "sd_dx": 0.438,
+    "mean_dstr": 191.841
+   },
+   "str_per_tavern_buff": {
+    "n_games": 60,
+    "n_obs": 767,
+    "slope": 1.0808,
+    "ci": [
+     -3.8042,
+     7.6807
+    ],
+    "r2_within": 0.0001,
+    "mean_dx": 0.468,
+    "sd_dx": 2.042,
+    "mean_dstr": 191.841
+   },
+   "str_per_bought": {
+    "n_games": 60,
+    "n_obs": 767,
+    "slope": 12.4758,
+    "ci": [
+     6.8713,
+     18.5595
+    ],
+    "r2_within": 0.0228,
+    "mean_dx": 7.018,
+    "sd_dx": 2.608,
+    "mean_dstr": 191.841
+   },
+   "str_per_cast_ctrl_bought": {
+    "n_games": 60,
+    "n_obs": 767,
+    "slope": 13.1481,
+    "coef": 13.1481,
+    "ci": [
+     6.2711,
+     19.023
+    ],
+    "control": "bought"
+   }
+  },
+  {
+   "arm": "dose_g99",
+   "casts_per_turn": 2.859,
+   "casts_per_turn_p90": 6.0,
+   "dstr_per_turn": 233.3,
+   "str_per_cast": {
+    "n_games": 60,
+    "n_obs": 781,
+    "slope": 7.9216,
+    "ci": [
+     -8.5644,
+     22.0502
+    ],
+    "r2_within": 0.0021,
+    "mean_dx": 2.859,
+    "sd_dx": 2.082,
+    "mean_dstr": 233.301
+   },
+   "str_per_golden": {
+    "n_games": 60,
+    "n_obs": 781,
+    "slope": -24.8862,
+    "ci": [
+     -46.1955,
+     -2.0806
+    ],
+    "r2_within": 0.0014,
+    "mean_dx": 0.23,
+    "sd_dx": 0.504,
+    "mean_dstr": 233.301
+   },
+   "str_per_tavern_buff": {
+    "n_games": 60,
+    "n_obs": 781,
+    "slope": -4.3935,
+    "ci": [
+     -33.3295,
+     6.7507
+    ],
+    "r2_within": 0.0005,
+    "mean_dx": 0.305,
+    "sd_dx": 1.705,
+    "mean_dstr": 233.301
+   },
+   "str_per_bought": {
+    "n_games": 60,
+    "n_obs": 781,
+    "slope": 1.226,
+    "ci": [
+     -14.1159,
+     12.676
+    ],
+    "r2_within": 0.0001,
+    "mean_dx": 7.855,
+    "sd_dx": 2.496,
+    "mean_dstr": 233.301
+   },
+   "str_per_cast_ctrl_bought": {
+    "n_games": 60,
+    "n_obs": 781,
+    "slope": 9.7134,
+    "coef": 9.7134,
+    "ci": [
+     -9.3548,
+     26.2275
+    ],
+    "control": "bought"
+   }
+  },
+  {
+   "arm": "gold99_opp",
+   "casts_per_turn": 2.816,
+   "casts_per_turn_p90": 6.0,
+   "dstr_per_turn": 209.78,
+   "str_per_cast": {
+    "n_games": 200,
+    "n_obs": 2557,
+    "slope": 4.1584,
+    "ci": [
+     -2.189,
+     10.2626
+    ],
+    "r2_within": 0.0007,
+    "mean_dx": 2.816,
+    "sd_dx": 2.0,
+    "mean_dstr": 209.778
+   },
+   "str_per_golden": {
+    "n_games": 200,
+    "n_obs": 2557,
+    "slope": -10.5217,
+    "ci": [
+     -34.5277,
+     13.9658
+    ],
+    "r2_within": 0.0003,
+    "mean_dx": 0.233,
+    "sd_dx": 0.512,
+    "mean_dstr": 209.778
+   },
+   "str_per_tavern_buff": {
+    "n_games": 200,
+    "n_obs": 2557,
+    "slope": -0.0972,
+    "ci": [
+     -4.7722,
+     4.4269
+    ],
+    "r2_within": 0.0,
+    "mean_dx": 0.448,
+    "sd_dx": 1.825,
+    "mean_dstr": 209.778
+   },
+   "str_per_bought": {
+    "n_games": 200,
+    "n_obs": 2557,
+    "slope": 3.9429,
+    "ci": [
+     -1.1566,
+     8.8625
+    ],
+    "r2_within": 0.0009,
+    "mean_dx": 7.747,
+    "sd_dx": 2.452,
+    "mean_dstr": 209.778
+   },
+   "str_per_cast_ctrl_bought": {
+    "n_games": 200,
+    "n_obs": 2557,
+    "slope": 6.4714,
+    "coef": 6.4714,
+    "ci": [
+     -0.499,
+     13.078
+    ],
+    "control": "bought"
+   }
+  },
+  {
+   "arm": "gold99_cap120",
+   "casts_per_turn": 6.707,
+   "casts_per_turn_p90": 13.0,
+   "dstr_per_turn": 928.84,
+   "str_per_cast": {
+    "n_games": 100,
+    "n_obs": 1309,
+    "slope": -44.5525,
+    "ci": [
+     -77.0844,
+     -17.4743
+    ],
+    "r2_within": 0.0057,
+    "mean_dx": 6.707,
+    "sd_dx": 4.556,
+    "mean_dstr": 928.843
+   },
+   "str_per_golden": {
+    "n_games": 100,
+    "n_obs": 1309,
+    "slope": 62.3772,
+    "ci": [
+     -44.9012,
+     179.794
+    ],
+    "r2_within": 0.0004,
+    "mean_dx": 0.539,
+    "sd_dx": 0.843,
+    "mean_dstr": 928.843
+   },
+   "str_per_tavern_buff": {
+    "n_games": 100,
+    "n_obs": 1309,
+    "slope": -9.5621,
+    "ci": [
+     -50.8486,
+     -0.7182
+    ],
+    "r2_within": 0.0004,
+    "mean_dx": 0.753,
+    "sd_dx": 4.596,
+    "mean_dstr": 928.843
+   },
+   "str_per_bought": {
+    "n_games": 100,
+    "n_obs": 1309,
+    "slope": 33.7935,
+    "ci": [
+     12.5228,
+     60.8998
+    ],
+    "r2_within": 0.0049,
+    "mean_dx": 25.474,
+    "sd_dx": 5.407,
+    "mean_dstr": 928.843
+   },
+   "str_per_cast_ctrl_bought": {
+    "n_games": 100,
+    "n_obs": 1309,
+    "slope": -35.9776,
+    "coef": -35.9776,
+    "ci": [
+     -70.4822,
+     -5.6914
+    ],
+    "control": "bought"
+   }
+  }
+ ],
+ "note": "局内去均值 OLS（game fixed effects）；Δ 为逐回合增量；bootstrap 按局重采样"
+}

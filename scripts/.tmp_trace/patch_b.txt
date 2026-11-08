@@ -1,0 +1,2 @@
+    u = [g['turn'][t] for g in U for t in range(lo_, hi_ + 1) if t in g['turn'] and g['turn'][t]['upg'] > 0]
+    c = [g['turn'][t] for g in U for t in range(lo_, hi_ + 1) if t in g['turn'] and g['turn'][t]['upg'] == 0]

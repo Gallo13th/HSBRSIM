@@ -68,6 +68,16 @@ def attach_bc_card_head(model: Any, dim: Optional[int] = None) -> Any:
     return model
 
 
+def attach_ceiling_head(model: Any) -> Any:
+    """B10：给已加载的 checkpoint 追加「终局强度」辅助头（``Linear(d,1)``）。
+
+    转发 :func:`hsbg.az.train.entity_model.attach_ceiling_head`。
+    目标 = 该局终局盘面强度 ``log1p(Σatk+hp)``（零初始化，初始不影响 trunk）。
+    """
+    from .entity_model import attach_ceiling_head as _attach
+    return _attach(model)
+
+
 def attach_strength_head(model: Any, norm: Optional[Dict[str, float]] = None) -> Any:
     """给已加载的旧 entity checkpoint 追加场面强度辅助头（见 ``board_problems``）。
 
@@ -381,6 +391,8 @@ def load_checkpoint(path: str, device: str = "cpu") -> tuple[Any, Dict[str, Any]
     # 过程价值辅助头（可选）：meta 声明或 state_dict 里确有 process_head.* 都重建
     has_process_head = bool(meta.get("process_head", False)) or any(
         str(k).startswith("process_head.") for k in state)
+    # B10 终局强度辅助头（可选）：state_dict 里确有 ceiling_head.* 就重建后 load
+    has_ceiling_head = any(str(k).startswith("ceiling_head.") for k in state)
     if arch == "entity18m":
         model = build_net(arch="entity18m", seq_head=seq_head,
                           bc_card_head=has_card_head,
@@ -400,7 +412,18 @@ def load_checkpoint(path: str, device: str = "cpu") -> tuple[Any, Dict[str, Any]
     else:
         model = build_net(hidden, seq_head=seq_head, bc_card_head=has_card_head,
                           bc_card_dim=(card_dim or None))
-    model.load_state_dict(payload["state_dict"])
+    # B10：快照里带 ceiling_head.* 时先补头，再整表加载（否则 strict load 报多余键）
+    # 补头失败（非 entity/测试替身）就退回 strict=False，保留其余权重可用。
+    _ceiling_ok = True
+    if has_ceiling_head and getattr(model, "ceiling_head", None) is None:
+        try:
+            attach_ceiling_head(model)
+        except Exception:  # noqa: BLE001 - 非 entity/测试替身
+            _ceiling_ok = False
+    if has_ceiling_head and not _ceiling_ok:
+        model.load_state_dict(payload["state_dict"], strict=False)
+    else:
+        model.load_state_dict(payload["state_dict"])
     _norm_meta = meta.get("strength_norm")
     if isinstance(_norm_meta, dict) and _norm_meta:
         try:
@@ -421,6 +444,7 @@ __all__ = [
     "build_net",
     "attach_bc_card_head",
     "attach_move_head_split",
+    "attach_ceiling_head",
     "attach_strength_head",
     "attach_process_head",
     "bc_card_head_dim",

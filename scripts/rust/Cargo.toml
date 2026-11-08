@@ -1,0 +1,22 @@
+# HSBRSIM Rust 引擎 workspace（vendored fork of TavernGym / AutoTavern 1.0.0，MIT）。
+# 与上游唯一的差异是 crate/包/模块名（taverngym -> hsbg-engine, lib hsbg_engine），
+# 详见 rust/FORK.md。构建 profile 与上游逐项一致，保证吞吐基准可比。
+[workspace]
+resolver = "2"
+members = ["crates/hsbg-engine", "crates/hsbg-engine-py"]
+
+[workspace.package]
+# fork 保留上游 1.0.0 版本号：`version()` 是公开 API，行为/返回值与上游逐位一致。
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.98"
+license = "MIT"
+repository = "https://github.com/Gallo13th/HSBRSIM"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"  # keep backtraces/profiling usable
+
+[profile.dev.package."*"]
+opt-level = 2  # fast dependencies even in debug builds

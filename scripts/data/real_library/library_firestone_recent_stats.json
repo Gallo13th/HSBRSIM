@@ -1,0 +1,311 @@
+{
+  "schema": "hsbg.firestone_replay_library.stats",
+  "schema_version": 1,
+  "generated_at": "2026-10-31T06:55:48+0800",
+  "source": {
+    "root": "data/firestone_replays",
+    "xmlz": "data/firestone_replays/xmlz",
+    "pms": "data/firestone_replays/pms",
+    "index": "data/firestone_replays/index.json",
+    "cards": "rust/crates/hsbg-engine/data/cards.json",
+    "feed": "https://static.zerotoheroes.com/api/bgs/bgs-perfect-games.json",
+    "xml_endpoint": "https://xml.firestoneapp.com/<replayKey>",
+    "pms_endpoint": "https://bgs-post-match-stats.firestoneapp.com/<reviewId>.gz.json"
+  },
+  "games": {
+    "feed": 500,
+    "processed": 500,
+    "xml_ok": 500,
+    "pms_ok": 500,
+    "errors": 0
+  },
+  "rows": {
+    "total": 10811,
+    "self": 6119,
+    "opponent": 4692,
+    "from_pms": 9204,
+    "from_xml": 1607,
+    "dedup_removed": 1327,
+    "per_game_mean": 24.3
+  },
+  "battles": {
+    "pms_battles_with_info": 6392,
+    "pms_actual": 5707,
+    "matched_to_xml": 5546,
+    "match_rate_of_actual": 0.972,
+    "match_jaccard_p50": 1.0,
+    "match_jaccard_mean": 0.929,
+    "exact_match": 4159
+  },
+  "turns": {
+    "per_game": {
+      "7": 2,
+      "8": 9,
+      "9": 3,
+      "10": 2,
+      "11": 9,
+      "12": 31,
+      "13": 161,
+      "14": 163,
+      "15": 85,
+      "16": 25,
+      "17": 7,
+      "18": 3
+    },
+    "rows_by_turn": {
+      "1": 195,
+      "2": 325,
+      "3": 863,
+      "4": 946,
+      "5": 956,
+      "6": 941,
+      "7": 902,
+      "8": 864,
+      "9": 819,
+      "10": 799,
+      "11": 788,
+      "12": 786,
+      "13": 797,
+      "14": 511,
+      "15": 228,
+      "16": 67,
+      "17": 18,
+      "18": 6
+    },
+    "strength_by_turn": {
+      "1": {
+        "n": 195,
+        "p50": 6.0,
+        "p90": 9.0,
+        "max": 24
+      },
+      "2": {
+        "n": 325,
+        "p50": 7.0,
+        "p90": 14.6,
+        "max": 34
+      },
+      "3": {
+        "n": 863,
+        "p50": 16.0,
+        "p90": 26.0,
+        "max": 137
+      },
+      "4": {
+        "n": 946,
+        "p50": 26.0,
+        "p90": 43.0,
+        "max": 251
+      },
+      "5": {
+        "n": 956,
+        "p50": 40.0,
+        "p90": 66.0,
+        "max": 418
+      },
+      "6": {
+        "n": 941,
+        "p50": 64.0,
+        "p90": 110.0,
+        "max": 326
+      },
+      "7": {
+        "n": 902,
+        "p50": 103.0,
+        "p90": 195.9,
+        "max": 1122
+      },
+      "8": {
+        "n": 864,
+        "p50": 163.0,
+        "p90": 365.4,
+        "max": 3432
+      },
+      "9": {
+        "n": 819,
+        "p50": 313.0,
+        "p90": 935.6,
+        "max": 18216
+      },
+      "10": {
+        "n": 799,
+        "p50": 731.0,
+        "p90": 2584.6,
+        "max": 92982
+      },
+      "11": {
+        "n": 788,
+        "p50": 1722.5,
+        "p90": 6746.7,
+        "max": 142567
+      },
+      "12": {
+        "n": 786,
+        "p50": 3267.5,
+        "p90": 13762.0,
+        "max": 121700
+      },
+      "13": {
+        "n": 797,
+        "p50": 6432.0,
+        "p90": 28980.0,
+        "max": 175099
+      },
+      "14": {
+        "n": 511,
+        "p50": 11060.0,
+        "p90": 49130.0,
+        "max": 196211
+      },
+      "15": {
+        "n": 228,
+        "p50": 21167.0,
+        "p90": 84165.2,
+        "max": 242709
+      },
+      "16": {
+        "n": 67,
+        "p50": 20753.0,
+        "p90": 78159.4,
+        "max": 138700
+      },
+      "17": {
+        "n": 18,
+        "p50": 14866.0,
+        "p90": 101761.6,
+        "max": 123134
+      },
+      "18": {
+        "n": 6,
+        "p50": 8830.0,
+        "p90": 69422.0,
+        "max": 81524
+      }
+    }
+  },
+  "board": {
+    "size_hist": {
+      "1": 544,
+      "2": 868,
+      "3": 964,
+      "4": 739,
+      "5": 863,
+      "6": 1424,
+      "7": 5409
+    },
+    "empty": 0
+  },
+  "placement": {
+    "1": 491,
+    "4": 4,
+    "5": 2,
+    "7": 1,
+    "6": 1,
+    "2": 1
+  },
+  "fields": {
+    "rows": 10811,
+    "coverage": {
+      "board": 1.0,
+      "gold": 0.566,
+      "golden": 0.4848,
+      "hand": 0.5516,
+      "hero": 0.9743,
+      "hero_hp": 1.0,
+      "keywords": 0.7543,
+      "main_placement": 1.0,
+      "placement": 0.566,
+      "tier": 1.0
+    },
+    "mmr_min": 4003,
+    "mmr_max": 14816
+  },
+  "card_mapping": {
+    "minion_mentions": 58850,
+    "unmapped": 0,
+    "unmapped_ratio": 0.0,
+    "top_unmapped": []
+  },
+  "actions": {
+    "total": 149166,
+    "by_type": {
+      "play_minion": 38752,
+      "play_spell": 28835,
+      "sell": 25283,
+      "reroll": 20038,
+      "buy_minion": 12073,
+      "end_turn": 6827,
+      "buy_spell": 6741,
+      "triple": 2866,
+      "hero_power": 2621,
+      "upgrade": 2424,
+      "dark_gift": 1444,
+      "freeze": 1262
+    },
+    "mappable_by_type": {
+      "buy_minion": {
+        "samples": 12073,
+        "mappable": 12073,
+        "ratio": 1.0
+      },
+      "end_turn": {
+        "samples": 6827,
+        "mappable": 6827,
+        "ratio": 1.0
+      },
+      "play_minion": {
+        "samples": 38752,
+        "mappable": 36756,
+        "ratio": 0.948
+      },
+      "freeze": {
+        "samples": 1262,
+        "mappable": 1262,
+        "ratio": 1.0
+      },
+      "upgrade": {
+        "samples": 2424,
+        "mappable": 2424,
+        "ratio": 1.0
+      },
+      "dark_gift": {
+        "samples": 1444,
+        "mappable": 1444,
+        "ratio": 1.0
+      },
+      "sell": {
+        "samples": 25283,
+        "mappable": 25283,
+        "ratio": 1.0
+      },
+      "buy_spell": {
+        "samples": 6741,
+        "mappable": 6741,
+        "ratio": 1.0
+      },
+      "play_spell": {
+        "samples": 28835,
+        "mappable": 28834,
+        "ratio": 1.0
+      },
+      "reroll": {
+        "samples": 20038,
+        "mappable": 20038,
+        "ratio": 1.0
+      },
+      "triple": {
+        "samples": 2866,
+        "mappable": 0,
+        "ratio": 0.0
+      },
+      "hero_power": {
+        "samples": 2621,
+        "mappable": 2621,
+        "ratio": 1.0
+      }
+    },
+    "mappable_ratio": 0.967
+  },
+  "errors": [],
+  "elapsed_s": 80.1
+}

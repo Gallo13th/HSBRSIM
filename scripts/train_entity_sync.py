@@ -51,6 +51,7 @@ from hsbg.az.train.model import (  # noqa: E402
     attach_bc_card_head,
     attach_move_head_split,
     attach_process_head,
+    attach_ceiling_head,
     attach_strength_head,
     bc_card_head_dim,
     build_net,
@@ -2012,6 +2013,8 @@ def main() -> int:
     ap.add_argument("--bc-coef-ramp", default="",
                     help='BC 系数 ramp（与 --seq-coef-ramp 同语法），如 "0.005@0,0.02@0.3"；'
                          "按累计 decisions 求值后写回 bc_coef")
+    ap.add_argument("--ceiling-aux-coef", type=float, default=0.0,
+                    help="B10 终局强度辅助头（预测 log1p(终局Σatk+hp)）系数；0=关闭")
     ap.add_argument("--bc-tier-min", type=int, default=0,
                     help="只保留 tier>=N 的 BC 决策（0=不过滤；B09 用 5）")
     ap.add_argument("--bc-mmr-min", type=int, default=6000,
@@ -3054,6 +3057,22 @@ def main() -> int:
             args.strength_aux_coef = 0.0
             _problem_enabled = _strength_enabled = False
             problem_pool = None
+    _ceiling_coef = float(getattr(args, "ceiling_aux_coef", 0.0) or 0.0)
+    if _ceiling_coef > 0.0:
+        if getattr(model, "ceiling_head", None) is None:
+            try:
+                attach_ceiling_head(model)
+                print(f"[ceiling] checkpoint 无 ceiling_head：已追加 "
+                      f"Linear({int(getattr(model, 'd_model', 0) or 0)}, 2)"
+                      f"（预测 log1p(终局Σatk+hp) 与 终局tier/6）"
+                      f" coef={_ceiling_coef:g}", flush=True)
+            except Exception as exc:  # noqa: BLE001 - 非 entity/测试替身
+                print(f"[warn] 追加 ceiling_head 失败（本次关闭 ceiling_aux_coef=0）："
+                      f"{exc!r}", flush=True)
+                args.ceiling_aux_coef = 0.0
+        else:
+            print("[ceiling] checkpoint 已带 ceiling_head（沿用权重）", flush=True)
+
     if _strength_enabled and problem_pool is not None:
         _snorm = dict(problem_pool.norm or {"mean": 0.0, "std": 1.0})
         if getattr(model, "strength_head", None) is None:
@@ -3180,6 +3199,8 @@ def main() -> int:
         bc_card_weight=float(args.bc_card_weight),
         # upgrade 子集 one-sided DPO：系数固定（无 ramp）；池在下方注入 trainer
         dpo_coef=float(args.dpo_coef),
+        # B10：终局强度辅助头（默认 0 = 关闭）
+        ceiling_aux_coef=float(getattr(args, "ceiling_aux_coef", 0.0) or 0.0),
         dpo_beta=float(args.dpo_beta),
         dpo_batch=int(args.dpo_batch),
         dpo_every=int(args.dpo_every),
@@ -4190,6 +4211,10 @@ def main() -> int:
                      f" bc_coef={stats.get('bc_coef', 0.0):.4g}"
                      f" bc_samples={stats.get('bc_samples', 0.0):.0f}"
                      if bc_enabled else "")
+                  + (f" ceil={stats.get('ceiling_aux_loss', 0.0):.4f}"
+                     f" ceil_coef={stats.get('ceiling_aux_coef', 0.0):.4g}"
+                     f" ceil_n={stats.get('ceiling_rows', 0.0):.0f}"
+                     if float(getattr(args, 'ceiling_aux_coef', 0.0) or 0.0) > 0.0 else "")
                   + (f" dpo={stats['dpo_loss']:.4f}"
                      f" dpo_acc={stats['dpo_accept_rate']:.3f}"
                      f" dpo_coef={stats['dpo_coef']:.4g}"

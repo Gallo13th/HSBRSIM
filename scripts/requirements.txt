@@ -1,0 +1,9 @@
+# HSBRSIM Python 依赖（等价于：pip install -e ".[train,dev,plot]"）
+# 若用 scripts/bootstrap.sh，本文件不需要手动安装。
+numpy>=1.24
+torch>=2.0          # CUDA 版本请按官方命令装（pip install torch --index-url ...）
+pytest>=7.0
+matplotlib>=3.5
+
+# 引擎（hsbg_engine）不在这里：它由 rust/ 的 maturin 构建：
+#   cd rust && python -m pip install -e .

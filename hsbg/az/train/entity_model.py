@@ -299,6 +299,17 @@ def build_entity_net(*, d_model: int = 384, n_layers: int = 8, n_heads: int = 8,
             pred = None if self.strength_head is None else self.strength_head(g)
             return logits, pred
 
+        def forward_ceiling(self, features, cards, mask=None):
+            """终局强度（上限）一次前向：``(policy_logits, ceiling_pred[B,1])``。
+
+            只在 ``ceiling_aux_coef>0`` 时调用；``ceiling_head`` 未 attach 时第二项为
+            ``None``。**不改变** ``forward()`` 的策略/价值输出（同一 trunk，独立头）。
+            """
+            logits, _rank, _value, g = self._forward_impl(features, cards, mask)
+            head = getattr(self, "ceiling_head", None)
+            pred = None if head is None else head(g)
+            return logits, pred
+
         def forward_process(self, features, cards, mask=None):
             """过程价值一次前向：``(policy_logits, process_pred[N,3])``。
 
@@ -462,6 +473,53 @@ def attach_strength_head(model: Any, *, norm: Optional[Dict[str, float]] = None
     model.strength_head = head
     model.strength_norm = dict(norm or {"mean": 0.0, "std": 1.0})
     return model
+
+
+#: 终局"上限"辅助头的输出维度：0=log1p(终局Σatk+hp)、1=终局 tier/6。
+CEILING_HEAD_OUT = 2
+
+
+def attach_ceiling_head(model: Any) -> Any:
+    """给已加载的 checkpoint 追加"终局上限"辅助头（``Linear(d_model, 2)``）。
+
+    输出两项（见 :data:`CEILING_HEAD_OUT`）：
+
+    0. ``log1p(终局盘面 Σatk+hp)``：整局"能滚多肥"的上限；
+    1. ``终局 tier / 6``：整局"能爬多高"的上限（高本带来的收益预期）。
+
+    与 ``strength_head``（t+3 增量）的区别：这里预测的是**整局终点**，给"现在这一步
+    会不会让我终局更肥 / 更高本"提供稠密梯度——B10 的核心机制。
+
+    零权重初始化：初始 ``pred=0``，trunk 梯度为 0（不扰动策略），但 head 自身立刻
+    按 ``dL/dpred·g`` 学习，几步后 trunk 才接到信号。
+    """
+    if getattr(model, "ceiling_head", None) is not None:
+        return model
+    d = int(getattr(model, "d_model", 0) or 0)
+    if d <= 0:
+        raise ValueError(f"模型不是 entity（d_model={d}）")
+    torch = _torch()
+    head = torch.nn.Linear(d, int(CEILING_HEAD_OUT))
+    with torch.no_grad():
+        head.weight.zero_()
+        head.bias.zero_()
+    model.ceiling_head = head
+    return model
+
+
+def forward_ceiling_model(model: Any, features: Any, cards: Any, mask: Any = None):
+    """一条 batch 的终局强度预测：``(policy_logits, ceiling_pred|None)``。
+
+    模型没有 ``forward_ceiling`` 时退回 ``forward_model``（``ceiling_pred=None``）。
+    只在 ``ceiling_aux_coef>0`` 的损失分支调用。
+    """
+    fn = getattr(model, "forward_ceiling", None)
+    if fn is None:
+        return None
+    out = fn(features, cards, mask)
+    if not isinstance(out, (tuple, list)) or len(out) != 2:
+        raise ValueError("forward_ceiling 必须返回 (policy_logits, ceiling_pred)")
+    return out[0], out[1]
 
 
 def attach_move_head_split(model: Any) -> Any:

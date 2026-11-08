@@ -151,6 +151,11 @@ def _batch_arrays(batch: Any) -> Dict[str, np.ndarray]:
         arrays["behavior_logprobs"] = batch.behavior_logprobs
         if getattr(batch, "pi_logprobs", None) is not None:
             arrays["pi_logprobs"] = batch.pi_logprobs
+    # B10：终局强度辅助头目标（None 时不写，保持默认字段集合与旧版一致）
+    if getattr(batch, "final_strength", None) is not None:
+        arrays["final_strength"] = np.asarray(batch.final_strength, dtype=np.float32)
+    if getattr(batch, "final_tier", None) is not None:
+        arrays["final_tier"] = np.asarray(batch.final_tier, dtype=np.float32)
     return arrays
 
 
@@ -1496,6 +1501,13 @@ class ProcessActorPool:
                     packed_all[i]["behavior_logprobs"] = lb.behavior_logprobs
                     if getattr(lb, "pi_logprobs", None) is not None:
                         packed_all[i]["pi_logprobs"] = lb.pi_logprobs
+                # B10：终局"上限"辅助头目标（None 时不写，字段集合与旧版一致）
+                if getattr(lb, "final_strength", None) is not None:
+                    packed_all[i]["final_strength"] = np.asarray(
+                        lb.final_strength, dtype=np.float32)
+                if getattr(lb, "final_tier", None) is not None:
+                    packed_all[i]["final_tier"] = np.asarray(
+                        lb.final_tier, dtype=np.float32)
         if packed_all and all("advantages" in p for p in packed_all):
             # L4：worker 已构建好 batch（episode_id 全局唯一）→ 父进程只拼接
             keys = ["features", "cards", "masks", "actions", "old_logprobs", "values",
@@ -1504,7 +1516,8 @@ class ProcessActorPool:
             # 可选字段：所有 shard 都带才拼接（动作序列 / 教师 / 过程价值 / 行为混合；
             # 默认关闭时全都没有）
             keys += [k for k in ("seq_target", "teacher_action", "process_target",
-                                 "behavior_logprobs", "pi_logprobs")
+                                 "behavior_logprobs", "pi_logprobs",
+                                 "final_strength", "final_tier")
                      if all(k in p for p in packed_all)]
             merged = {k: np.concatenate([p[k] for p in packed_all], axis=0) for k in keys}
             meta["episodes"] = int(len(np.unique(merged["episode_ids"])))

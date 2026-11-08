@@ -78,6 +78,8 @@ TIER_BONUS="${TIER_BONUS:-0.0}"
 TIER_TABLE="${TIER_TABLE:-7:4,9:5,12:6}"
 TIER_SPREAD="${TIER_SPREAD:-0}"
 FORCED_UPGRADE="${FORCED_UPGRADE:-0}"
+CEILING_AUX_COEF="${CEILING_AUX_COEF:-0}"
+BC_TIER_MIN="${BC_TIER_MIN:-0}"
 FORCED_UPGRADE_MARGIN="${FORCED_UPGRADE_MARGIN:-0}"
 TARGET_KL="${TARGET_KL:-0.02}"
 ENTROPY_COEF="${ENTROPY_COEF:-0.001}"
@@ -197,7 +199,8 @@ CMD=("$PY" scripts/train_entity_sync.py
   --library-p 0.0 --lockstep 1 --fast-act 1 --amp bf16
   --compile-train 1 --anchor-amp 1 --pi-coef 0.0
   --seq-coef 0.0 --seq-ramp-total-decisions 0.0
-  --bc-coef "${BC_COEF:-0.0}" --bc-mmr-min "${BC_MMR_MIN:-6000}" --bc-mmr-boost "${BC_MMR_BOOST:-1.0}" \
+  --ceiling-aux-coef "${CEILING_AUX_COEF:-0}" \
+  --bc-tier-min "${BC_TIER_MIN:-0}" --bc-coef "${BC_COEF:-0.0}" --bc-mmr-min "${BC_MMR_MIN:-6000}" --bc-mmr-boost "${BC_MMR_BOOST:-1.0}" \
   --bc-type-weight "${BC_TYPE_WEIGHT:-1.0}" --bc-card-weight "${BC_CARD_WEIGHT:-0.5}" \
   --bc-class-weight "${BC_CLASS_WEIGHT:-}" --bc-batch "${BC_BATCH:-128}" --bc-every "${BC_EVERY:-1}"
   --bc-samples "${BC_SAMPLES:-data/firestone_bc/bc_samples.jsonl.gz}"

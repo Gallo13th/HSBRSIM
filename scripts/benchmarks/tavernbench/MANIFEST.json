@@ -1,0 +1,171 @@
+{
+  "benchmark": "TavernBench",
+  "upstream": {
+    "repository": "https://github.com/MCG-NJU/AutoTavern",
+    "commit": "fb61201",
+    "commit_title": "TavernGym and TavernBench v1.0.0",
+    "release_tag": "v1.0.0",
+    "game_patch": "36.6.3",
+    "license": "MIT",
+    "copyright": "Copyright (c) 2026 The AutoTavern Authors",
+    "citation": "Ma, Changlian and Wang, Limin. Build, Don't Play: Self-Improving LLM Research Agents Develop a Hearthstone Battlegrounds AI That Rivals Top Players. 2026."
+  },
+  "vendored_path": "benchmarks/tavernbench",
+  "vendored_from": "AutoTavern/tavernbench (data/, results/, tavernbench/) + AutoTavern/LICENSE + AutoTavern/NOTICE",
+  "notes": [
+    "原样 vendored，未修改上游代码与数据；新增文件仅本 MANIFEST.json、expected/ 与本目录 .gitignore。",
+    "TavernBench 任务/标签/状态/答案与代码均为 MIT；游戏内容版权归 Blizzard，见 NOTICE。"
+  ],
+  "expected_report": {
+    "path": "expected/eval_report.json",
+    "generated_by": "cd <AutoTavern>/tavernbench && python3 -m tavernbench.report --set data/eval --runs results/eval --systems tavernagent,claude-opus-5.5,claude-sonnet-5.5,gpt-6-astra,gpt-6.1-sol,gemini-3.8-flash,grok-4.7,glm-5.3,kimi-k2.6,intern-s2-preview,deepseek-v4.1-flash,jev --out /tmp/upstream_eval_report.json",
+    "sha256": "24ee6e78a2e043ecb78569c3eae903cb6ecad248a5a6829e99fdb288400d23a3"
+  },
+  "file_count": 36,
+  "files": {
+    "LICENSE": {
+      "sha256": "d2cae314b54e2093866b9972facb4c1724a6adcb322e7fb19a8c2431c1cdd551",
+      "size": 1079
+    },
+    "NOTICE": {
+      "sha256": "87c819b8b5de1ae9fd025f34b191192eaa1d3cbddbca33f9b1f11949c713b784",
+      "size": 1439
+    },
+    "data/eval/labels.jsonl": {
+      "sha256": "99447d4fbafd9b3748a0460b02598a4b7244897ab4313a081bfdff0fb579f940",
+      "size": 61493
+    },
+    "data/eval/prompts.jsonl": {
+      "sha256": "0c9b15d239585a9069b6d8c07bb674db0a0d3e7aa876f84e3452866ff160d590",
+      "size": 1230334
+    },
+    "data/eval/states.jsonl.gz": {
+      "sha256": "3f8ebeeae90c4a846344dd53672747d30f61b57203f8607d5b6bd55d8a54cdad",
+      "size": 1959697
+    },
+    "data/full/labels.jsonl": {
+      "sha256": "cfb321bbf7ed0538999949abf1a7189bc9a17d3522240ecbe219dd02325464c6",
+      "size": 157383
+    },
+    "data/full/prompts.jsonl": {
+      "sha256": "58caa46d3dd0b186f05688dae40044acd382e5db641790988c4dc4f6a4bfce33",
+      "size": 3060716
+    },
+    "data/full/states.jsonl.gz": {
+      "sha256": "a3ce5adfdaf28b3d4f5864893e5316129bf8f3b31f51552348d7fa2cfdfaf101",
+      "size": 3621580
+    },
+    "expected/eval_report.json": {
+      "sha256": "24ee6e78a2e043ecb78569c3eae903cb6ecad248a5a6829e99fdb288400d23a3",
+      "size": 22358
+    },
+    "results/eval/claude-opus-5.5/answers.jsonl": {
+      "sha256": "69059038b56a3811fa35e632b557201824ee84781ba4eb903f556ed27af5fa4d",
+      "size": 130421
+    },
+    "results/eval/claude-sonnet-5.5/answers.jsonl": {
+      "sha256": "aada12f7b5ddc56c0ec4f179afbb4dd5045e5291082622a6a71f5b0515f846eb",
+      "size": 76807
+    },
+    "results/eval/deepseek-v4.1-flash/answers.jsonl": {
+      "sha256": "4053213f88b09d9375b1122cf5bfd55a52238f8063be1b495c29329e1a6e1e8c",
+      "size": 97329
+    },
+    "results/eval/gemini-3.8-flash/answers.jsonl": {
+      "sha256": "ef3211c187113a83dcfbc3809314c77bbb1d37bec263d3ba88da684785bd3a7f",
+      "size": 89238
+    },
+    "results/eval/glm-5.3/answers.jsonl": {
+      "sha256": "9df83781f188413a428062499f5dad60e5345e487da6f734a5ac5684ac098e5a",
+      "size": 89284
+    },
+    "results/eval/gpt-6-astra/answers.jsonl": {
+      "sha256": "b48f5643adce84287e7176e4542e353a2326acb36bcf4a7de3c304534fceaad7",
+      "size": 82925
+    },
+    "results/eval/gpt-6.1-sol/answers.jsonl": {
+      "sha256": "b3ed6ddd33030315f592c216f022be5b72b0da5509a7d38e751dce819238e835",
+      "size": 83402
+    },
+    "results/eval/grok-4.7/answers.jsonl": {
+      "sha256": "bec4d5065ea3b416ac204ad1f97f2d75c58f09dfb63e55e7f67adcbc1256bf5c",
+      "size": 85923
+    },
+    "results/eval/intern-s2-preview/answers.jsonl": {
+      "sha256": "d537f9b0f79f626412ed9ff22ff0141b542e73ca1b82ed128f2f6eb47be64f7f",
+      "size": 87522
+    },
+    "results/eval/jev/answers.jsonl": {
+      "sha256": "bf4261d17d6f04c38680a73d0fae203ff26c860aebbd1307fd8a4a3e1fb51fb2",
+      "size": 310125
+    },
+    "results/eval/kimi-k2.6/answers.jsonl": {
+      "sha256": "a538a6acc3137b1d919355e7d309f29c8ad2ae4a3ac460d232ec02ebd82e1f7b",
+      "size": 2119874
+    },
+    "results/eval/tavernagent/answers.jsonl": {
+      "sha256": "f9332394d2d79fbb811e6fc92bf84ca49c9b5a2fbd98fe37eb52f17d33cff3a3",
+      "size": 42100
+    },
+    "results/tools/deepseek-v4.1-flash/answers.jsonl": {
+      "sha256": "dd9163a0745e6c429f47d227b7058cfa0bdd9cfd7b314c75ac2eb1ef08ac13a6",
+      "size": 58573
+    },
+    "results/tools/glm-5.3/answers.jsonl": {
+      "sha256": "1ab367ed5af4dee2971dcd20152092b20921c715a2d01f1ec332397844708a0e",
+      "size": 29635
+    },
+    "results/tools/gpt-6-astra/answers.jsonl": {
+      "sha256": "bb051a1ff697b562ab6dce682311133b876985b606f6dadf2be298e1b8388fa0",
+      "size": 28062
+    },
+    "results/tools/intern-s2-preview/answers.jsonl": {
+      "sha256": "f44805a54c7b27e37eba50bbf6611ce077577b001d2d213e9b5f10ce93eab166",
+      "size": 41908
+    },
+    "results/tools/kimi-k2.6/answers.jsonl": {
+      "sha256": "a21fa0cce43092f410c1b20368dda928668a86206afef84ea72457a0d1b3a0fa",
+      "size": 95115
+    },
+    "tavernbench/__init__.py": {
+      "sha256": "b42b143eb4b0ac931cdc6b37da678316045a8cf8c7a2100d54620bf1e2ebb603",
+      "size": 92
+    },
+    "tavernbench/chance.py": {
+      "sha256": "6f3db0f3c9bc36ce94d0e7d3bbcccaae0ef13fc6faf38ca8fe08894b27596eff",
+      "size": 2226
+    },
+    "tavernbench/engine.py": {
+      "sha256": "a457a6662c8eaf36c9beb442962bd3d1d9e6e6e4204f4a61a0847a6e5b4d178f",
+      "size": 10016
+    },
+    "tavernbench/render.py": {
+      "sha256": "fbff99423b3cc2f23f3b9ff430d209633df4e4508455775571731a2dcdc98bba",
+      "size": 3786
+    },
+    "tavernbench/report.py": {
+      "sha256": "ac073887d8606914fb8138bbe3433131cb090012c5aeeefa5548c570f0217f35",
+      "size": 5742
+    },
+    "tavernbench/run_claude.py": {
+      "sha256": "478d9696e74336de2f71a764c81c88c5ebac0bf86b87fadc1f444cd0a24eaaa8",
+      "size": 3250
+    },
+    "tavernbench/run_jev.py": {
+      "sha256": "dd278b6b2c0c458623676a1b58b97dc114bed13610a1a4adc4410b7e667c78d2",
+      "size": 11950
+    },
+    "tavernbench/run_openai.py": {
+      "sha256": "9d74cfb0b8589dc26af35c2b760f4168e849be23b8fdcc925c2db6392f6cef64",
+      "size": 9487
+    },
+    "tavernbench/run_tools.py": {
+      "sha256": "c55de800bcbacce38fa99e3fb8cffe64d7d666c6b0f97a0277b66cd77471912c",
+      "size": 14082
+    },
+    "tavernbench/score.py": {
+      "sha256": "5fd3ea670c607bbc6a46ac8c9d92af6d88a2253677ab872552e387b02cd1d62e",
+      "size": 7135
+    }
+  }
+}

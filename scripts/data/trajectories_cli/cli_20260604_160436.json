@@ -1,0 +1,23 @@
+{
+  "game_id": "cli_20260604_160436",
+  "hero_id": "BG20_HERO_100",
+  "hero_name": "洛卡拉",
+  "seed": 0,
+  "active_tribes": [],
+  "placement": 7,
+  "final_health": 30,
+  "final_tier": 1,
+  "turns": [
+    {
+      "turn": 1,
+      "health": 30,
+      "armor": 0,
+      "tavern_tier": 1,
+      "gold": 3,
+      "board": [],
+      "trinkets": [],
+      "hero_power_used": false
+    }
+  ],
+  "anomaly_id": null
+}

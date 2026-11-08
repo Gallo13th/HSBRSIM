@@ -1165,6 +1165,12 @@ class PPOConfig:
     #: 存活题 mean 1.231 / std 0.734）的题；过滤计数进 history 的
     #: ``problem_pool_dropped_by_delta``。必须有限且 >= 0。
     problem_min_strength_delta: float = 0.0
+    #: **终局强度辅助头**（B10，entity 的 ``ceiling_head``）：从状态预测该局**终局**
+    #: 盘面强度 ``log1p(Σatk+hp)``；用真实对局结果做监督（同一局所有决策共享目标）。
+    #: 默认 0 = 关闭（前向/损失与旧版逐位一致）。每个 minibatch 只在前 256 行上算，
+    #: 成本约为一次小前向。
+    ceiling_aux_coef: float = 0.0
+
     #: **强度辅助头**（entity 的 ``strength_head``）：从状态预测 t+3 **战团强度增量**
     #: ``log1p(after)-log1p(before)``（z-score 回归）+ tier+1 是否达成（二分类）。
     #: **0 = 关闭（默认）**：不建头、
@@ -1421,6 +1427,11 @@ class PPOBatch:
     behavior_logprobs: Optional[np.ndarray] = None
     #: 同一动作在 π（采集策略）下的 logprob f32[n]；KL/approx_kl 口径用。None = 未启用。
     pi_logprobs: Optional[np.ndarray] = None
+    #: 该局**终局盘面强度** log1p(Σatk+hp) f32[n]（B10 的"上限"辅助头目标 0）；
+    #: 同一局所有决策共享同一个值。None = 未启用（默认）
+    final_strength: Optional[np.ndarray] = None
+    #: 该局**终局 tier / 6** f32[n]（B10 的"上限"辅助头目标 1）。None = 未启用
+    final_tier: Optional[np.ndarray] = None
     meta: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -1434,6 +1445,12 @@ class PPOBatch:
             self.teacher_action = np.asarray(self.teacher_action, dtype=np.int16).reshape(-1)
         if self.process_target is not None:
             self.process_target = np.asarray(self.process_target, dtype=np.float32)
+        if self.final_strength is not None:
+            self.final_strength = np.asarray(
+                self.final_strength, dtype=np.float32).reshape(-1)
+        if self.final_tier is not None:
+            self.final_tier = np.asarray(
+                self.final_tier, dtype=np.float32).reshape(-1)
         if self.behavior_logprobs is not None:
             self.behavior_logprobs = np.asarray(
                 self.behavior_logprobs, dtype=np.float32).reshape(-1)
@@ -1854,6 +1871,14 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
         episode_ids=episode_ids, forced=forced, seq_target=seq_target,
         teacher_action=teacher_action, process_target=process_target,
         behavior_logprobs=behavior_logprobs, pi_logprobs=pi_logprobs,
+        final_strength=(
+            np.asarray([float(r.get("final_strength", 0.0) or 0.0) for r in recs],
+                       dtype=np.float32)
+            if any("final_strength" in r for r in recs) else None),
+        final_tier=(
+            np.asarray([float(r.get("final_tier", 0.0) or 0.0) for r in recs],
+                       dtype=np.float32)
+            if any("final_tier" in r for r in recs) else None),
         meta=merged_meta)
 
 
@@ -2627,6 +2652,41 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         value_loss = value_loss + float(config.value_head_coef) * F.mse_loss(
             scalar_value, returns_t)
 
+    # ── B10：终局强度辅助头（默认 0 = 整段不执行）────────────────────────────
+    # 目标 = 该局终局 log1p(Σatk+hp)（同一局所有决策共享）。只在 minibatch 的前
+    # ``_CEIL_ROWS`` 行上前向一次小批量，避免把 trunk 前向翻倍。
+    ceiling_coef = float(getattr(config, "ceiling_aux_coef", 0.0) or 0.0)
+    ceiling_loss = None
+    ceiling_n = 0
+    ceiling_term = 0.0
+    if ceiling_coef > 0.0:
+        _fs_np = getattr(batch, "final_strength", None)
+        if _fs_np is not None:
+            _CEIL_ROWS = 256
+            _ci = idx[:_CEIL_ROWS] if idx.size > _CEIL_ROWS else idx
+            _fs = torch.from_numpy(np.ascontiguousarray(
+                np.asarray(_fs_np)[_ci].astype(np.float32))).to(dev)
+            if bool(torch.isfinite(_fs).all()) and float(_fs.abs().sum()) > 0.0:
+                from .entity_model import forward_ceiling_model  # noqa: PLC0415
+                _xc = torch.from_numpy(np.ascontiguousarray(
+                    batch.features[_ci].astype(np.float32))).to(dev)
+                _cc = torch.from_numpy(np.ascontiguousarray(
+                    batch.cards[_ci].astype(np.int64))).to(dev)
+                _mc = torch.from_numpy(np.ascontiguousarray(
+                    batch.masks[_ci].astype(bool))).to(dev)
+                _cl, _cp = forward_ceiling_model(model, _xc, _cc, _mc)
+                if _cp is not None:
+                    _cp = _cp.reshape(int(_fs.numel()), -1)
+                    ceiling_loss = F.smooth_l1_loss(_cp[:, 0], _fs)
+                    _ft_np = getattr(batch, "final_tier", None)
+                    if _ft_np is not None and _cp.shape[1] > 1:
+                        _ft = torch.from_numpy(np.ascontiguousarray(
+                            np.asarray(_ft_np)[_ci].astype(np.float32))).to(dev)
+                        if bool(torch.isfinite(_ft).all()):
+                            ceiling_loss = ceiling_loss + F.smooth_l1_loss(_cp[:, 1], _ft)
+                    ceiling_term = ceiling_coef * ceiling_loss
+                    ceiling_n = int(_fs.numel())
+
     aux_mask = has_pi & (valid > 0)   # forced 样本不参与 aux policy（与主 policy loss 一致）
     if bool(aux_mask.any()) and float(config.pi_coef) > 0.0:
         aux_all = -(target_pi * safe_logp).sum(dim=-1)
@@ -2652,6 +2712,8 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
     total = (policy_loss + float(config.value_coef) * value_loss
              + float(config.pi_coef) * aux_pi_loss
              - float(config.entropy_coef) * entropy)
+    if ceiling_loss is not None:
+        total = total + ceiling_term
     if seq_loss is not None:
         total = total + seq_coef * seq_loss
     # ── 在线缩放教师 DAgger（默认 teacher_bc_coef=0 时整段不执行）────────────
@@ -2915,6 +2977,11 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
         result["upgrade_bc_loss"] = upgrade_bc_loss
         result["upgrade_bc_coef"] = torch.as_tensor(float(_ubc), device=dev)
         result["upgrade_bc_samples"] = torch.as_tensor(float(upgrade_bc_n), device=dev)
+    # B10 终局强度辅助头：只有真的算了才出现（默认关闭 -> 结构不变）
+    if ceiling_loss is not None:
+        result["ceiling_aux_loss"] = ceiling_loss.detach()
+        result["ceiling_aux_coef"] = torch.as_tensor(float(ceiling_coef), device=dev)
+        result["ceiling_rows"] = torch.as_tensor(float(ceiling_n), device=dev)
     # 过程价值辅助头：只有真的算了 MSE 才出现（默认关闭 -> 结构不变）
     if process_stats:
         result.update(process_stats)
@@ -3265,6 +3332,7 @@ def train_ppo(model: Any, batch: PPOBatch, config: Optional[PPOConfig] = None,
     }
     # 提升 epoch 指标，供训练入口/history 使用；缺标签的 epoch 不以 0 稀释。
     for _key in ("policy_loss", "discover_bc_loss", "triple_bc_loss", "upgrade_bc_loss",
+                 "ceiling_aux_loss", "ceiling_aux_coef", "ceiling_rows",
                  "bc_scale", "r",
                  "discover_bc_scale", "triple_bc_scale", "upgrade_bc_scale",
                  "discover_bc_r", "triple_bc_r", "upgrade_bc_r",
@@ -4170,6 +4238,7 @@ def pack_records_arrays(records: Sequence[Dict[str, Any]],
         "game_ids": np.empty(n, dtype=np.int64),
         "turns": np.empty(n, dtype=np.int32),
         "game_bot_strength": np.zeros(n, dtype=np.float32),
+        "final_strength": np.zeros(n, dtype=np.float32),
         "forced": np.empty(n, dtype=bool),
         "has_pi": np.zeros(n, dtype=bool),
     }
@@ -4187,6 +4256,7 @@ def pack_records_arrays(records: Sequence[Dict[str, Any]],
         out["game_ids"][i] = int(r["game_id"])
         out["turns"][i] = int(r.get("turn", -1))
         out["game_bot_strength"][i] = float(r.get("game_bot_strength", 0.0) or 0.0)
+        out["final_strength"][i] = float(r.get("final_strength", 0.0) or 0.0)
         out["forced"][i] = bool(r.get("forced", False))
         pi = r.get("target_pi")
         if pi is not None and has_pi and not out["forced"][i]:
@@ -4392,6 +4462,14 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
         episode_ids=episode_ids, forced=t["forced"], seq_target=seq_target,
         teacher_action=teacher_action, process_target=process_target,
         behavior_logprobs=behavior_logprobs, pi_logprobs=pi_logprobs,
+        final_strength=(lambda fs: None if fs is None else
+                        np.asarray(fs, dtype=np.float32).reshape(-1)
+                        if np.asarray(fs).size == n else None)(
+                            t.get("final_strength")),
+        final_tier=(lambda ft: None if ft is None else
+                    np.asarray(ft, dtype=np.float32).reshape(-1)
+                    if np.asarray(ft).size == n else None)(
+                        t.get("final_tier")),
         meta=merged_meta)
 
 
@@ -4571,6 +4649,16 @@ def collect_ppo_batch(model: Any, config: Optional[CollectConfig] = None, *,
             if over:
                 rank = int(list(game.placements())[int(cfg.learner_seat)])
                 _attach_rank(policy.records, rank)
+                # B10：终局盘面强度 log1p(Σatk+hp)（同一局所有记录共享）
+                try:
+                    _pj = json.loads(game.player_json(int(cfg.learner_seat)))
+                    _fs = float(np.log1p(sum(
+                        int(m.get("atk") or 0) + int(m.get("hp") or 0)
+                        for m in (_pj.get("board") or []))))
+                    for _r in policy.records:
+                        _r["final_strength"] = float(_fs)
+                except BaseException:  # noqa: BLE001 - 目标不可得不挂
+                    pass
                 records.extend(policy.records)
             else:
                 truncated += 1

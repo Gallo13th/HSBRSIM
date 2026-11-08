@@ -1,0 +1,389 @@
+[
+  {
+    "id": "BG36_MidGameEffect_000t",
+    "dbf_id": 132192,
+    "name": "Offensive Sacrifice",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "+10 Attack. <b>Deathrattle:</b> Give this minion's Attack to another friendly minion.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t10",
+    "dbf_id": 132208,
+    "name": "Echoing Voice",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "At the end of your turn, trigger this minion's <b>Battlecries</b>.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t11",
+    "dbf_id": 132485,
+    "name": "Double Vision",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "Get an extra copy of this.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t12",
+    "dbf_id": 132276,
+    "name": "Persisting Horror",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Reborn</b>. Is <b>Reborn</b> with full stats and <b>Bonus Keyword</b>s.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t13",
+    "dbf_id": 132279,
+    "name": "Harpy's Talons",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Divine Shield</b>, <b>Windfury</b>",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t14",
+    "dbf_id": 132441,
+    "name": "Gilding",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "This is Golden, but doesn't give a Triple Reward.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t15",
+    "dbf_id": 132442,
+    "name": "Toreth's Blessing",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "This minion's <b>Divine Shield</b> takes 3 hits to break.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t16",
+    "dbf_id": 132443,
+    "name": "Jaws of Death",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Start of Combat:</b> Trigger this minion's <b>Deathrattles</b>.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t18",
+    "dbf_id": 132445,
+    "name": "Replication",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "At the end of every 2 turns, get a plain copy of this.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t2",
+    "dbf_id": 132200,
+    "name": "Defensive Sacrifice",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "+10 Health. <b>Deathrattle:</b> Give this minion's max Health to another friendly minion.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t21",
+    "dbf_id": 132448,
+    "name": "Time Turning",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "This minion's end of turn effects also trigger at start of turn.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t22",
+    "dbf_id": 132790,
+    "name": "Amalgamation",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "Has all minion types.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t28",
+    "dbf_id": 132553,
+    "name": "Battle Scars",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "Has +3/+3 for each <b>Battlecry</b> you've triggered this game. ({1})",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t28t",
+    "dbf_id": 133476,
+    "name": "Battle Scars",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "Has +2/+2 for each <b>Battlecry</b> you've triggered this game. ({1})",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t29",
+    "dbf_id": 132554,
+    "name": "Death's Embrace",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "Has +2/+2 for each <b>Deathrattle</b> you've triggered this game. ({1})",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t29t",
+    "dbf_id": 133478,
+    "name": "Death's Embrace",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "Has +1/+1 for each <b>Deathrattle</b> you've triggered this game. ({1})",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t3",
+    "dbf_id": 132201,
+    "name": "Charisma",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Rally:</b> Get a random minion of your most common type.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t30",
+    "dbf_id": 132555,
+    "name": "Spell Siphon",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "Has +3/+3 for each Tavern spell you've cast this game. ({1})",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t30t",
+    "dbf_id": 133480,
+    "name": "Spell Siphon",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "Has +2/+2 for each Tavern spell you've cast this game. ({1})",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t4",
+    "dbf_id": 132202,
+    "name": "Incubation",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "+4/+4. In 2 turns, double this minion's stats.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t5",
+    "dbf_id": 132203,
+    "name": "Mystic Essence",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Deathrattle:</b> Get a random Tavern spell.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t50",
+    "dbf_id": 132732,
+    "name": "Tarecgosa's Blessing",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "Permanently keeps <b><b>Bonus Keyword</b>s</b> and double stats gained in combat.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t51",
+    "dbf_id": 132733,
+    "name": "Steady Growth",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "At the end of your turn, gain +{1}/+{2}.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t52",
+    "dbf_id": 132734,
+    "name": "Fresh Perspective",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Deathrattle:</b> Gain 2 free <b>Refreshes</b>.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t60",
+    "dbf_id": 132833,
+    "name": "Invulnerability",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Immune</b> while attacking.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t61",
+    "dbf_id": 132835,
+    "name": "Golemancy",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Deathrattle:</b> Summon a Golem with this minion's stats.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t62",
+    "dbf_id": 133310,
+    "name": "Sunken Persistence",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "This minion's <b>Spellcrafts</b> are permanent.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t64",
+    "dbf_id": 133361,
+    "name": "Dexterity",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "Whenever you play a card, gain +2/+2.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t64t",
+    "dbf_id": 133457,
+    "name": "Dexterity",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "Whenever you play a card, gain +4/+4.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t65",
+    "dbf_id": 133344,
+    "name": "Polarization",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "At the end of your turn, <b>Magnetize</b> a random Mech to this.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t66",
+    "dbf_id": 133351,
+    "name": "Demonology",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Rally:</b> Add a <b>Fodder</b> to your next 3 <b>Refreshes</b>.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t69",
+    "dbf_id": 133353,
+    "name": "Toxicity",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Venomous</b>",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t7",
+    "dbf_id": 132205,
+    "name": "Resistance",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Start of Combat:</b> Double this minion's Health.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t71",
+    "dbf_id": 133359,
+    "name": "Hostility",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Start of Combat:</b> Double this minion's Attack.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t72",
+    "dbf_id": 133363,
+    "name": "Titanic Strength",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "+1000 Attack.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t73",
+    "dbf_id": 133421,
+    "name": "Fortitude",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "+5/+5.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t74",
+    "dbf_id": 133423,
+    "name": "Sharpened Sword",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "Whenever you play a card, gain +3 Attack.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t75",
+    "dbf_id": 133424,
+    "name": "Toughened Shield",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "Whenever you play a card, gain +3 Health.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t79",
+    "dbf_id": 133472,
+    "name": "Furtiveness",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Stealth</b>",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t80",
+    "dbf_id": 133474,
+    "name": "Consanguinity",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Rally:</b> Get 2 <b>Blood Gems</b>.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t81",
+    "dbf_id": 133482,
+    "name": "Transcendence",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Start of Combat:</b> Triple this minion's stats.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t82",
+    "dbf_id": 133860,
+    "name": "Affinity",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "At the end of every 2 turns, get a random minion of this type.",
+    "dark_gift": true
+  },
+  {
+    "id": "BG36_MidGameEffect_000t9",
+    "dbf_id": 132207,
+    "name": "Admiration",
+    "card_set": 1453,
+    "card_type": 5,
+    "text": "<b>Start of Combat:</b> Gain the Attack of the minion to the left.",
+    "dark_gift": true
+  }
+]

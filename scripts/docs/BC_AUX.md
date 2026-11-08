@@ -1,0 +1,711 @@
+# 真实人类对局 BC 辅助正则（形态 A + 分层目标）
+
+> 状态：**已接入 PPO，默认关闭**。`bc_coef=0` 时不会加载数据、不编码、不采样、不算 loss，
+> 训练路径与旧版本逐位等价（同 seed `model.pt` SHA256 相同，2026-10-29 实测
+> `5d6ec0428b4469a62934b9087da9b03c6f43f5d13af4c200393d598433d7d057`）。
+> v2 起 BC 目标改为**分层目标**：动作类型级（9 类，245 logits 的 log-sum-exp 聚合）
+> + 卡牌身份级（buy/play 样本上的 3983 类 `card_head`），见 §11。
+> 本文记录数据来源、过滤/编码假设、权重策略、启用/回退方法与失败判据。实现：
+> `hsbg/az/train/bc_aux.py`、`hsbg/az/train/ppo.py`、
+> `hsbg/az/train/ppo_trainer.py`、`scripts/train_entity_sync.py`；单测：
+> `tests/test_bc_aux.py`、`tests/test_bc_hier.py`。
+
+---
+
+## 1. 目标与形态
+
+主目标是 PPO clipped surrogate（+ 可选 MCTS π 辅助 CE / 动作序列辅助 BCE）。
+BC 只作为**小权重辅助交叉熵**加入**同一次 backward**：
+
+```text
+total = ppo_policy + value_coef * value + pi_coef * aux_pi
+        + seq_coef * seq_bce
+        + bc_coef * (bc_type_weight * CE_type
+                     + bc_card_weight * CE_card)      # ← 本模块；默认 bc_coef=0
+```
+
+它**不改变**主目标、不替换自对弈数据、不单独 step；只提供“人类在相似状态下更常选
+哪些动作/哪张卡”的先验，缓解冷启动/策略坍缩。形态 A 的硬约束：
+
+- 默认 `bc_coef=0` 时零影响（权重逐位相同，stats/日志不出现 `bc_*`，不构建
+  `card_head`）；
+- BC 系数可 ramp（与 `seq_coef_ramp` 同一实现/语法）；
+- 加载失败/池为空只 warn 一次并自动 `bc_coef=0`，不崩训练；
+- 数据/编码/损失均为纯函数，可单测（不依赖引擎）。
+
+---
+
+## 2. 数据来源与质量
+
+| 项 | 值 |
+|---|---|
+| 文件 | `data/firestone_bc/bc_samples.jsonl.gz`（gzip JSONL，12 MB） |
+| 样本 | 308,944 条真实决策（1000 局 Firestone 回放，客户端视角） |
+| 字段 | 见 `data/firestone_bc/SCHEMA.md`；实际抽样确认 `action_index` 已映射到 245 动作空间 |
+| 动作可映射 | 290,034 / 308,944 = **93.88%** |
+| 卡表命中 | 6,009,406 / 6,012,268 = **99.95%**（唯一未命中是 UI 按钮 `BG36_Button_DarkGift`） |
+| MMR | 4,009–15,407，中位 6,280 |
+| 解析器 | `scripts/firestone_bc_parse.py`（仅标准库） |
+| 统计/可行性 | `docs/BC_DATA_FEASIBILITY.md` |
+
+本实现的实际池（默认白名单 + `mmr>=6000`）：
+
+```text
+samples = 183,245（过滤前 308,944）
+load    ≈ 7–8 s（单进程，含 cards.json 解析）
+mmr     6,000–15,407，mean ≈ 7,022
+```
+
+类别分布（`load_bc_samples(mmr_min=6000)`，同时是启动日志内容）：
+
+| action_type | 样本 | 占比 |
+|---|---:|---:|
+| play_minion | 43,081 | 23.51% |
+| play_spell | 38,124 | 20.80% |
+| sell | 35,228 | 19.22% |
+| reroll | 27,662 | 15.10% |
+| buy_minion | 15,821 | 8.63% |
+| buy_spell | 9,169 | 5.00% |
+| end_turn | 7,638 | 4.17% |
+| hero_power | 3,472 | 1.89% |
+| upgrade | 3,050 | 1.66% |
+
+高频 `play_*` / `sell` 与低频 `upgrade` / `hero_power` 相差 14 倍，因此损失必须做
+class-balanced（见 §5），不能直接按样本均匀平均。
+
+数据质量风险（来自解析器与可行性文档，BC 侧仍成立）：
+
+- 客户端事件不是引擎 `state_json`，实体 id/触发顺序不可逐位复现；
+- 商店由 Bob 控制的 zone 1/6 卡重建，买入目标命中 99.3%/96.3%，仍有 1–4% 槽位错位；
+- 17.2% 的 `play_minion` 在 block start 时卡已不在手牌（hand slot 缺失）→ 这类
+  `action_index=null` 已被过滤；
+- 换位（`reposition`）、冻结（toggle 语义）、黑暗赠礼（礼物卡未知）、三连（option 未解析）
+  标签噪声大，**不纳入白名单**；
+- 回放没有最终名次，只有 MMR；不能按 placement 加权（本实现用 MMR 权重）。
+
+---
+
+## 3. 白名单与排除原因
+
+默认白名单（`DEFAULT_BC_ACTION_TYPES`，顺序即类别 id）：
+
+```text
+sell, reroll, buy_minion, buy_spell, play_spell,
+play_minion, upgrade, hero_power, end_turn
+```
+
+纳入理由：动作类型/槽位在回放中可重建，且状态覆盖高（商店 97.78%、gold/tier/health
+缺失 0.15%、手牌位 99.98% 对法术、82.8% 对随从）。`play_minion` 只保留
+`action_index` 存在的 82.8% 子集。
+
+排除：
+
+| 动作 | 样本 | 排除原因 |
+|---|---:|---|
+| reposition | 11,655 | `MOVE_MINION` 混入卡牌效果移动；槽位/语义噪声大 |
+| dark_gift | 2,862 | 礼物卡未知，只能监督“按按钮” |
+| freeze | 2,669 | 回放只看到 toggle，无法区分 Freeze/Unfreeze |
+| triple | 5,734 | `action_index=null`（选项未解析） |
+| activate | — | 回放没有单独标记 |
+| magnetize | — | BG 无磁力 |
+
+另外过滤：`action_index` 非整数/越界/`null`、`mmr` 缺失或 `< bc_mmr_min`、白名单外类型。
+
+---
+
+## 4. 部分观测编码（3227 floats + 124 cards）
+
+`bc_obs_batch(samples, layout=BC_OBS_LAYOUT)` 把每条 BC 样本编码成我们固定观测的
+**部分观测**。布局偏移全部来自 `hsbg/env/obs_std.py`（不硬编码偏移）；`BC_OBS_LAYOUT`
+明确列出实际用到的切片，单测检查 features 叶子切片与 card 块均不重叠、不越界。
+
+已知槽位（mask True）：
+
+| 块 | 填充 |
+|---|---|
+| global | turn/20、health/40、armor/20、gold/10、tier/6、board_len/7、hand_len/10、alive=1、me_alive=1（缺失字段填 0 + mask False） |
+| board | 7 × `MINION_F`：present、atk/hp/max_hp（卡表基础值 /10）、tier/6、golden、keywords/races 位 |
+| hand | 10 × `ITEM_F`：present、is_minion、cost=0（引擎手牌语义）、随从/法术子块 |
+| shop | 8 × `ITEM_F`：present、is_minion、cost/5（卡表基础价）、随从/法术子块；第 7 槽是酒馆法术槽 |
+| cards | hero(1)、board(7)、hand(10)、shop(8) 的卡表下标+1 |
+
+未知槽位/字段（mask False，值 0）：
+
+- 对手 7×9 摘要、对手 7×7×31 上局战团、pending/choices/quests/secrets/trinkets、
+  hero power 卡、法术 `data`、大多数 global 标量（upgrade/refresh price、deity、
+  trinket 等）；
+- 未观测到的 board/hand/shop 槽；
+- 英雄皮肤归一失败时的 hero（约 0.6% 样本，3 个基础英雄不在卡表）。
+
+**近似动作掩码**：`bc_obs_batch` 同时返回 `action_mask[n,245]`，由部分观测推断：
+
+- EndTurn 恒合法；HeroPower(slot0) 恒合法；Upgrade 在 tier<6 时；Refresh 在 gold>=1 时；
+- Buy(8+slot)：商店该槽有卡，且 gold 已知时不排除买不起的槽（基础价近似）；
+- Sell(16+slot)：棋盘该槽有随从；
+- Play{hand,pos}：手牌该槽有卡；法术仅 pos 0；随从按 `board_len+1` 个插入位；
+- 最后**强制把真实动作加入 mask**（保证 CE 可算）。
+
+这**不是**引擎 `legal_mask` 的精确重建，而是“白名单动作族内的条件候选集”。它避免
+BC 梯度去压低 freeze/dark_gift 等未标注动作，但也使 CE 的分母小于真实合法动作数
+（实测平均约 34 个候选，均匀参考 CE ≈ ln(34) ≈ 3.5）。
+
+### 部分观测假设与风险
+
+1. **对手不可见**：回放只有记录者视角，对手手牌/金币/酒馆全程隐藏；BC 只学单边策略。
+   模型看到的是“对手块全 0 + mask False”，与引擎自对弈的完整观测分布不同，因此只能
+   作为小权重正则，不能当主数据。
+2. **商店 RNG 不可复现**：回放没有刷新序列/随机种子，同一商店在引擎里不能逐位复现；
+   BC 只提供“看到这类商店时人类怎么选”的先验。
+3. **tag 噪声**：客户端 tag 与引擎不完全一致；商店槽位 1–4% 错位、买入目标 0.7%/3.7%
+   未命中、手牌位 17% 缺失（已过滤）。
+4. **静态卡表近似**：回放没有每个随从的实时 atk/hp/关键词，本实现用卡表基础值填充；
+   实际 buff 后的数值不可见，模型可能学到“基础身材”偏差。
+5. **法术槽/价格**：shop 第 7 槽是酒馆法术；cost 用卡表基础价，实际折扣/动态价格不可见。
+6. **英雄皮肤**：`hero` 是皮肤 id，按 `_SKIN_[A-Z0-9]+` 去后缀映射到基础英雄；
+   3 个基础英雄缺失（约 1,803/308,944 样本）时 hero=0、mask False。
+7. **动作掩码不是 legal_mask**：见上；BC 是条件辅助目标，不用于评测/搜索。
+
+---
+
+## 5. 权重策略
+
+`bc_ce_loss(logits, target_action, weights, mask, class_ids, class_counts)`：
+
+```text
+per_i   = CE(logits_i, target_i)                  # 245 类，非法位已填 -1e30
+w_i     = mmr_weight_i * class_weight[class_i]    # 样本权重
+loss    = Σ_{mask_i=True} w_i * per_i / Σ_{mask_i=True} w_i
+```
+
+### 5.1 class-balanced
+
+按**动作类别频率倒数**并归一：
+
+```text
+inv_c      = 1 / count_c
+class_w_c  = inv_c / mean_{c: count_c>0}(inv_c)
+```
+
+归一化到“每个类别总权重相同、类别权重均值=1”，保持损失量级与未加权 CE 可比。
+例如 `count=[9,1]` -> `class_w=[0.2,1.8]`。`count` 默认用**全池**计数（`class_counts`），
+不是每个 minibatch 的计数，避免小 batch 抖动。
+
+### 5.2 MMR 权重
+
+- 默认：`mmr >= bc_mmr_min(6000)` -> **1.0**；低于下限直接丢弃；
+- 可选线性增强（`bc_mmr_boost > 1`）：在 `[6000, 8000]` 上从 1.0 线性升到
+  `bc_mmr_boost`，`>=8000` 保持该值。CLI：`--bc-mmr-boost 1.5`。
+- 没有 placement 字段，不能按名次加权；MMR 是唯一可用的质量代理。
+
+### 5.3 样本 mask
+
+`load_bc_samples` 已过滤非法/缺失；`bc_ce_loss` 的 `mask` 参数用于额外屏蔽（本路径
+传 None/全 True）。全 mask 掉或权重全 0 时返回 0（保留计算图，不产生 NaN）。
+
+---
+
+## 6. PPO 接入细节
+
+### 6.1 配置（`PPOConfig`）
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `bc_coef` | 0.0 | BC 总权重；0=关闭（不加载/不建 card_head/不出 stats） |
+| `bc_coef_ramp` | `""` | 与 `seq_coef_ramp` 同语法，如 `0.005@0,0.02@0.3` |
+| `bc_type_weight` | 1.0 | 类型级 CE 权重（9 类 log-sum-exp 聚合） |
+| `bc_card_weight` | 0.5 | 卡牌身份 CE 权重（buy/play 的 3983 类 card_head）；0=不建头 |
+| `bc_mmr_min` | 6000 | MMR 下限 |
+| `bc_mmr_boost` | 1.0 | 6000–8000 线性增强上限（1=关闭） |
+| `bc_samples_path` | `""` | 空=仓库默认 `data/firestone_bc/bc_samples.jsonl.gz` |
+| `bc_batch` | **128** | 每个 PPO 微批抽取/编码的 BC 条数（固定形状编译；原 256） |
+| `bc_every` | 1 | 每 N 个 PPO 微批做一次 BC；N>1 时该步权重乘 N（等效平均权重） |
+| `bc_compile` | 1 | `compile_train>0` 时把 BC 批次单独 `torch.compile`；0=保持 eager（A/B 基线） |
+
+### 6.2 训练流程
+
+1. `PPOTrainer.__init__`：`bc_enabled`（常数系数>0 或 ramp 有正系数）时预加载一次
+   `BCSamples`（CLI 预加载后通过 `bc_pool=` 注入，避免重复读 12 MB）；失败/空池
+   **warn 一次**，自动 `bc_coef=0, bc_coef_ramp=""`；
+2. `train_ppo` 每个 PPO 微批（`bc_every>1` 时每 N 个微批）：从 BC 池用**独立 RNG**
+   抽 `min(bc_batch, n_pool)` 条 -> `bc_obs_batch` -> 额外一次 `forward_bc`（同一张图
+   同时出 policy logits 与 card logits；`compile_train>0` 且 `bc_compile=1` 时走
+   **单独编译的固定 `bc_batch` 形状图**）-> 分层 BC loss ->
+   `total += bc_coef*N * (w_type*CE_type + w_card*CE_card)`（跳过步不执行、不占开销）；
+3. 与 PPO/seq 共用同一次 `backward()`，不单独 `optimizer.step()`；
+4. stats 增加 `bc_loss` / `bc_type_loss` / `bc_card_loss` / `bc_coef` / `bc_samples` /
+   `bc_pool_samples` / `bc_pool`（仅 bc 真正启用时）；`[ppo] step/epoch` 与
+   `[iter i]` 日志追加 `bc=... bc_type=... bc_card=... bc_coef=... bc_samples=...`；
+5. `bc_coef=0`：不加载、不采样、不 forward、不出 stats 字段；`history.jsonl` 的
+   `config` 回显也去掉全部 `bc_*` 键，保持旧结构。
+
+### 6.3 ramp
+
+`parse_bc_coef_ramp(spec)` 直接复用 `seq_aux.parse_coef_ramp`（同一语法/校验/排序）。
+CLI 按**累计 decisions** 的进度求值后写回 `config.bc_coef`（与 seq ramp 同一进度口径）：
+
+```text
+progress = min(1, cum_decisions / total_decisions)
+bc_coef  = linear_interp(points, progress)
+```
+
+`total_decisions` 取 `--stop-at-decisions`（>0），否则 30M（与 seq 的缺省一致）。
+
+---
+
+## 7. 如何开启 / 回退
+
+### 7.1 默认（关闭，零影响）
+
+```bash
+python scripts/train_entity_sync.py ...   # 不传任何 --bc-*
+```
+
+或显式：
+
+```bash
+python scripts/train_entity_sync.py ... --bc-coef 0
+```
+
+两者模型权重/PPO 指标应逐位一致（见 §8 冒烟）。
+
+### 7.2 从 s5 最佳 ckpt 起的新阶段（建议）
+
+**不要中断正在跑的 s5**。等 s5 结束/到阶段边界后，从最佳 ckpt 起新阶段：
+
+```bash
+python scripts/train_entity_sync.py \
+  --checkpoint runs/az_entity_s5/model.pt \
+  --arch entity --device cuda:7 \
+  --processes 1 --gpus "" --workers 1 --sims 0 \
+  --bc-coef 0.01 \
+  --bc-coef-ramp 0.005@0,0.01@0.2 \
+  --bc-mmr-min 6000 --bc-mmr-boost 1.0 \
+  --bc-samples data/firestone_bc/bc_samples.jsonl.gz \
+  --bc-batch 256 \
+  ...（其余沿用 stage 的超参）
+```
+
+建议初值：**从零/tiny 冷启动 `bc_coef=0.01`；从 s5 等已训练 ckpt 起用
+`bc_coef=5e-4–1e-3`**，`bc_batch=256`，`bc_mmr_min=6000`。已训练 ckpt 的
+`bc_loss` 初始可达 14–18（部分观测 OOD + 人类与当前策略差异），0.01 可能压过 PPO；
+先从 `5e-4` 观察 `bc_loss` 与 C0 eval，若稳定再升到 `0.005–0.01`。ramp 让 BC 在阶段
+早期略强、后期让位给 PPO：
+
+```text
+--bc-coef-ramp 0.01@0,0.01@0.3,0.005@1.0
+```
+
+### 7.3 回退
+
+- 运行时：`--bc-coef 0`（不加载、零影响）；
+- 已启动的训练：不要热改；下一个阶段用 `bc_coef=0` 从 ckpt 重启；
+- 数据缺失：保持 `bc_coef=0`；若误开，加载失败会自动关闭并 warn。
+
+---
+
+## 8. 冒烟数字（本机）
+
+> 环境：`/home/data/users/gaoletian/.conda/envs/hiermolgen/bin/python`（torch 2.6 / cu124）。
+> 未触碰 s5（`/tmp/s5c_train.log`，out=`runs/az_entity_s5`）。
+
+### 8.1 CPU tiny（`--bc-coef 0.01`，2 iter，`bc_batch=64`）
+
+```text
+[bc] 真实人类 BC 池: samples=183245 mmr>=6000 load=7.2s
+[bc] class_counts={"sell":35228,...}
+[ppo] epoch 1/1 ... bc=3.2246 bc_coef=0.01 bc_samples=64
+[iter 0] ... bc=3.2246 bc_coef=0.01 bc_samples=64
+[ppo] epoch 1/1 ... bc=3.4528 bc_coef=0.01 bc_samples=64
+[iter 1] ... bc=3.4528 bc_coef=0.01 bc_samples=64
+```
+
+12 iter（`bc_batch=128`）的 `bc_loss` 从 **3.345** 降到 **3.10–3.29**（单步/小 batch
+有抖动；趋势向下）。作为参考：动作掩码平均约 34 个候选，均匀策略 CE ≈ ln(34) ≈ 3.53；
+模型初始 CE 3.35 已低于该参考。任务描述中的 `ln(9)` 对应“9 个动作类别”，实际 CE 是
+245 动作 + 槽位掩码，参考值应以候选槽位数为准。
+
+### 8.2 等价性（`bc_coef=0`）
+
+两次 CPU tiny 运行：A 显式 `--bc-coef 0`，B 不传 BC 参数；同 `--seed 0`、同 batch：
+
+- `model.pt` SHA256 完全相同：
+  `2cd378e27c8bdcc9c9cc7e483f743f902726903c9b2f26ef6290c1a14c48881f`
+- `history.jsonl` 去掉墙钟字段（`seconds`/`profile`/`collect.elapsed_s`）与
+  `args.out` 后逐项相同；PPO `total/policy/value/entropy/kl` 输出行逐字相同。
+
+### 8.3 GPU（cuda:7）
+
+tiny（1 iter）：
+
+```text
+[bc] 真实人类 BC 池: samples=183245 mmr>=6000 load=7.5s
+[ppo] step 0 total=1.0336 ... bc=3.1946 bc_coef=0.01
+[ppo] epoch 1/2 ... bc=3.1720 bc_coef=0.01 bc_samples=64
+[ppo] epoch 2/2 ... bc=3.3803 bc_coef=0.01 bc_samples=64
+[iter 0] ... bc=3.2761 bc_coef=0.01 bc_samples=64
+```
+
+**从 s5 ckpt 起（entity，cuda:7，1 iter）**：`bc_loss` 初始约 **14–18**（不是 2–4）。
+原因：s5 策略在“部分观测（对手全 0、商店/手牌只填可见槽）”上高度自信，且人类动作与
+当前策略差异大；动作掩码已把 CE 从全 245 掩码时的 ~217 降到 ~14。
+**结论：从已训练 ckpt 启用时不要直接用 0.01**；建议 `bc_coef=5e-4…1e-3` 起步，
+或先跑 20–50 iter 观察，确认 C0 eval 不退化后再升到 0.005–0.01。
+从零/tiny 冷启动则 0.01 可用（§8.1）。
+
+### 8.4 测试
+
+```text
+# 默认环境（/tmp/hsbrsim_clone/rust/python 的旧 _core，缺 RustCollector）
+# 会先失败在 8 个既有 rust-collector/mirror 测试；与本改动无关。
+# 用仓库自身引擎跑全量：
+PYTHONPATH=$PWD/rust/python python -m pytest tests -q -p no:warnings
+# => 全部通过（lastfailed={}；仅 skip 既有引擎相关用例）
+```
+
+`tests/test_bc_aux.py` 覆盖：加载/白名单/缺失字段、MMR 权重、class-balanced、
+切片不重叠、CE 手算、`bc_coef=0` 逐位等价、`bc_coef>0` stats。
+`tests/test_bc_hier.py` 覆盖（v2 分层目标）：245 动作段/9 类映射唯一性、play 按手牌
+卡种动态细分、类型 log-sum-exp CE 与手算一致/数值稳定、卡牌标签映射失败跳过、
+两层权重线性生效、`card_head` 构建/attach/checkpoint 往返、`bc_coef=0` 同 seed
+`model.pt` SHA256 相同、ramp 边界。
+
+---
+
+## 9. 期望收益与失败判据
+
+### 期望收益
+
+- **冷启动/坍缩**：PPO 在对手强/奖励稀疏时策略熵坍缩到少数动作；BC 提供人类动作先验，
+  提升动作多样性/合法率；
+- **槽位选择**：buy/sell/play 的槽位由 BC 监督（真正的人类偏好），比纯 PPO 随机探索更快；
+- **低频动作**：class-balanced 让 upgrade/hero_power 不被高频 play/sell 淹没；
+- **与搜索互补**：BC 不替代 MCTS/自对弈，只在小权重下稳定早期策略。
+
+### 失败判据（任一出现即回退 `bc_coef=0`）
+
+1. `bc_loss` 长期不降（例如 5 个 iteration 内没有下降趋势）或 NaN；
+2. `illegal_prob_max > 0`（BC 动作掩码/target 不一致会直接暴露）；
+3. C0 eval 的 `mean_rank` 相对 baseline 变差超过 ~0.1，或 `top4/win` 显著下降；
+4. `approx_kl` / `clip_frac` 异常升高（BC 与 PPO 梯度冲突）；
+5. entropy 异常塌缩到低于 baseline 的一半；
+6. 训练吞吐下降超过可接受范围（BC 编码/前向额外开销；CPU 实测 encode 256≈0.05s，
+   额外 forward 约 +15–25% PPO 时间，GPU 上占比更低）。
+
+### 建议启用时机
+
+- **不要在 s5 运行中热改**；等 s5 结束，从最佳 ckpt（按 C0 mean_rank/top4）起**新阶段**；
+- 从已训练 ckpt 起：`bc_coef=5e-4–1e-3` + `bc_batch=256` 跑 20–50 iter，观察 `bc_loss` 与 eval；
+- 从零/tiny：`bc_coef=0.01` 起步；
+- 若有效，再按 ramp 提到 0.005–0.01；若无效，直接回退，不影响已有 ckpt。
+
+---
+
+## 10. 复现命令
+
+```bash
+# 单测（v2 分层目标）
+python -m pytest tests/test_bc_aux.py tests/test_bc_hier.py -q -p no:warnings
+
+# CPU tiny 冒烟（1–2 iter，分层目标）
+python scripts/train_entity_sync.py --arch tiny --device cpu \
+  --games 1 --sims 0 --iterations 2 --minutes 5 \
+  --max-steps 2000 --max-actions-per-turn 10 \
+  --batch-size 8 --minibatch 16 --epochs 1 \
+  --workers 1 --processes 1 \
+  --bc-coef 0.01 --bc-type-weight 1.0 --bc-card-weight 0.5 --bc-batch 64 \
+  --out /tmp/bc_smoke_cpu
+
+# 等价性（bc_coef=0；两次都保存到同名的 model.pt）
+python scripts/train_entity_sync.py ... --bc-coef 0 --out /tmp/bc_eq_a
+python scripts/train_entity_sync.py ...              --out /tmp/bc_eq_b
+sha256sum /tmp/bc_eq_a/model.pt /tmp/bc_eq_b/model.pt
+
+# cuda:7 1 iter（空闲卡）——已训练 ckpt 的分层 BC 冒烟
+python scripts/train_entity_sync.py --arch entity --device cuda:7 \
+  --checkpoint runs/champion_c0_1975.pt \
+  --games 1 --sims 0 --iterations 1 --minutes 10 \
+  --max-steps 5000 --max-actions-per-turn 10 \
+  --batch-size 4 --minibatch 4 --epochs 1 \
+  --workers 1 --processes 1 --eval-games 0 \
+  --bc-coef 5e-4 --bc-type-weight 1.0 --bc-card-weight 0.5 --bc-batch 64 \
+  --out /tmp/bc_hier_smoke
+```
+
+---
+
+## 11. 分层目标（v2：动作类型 + 卡牌身份）
+
+### 11.1 动机
+
+从已训练 ckpt（如 `runs/champion_c0_1975.pt`）起，245 维动作 CE 初始 **14–18**：
+
+1. 部分观测（对手/未知槽位全 0 + mask False）对完整观测训练出的策略是 OOD，
+   模型在这些输入上高度自信且类型边际也偏；
+2. 商店/手牌槽位有 1–4% 错位（见 §2），槽位级 CE 会被“买/卖/打出到相邻槽”主导。
+
+分层目标把“**做什么动作类型**”和“**具体哪张卡**”拆开：
+
+- 类型级 CE 对槽位错位不敏感（同类型内换槽位不增加 loss）；
+- 卡牌身份 CE 只在 buy/play 样本上监督“是哪张卡”，与槽位无关；
+- 两个目标由**同一次 forward** 产出、加进**同一次 backward**，不需要额外网络层：
+  类型级直接对 `policy_head` 的 245 logits 做 log-sum-exp 聚合，新增的只有
+  `card_head = Linear(d_model, 3983)`。
+
+### 11.2 类型映射（9 类）
+
+类别顺序 = `BC_ACTION_TYPES`（与 `action_class` 一致）：
+
+```text
+0 sell, 1 reroll, 2 buy_minion, 3 buy_spell, 4 play_spell,
+5 play_minion, 6 upgrade, 7 hero_power, 8 end_turn
+```
+
+`STD_ACTION_SEGMENT[245]` 先由 `hsbg.env.action_space_std.SEGMENTS` 生成
+（每个动作唯一归属一个动作段，单测校验 14 段连续覆盖 0..244），再映射到 9 类：
+
+| 动作段 | 动作下标 | BC 类型 | 说明 |
+|---|---|---|---|
+| end_turn | 0 | 8 end_turn | 静态 |
+| refresh | 1 | 1 reroll | 静态 |
+| upgrade | 3 | 6 upgrade | 静态 |
+| hero_power | 4..5 | 7 hero_power | 静态 |
+| sell | 16..22 | 0 sell | 静态 |
+| buy | 8..14 | 2 buy_minion | 静态（商店 0..6 = 随从槽） |
+| buy | 15 | 3 buy_spell | 静态（商店第 7 槽 = 酒馆法术槽） |
+| play | 46..125 | 4 play_spell / 5 play_minion | **按样本观测到的该手牌槽卡种动态细分** |
+| freeze/dark_gift/cancel/activate/choose/magnetize/move | — | `-1` | 不进白名单，不参与类型聚合 |
+
+`play` 段无法只靠动作下标区分随从/法术（同一 `hand*8+pos` 编码），因此
+`bc_type_ids(samples)` 读取该样本**手牌槽的卡种**：法术槽只有 `pos=0` 计入
+`play_spell`，随从槽 8 个落位计入 `play_minion`；卡种未知的动作记 `-1`。
+**真实动作**无论手牌是否已知都被强制归入其 `action_type`（标签优先），保证
+类型 CE 的分母非空。静态可分的动作共 20 个（7 类），play 两类动态。
+
+> 注：正文任务描述里列出的 `freeze` **不在** 9 类里。BC 白名单（§3）排除 freeze
+> （回放只能看到 toggle，无法区分冻结/解冻），`DEFAULT_BC_ACTION_TYPES` 恰好 9 类；
+> 若把 freeze 计入类型分母，只会给一个永远不是目标的类加概率质量，抬高 CE。9 类
+> 与 `BC_ACTION_TYPES` / `action_class` 完全一致。
+
+聚合（数值稳定）：
+
+```text
+L_c = logsumexp_{a: type_ids[a]==c 且 action_mask[a]}  policy_logits[a]
+CE_type = 样本权重（MMR × 类型 class-balanced）加权的 9 类 CE
+```
+
+空类型（无候选）填 `-1e30` 哨兵，不会出现 `-inf`/NaN。
+
+### 11.3 卡牌身份（3983 类）
+
+- `card_head = Linear(d_model, 3983)`（37.0.0 卡表条目数；不含空槽）；
+- **零初始化**：初始 logits 全 0 = 均匀先验，`CE_card` 起点 = `ln(3983) = 8.2898`，
+  梯度稳定；随后由 BC 梯度训练；
+- 标签：`card_id` 经 `cards.json` 的 `id_to_index` 映射后减 1（0-based，0..3982）；
+  金色 `_G` 是独立卡表条目；映射失败 / 非 buy/play（4 类）样本 `card_target=-1`，
+  **不参与** card CE（仍参与 type CE）；
+- `CE_card` 只在 `card_valid` 样本上按 MMR 权重平均；**不做** 3983 类 class-balanced
+  （小 batch 上频率倒数噪声过大）；
+- 只为分层的类型/卡牌两个目标做一次额外 `forward_bc`，不改变主 PPO 前向。
+
+### 11.4 权重与 stats
+
+```text
+total = ppo + seq + bc_coef * (bc_type_weight * CE_type + bc_card_weight * CE_card)
+默认：bc_type_weight=1.0，bc_card_weight=0.5，bc_batch=128，bc_every=1，bc_coef=0（关闭）
+CLI：--bc-type-weight / --bc-card-weight / --bc-batch / --bc-every / --bc-coef / --bc-coef-ramp
+stats：bc_loss, bc_type_loss, bc_card_loss, bc_coef, bc_coef_effective, bc_samples,
+       bc_every, bc_steps, bc_type_weight, bc_card_weight（仅 bc 启用时）
+```
+
+`bc_coef=0` 时**不构建** `card_head`（模型参数量、前向、checkpoint 与旧版逐位一致）；
+checkpoint `meta.bc_card_head` / `meta.bc_card_dim` 记录是否带头及维度，`load_checkpoint`
+据此重建。旧 ckpt（无头）在 `bc_coef>0` 且 `bc_card_weight>0` 时由
+`attach_bc_card_head` 追加零初始化头（smoke 中 entity 参数量
+14,902,579 → 16,436,034，多 1,533,455 = 384×3983+3983）。
+
+### 11.5 冒烟数字（`runs/champion_c0_1975.pt`，cuda:7，1 iter）
+
+环境：`/home/data/users/gaoletian/.conda/envs/hiermolgen/bin/python`（torch 2.6.0+cu124）。
+未触碰正在跑的 arena 进程（`/tmp/arena_1975.log`）。
+
+同 512 条 BC 样本（`mmr>=6000`，随机抽样）直接前向：
+
+| 目标 | 初始值 | 参考 |
+|---|---:|---|
+| 245 维 action CE（class-balanced，旧方案） | **16.32** | 旧文档 14–18 |
+| 245 维 action CE（无 class-balanced） | 15.77 | — |
+| 类型级 CE（9 类，class-balanced） | **13.68** | 比旧 245 CE 低 2.64 |
+| 卡牌身份 CE（3983 类，零初始化） | **8.29** | = ln(3983)，均匀先验 |
+| 总 BC（w=1.0/0.5） | 17.83 | 随 card_head 训练快速下降 |
+
+`train_entity_sync.py --checkpoint champion --bc-coef 5e-4` 的 1 iter（`bc_batch=64`）：
+
+```text
+[bc] 分层目标: type_weight=1 card_weight=0.5 card_head=on coef(dec=0)=0.0005
+[bc] checkpoint 无 card_head：已追加 Linear(384, 3983)
+[ppo] step 0 ... bc=16.6235 bc_type=12.4786 bc_card=8.2898 bc_coef=0.0005
+[ppo] epoch 1/1 ... bc=16.8924 bc_type=12.7521 bc_card=8.2806 bc_coef=0.0005 bc_samples=64
+```
+
+对比结论：
+
+- 两层损失**各自**都低于旧 245 维 CE 的 14–18：type 12.5–13.7、card 8.28–8.29；
+- 类型 CE 仍未到 `ln(9)=2.2` 量级，原因是该 ckpt 在部分观测上的**类型边际**也过度
+  自信（同一批 512 条：type top1 acc=31.8%；play_minion/play_spell 的 NLL 为
+  1.45/2.91，而 sell/reroll/buy_spell/end_turn 为 15.9/20.4/21.8/20.8）。
+  分层目标去掉的是“同类型内的槽位熵”，不能修复 OOD 的过度自信；
+- 因此建议从已训练 ckpt 启用时仍用小系数（见 11.6），并观察 type/card 是否随
+  训练下降；card CE 的起点是均匀先验 8.29，前几个 minibatch 就会开始下降。
+
+离线 BC-only sanity（同一 ckpt，另取 256 条，lr=3e-4，只优化两层 BC，30 步）：
+
+```text
+step  0: type 15.01  card 8.2898
+step  5: type  5.27  card 7.8199
+step 20: type  2.26  card 4.8751
+step 30: type  1.14  card 3.9936
+```
+
+说明初始高值来自“OOD ckpt + 零初始化新头”，不是目标定义问题；分层目标的
+类型 CE 可以很快降到 `ln(9)` 附近，卡牌 CE 也随 card_head 训练快速下降。
+
+### 11.6 建议取值
+
+| 场景 | bc_coef | type_weight | card_weight | 说明 |
+|---|---:|---:|---:|---|
+| 从已训练 ckpt（champion/s5） | **5e-4 – 1e-3** | 1.0 | 0.5 | 先跑 20–50 iter 看 C0，不退化再升 |
+| 从零 / tiny 冷启动 | 0.01 | 1.0 | 0.5 | 与旧方案一致 |
+| 只修类型先验 | 1e-3 – 5e-3 | 1.0 | 0.0 | 不建 card_head（参数零增加） |
+| 只学卡牌身份 | 1e-3 | 0.0 | 0.5 | 需要 `card_head`；不建议长期单独用 |
+
+ramp 建议（按累计 decisions 的进度）：
+
+```text
+--bc-coef-ramp 5e-4@0,5e-3@0.5      # 已训练 ckpt：前期弱、中期到位
+--bc-coef-ramp 0.01@0,0.005@1.0     # 冷启动：前期强、后期让位 PPO
+```
+
+失败判据（新增）：
+
+1. `bc_type_loss` 连续 5 个 iteration 不降，或 `bc_card_loss` 长期停在 8.29 附近
+   （说明 card_head 没学到东西 / 标签映射失败率异常）；
+2. `bc_card_loss` 远低于 `ln(3983)` 但 `bc_type_loss` 升高（两层梯度冲突）；
+3. 其余沿用 §9 的 C0 / KL / entropy / 合法率判据。
+
+---
+
+## 12. 训练侧编译、`--bc-every` 与开销 A/B（2026-10-29）
+
+### 12.1 接线
+
+- `bc_batch` 默认 **128**（原 256）；`bc_every` 默认 1；`bc_compile` 默认 1。
+- `TrainForward` 为 BC 批次单独编译一张**固定 `bc_batch` 形状**的图（BC 批次与 PPO
+  minibatch 1024 不同，复用主图会触发重编译）。warmup 与 main/aux 一起做；失败只
+  warn 一次并永久回退 eager；`compile_train=0` 或 `bc_compile=0` 时行为与旧版一致
+  （BC 走 eager `forward_bc_model`）。
+- `--bc-every N`：每 N 个 PPO **微批**做一次 BC（一个 iteration 通常 ~40 个微批），
+  跳过步不 `bc_obs_batch`、不 `forward_bc`、不进 `total`。该步系数严格折算为
+  `bc_coef_eff = bc_coef * m_total / n_bc`（`m_total = epochs*ceil(n/minibatch)`，
+  `n_bc = ceil(m_total/N)`），因此 `n_bc * bc_coef_eff = m_total * bc_coef`：无论 N 是否
+  整除微批数，BC 的总权重都与每步 `bc_coef` 等价。**不是**按外迭代跳整轮（那样 wall
+  会双峰、峰值不变）。
+- BC 采样使用**独立 RNG**（`PPOTrainer.bc_rng`，进 `trainer.pt`），不扰动 PPO 的
+  permutation/采样；`bc_coef=0` 与所有跳过步对其他指标逐位无影响（单测
+  `tests/test_bc_compile.py`）。
+- stats 新增：`bc_every` / `bc_steps` / `bc_coef_effective`，以及
+  `compile.bc_compiled/bc_batch/bc_calls/bc_eager_calls`；启动日志
+  `[ppo] train compile ... bc=on(B=128)`。
+
+### 12.2 A/B：任务指定规模（`--processes 2 --games 64 --iterations 8`，cuda:7）
+
+同 checkpoint `runs/champion_c0_1975.pt`、`--compile-train 1 --amp bf16
+--minibatch 1024 --grad-accum 8 --seq-coef 0.05 --bc-coef 5e-4 --bc-batch 128`
+（镜像 3 席 p0.3 + 人类 2 席 p0.15；中位数 8 iter）：
+
+| arm | BC | `ppo_s` 中位 | wall/iter 中位 | dec/s 中位 | `bc_type_loss` | `bc_card_loss` |
+|---|---|---:|---:|---:|---:|---:|
+| arm1 | 128 / eager / every1 | 2.71 s | 5.87 s | 2424 | 14.3724 | 8.2639 |
+| arm2 | 128 / compiled / every1 | **2.59 s** | 5.74 s | 2473 | 14.3757 | 8.2638 |
+| arm3 | 128 / compiled / every2 | **2.27 s** | 5.88 s | 2399 | 14.1719 | 8.2637 |
+
+- arm2/arm3 都远低于验收线 5.5 s；该规模下 collect（~5.7 s）主导 wall，所以 wall/dec/s
+  差异在噪声内，**看 `ppo_s`**：编译 −4%，再叠加 every2 −12%。
+- 首 iter（含 inductor 首跑/allocator 预热，warmup 在计时外）约 5.6–6.2 s，其余
+  2.0–2.9 s；**下文生产 batch 用中位数**。
+
+### 12.3 生产 batch（`--games 192`，每 iter 41–43 k decisions）
+
+2 workers + learner 共用 `cuda:7`（按任务约束），因此 `ppo_s` 含抢卡；`p0` 是同一
+配置下 `bc_coef=0` 的基线，BC 成本 = `ppo_s(arm) − ppo_s(p0)`：
+
+| arm | BC 配置 | `ppo_s` 中位 | wall/iter | dec/s | BC 步/iter | BC 成本 |
+|---|---|---:|---:|---:|---:|---:|
+| p0 | 关闭 | 6.57 s | 10.41 s | 4027 | 0 | — |
+| p1 | **现状** 256 / eager / every1 | 9.86 s | 11.42 s | 3632 | 39 | **3.29 s** |
+| p1b | 128 / eager / every1 | 8.60 s | 10.75 s | 3842 | 39 | 2.03 s |
+| p2 | 128 / compiled / every1 | 8.18 s | 10.97 s | 3765 | 39 | 1.61 s |
+| p3 | 128 / compiled / every2 | 7.52 s | 10.88 s | 3800 | 20 | 0.95 s |
+| p4 | 128 / compiled / every4 | 7.08 s | 10.93 s | 3732 | 11 | 0.51 s |
+| p5 | 512 / compiled / every16 | 7.08 s | 10.36 s | 3934 | 3 | 0.51 s |
+| p6 | 256 / compiled / every8 | 6.99 s | 11.10 s | 3810 | 5 | 0.42 s |
+| **p7** | **128 / compiled / every8** | **6.70 s** | 10.82 s | 3800 | 5 | **0.13 s** |
+| **p8** | **128 / compiled / every16** | **6.66 s** | 10.54 s | 3866 | 3 | **0.09 s** |
+
+读数：
+
+1. **编译 BC 本身只值 ~20%**（p1b 2.03 s → p2 1.61 s），因为 BC 前向是 B=128 的小
+   kernel，且真实循环里还有 CPU 编码/拷贝；单图编译是必要条件，但不是主杠杆。
+2. **主杠杆是每 iteration 的 BC 样本总数**（`bc_batch × 步数`）：
+   p2/p4/p5/p6 都是 ~1.3–5.0 k 样本/iter，BC 成本 0.4–1.6 s；p7 640、p8 384 样本/iter，
+   成本 0.13/0.09 s。`--bc-every` 按 N 折算权重后，**减少的是样本数/前向次数，不是权重**。
+3. 微基准（独占 cuda:7，`forward_bc`+分层 loss 的 fwd+bwd）：B=128 eager 25.9 ms /
+   compiled 15.2 ms；B=256 compiled 19.6 ms；B=512 compiled 37.2 ms；B=1024 compiled
+   75.2 ms。**样本编码 `bc_obs_batch` 是另一个固定成本**（每样本 ~0.2–0.3 ms 的 Python
+   循环），所以「大 batch 少步数」只在样本数相近时略优（p5≈p4、p6 略低于 p4）。
+
+隔离外推（production 的 learner 独占卡；s6 实测 BC 关闭基线 **5.15 s**）：
+`ppo_s ≈ 5.15 + (arm − p0)`：p7 **≈5.28 s**、p8 ≈5.24 s、p4 ≈5.66 s、p3 ≈6.10 s、
+p2 ≈6.76 s、p1 ≈8.44 s（s6 实测 8.83 s，含 20 worker 抢卡与 bc ramp）。同卡差值与
+12.3b 的 learner-only Δ 略有出入（p7 0.13 vs 0.25 s），以 12.3b 的直接测量为准。
+
+### 12.3b learner-only 直接测量（无 collect 抢卡，cuda:7 独占）
+
+上面的 p0..p8 是「learner + 2 actor 同卡」；为拿到不受抢卡影响的裸 `ppo_s`，用
+41 000 条**合成** `PPOBatch`（=生产每 iter decisions；只影响形状/样本数，不影响
+前向与 BC 计时）直接 `PPOTrainer.update`，同一 checkpoint、`--compile-train 1
+--anchor-amp 1 --anchor-beta 0.1`，每项跑 2 次取中位（合成 batch 没 `seq_target`，
+所以绝对值比 production 低 ~0.9 s；**看差值**）：
+
+| BC | `ppo_s` | Δ vs BC 关闭 |
+|---|---:|---:|
+| 关闭 | 4.21 s | — |
+| 128 / eager / every1 | 6.24 s | **+2.03 s** |
+| 128 / compiled / every1 | 5.81 s | **+1.60 s**（编译 −21%） |
+| 128 / compiled / every2 | 5.09 s | +0.88 s |
+| 128 / compiled / every4 | 4.68 s | +0.47 s |
+| **128 / compiled / every8** | **4.46 s** | **+0.25 s** |
+| 128 / compiled / every16 | 4.37 s | +0.16 s |
+
+换算到 production（BC 关闭 5.15 s）：`--bc-every 2` ≈6.03、`--bc-every 4` ≈5.62、
+**`--bc-every 8` ≈5.40 s**、`--bc-every 16` ≈5.31 s。即 **every8 就能把 s6 的
+`ppo_s` 从 8.83 s 压到 5.4 s 左右（≤5.5 s 验收线）**，同时保持等效 BC 权重。
+
+### 12.4 结论与推荐
+
+- 任务 A/B（64 games）验收线：arm2 **2.59 s** / arm3 **2.27 s** ≤ 5.5 s ✅。
+- 生产 s6（192 games、隔离 learner）建议：
+
+  ```text
+  --compile-train 1 --anchor-amp 1 \
+  --bc-coef 5e-4 --bc-batch 128 --bc-every 8 --bc-compile 1
+  ```
+
+  learner-only 实测 Δ=+0.25 s，production 外推 ≈ **5.4 s**（BC 成本 0.25 s；现状
+  256/eager/every1 为 +2.03 s / s6 实测 8.83 s）。若想给 BC 更多梯度信号，用
+  `--bc-every 4`（≈5.62 s）或 `--bc-every 2`（≈6.03 s）；不要再用
+  `bc_batch 256 + every1`。`--bc-every 16`（≈5.31 s）收益已很小、方差更大，不推荐。
+- **实测下界**：BC 完全关闭时 `ppo_s` = 6.57 s（同卡抢占）/ 4.21 s（learner-only）。
+  every8 只剩 ~0.25 s BC 开销；要再往下只能改 BC 实现：把 `bc_obs_batch` 的逐样本
+  Python 编码向量化/缓存（当前占 BC 成本一半以上），或把 BC 拆成独立 optimizer step
+  每 K 个 iteration 跑一次。**不建议**再降 `bc_coef` 来换速度（那是目标权重，不是
+  开销开关）。

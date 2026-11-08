@@ -144,6 +144,23 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
         if game.is_over():
             rank = int(list(game.placements())[int(cfg.learner_seat)])
             _attach_rank(policy.records, rank)
+            # B10：终局盘面强度 log1p(Σatk+hp)（同一局所有记录共享）
+            _fs = None
+            _ft = None
+            try:
+                _pj = json.loads(game.player_json(int(cfg.learner_seat)))
+                _fs = float(np.log1p(sum(
+                    int(m.get("atk") or 0) + int(m.get("hp") or 0)
+                    for m in (_pj.get("board") or []))))
+                _ft = float((_pj.get("tier") or 0)) / 6.0
+            except BaseException:  # noqa: BLE001
+                _fs = None
+                _ft = None
+            if _fs is not None:
+                for _r in policy.records:
+                    _r["final_strength"] = float(_fs)
+                    if _ft is not None:
+                        _r["final_tier"] = float(_ft)
             # 长强局加权（--game-weight-mode != none）：每局记录长度与对手最强盘面
             if str(getattr(cfg, "game_weight_mode", "none") or "none") != "none":
                 _gt = max((int(r.get("turn", 0) or 0) for r in policy.records), default=0)
@@ -899,15 +916,31 @@ def collect_ppo_lockstep(model: Any, cfg: CollectConfig, *, eval_fn: Any,
         recs = by_game.get(int(st["gid"]), [])
         n_rec = len(recs)
         rank = int(list(g.placements())[seat]) if g.is_over() else 0
+        # B10：终局盘面强度 log1p(Σatk+hp)，与 rank 同点挂到本局所有记录上
+        _fs = None
+        _ft = None
+        try:
+            _pj = json.loads(g.player_json(seat))
+            _fs = float(np.log1p(sum(int(m.get("atk") or 0) + int(m.get("hp") or 0)
+                                     for m in (_pj.get("board") or []))))
+            _ft = float((_pj.get("tier") or 0)) / 6.0
+        except BaseException:  # noqa: BLE001 - 目标不可得就不挂（消费端有默认 0）
+            _fs = None
+            _ft = None
         if recs and rank:
             _attach_rank(recs, rank)
-            # 长强局加权：每局记录长度与对手最强盘面（仅 mode != none）
-            if str(getattr(cfg, "game_weight_mode", "none") or "none") != "none":
-                _gt = max((int(r.get("turn", 0) or 0) for r in recs), default=0)
-                _gs = _max_opp_strength(g, seat, N_PLAYERS)
-                for _r in recs:
-                    _r["game_turns"] = int(_gt)
-                    _r["game_bot_strength"] = float(_gs)
+        if recs and _fs is not None:
+            for _r in recs:
+                _r["final_strength"] = float(_fs)
+                if _ft is not None:
+                    _r["final_tier"] = float(_ft)
+        # 长强局加权：每局记录长度与对手最强盘面（仅 mode != none）
+        if recs and str(getattr(cfg, "game_weight_mode", "none") or "none") != "none":
+            _gt = max((int(r.get("turn", 0) or 0) for r in recs), default=0)
+            _gs = _max_opp_strength(g, seat, N_PLAYERS)
+            for _r in recs:
+                _r["game_turns"] = int(_gt)
+                _r["game_bot_strength"] = float(_gs)
         records.extend(recs)
         illegal += int(st["illegal"])
         truncated += int(st["truncated"])

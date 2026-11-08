@@ -1,6 +1,8 @@
 #!/bin/bash
 # B06 判读面板：150 / 250 / 300M 各跑一次 384 局 bot 面板（n_ls≈24）
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
+export HSBRSIM_FORCE_UPGRADE=1
+export HSBRSIM_BAN_TRINKETS=BG36_MagicItem_414
 for M in 150 250 300; do
   f=""
   for i in $(seq 1 1440); do
