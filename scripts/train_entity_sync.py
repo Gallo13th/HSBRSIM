@@ -1972,6 +1972,12 @@ def main() -> int:
                     help="强制升本的额外金币余量（默认 0=严格大于）")
     ap.add_argument("--comp-buy-bias", type=float, default=0.0,
                     help="B11 复利买卡偏置：1=商店出现核心卡时屏蔽其它购买（0=关闭）")
+    ap.add_argument("--comp-buy-include", default="MULT,GROW",
+                    help="参与买卡规则的目标类别（逗号分隔；默认 MULT,GROW）")
+    ap.add_argument("--comp-buy-mult-force-health", type=float, default=15.0,
+                    help="开局阶段放大器必须买的血量门槛（> 该值）")
+    ap.add_argument("--comp-buy-mult-force-turn", type=int, default=12,
+                    help="开局阶段放大器必须买的回合上限（<= 该值）")
     ap.add_argument("--comp-buy-max-copies", type=int, default=3,
                     help="同一张核心卡最多囤几张（达到后恢复正常购买）")
     ap.add_argument("--comp-buy-health-floor", type=float, default=12.0,
@@ -3766,6 +3772,9 @@ def main() -> int:
             forced_upgrade=bool(int(args.forced_upgrade)),
             forced_upgrade_max_tier=int(getattr(args, "forced_upgrade_max_tier", 5)),
             comp_buy_bias=float(getattr(args, "comp_buy_bias", 0.0) or 0.0),
+            comp_buy_include=str(getattr(args, "comp_buy_include", "MULT,GROW") or ""),
+            comp_buy_mult_force_health=float(getattr(args, "comp_buy_mult_force_health", 15.0)),
+            comp_buy_mult_force_turn=int(getattr(args, "comp_buy_mult_force_turn", 12)),
             comp_buy_max_copies=int(getattr(args, "comp_buy_max_copies", 3)),
             comp_buy_health_floor=float(getattr(args, "comp_buy_health_floor", 12.0)),
             comp_buy_opening_health=float(getattr(args, "comp_buy_opening_health", 20.0)),

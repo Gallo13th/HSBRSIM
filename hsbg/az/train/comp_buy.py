@@ -78,8 +78,9 @@ def _abs(p: str) -> str:
 class CompSpec:
     """``data/comp_cards.json`` 的运行时视图（卡下标 → 阵容/类别）。"""
 
-    def __init__(self, path: str = "") -> None:
+    def __init__(self, path: str = "", include: Tuple[str, ...] = ("MULT", "GROW")) -> None:
         spec = json.load(open(_abs(path or _env_spec()), encoding="utf-8"))
+        self.include = tuple(str(x).upper() for x in include)
         self.card_comp: Dict[int, Set[str]] = {}
         self.card_name: Dict[int, str] = {}
         self.card_cat: Dict[int, str] = {}
@@ -101,6 +102,17 @@ class CompSpec:
         self.mult_names = {self.card_name.get(i, "") for i in self.mult}
         for i in self.mult:
             self.card_cat[i] = "MULT"
+        self._apply_include()
+
+    def _apply_include(self) -> None:
+        """按 ``include`` 裁剪目标：只保留指定类别（默认 MULT+GROW）。"""
+        keep = {cid for cid, cat in self.card_cat.items() if cat in set(self.include)}
+        self.card_name = {k: v for k, v in self.card_name.items() if k in keep}
+        self.card_cat = {k: v for k, v in self.card_cat.items() if k in keep}
+        self.card_comp = {k: v for k, v in self.card_comp.items() if k in keep}
+        self.mult &= keep
+        self.grow &= keep
+        self.engine &= keep
 
     def early_ok(self, card: int, turn: int) -> bool:
         nm = self.card_name.get(card, "")
@@ -122,11 +134,23 @@ class CompBuyBias:
         self.opening_health = float(getattr(cfg, "comp_buy_opening_health", 20.0) or 20.0) \
             if cfg is not None else 20.0
         self.late_turn = int(getattr(cfg, "comp_buy_late_turn", 17) or 17) if cfg is not None else 17
+        # 目标类别（默认只留乘算放大器 + 成长核心；ENGINE 类"买了也不滚"，v3 起移出）
+        _inc = str(getattr(cfg, "comp_buy_include", "") or "").strip() if cfg is not None else ""
+        if not _inc:
+            _inc = (os.environ.get("HSBRSIM_COMP_BUY_INCLUDE", "") or "").strip() or "MULT,GROW"
+        self.include = tuple(x.strip().upper() for x in _inc.split(",") if x.strip())
+        # 开局阶段把 MULT 升级为"必须买"的门槛
+        self.mult_force_health = float(getattr(cfg, "comp_buy_mult_force_health", 15.0) or 15.0) \
+            if cfg is not None else 15.0
+        self.mult_force_turn = int(getattr(cfg, "comp_buy_mult_force_turn", 12) or 12) \
+            if cfg is not None else 12
         self.spec: Optional[CompSpec] = None
         if self.enabled:
             try:
-                self.spec = CompSpec(spec_path or str(
-                    (getattr(cfg, "comp_cards", "") if cfg is not None else "") or ""))
+                self.spec = CompSpec(
+                    spec_path or str((getattr(cfg, "comp_cards", "")
+                                      if cfg is not None else "") or ""),
+                    include=self.include)
             except Exception:  # noqa: BLE001 - 规格缺失就整体关闭（不中断训练）
                 self.enabled = False
                 self.spec = None
@@ -176,10 +200,10 @@ class CompBuyBias:
         shop = self._slice(cards, SLICE_CARD_SHOP, N_SHOP)
         if not shop:
             return mask, False
-        # 商店里的合法买入（slot → 卡）
-        buyable = {i: shop[i] for i in range(len(shop))
-                   if shop[i] > 0 and int(A_BUY) + i < m.size and bool(m[int(A_BUY) + i])
-                   and shop[i] in self.spec.card_name}
+        # 商店里的**全部**合法买入（slot → 卡）；目标卡是其中的子集
+        legal = {i: shop[i] for i in range(len(shop))
+                 if shop[i] > 0 and int(A_BUY) + i < m.size and bool(m[int(A_BUY) + i])}
+        buyable = {i: cid for i, cid in legal.items() if cid in self.spec.card_name}
         if not buyable:
             return mask, False
         health, turn, own = self._state(features, cards)
@@ -210,18 +234,29 @@ class CompBuyBias:
             self._protect(m, out, own, cards)
             return out, True
 
-        # ② 开局：只对放大器/早启动核心软偏置
+        # ② 开局：放大器（MULT）在门槛内**必须买**；成长核心（GROW）软偏置
+        mult_slots = [i for i, cid in buyable.items()
+                      if cid in self.spec.mult and own.get(cid, 0) < self.max_copies
+                      and health > self.mult_force_health and turn <= self.mult_force_turn]
+        if mult_slots:
+            out = np.zeros_like(m)
+            for i in mult_slots:
+                out[int(A_BUY) + i] = True
+            self.n_must += 1
+            self.n_hit += len(mult_slots)
+            self._protect(m, out, own, cards)
+            return out, True
         if health < self.opening_health:
             self.n_release += 1
             return mask, False
         slots = [i for i, cid in buyable.items()
-                 if (cid in self.spec.mult or cid in self.spec.grow)
+                 if cid in self.spec.grow
                  and own.get(cid, 0) < self.max_copies
                  and self.spec.early_ok(cid, turn)]
         if not slots:
             return mask, False
         out = np.array(m, copy=True)
-        for i in buyable:
+        for i in legal:
             if i in slots:
                 continue
             out[int(A_BUY) + i] = False
@@ -243,6 +278,7 @@ class CompBuyBias:
         if not self.enabled:
             return {}
         return {"comp_buy_mode": float(self.mode),
+                "comp_buy_threshold": float(100 * (len(self.spec.card_name) if self.spec else 0) / 123.0),
                 "comp_buy_targets": float(len(self.spec.card_name) if self.spec else 0),
                 "comp_must": float(self.n_must), "comp_soft": float(self.n_soft),
                 "comp_release": float(self.n_release)}

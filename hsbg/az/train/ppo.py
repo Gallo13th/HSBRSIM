@@ -450,6 +450,11 @@ class CollectConfig:
     comp_buy_health_floor: float = 12.0
     comp_buy_opening_health: float = 20.0
     comp_buy_late_turn: int = 17
+    #: 目标类别过滤（v3 起默认只留放大器+成长核心；ENGINE 类"买了也不滚"）
+    comp_buy_include: str = "MULT,GROW"
+    #: 开局阶段把放大器升级为"必须买"的门槛（血量 > X 且 回合 <= Y）
+    comp_buy_mult_force_health: float = 15.0
+    comp_buy_mult_force_turn: int = 12
     #: 强制升本的**上限本数**：当前 tier >= 该值后不再强制（默认 5；<=0 = 不限）
     forced_upgrade_max_tier: int = 5
     tier_spread: bool = False

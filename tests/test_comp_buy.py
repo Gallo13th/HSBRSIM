@@ -50,7 +50,7 @@ def test_spec_has_multipliers():
     spec = _spec()
     names = {spec.card_name[i] for i in spec.mult}
     assert "布莱恩·铜须" in names and "达卡莱附魔师" in names and "提图斯·瑞文戴尔" in names
-    assert len(spec.card_name) > 100
+    assert len(spec.card_name) > 60            # v3：只留 MULT+GROW ≈85 张
 
 
 def test_must_buy_when_committed():
@@ -97,16 +97,17 @@ def test_release_when_late_turn_or_too_many_copies():
     assert not biased2                                   # 已达 max_copies
 
 
-def test_opening_soft_bias_on_multiplier():
+def test_opening_soft_bias_on_grow():
+    """v3：开局对 GROW 是软偏置（可刷新/结束回合），对 MULT 是硬强制。"""
     spec = _spec()
-    mult = sorted(spec.mult)[0]
-    # 选一张"既不是放大器也不是成长核心"的目标卡（例如纯经济/功能卡）作为对照
-    other = next(i for i in sorted(spec.card_comp)
-                 if i not in spec.mult and i not in spec.grow)
+    grow = [i for i in sorted(spec.grow) if spec.early_ok(i, 5)]
+    assert grow
+    target = grow[0]
+    other = next(i for i in range(1, 300) if i not in spec.card_name)
     g = CompBuyBias(_cfg())
-    f, c, m = _obs(shop_ids=[other, mult], health=30, turn=4)
+    f, c, m = _obs(shop_ids=[other, target], health=30, turn=5)
     out, biased = g.rewrite(f, c, m)
-    assert biased and g.n_soft == 1
+    assert biased and g.n_soft == 1 and g.n_must == 0
     assert bool(out[int(A_BUY) + 1]) and not bool(out[int(A_BUY) + 0])
     assert bool(out[A_REFRESH]) and bool(out[A_END])
 
@@ -129,3 +130,37 @@ def test_no_target_is_identity_and_disabled():
     assert not biased and out is m
     g2 = CompBuyBias(_cfg(bias=0.0))
     assert not g2.enabled
+
+
+def test_v3_mult_must_buy_in_opening():
+    """v3：开局阶段（无承诺、血量>15、回合<=12）见到放大器必须买。"""
+    spec = _spec()
+    mult = sorted(spec.mult)[0]
+    g = CompBuyBias(_cfg())
+    assert set(g.include) == {"MULT", "GROW"}
+    f, c, m = _obs(shop_ids=[700, mult], health=30, turn=5)
+    out, biased = g.rewrite(f, c, m)
+    assert biased and g.n_must == 1
+    assert list(np.flatnonzero(out)) == [int(A_BUY) + 1]
+
+
+def test_v3_engine_cards_are_not_targets():
+    """v3：ENGINE 类（如 火花破坏机）已移出目标集合。"""
+    spec = _spec()
+    engine = sorted(spec.engine)
+    assert engine == []                                   # include 裁剪后 ENGINE 为空
+    assert all(spec.card_cat.get(i) in ("MULT", "GROW") for i in spec.card_name)
+
+
+def test_v3_max_copies_default_two():
+    """v3：max_copies 默认 2 ⇒ 同卡已有 2 张就不再强制。"""
+    spec = _spec()
+    mult = sorted(spec.mult)[0]
+    g = CompBuyBias(type("C", (), {"comp_buy_bias": 1.0, "comp_cards": "",
+                                   "comp_buy_max_copies": 2,
+                                   "comp_buy_health_floor": 12.0,
+                                   "comp_buy_opening_health": 20.0,
+                                   "comp_buy_late_turn": 17})())
+    f, c, m = _obs(shop_ids=[mult, mult], board_ids=[mult], hand_ids=[mult], health=30, turn=5)
+    _, biased = g.rewrite(f, c, m)
+    assert not biased                                     # 已有 2 张 -> 放行

@@ -82,6 +82,10 @@ CEILING_AUX_COEF="${CEILING_AUX_COEF:-0}"
 BC_TIER_MIN="${BC_TIER_MIN:-0}"
 COMP_BUY_BIAS="${COMP_BUY_BIAS:-0}"
 COMP_CARDS="${COMP_CARDS:-data/comp_cards.json}"
+COMP_BUY_INCLUDE="${COMP_BUY_INCLUDE:-MULT,GROW}"
+COMP_BUY_MAX_COPIES="${COMP_BUY_MAX_COPIES:-2}"
+COMP_BUY_MULT_FORCE_HEALTH="${COMP_BUY_MULT_FORCE_HEALTH:-15}"
+COMP_BUY_MULT_FORCE_TURN="${COMP_BUY_MULT_FORCE_TURN:-12}"
 FORCED_UPGRADE_MAX_TIER="${FORCED_UPGRADE_MAX_TIER:-5}"
 FORCED_UPGRADE_MARGIN="${FORCED_UPGRADE_MARGIN:-0}"
 TARGET_KL="${TARGET_KL:-0.02}"
@@ -198,7 +202,9 @@ CMD=("$PY" scripts/train_entity_sync.py
   --shaping-tier-bonus 0,0,20,60,150,400,900
   --forced-upgrade "$FORCED_UPGRADE" --forced-upgrade-margin "$FORCED_UPGRADE_MARGIN" \
   --forced-upgrade-max-tier "$FORCED_UPGRADE_MAX_TIER" \
-  --comp-buy-bias "$COMP_BUY_BIAS" --comp-cards "$COMP_CARDS"
+  --comp-buy-bias "$COMP_BUY_BIAS" --comp-cards "$COMP_CARDS" \
+  --comp-buy-include "$COMP_BUY_INCLUDE" --comp-buy-max-copies "$COMP_BUY_MAX_COPIES" \
+  --comp-buy-mult-force-health "$COMP_BUY_MULT_FORCE_HEALTH" --comp-buy-mult-force-turn "$COMP_BUY_MULT_FORCE_TURN"
   --tier-target-coef "$TIER_COEF" --tier-penalty "$TIER_PENALTY" --tier-bonus "$TIER_BONUS"
   --tier-target-table "$TIER_TABLE" --tier-spread "$TIER_SPREAD"
   --library-p 0.0 --lockstep 1 --fast-act 1 --amp bf16

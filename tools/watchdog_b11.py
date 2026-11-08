@@ -37,6 +37,8 @@ FORCED_UPGRADE_MAX_TIER = "5"         # B10：到 5 本即停止强制
 CEILING_AUX_COEF = "0.02"             # B10：终局上限辅助头系数（续训必须保留）
 COMP_BUY_BIAS = "1"                    # B11：复利核心卡买卡偏置
 COMP_CARDS = "data/comp_cards.json"
+COMP_BUY_INCLUDE = "MULT,GROW"
+COMP_BUY_MAX_COPIES = "2"
 GAME_WEIGHT_ALPHA = "0.5"
 GAME_WEIGHT_BETA = "0.5"
 GAME_WEIGHT_FLOOR = "0.5"
@@ -137,6 +139,7 @@ export FORCED_UPGRADE="{forced_upgrade}" FORCED_UPGRADE_MARGIN="0" FORCED_UPGRAD
 export CEILING_AUX_COEF="{ceiling_aux_coef}" BC_COEF="0.0"
 export COMP_BUY_BIAS="{comp_buy_bias}" COMP_CARDS="{comp_cards}"
 export HSBRSIM_COMP_BUY_BIAS="{comp_buy_bias}"
+export HSBRSIM_COMP_BUY_INCLUDE="{comp_buy_include}"
 export HSBRSIM_COMP_CARDS="{comp_cards}"
 export HSBRSIM_BAN_TRINKETS="{ban_trinkets}"
 export HSBRSIM_FORCE_UPGRADE="{forced_upgrade}"
@@ -151,6 +154,7 @@ HB_RAMP="$HB_RAMP" HB_QUANTILE_RAMP="$HB_QUANTILE_RAMP" RAMP_MODE="$RAMP_MODE" R
 HB_LIB="$HB_LIB" HB_FIDELITY="$HB_FIDELITY" HB_SEATS="$HB_SEATS" \\
 FORCED_UPGRADE="$FORCED_UPGRADE" FORCED_UPGRADE_MARGIN="$FORCED_UPGRADE_MARGIN" FORCED_UPGRADE_MAX_TIER="$FORCED_UPGRADE_MAX_TIER" \\
 CEILING_AUX_COEF="$CEILING_AUX_COEF" BC_COEF="0.0" COMP_BUY_BIAS="$COMP_BUY_BIAS" COMP_CARDS="$COMP_CARDS" \\
+COMP_BUY_INCLUDE="$COMP_BUY_INCLUDE" COMP_BUY_MAX_COPIES="$COMP_BUY_MAX_COPIES" \\
 HSBRSIM_BAN_TRINKETS="$HSBRSIM_BAN_TRINKETS" \\
 HSBRSIM_FORCE_UPGRADE="$HSBRSIM_FORCE_UPGRADE" \\
 FROZEN_SEATS=0 FROZEN_OPPONENT="" LEAF_WAIT_MS=0.0 FORCE=1 \\
@@ -163,7 +167,8 @@ bash scripts/run_stage300m.sh
            ban_trinkets=BAN_TRINKETS, forced_upgrade=FORCED_UPGRADE,
            ceiling_aux_coef=CEILING_AUX_COEF,
            forced_upgrade_max_tier=FORCED_UPGRADE_MAX_TIER,
-           comp_buy_bias=COMP_BUY_BIAS, comp_cards=COMP_CARDS)
+           comp_buy_bias=COMP_BUY_BIAS, comp_cards=COMP_CARDS,
+           comp_buy_include=COMP_BUY_INCLUDE, comp_buy_max_copies=COMP_BUY_MAX_COPIES)
 
 
 def launch(done, snap_iter, seed):
@@ -228,7 +233,8 @@ def launch(done, snap_iter, seed):
                 exp = {"HSBRSIM_FORCE_UPGRADE": FORCED_UPGRADE,
                        "HSBRSIM_FORCE_UPGRADE_MAX_TIER": FORCED_UPGRADE_MAX_TIER,
                        "CEILING_AUX_COEF": CEILING_AUX_COEF,
-                       "HSBRSIM_COMP_BUY_BIAS": COMP_BUY_BIAS}
+                       "HSBRSIM_COMP_BUY_BIAS": COMP_BUY_BIAS,
+                       "HSBRSIM_COMP_BUY_INCLUDE": COMP_BUY_INCLUDE}
                 for k, v in exp.items():
                     if str(envmap.get(k, "")).strip() != str(v).strip():
                         bad.append("env:%s=%r!=%r" % (k, envmap.get(k), v))
