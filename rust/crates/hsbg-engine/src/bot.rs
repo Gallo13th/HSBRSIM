@@ -207,9 +207,12 @@ pub fn play_turn(g: &mut Game, p: PlayerId) -> bool {
         }
         let a = choose_action(g, p);
         if g.apply(p, a).is_err() {
-            // Fall back to ending the turn / first option.
+            // Fall back to ending the turn / first option / cancelling an unaffordable
+            // pending offer (a paid trinket nobody can afford has no legal option).
             let fallback = if g.players[p].pending.is_empty() {
                 Action::EndTurn
+            } else if g.legal_mask(p).get(crate::actions::A_CANCEL).copied().unwrap_or(false) {
+                Action::Cancel
             } else {
                 Action::Choose(0)
             };

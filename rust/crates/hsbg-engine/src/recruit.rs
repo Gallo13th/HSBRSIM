@@ -2310,6 +2310,20 @@ impl Game {
 
     /// Back out of a cancellable pending choice (spell/hero power/Activate targeting).
     pub fn cancel(&mut self, p: PlayerId) -> ActResult {
+        // 逃生口（与 `legal_mask` 的 `!any` 分支对应）：付费饰品单一个都买不起时，
+        // 放弃该单而不是把这一座卡死。
+        let trinket_offer = match self.players[p].pending.last() {
+            Some(Pending::Trinket { options, free, .. }) => Some((options.clone(), *free)),
+            _ => None,
+        };
+        if let Some((options, free)) = trinket_offer {
+            let gold = self.players[p].gold;
+            if !free && !options.iter().any(|t| self.trinket_price(p, *t) <= gold) {
+                self.drop_unaffordable_trinket_offers(p);
+                self.log(|| format!("p{p}: cancel unaffordable trinket offer"));
+                return Ok(());
+            }
+        }
         let pl = &mut self.players[p];
         match pl.pending.last() {
             Some(top) if top.cancellable() => {

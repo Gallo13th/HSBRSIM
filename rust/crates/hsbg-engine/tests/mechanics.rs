@@ -12064,9 +12064,10 @@ fn a_saved_game_is_checked_against_the_card_table() {
 }
 
 #[test]
-fn a_seat_without_a_legal_action_stops_the_bots_at_once() {
-    // A paid trinket offer nobody can afford and nobody can decline (built by hand: the
-    // engine skips such an offer).
+fn an_unaffordable_paid_trinket_offer_can_be_cancelled() {
+    // A paid trinket offer nobody can afford and that cannot be declined: since
+    // 2026-11-08 the seat gets `A_CANCEL` as an escape hatch (otherwise the whole game
+    // deadlocks with an all-false mask — that crash hit training 194 times).
     let mut g = game(9502);
     let dear = *g
         .trinket_universe
@@ -12079,9 +12080,12 @@ fn a_seat_without_a_legal_action_stops_the_bots_at_once() {
         free: false,
         replace: None,
     });
-    assert!(g.needs_action(0) && !g.legal_mask(0).iter().any(|x| *x));
-    assert!(!hsbg_engine::bot::play_turn(&mut g, 0), "nothing was done");
-    assert!(g.players[0].pending.len() == 1);
+    let mask = g.legal_mask(0);
+    assert!(g.needs_action(0));
+    assert!(mask[hsbg_engine::actions::A_CANCEL], "逃生口必须存在");
+    assert!(mask.iter().any(|x| *x), "mask 不能全 False");
+    assert!(hsbg_engine::bot::play_turn(&mut g, 0), "bot 应放弃该单");
+    assert!(g.players[0].pending.is_empty(), "放弃后报价单应被移除");
 }
 
 #[test]

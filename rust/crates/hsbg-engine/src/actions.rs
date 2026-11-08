@@ -218,10 +218,17 @@ impl Game {
         }
         let pl = &self.players[p];
         if let Some(top) = pl.pending.last() {
+            let mut any = false;
             for i in 0..top.len().min(N_CHOICE) {
-                m[A_CHOOSE + i] = self.option_legal(p, i);
+                let ok = self.option_legal(p, i);
+                m[A_CHOOSE + i] = ok;
+                any |= ok;
             }
-            m[A_CANCEL] = top.cancellable();
+            // 逃生口：一个选项都点不了时允许放弃该点单。典型场景是**付费饰品单**
+            // （`Pending::Trinket { free: false }`）：单子挂起后金币被花掉，四个选项全
+            // 买不起，`cancellable()` 又是 false —— 若不在这里放行 `A_CANCEL`，该座没有
+            // 任何合法动作，整局卡死（训练侧表现为 `mask 全 False` 崩溃）。
+            m[A_CANCEL] = top.cancellable() || !any;
             return m;
         }
         let cfg = &self.cfg;

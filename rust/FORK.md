@@ -115,3 +115,16 @@ python -m pytest ../tests/test_rust_engine.py -q
   → `game_config_json()` → 全部 `E.Game(config_json=...)`；训练/评测同时生效。
 - 测试：`tests/trinket_ban.rs`（禁用它后 24 个种子 × lesser/greater 报价均不含该 id；
   禁掉全部 lesser 饰品时报价退化为空且不 panic）。
+- **2026-11-08 空 mask 死锁修复（付费饰品单买不起时无合法动作）**：
+  现象：训练采集持续报 `存在无合法动作的行（mask 全 False）`（今天 194 个现场 dump）。
+  根因：`Pending::Trinket { free: false }` 的报价单挂起后金币被花掉，四个选项
+  `trinket_price(p, t) > gold` 全部不可选，而 `Pending::cancellable()` 对饰品单恒为
+  false —— `legal_mask` 的 pending 分支只置 `A_CHOOSE*`/`A_CANCEL`，于是整座 mask 全
+  false，`needs_action` 又为 true，整局卡死。
+  修复：①`actions.rs::legal_mask` 在 pending 分支统计"有没有任何合法选项"，若一个都
+  没有则**强制放行 `A_CANCEL`**（逃生口）；②`recruit.rs::cancel` 识别"付费饰品单一个
+  都买不起"的情形，走已有的 `drop_unaffordable_trinket_offers` 放弃该单（而不是报
+  `nothing to cancel`）。
+  验证：`tests/empty_mask.rs` 用现场 dump（`tests/fixtures/empty_mask_trinket.json`）
+  断言修复后 mask 含 `A_CANCEL`、`apply` 成功；离线重放 **194/194** 个历史 dump 全部
+  恢复出合法动作（修复前 18/194 复现空 mask）。
