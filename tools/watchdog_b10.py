@@ -134,8 +134,8 @@ export HB_LIB="{hb_lib}" HB_FIDELITY="{hb_fid}" HB_SEATS="{hb_seats}"
 export FORCED_UPGRADE="{forced_upgrade}" FORCED_UPGRADE_MARGIN="0" FORCED_UPGRADE_MAX_TIER="{forced_upgrade_max_tier}"
 export CEILING_AUX_COEF="{ceiling_aux_coef}" BC_COEF="0.0"
 export HSBRSIM_BAN_TRINKETS="{ban_trinkets}"
-export HSBRSIM_FORCE_UPGRADE="{forced_upgrade}",
-                              HSBRSIM_FORCE_UPGRADE_MAX_TIER="{forced_upgrade_max_tier}"
+export HSBRSIM_FORCE_UPGRADE="{forced_upgrade}"
+export HSBRSIM_FORCE_UPGRADE_MAX_TIER="{forced_upgrade_max_tier}"
 CK="$CK" TS="$TS" OUT="$OUT" SEED="$SEED" STOP_DECISIONS="$STOP" \\
 MINUTES="$MINUTES" PROCESSES="$PROCESSES" THREADS="$THREADS" \\
 MINIBATCH="$MINIBATCH" GRAD_ACCUM="$GRAD_ACCUM" GAMES="$GAMES" \\
@@ -186,6 +186,7 @@ def launch(done, snap_iter, seed):
                      stderr=subprocess.STDOUT, start_new_session=True,
                      env=dict(os.environ, PYTHONPATH="rust/python:.",
                               HSBRSIM_FORCE_UPGRADE=FORCED_UPGRADE,
+                              HSBRSIM_FORCE_UPGRADE_MAX_TIER=FORCED_UPGRADE_MAX_TIER,
                               HSBRSIM_BAN_TRINKETS=BAN_TRINKETS))
     log("resume: snap=%d DONE=%d offset=%d eval_first=%d seed=%d" %
         (snap_iter, done, offset, eval_first, seed))
@@ -205,6 +206,27 @@ def launch(done, snap_iter, seed):
         bad = [k for k, v in checks.items() if v not in cmd]
         if GAME_WEIGHT_MODE == "none" and "--game-weight-mode" in cmd:
             bad.append("game_weight")
+        # 续训后**进程 env 精确核对**（模板里多一个逗号就会让 HSBRSIM_FORCE_UPGRADE
+        # 变成 "1," 而静默关闭强制升本——B10 在 14:59 那次续训就踩了这个坑）
+        try:
+            import glob as _glob
+            pids = [p.split("/")[2] for p in _glob.glob("/proc/[0-9]*/cmdline")
+                    if b"train_entity_sync.py" in open(p, "rb").read()]
+            pids = sorted(set(pids))
+            if not pids:
+                bad.append("no_trainer_pid")
+            else:
+                envtxt = open("/proc/%s/environ" % pids[0], "rb").read().decode(
+                    "utf-8", "replace")
+                envmap = dict(kv.split("=", 1) for kv in envtxt.split("\x00") if "=" in kv)
+                exp = {"HSBRSIM_FORCE_UPGRADE": FORCED_UPGRADE,
+                       "HSBRSIM_FORCE_UPGRADE_MAX_TIER": FORCED_UPGRADE_MAX_TIER,
+                       "CEILING_AUX_COEF": CEILING_AUX_COEF}
+                for k, v in exp.items():
+                    if str(envmap.get(k, "")).strip() != str(v).strip():
+                        bad.append("env:%s=%r!=%r" % (k, envmap.get(k), v))
+        except Exception as _e:  # noqa: BLE001
+            bad.append("env_check_failed")
         if bad:
             log("ERROR 续训口径不一致: %s（期望 seats=%s fidelity=%s lib=%s gw=%s）"
                 % (",".join(bad), HB_SEATS, HB_FIDELITY, os.path.basename(HB_LIB),
