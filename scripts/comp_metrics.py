@@ -94,9 +94,17 @@ def main() -> int:
             print("   %-16s T%s %.2f%%" % (nm, t, 100 * r))
     if args.lineups:
         d = json.load(open(args.lineups, encoding="utf-8"))
+        # 用**全部**对局（`all`），不是只显示的前 N 行（`rows`）——否则 8 个盘面的
+        # 1 张卡会被读成 1.79%，与 45 个盘面的 0.64% 差 3 倍（B09@50M 踩过这个坑）。
         boards = []
-        for g in d.get("rows") or []:
-            b = collections.Counter(u["card"] for u in g["model"]["board"])
+        src = d.get("all") or d.get("rows") or []
+        for g in src:
+            if src is not d.get("rows") and not g.get("ok"):
+                continue
+            m = g.get("model") or {}
+            if src is not d.get("rows") and not (0 < int(m.get("placement") or 0) <= 2):
+                continue
+            b = collections.Counter(u["card"] for u in (m.get("board") or []))
             if b: boards.append(b)
         s = _stats(boards)
         print("\n[%s] boards=%d slots=%d 放大器占比=%.2f%% T5+占比=%.2f%% 每唯一卡=%.2f"
