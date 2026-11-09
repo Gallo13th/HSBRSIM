@@ -45,7 +45,7 @@ def test_attach_is_idempotent_and_zero_init():
     assert getattr(m, "ceiling_head", None) is None
     attach_ceiling_head(m)
     h = m.ceiling_head
-    assert h is not None and h.out_features == 2
+    assert h is not None and h.out_features == 4
     assert float(h.weight.abs().sum()) == 0.0 and float(h.bias.abs().sum()) == 0.0
     first = m.ceiling_head
     attach_ceiling_head(m)
@@ -64,7 +64,7 @@ def test_zero_init_does_not_change_policy_logits():
         attach_ceiling_head(m)
         logits1, pred1 = forward_ceiling_model(m, f, c, mask)
     assert torch.allclose(base, logits1, atol=0.0)   # 零初始化不动策略
-    assert pred1 is not None and pred1.shape == (3, 2)
+    assert pred1 is not None and pred1.shape == (3, 4)
     assert float(pred1.abs().sum()) == 0.0
     assert pred0 is None
 
@@ -113,7 +113,7 @@ def test_ceiling_head_survives_save_load(tmp_path):
     save_checkpoint(m, str(p), meta={"arch": "entity", "d_model": 32, "n_layers": 1, "n_heads": 2})
     m2, meta = load_checkpoint(str(p), device="cpu")
     assert getattr(m2, "ceiling_head", None) is not None
-    assert m2.ceiling_head.out_features == 2
+    assert m2.ceiling_head.out_features == 4
     assert torch.allclose(m2.ceiling_head.weight, m.ceiling_head.weight)
     assert torch.allclose(m2.ceiling_head.bias, m.ceiling_head.bias)
     assert meta.get("d_model") == 32

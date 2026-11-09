@@ -1984,6 +1984,8 @@ def main() -> int:
                     help="血量 <= 该值时完全恢复正常（先保命）")
     ap.add_argument("--comp-buy-opening-health", type=float, default=20.0,
                     help="开局阶段血量低于该值就不做软偏置")
+    ap.add_argument("--comp-buy-partner", type=int, default=0,
+                    help="场上已有放大器时强制买其配套核心")
     ap.add_argument("--comp-buy-protect", default="MULT",
                     help="始终禁止卖出的类别（默认 MULT=放大器）")
     ap.add_argument("--comp-buy-late-turn", type=int, default=17,
@@ -3782,6 +3784,7 @@ def main() -> int:
             comp_buy_opening_health=float(getattr(args, "comp_buy_opening_health", 20.0)),
             comp_buy_late_turn=int(getattr(args, "comp_buy_late_turn", 17)),
             comp_buy_protect=str(getattr(args, "comp_buy_protect", "MULT") or ""),
+            comp_buy_partner=int(getattr(args, "comp_buy_partner", 0) or 0),
             comp_cards=str(getattr(args, "comp_cards", "") or ""),
             forced_upgrade_margin=float(args.forced_upgrade_margin),
             tier_target_coef=float(args.tier_target_coef),

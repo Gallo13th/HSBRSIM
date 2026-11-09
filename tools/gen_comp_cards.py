@@ -56,6 +56,17 @@ CAT = {
     "魔鳍真菌学家": "ECON", "酒馆旋风": "ECON",
 }
 
+#: 放大器 → 配套核心（来自 HSBG.md 对应阵容的"核心/附加"列表；B13 路线 1 用）
+PARTNERS = {
+    "布莱恩·铜须": ["热气球测绘员", "守门融合怪", "海藻护卫", "魔网浮灵", "恶魔干扰者",
+                    "龙族看护员", "执念诗心龙", "英勇的巢母", "上进的逃兵", "得胜的地卜术师"],
+    "达卡莱附魔师": ["小瞎眼", "魔鳍学徒", "邪火咒龙", "剃刀沼泽舞扇者", "堑壕斗士",
+                     "黑暗傀儡师", "梦魇侵蚀怪", "神秘的克熙尔", "多面辅助无人机", "转运构筑机"],
+    "提图斯·瑞文戴尔": ["断手被遗忘者", "木乃伊工匠", "德鲁斯特堕落屠夫", "丧钟死灵",
+                        "永恒召唤者", "永恒骑士", "牺牲的愤怒卫士", "鬼影幻术师", "香蕉猛猿",
+                        "下水道老鼠头目", "猎头狮鹫", "逐亡陆行鸟", "巨狼戈德林", "永恒大亨"],
+}
+
 #: 复利阵容（编号, 名称, 评级, 核心卡）—— 直接来自 HSBG.md 的 31 套里"靠成长/乘算"的那些
 COMPS = [
     ("01", "机械-手速磁力", "S", ["极性B-Box拳手", "空军上将罗杰斯", "骄傲的私掠者", "自动起床号", "火花破坏机", "复映无人机", "上进的逃兵", "布莱恩·铜须"]),
@@ -175,6 +186,9 @@ def main() -> int:
         "grow_ids": sorted({i for v in (bias_eff.get("GROW") or {}).values() for i in v}),
         "engine_ids": sorted({i for v in (bias_eff.get("ENGINE") or {}).values() for i in v}),
         "econ_ids": sorted({i for v in (bias_eff.get("ECON") or {}).values() for i in v}),
+        "partners": {amp: {nm: sorted(n2i.get(nm) or []) for nm in names
+                          if (n2i.get(nm) and avail.get(nm, 0.0) >= 0.4)}
+                     for amp, names in PARTNERS.items()},
     }
     out = os.path.join(ROOT, "data", "comp_cards.json")
     with open(out, "w", encoding="utf-8") as f:

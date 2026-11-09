@@ -476,7 +476,8 @@ def attach_strength_head(model: Any, *, norm: Optional[Dict[str, float]] = None
 
 
 #: 终局"上限"辅助头的输出维度：0=log1p(终局Σatk+hp)、1=终局 tier/6。
-CEILING_HEAD_OUT = 2
+#: 终局辅助头输出维度：0=log1p(终局强度) 1=终局tier/6 2=是否持有放大器 3=成长斜率
+CEILING_HEAD_OUT = 4
 
 
 def attach_ceiling_head(model: Any) -> Any:

@@ -452,6 +452,8 @@ class CollectConfig:
     comp_buy_late_turn: int = 17
     #: 始终保护（禁止卖出）的类别，默认 MULT（放大器买了绝不卖）
     comp_buy_protect: str = "MULT"
+    #: 场上已有放大器时强制买其配套核心（B13 路线 1）
+    comp_buy_partner: int = 0
     #: 目标类别过滤（v3 起默认只留放大器+成长核心；ENGINE 类"买了也不滚"）
     comp_buy_include: str = "MULT,GROW"
     #: 开局阶段把放大器升级为"必须买"的门槛（血量 > X 且 回合 <= Y）
@@ -1452,6 +1454,9 @@ class PPOBatch:
     final_strength: Optional[np.ndarray] = None
     #: 该局**终局 tier / 6** f32[n]（B10 的"上限"辅助头目标 1）。None = 未启用
     final_tier: Optional[np.ndarray] = None
+    #: B13 路线 2：终局是否持有放大器（0/1）与 t15→终局的成长斜率 log1p(终局)-log1p(t15)
+    final_has_amp: Optional[np.ndarray] = None
+    final_growth: Optional[np.ndarray] = None
     meta: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -1471,6 +1476,12 @@ class PPOBatch:
         if self.final_tier is not None:
             self.final_tier = np.asarray(
                 self.final_tier, dtype=np.float32).reshape(-1)
+        if self.final_has_amp is not None:
+            self.final_has_amp = np.asarray(
+                self.final_has_amp, dtype=np.float32).reshape(-1)
+        if self.final_growth is not None:
+            self.final_growth = np.asarray(
+                self.final_growth, dtype=np.float32).reshape(-1)
         if self.behavior_logprobs is not None:
             self.behavior_logprobs = np.asarray(
                 self.behavior_logprobs, dtype=np.float32).reshape(-1)
@@ -2704,6 +2715,19 @@ def ppo_losses(model: Any, batch: PPOBatch, config: PPOConfig,
                             np.asarray(_ft_np)[_ci].astype(np.float32))).to(dev)
                         if bool(torch.isfinite(_ft).all()):
                             ceiling_loss = ceiling_loss + F.smooth_l1_loss(_cp[:, 1], _ft)
+                    _fa_np = getattr(batch, "final_has_amp", None)
+                    _fg_np = getattr(batch, "final_growth", None)
+                    if _fa_np is not None and _cp.shape[1] > 2:
+                        _fa = torch.from_numpy(np.ascontiguousarray(
+                            np.asarray(_fa_np)[_ci].astype(np.float32))).to(dev)
+                        if bool(torch.isfinite(_fa).all()) and float(_fa.sum()) > 0.0:
+                            ceiling_loss = ceiling_loss + F.binary_cross_entropy_with_logits(
+                                _cp[:, 2], _fa)
+                    if _fg_np is not None and _cp.shape[1] > 3:
+                        _fg = torch.from_numpy(np.ascontiguousarray(
+                            np.asarray(_fg_np)[_ci].astype(np.float32))).to(dev)
+                        if bool(torch.isfinite(_fg).all()) and float(_fg.abs().sum()) > 0.0:
+                            ceiling_loss = ceiling_loss + F.smooth_l1_loss(_cp[:, 3], _fg)
                     ceiling_term = ceiling_coef * ceiling_loss
                     ceiling_n = int(_fs.numel())
 

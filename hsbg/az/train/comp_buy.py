@@ -99,6 +99,8 @@ class CompSpec:
         self.mult: Set[int] = {int(i) + 1 for i in (spec.get("mult_ids") or [])}
         self.grow: Set[int] = {int(i) + 1 for i in (spec.get("grow_ids") or [])}
         self.engine: Set[int] = {int(i) + 1 for i in (spec.get("engine_ids") or [])}
+        self.partners: Dict[str, Dict[str, List[int]]] = spec.get("partners") or {}
+        self.bias: Dict[str, Dict[str, List[int]]] = spec.get("bias") or {}
         self.mult_names = {self.card_name.get(i, "") for i in self.mult}
         for i in self.mult:
             self.card_cat[i] = "MULT"
@@ -165,7 +167,24 @@ class CompBuyBias:
                 self.protect_ids |= set(self.spec.mult if cat == "MULT" else
                                         (self.spec.grow if cat == "GROW" else
                                          (self.spec.engine if cat == "ENGINE" else set())))
+        # 放大器 → 配套核心（B13 路线 1）：场上已有放大器时，把该放大器的配套卡加入必须买
+        _pm = getattr(cfg, "comp_buy_partner", 0) if cfg is not None else 0
+        self.partner_mode = ("1" if int(_pm or 0) else ""
+                             ) or str(os.environ.get("HSBRSIM_COMP_BUY_PARTNER", "") or "").strip()
+        self.partners = {}      # amp_code -> {partner_code: name}
+        self.amp_code2name = {}
+        if self.spec is not None and self.partner_mode not in ("", "0"):
+            for amp, tbl in (self.spec.partners or {}).items():
+                acodes = {int(x) + 1 for x in (self.spec.bias.get("MULT", {}).get(amp) or [])}
+                for c in acodes:
+                    self.amp_code2name[c] = amp
+                    self.partners.setdefault(c, {})
+                for nm, ids in (tbl or {}).items():
+                    for i in ids:
+                        for c in acodes:
+                            self.partners[c][int(i) + 1] = nm
         # 统计
+        self.n_partner_forced = 0
         self.n_protected = 0
         self.n_must = 0
         self.n_soft = 0
@@ -232,9 +251,29 @@ class CompBuyBias:
         legal = {i: shop[i] for i in range(len(shop))
                  if shop[i] > 0 and int(A_BUY) + i < m.size and bool(m[int(A_BUY) + i])}
         buyable = {i: cid for i, cid in legal.items() if cid in self.spec.card_name}
+        health, turn, own = self._state(features, cards)
+        # ①' 已经持有放大器 ⇒ 必须买它的配套核心（B13 路线 1）。
+        # 注意：配套卡通常不在 include 的目标类别里，所以这里用 legal（全部合法买入）判定。
+        if self.partners:
+            board = self._slice(cards, SLICE_CARD_BOARD, N_BOARD)
+            want = {}
+            for _i, _cid in enumerate(board):
+                if _cid > 0 and _cid in self.partners:
+                    want.update(self.partners[_cid])
+            if want:
+                pslots = [i for i, cid in legal.items()
+                          if cid in want and own.get(cid, 0) < self.max_copies]
+                if pslots:
+                    out = np.zeros_like(m)
+                    for i in pslots:
+                        out[int(A_BUY) + i] = True
+                    self.n_partner_forced += 1
+                    self.n_must += 1
+                    self.n_hit += len(pslots)
+                    self._protect(m, out, own, cards)
+                    return out, True
         if not buyable:
             return (m, True) if prot is not None else (mask, False)
-        health, turn, own = self._state(features, cards)
 
         # ── 恢复正常的通用条件 ──
         if health <= self.health_floor or turn > self.late_turn:

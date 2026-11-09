@@ -99,6 +99,7 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
         rec_prev: Optional[int] = None
         phi_prev = 0.0
         steps = 0
+        s_at_t15: Optional[float] = None   # B13：首次 turn>=15 时的盘面强度（成长斜率用）
         while not game.is_over() and steps < int(cfg.max_steps):
             acted = False
             for p in range(N_PLAYERS):
@@ -126,6 +127,15 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
                     if tier_delta:
                         tracker.queue(len(policy.records) - 1, policy.game_id, tier_delta)
                     decisions += 1
+                    if s_at_t15 is None:
+                        try:
+                            if int(json.loads(game.player_json(int(p))).get("turn") or 0) >= 15:
+                                _pj15 = json.loads(game.player_json(int(cfg.learner_seat)))
+                                s_at_t15 = float(np.log1p(sum(
+                                    int(m.get("atk") or 0) + int(m.get("hp") or 0)
+                                    for m in (_pj15.get("board") or []))))
+                        except BaseException:  # noqa: BLE001
+                            pass
                 elif gamemode == "weak":
                     game.step(int(p), _weak_bot_action(game, int(p), weak_rng))
                 else:
@@ -156,11 +166,32 @@ def _one_game(model: Any, cfg: CollectConfig, gi: int, *, search_fn: Any,
             except BaseException:  # noqa: BLE001
                 _fs = None
                 _ft = None
+            _fa = None
+            _fg = None
+            try:
+                _am = 0
+                for _m in (_pj.get("board") or []):
+                    try:
+                        if E.card_info(int(_m.get("card") or 0) + 1)[2] in (
+                                "布莱恩·铜须", "达卡莱附魔师", "提图斯·瑞文戴尔"):
+                            _am = 1
+                    except BaseException:  # noqa: BLE001
+                        pass
+                _fa = float(_am)
+                if _fs is not None and s_at_t15 is not None:
+                    _fg = float(_fs) - float(s_at_t15)
+            except BaseException:  # noqa: BLE001
+                _fa = None
+                _fg = None
             if _fs is not None:
                 for _r in policy.records:
                     _r["final_strength"] = float(_fs)
                     if _ft is not None:
                         _r["final_tier"] = float(_ft)
+                    if _fa is not None:
+                        _r["final_has_amp"] = float(_fa)
+                    if _fg is not None:
+                        _r["final_growth"] = float(_fg)
             # 长强局加权（--game-weight-mode != none）：每局记录长度与对手最强盘面
             if str(getattr(cfg, "game_weight_mode", "none") or "none") != "none":
                 _gt = max((int(r.get("turn", 0) or 0) for r in policy.records), default=0)
