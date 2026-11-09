@@ -454,6 +454,12 @@ class CollectConfig:
     comp_buy_protect: str = "MULT"
     #: 场上已有放大器时强制买其配套核心（B13 路线 1）
     comp_buy_partner: int = 0
+    #: 配套强制的最低等级（tier<该值不强制，避免早期锁死经济）
+    comp_buy_partner_tier_min: int = 4
+    #: 同一回合最多强制配套几次
+    comp_buy_partner_max_per_turn: int = 2
+    #: must=只留"买配套"；soft=同时允许结束回合
+    comp_buy_partner_mode: str = "must"
     #: 目标类别过滤（v3 起默认只留放大器+成长核心；ENGINE 类"买了也不滚"）
     comp_buy_include: str = "MULT,GROW"
     #: 开局阶段把放大器升级为"必须买"的门槛（血量 > X 且 回合 <= Y）

@@ -49,6 +49,7 @@ from hsbg.env.obs_std import (
 _DEFAULT_SPEC = "data/comp_cards.json"
 _HEALTH = int(GLOBAL_FIELD_INDEX["health"])
 _TURN = int(GLOBAL_FIELD_INDEX["turn"])
+_TIER = int(GLOBAL_FIELD_INDEX["tier"])
 
 #: 开局窗口：这些核心卡攻略建议"最晚第 N 回合启动"，超过就没意义
 EARLY_WINDOW = {"永恒骑士": 6, "牺牲的愤怒卫士": 8, "希望信使": 10, "德鲁斯特堕落屠夫": 8}
@@ -184,6 +185,18 @@ class CompBuyBias:
                         for c in acodes:
                             self.partners[c][int(i) + 1] = nm
         # 统计
+        _cfg = cfg
+        self.partner_tier_min = int(
+            (getattr(_cfg, "comp_buy_partner_tier_min", 0) if _cfg is not None else 0)
+            or os.environ.get("HSBRSIM_COMP_BUY_PARTNER_TIER_MIN", "4") or 4)
+        self.partner_max_per_turn = int(
+            (getattr(_cfg, "comp_buy_partner_max_per_turn", 0) if _cfg is not None else 0)
+            or os.environ.get("HSBRSIM_COMP_BUY_PARTNER_MAX_PER_TURN", "2") or 2)
+        _pm_mode = str(getattr(_cfg, "comp_buy_partner_mode", "") if _cfg is not None else "") \
+            or os.environ.get("HSBRSIM_COMP_BUY_PARTNER_MODE", "must") or "must"
+        self.partner_soft = _pm_mode.lower() == "soft"
+        self._pturn = -1          # 当前回合已强制配套几次
+        self._pcount = 0
         self.n_partner_forced = 0
         self.n_protected = 0
         self.n_must = 0
@@ -210,6 +223,14 @@ class CompBuyBias:
             if cid > 0:
                 own[cid] = own.get(cid, 0) + 1
         return health, turn, own
+
+    def _tier(self, features: Any) -> int:
+        """当前等级（features 的 tier 字段，scale=6）。"""
+        f = np.asarray(features, dtype=np.float32).reshape(-1)
+        try:
+            return int(round(float(f[_TIER]) * GLOBAL_FIELD_SCALE["tier"]))
+        except Exception:  # noqa: BLE001
+            return 0
 
     def _commitment(self, own: Dict[int, int]) -> Dict[str, int]:
         """own 里各阵容的核心张数（MULT 不计入承诺：它们跨阵容通用）。"""
@@ -255,23 +276,45 @@ class CompBuyBias:
         # ①' 已经持有放大器 ⇒ 必须买它的配套核心（B13 路线 1）。
         # 注意：配套卡通常不在 include 的目标类别里，所以这里用 legal（全部合法买入）判定。
         if self.partners:
+            # 六道闸门（任一不满足就不强制，交回模型自由发挥）：
+            #   1. 血线：health <= health_floor 时不再强买（先保命）
+            #   2. 回合：turn > late_turn 时不再强买（后期定型）
+            #   3. 已承诺 ≥2 个阵容：不再强塞第三条线
+            #   4. tier 门槛：tier < partner_tier_min 时不强买（早期先滚经济/升本）
+            #   5. 每回合上限：同一回合最多强制 partner_max_per_turn 次
+            #   6. 张数：own[cid] >= max_copies 的卡不再强买
+            _commit = self._commitment(own)
+            _tier = self._tier(features)
             board = self._slice(cards, SLICE_CARD_BOARD, N_BOARD)
             want = {}
             for _i, _cid in enumerate(board):
                 if _cid > 0 and _cid in self.partners:
                     want.update(self.partners[_cid])
-            if want:
-                pslots = [i for i, cid in legal.items()
-                          if cid in want and own.get(cid, 0) < self.max_copies]
-                if pslots:
-                    out = np.zeros_like(m)
-                    for i in pslots:
-                        out[int(A_BUY) + i] = True
-                    self.n_partner_forced += 1
-                    self.n_must += 1
-                    self.n_hit += len(pslots)
-                    self._protect(m, out, own, cards)
-                    return out, True
+            _gate = (bool(want)
+                     and health > self.health_floor
+                     and turn <= self.late_turn
+                     and len(_commit) < 2
+                     and _tier >= self.partner_tier_min
+                     and int(turn) >= 0)
+            if _gate:
+                if int(turn) != int(self._pturn):
+                    self._pturn = int(turn)
+                    self._pcount = 0
+                if self._pcount < self.partner_max_per_turn:
+                    pslots = [i for i, cid in legal.items()
+                              if cid in want and own.get(cid, 0) < self.max_copies]
+                    if pslots:
+                        out = np.zeros_like(m)
+                        for i in pslots:
+                            out[int(A_BUY) + i] = True
+                        if self.partner_soft and int(A_END) < out.size:
+                            out[int(A_END)] = True       # soft：允许结束回合，不硬卡
+                        self.n_partner_forced += 1
+                        self._pcount += 1
+                        self.n_must += 1
+                        self.n_hit += len(pslots)
+                        self._protect(m, out, own, cards)
+                        return out, True
         if not buyable:
             return (m, True) if prot is not None else (mask, False)
 

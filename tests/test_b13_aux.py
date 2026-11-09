@@ -34,10 +34,17 @@ def test_partner_forced_when_amp_on_board():
     c = CompBuyBias(cfg=None)
     amp = next(iter(c.partners))            # 某个放大器的 cards 编码
     partner_code = next(iter(c.partners[amp]))
+    from hsbg.env.obs_std import GLOBAL_FIELD_INDEX, GLOBAL_FIELD_SCALE, OBS_FLOATS
     cards = np.zeros(4000, dtype=np.int64)
     cards[int(SLICE_CARD_BOARD.start)] = amp
     cards[int(SLICE_CARD_SHOP.start)] = partner_code
-    feat = np.zeros(4000, dtype=np.float32)
+    feat = np.zeros(int(OBS_FLOATS), dtype=np.float32)
+    _ti = int(GLOBAL_FIELD_INDEX["tier"])
+    _hi = int(GLOBAL_FIELD_INDEX["health"])
+    _ni = int(GLOBAL_FIELD_INDEX["turn"])
+    feat[_ti] = 5.0 / float(GLOBAL_FIELD_SCALE["tier"])      # tier=5（过门槛）
+    feat[_hi] = 30.0 / float(GLOBAL_FIELD_SCALE["health"])   # 血量健康
+    feat[_ni] = 9.0 / float(GLOBAL_FIELD_SCALE["turn"])       # 回合 9
     m = np.zeros(N_ACTIONS, dtype=bool)
     m[A_END] = True
     m[A_BUY] = True                          # 商店 0 号位可买
@@ -52,6 +59,47 @@ def test_partner_forced_when_amp_on_board():
             os.environ.pop(_k, None)
         else:
             os.environ[_k] = _v
+
+
+def test_partner_gates_block_force():
+    """闸门：tier 太低 / 血量太低 / 回合太晚 都不应强制买配套。"""
+    import os
+    _old = {k: os.environ.get(k) for k in
+            ("HSBRSIM_COMP_BUY_BIAS", "HSBRSIM_COMP_BUY_INCLUDE", "HSBRSIM_COMP_BUY_PARTNER")}
+    os.environ["HSBRSIM_COMP_BUY_BIAS"] = "1"
+    os.environ["HSBRSIM_COMP_BUY_INCLUDE"] = "MULT,GROW,ENGINE"
+    os.environ["HSBRSIM_COMP_BUY_PARTNER"] = "1"
+    try:
+        from hsbg.az.train.comp_buy import CompBuyBias
+        from hsbg.env.action_space_std import A_BUY, A_END, N_ACTIONS
+        from hsbg.env.obs_std import (GLOBAL_FIELD_INDEX, GLOBAL_FIELD_SCALE, OBS_FLOATS,
+                                      SLICE_CARD_BOARD, SLICE_CARD_SHOP)
+        c = CompBuyBias(cfg=None)
+        amp = next(iter(c.partners))
+        partner = next(iter(c.partners[amp]))
+        ti = int(GLOBAL_FIELD_INDEX["tier"]); hi = int(GLOBAL_FIELD_INDEX["health"])
+        ni = int(GLOBAL_FIELD_INDEX["turn"])
+        for tier, health, turn, expect_force in ((2, 30, 9, False), (5, 8, 9, False),
+                                                 (5, 30, 20, False), (5, 30, 9, True)):
+            cards = np.zeros(4000, dtype=np.int64)
+            cards[int(SLICE_CARD_BOARD.start)] = amp
+            cards[int(SLICE_CARD_SHOP.start)] = partner
+            feat = np.zeros(int(OBS_FLOATS), dtype=np.float32)
+            feat[ti] = tier / float(GLOBAL_FIELD_SCALE["tier"])
+            feat[hi] = health / float(GLOBAL_FIELD_SCALE["health"])
+            feat[ni] = turn / float(GLOBAL_FIELD_SCALE["turn"])
+            m = np.zeros(N_ACTIONS, dtype=bool)
+            m[A_END] = True
+            m[A_BUY] = True
+            out, biased = c.rewrite(feat, cards, m)
+            forced = bool(biased and out[A_BUY] and not out[A_END])
+            assert forced is expect_force, (tier, health, turn, out[A_BUY], out[A_END])
+    finally:
+        for _k, _v in _old.items():
+            if _v is None:
+                os.environ.pop(_k, None)
+            else:
+                os.environ[_k] = _v
 
 
 def test_batch_carries_b13_targets():
