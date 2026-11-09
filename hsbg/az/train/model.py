@@ -412,14 +412,32 @@ def load_checkpoint(path: str, device: str = "cpu") -> tuple[Any, Dict[str, Any]
     else:
         model = build_net(hidden, seq_head=seq_head, bc_card_head=has_card_head,
                           bc_card_dim=(card_dim or None))
-    # B10：快照里带 ceiling_head.* 时先补头，再整表加载（否则 strict load 报多余键）
-    # 补头失败（非 entity/测试替身）就退回 strict=False，保留其余权重可用。
+    # B10/B13：快照里带 ceiling_head.* 时先补头，再整表加载。
+    # 旧 checkpoint 的头是 2 维（终局强度 / tier），新头是 4 维（+是否持放大器 / 成长斜率）：
+    # 前两行语义不变直接继承，后两行零初始化，避免 size mismatch。
     _ceiling_ok = True
     if has_ceiling_head and getattr(model, "ceiling_head", None) is None:
         try:
             attach_ceiling_head(model)
         except Exception:  # noqa: BLE001 - 非 entity/测试替身
             _ceiling_ok = False
+    _h = getattr(model, "ceiling_head", None)
+    _sd = payload["state_dict"]
+    _w = _sd.get("ceiling_head.weight")
+    if _w is not None and _h is not None and tuple(_w.shape) != tuple(_h.weight.shape):
+        import torch as _t  # noqa: PLC0415
+        _nw = _t.zeros_like(_h.weight)
+        _nb = _t.zeros_like(_h.bias)
+        _n = min(int(_w.shape[0]), int(_h.out_features))
+        with _t.no_grad():
+            _nw[:_n].copy_(_w[:_n])
+            if "ceiling_head.bias" in _sd:
+                _nb[:_n].copy_(_sd["ceiling_head.bias"][:_n])
+        _sd = dict(_sd)
+        _sd["ceiling_head.weight"] = _nw
+        _sd["ceiling_head.bias"] = _nb
+        payload = dict(payload)
+        payload["state_dict"] = _sd
     if has_ceiling_head and not _ceiling_ok:
         model.load_state_dict(payload["state_dict"], strict=False)
     else:
