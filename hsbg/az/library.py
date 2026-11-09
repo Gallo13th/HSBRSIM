@@ -69,7 +69,10 @@ class BoardEntry:
 
 
 def _card_str(engine: Any, cid: int) -> str:
-    return str(engine.card_info(int(cid))[0])
+    """``cid`` 是 0 基卡 id（``state_json``/``player_json`` 的 ``card`` 字段）；
+    ``card_info`` 的下标是 ``cid + 1``（0 号留给空槽）。少加这个 1 会静默取到错卡
+    （审计实测：cid 2952 本应 ``BG36_733``，漏 +1 后取出 ``BG36_731_G``）。"""
+    return str(engine.card_info(int(cid) + 1)[0])
 
 
 def capture_turn(engine: Any, game: Any, state: Optional[Dict[str, Any]] = None,

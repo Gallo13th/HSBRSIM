@@ -54,6 +54,15 @@ def _fix_action(action: int, mask: np.ndarray) -> tuple[int, bool]:
     return (int(legal[0]) if legal.size else 0), True
 
 
+def _game_cfg() -> str:
+    """与 lockstep 采集一致的规则配置（禁用饰品、降费等都在里面）。"""
+    try:
+        from .game_rules import game_config_json
+        return game_config_json()
+    except Exception:  # noqa: BLE001
+        return "{}"
+
+
 def play_selfplay_game(policy: Policy, *, seed: int, game_id: int = 0,
                        sample_stride: int = 1, max_steps: int = 50000,
                        collect: bool = True) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
@@ -62,7 +71,7 @@ def play_selfplay_game(policy: Policy, *, seed: int, game_id: int = 0,
     返回 ``(samples, game_meta)``；samples 的 ``rank/utility`` 在终局后回填。
     """
     E = load_engine()
-    game = E.Game(seed=int(seed))
+    game = E.Game(seed=int(seed), config_json=_game_cfg())
     policy.reset()
     samples: List[Dict[str, Any]] = []
     decisions = 0

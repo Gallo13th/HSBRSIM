@@ -87,7 +87,8 @@ def test_capture_then_inject_roundtrip():
 
     same_card = 0
     for got, want in zip(actual, entry.board):
-        same_card += int(_norm(E.card_info(int(got["card"]))[0]) == _norm(want["card"]))
+        # state_json 的 card 是 cid（0 基），card_info 的下标是 cid+1
+        same_card += int(_norm(E.card_info(int(got["card"]) + 1)[0]) == _norm(want["card"]))
         assert int(got["atk"]) == int(want["atk"])
         assert int(got["hp"]) == int(want["hp"])
         assert bool(got["golden"]) == bool(want["golden"])
