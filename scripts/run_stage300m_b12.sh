@@ -1,0 +1,141 @@
+#!/bin/bash
+# =============================================================================
+# run_stage300m_b12.sh — B11「强制升本(≤5) + ceiling head + 复利核心卡买卡偏置」
+#
+# 依据（B08/B09 的结论）：
+#   * B08：强制升本把 tier≥5@t15 从 7.7% 拉到 100%，且不牺牲对 bot 胜率；
+#   * B09：人类行为模仿（全量/高本 BC）对"复利"无效（放大器卡位 0.64% vs 基线 0.67%），
+#     还稳定拖累 human 面板 0.15–0.25 —— 模仿学不到"该买哪张核心"。
+#   * 因此 B10 改成**稠密价值信号**：从每个中间状态预测该局**终点**
+#       0) log1p(终局盘面 Σatk+hp)（能滚多肥）
+#       1) 终局 tier / 6（能爬多高）
+#     用真实对局结果做监督（同一局所有决策共享目标）。这样"现在这一步会不会让我
+#     终局更肥/更高本"就有了梯度，而不用改动观测维度、也不用禁卡。
+#
+# 保持不变：强制升本（user 明确要求）、5 席 p0.90 full 人盘、禁用加重护手、
+# 无长强加权、无 tier-target、无人类 BC、λ=0.995、lr 3e-6。
+#
+# 用法：
+#   bash scripts/run_stage300m_b12.sh
+#   MINUTES=5 STOP=200000000 OUT=runs/az_stage300m_b12_pilot TAG=az_stage300m_b12_pilot \
+#     bash scripts/run_stage300m_b12.sh        # pilot（验证 ceil 项真的在跑）
+# =============================================================================
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+export PYTHONPATH=rust/python:.
+
+CK="${CK:-runs/az_stage300m_b12_base.pt}"
+TS="${TS-}"
+OUT="${OUT:-runs/az_stage300m_b12}"
+SEED="${SEED:-28403}"
+STOP="${STOP:-300000000}"
+MINUTES="${MINUTES:-1500}"
+PROCESSES="${PROCESSES:-32}"
+THREADS="${THREADS:-2}"
+MINIBATCH="${MINIBATCH:-1024}"
+GRAD_ACCUM="${GRAD_ACCUM:-2}"
+GAMES="${GAMES:-384}"
+GPUS="${GPUS:-3,4,5,6}"
+DEVICE="${DEVICE:-cuda:0}"
+EVAL_DEVICE="${EVAL_DEVICE:-cuda:1}"
+SNAPSHOT_EVERY="${SNAPSHOT_EVERY:-50}"
+KEEP_SNAPSHOTS="${KEEP_SNAPSHOTS:-8}"
+TAG="${TAG:-az_stage300m_b12}"
+
+LR="${LR:-3.0e-06}"
+LR_MIN_RATIO="${LR_MIN_RATIO:-0.5}"
+MAX_UPDATES="${MAX_UPDATES:-4300}"
+EPOCHS="${EPOCHS:-1}"
+CLIP="${CLIP:-0.2}"
+TARGET_KL="${TARGET_KL:-0.02}"
+ENTROPY_COEF="${ENTROPY_COEF:-0.001}"
+MAX_GRAD_NORM="${MAX_GRAD_NORM:-1.0}"
+LAM="${LAM:-0.995}"
+
+# —— 保留：强制升本（B08 骨架）——
+FORCED_UPGRADE="${FORCED_UPGRADE:-1}"
+FORCED_UPGRADE_MARGIN="${FORCED_UPGRADE_MARGIN:-0}"
+export HSBRSIM_FORCE_UPGRADE="$FORCED_UPGRADE"
+FORCED_UPGRADE_MAX_TIER="${FORCED_UPGRADE_MAX_TIER:-5}"
+export HSBRSIM_FORCE_UPGRADE_MAX_TIER="$FORCED_UPGRADE_MAX_TIER"
+
+# —— 新增（B11）：复利核心卡买卡偏置（HSBG.md 的 20 套复利阵容核心卡）——
+COMP_BUY_BIAS="${COMP_BUY_BIAS:-1}"
+COMP_BUY_INCLUDE="${COMP_BUY_INCLUDE:-MULT,GROW,ENGINE}"
+COMP_BUY_MAX_COPIES="${COMP_BUY_MAX_COPIES:-2}"
+COMP_BUY_MULT_FORCE_HEALTH="${COMP_BUY_MULT_FORCE_HEALTH:-15}"
+COMP_BUY_MULT_FORCE_TURN="${COMP_BUY_MULT_FORCE_TURN:-12}"
+COMP_CARDS="${COMP_CARDS:-data/comp_cards.json}"
+export HSBRSIM_COMP_BUY_BIAS="$COMP_BUY_BIAS"
+export HSBRSIM_COMP_BUY_INCLUDE="$COMP_BUY_INCLUDE"
+export HSBRSIM_COMP_CARDS="$COMP_CARDS"
+
+# —— 已有：终局上限辅助头 ——
+CEILING_AUX_COEF="${CEILING_AUX_COEF:-0.02}"
+export CEILING_AUX_COEF
+
+# —— 人类 BC 关闭（B09 已证伪）——
+BC_COEF="${BC_COEF:-0.0}"
+BC_TIER_MIN="${BC_TIER_MIN:-0}"
+BC_MMR_MIN="${BC_MMR_MIN:-6000}"
+BC_MMR_BOOST="${BC_MMR_BOOST:-1.0}"
+BC_TYPE_WEIGHT="${BC_TYPE_WEIGHT:-1.0}"
+BC_CARD_WEIGHT="${BC_CARD_WEIGHT:-0.5}"
+BC_CLASS_WEIGHT="${BC_CLASS_WEIGHT-}"
+BC_BATCH="${BC_BATCH:-128}"
+BC_EVERY="${BC_EVERY:-1}"
+BC_SAMPLES="${BC_SAMPLES:-data/firestone_bc/bc_samples.jsonl.gz}"
+
+# 场地 = B07/B08（5 席 p0.90 full + 按回合曲线）
+HB_LIB="${HB_LIB:-data/real_library/library_real_quasi_full.jsonl}"
+HB_FIDELITY="${HB_FIDELITY:-full}"
+HB_SEATS="${HB_SEATS:-5}"
+HB_RAMP="${HB_RAMP:-}"
+HB_QUANTILE_RAMP="${HB_QUANTILE_RAMP:-}"
+RAMP_MODE="${RAMP_MODE:-step}"
+RAMP_START="${RAMP_START:-0}"
+GAME_WEIGHT_MODE="${GAME_WEIGHT_MODE:-none}"
+BAN_TRINKETS="${BAN_TRINKETS-BG36_MagicItem_414}"
+export HSBRSIM_BAN_TRINKETS="$BAN_TRINKETS"
+
+# tier-target（A）保持关闭
+TIER_COEF="${TIER_COEF:-0}"
+TIER_SPREAD="${TIER_SPREAD:-0}"
+
+FROZEN_SEATS="${FROZEN_SEATS:-0}"
+FROZEN_OPPONENT="${FROZEN_OPPONENT:-}"
+
+[ -f "$CK" ] || { echo "[b10] ERROR: 起点不存在 $CK（用 CK=... 指定）" >&2; exit 2; }
+
+export LAM LR LR_MIN_RATIO MAX_UPDATES EPOCHS CLIP TARGET_KL ENTROPY_COEF MAX_GRAD_NORM
+export HB_LIB HB_FIDELITY HB_SEATS
+export FORCED_UPGRADE FORCED_UPGRADE_MARGIN
+export TIER_COEF TIER_SPREAD
+
+echo "[b10] CK=$CK OUT=$OUT SEED=$SEED stop=$STOP"
+echo "[b10] 保留：强制升本 forced_upgrade=$FORCED_UPGRADE margin=$FORCED_UPGRADE_MARGIN 封顶 tier<$FORCED_UPGRADE_MAX_TIER"
+echo "[b10] 新增：终局上限辅助头 ceiling_aux_coef=$CEILING_AUX_COEF（log1p终局强度 + 终局tier/6）"
+echo "[b10] 人类BC关闭：bc_coef=$BC_COEF"
+echo "[b10] 场地：$HB_SEATS 席 / $HB_FIDELITY / 禁用饰品=${HSBRSIM_BAN_TRINKETS:-无}  加权=$GAME_WEIGHT_MODE  λ=$LAM"
+
+CK="$CK" TS="$TS" OUT="$OUT" SEED="$SEED" STOP_DECISIONS="$STOP" \
+MINUTES="$MINUTES" PROCESSES="$PROCESSES" THREADS="$THREADS" \
+MINIBATCH="$MINIBATCH" GRAD_ACCUM="$GRAD_ACCUM" GAMES="$GAMES" \
+GPUS="$GPUS" DEVICE="$DEVICE" EVAL_DEVICE="$EVAL_DEVICE" EVAL_GAMES=96 \
+SNAPSHOT_EVERY="$SNAPSHOT_EVERY" KEEP_SNAPSHOTS="$KEEP_SNAPSHOTS" TAG="$TAG" \
+LR="$LR" LR_MIN_RATIO="$LR_MIN_RATIO" MAX_UPDATES="$MAX_UPDATES" \
+LAM="$LAM" TIER_COEF="$TIER_COEF" TIER_SPREAD="$TIER_SPREAD" \
+FORCED_UPGRADE="$FORCED_UPGRADE" FORCED_UPGRADE_MARGIN="$FORCED_UPGRADE_MARGIN" \
+CEILING_AUX_COEF="$CEILING_AUX_COEF" \
+COMP_BUY_BIAS="$COMP_BUY_BIAS" COMP_CARDS="$COMP_CARDS" \
+COMP_BUY_INCLUDE="$COMP_BUY_INCLUDE" COMP_BUY_MAX_COPIES="$COMP_BUY_MAX_COPIES" \
+COMP_BUY_MULT_FORCE_HEALTH="$COMP_BUY_MULT_FORCE_HEALTH" COMP_BUY_MULT_FORCE_TURN="$COMP_BUY_MULT_FORCE_TURN" \
+BC_COEF="$BC_COEF" BC_TIER_MIN="$BC_TIER_MIN" BC_MMR_MIN="$BC_MMR_MIN" \
+BC_MMR_BOOST="$BC_MMR_BOOST" BC_TYPE_WEIGHT="$BC_TYPE_WEIGHT" \
+BC_CARD_WEIGHT="$BC_CARD_WEIGHT" BC_CLASS_WEIGHT="$BC_CLASS_WEIGHT" \
+BC_BATCH="$BC_BATCH" BC_EVERY="$BC_EVERY" BC_SAMPLES="$BC_SAMPLES" \
+HB_RAMP="$HB_RAMP" HB_QUANTILE_RAMP="$HB_QUANTILE_RAMP" RAMP_MODE="$RAMP_MODE" \
+RAMP_START="$RAMP_START" FROZEN_SEATS="$FROZEN_SEATS" FROZEN_OPPONENT="$FROZEN_OPPONENT" \
+LEAF_WAIT_MS=0.0 \
+FORCE="${FORCE:-1}" \
+bash scripts/run_stage300m.sh

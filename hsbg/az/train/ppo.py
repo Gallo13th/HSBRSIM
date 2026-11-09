@@ -450,6 +450,8 @@ class CollectConfig:
     comp_buy_health_floor: float = 12.0
     comp_buy_opening_health: float = 20.0
     comp_buy_late_turn: int = 17
+    #: 始终保护（禁止卖出）的类别，默认 MULT（放大器买了绝不卖）
+    comp_buy_protect: str = "MULT"
     #: 目标类别过滤（v3 起默认只留放大器+成长核心；ENGINE 类"买了也不滚"）
     comp_buy_include: str = "MULT,GROW"
     #: 开局阶段把放大器升级为"必须买"的门槛（血量 > X 且 回合 <= Y）

@@ -154,7 +154,19 @@ class CompBuyBias:
             except Exception:  # noqa: BLE001 - 规格缺失就整体关闭（不中断训练）
                 self.enabled = False
                 self.spec = None
+        # 保护集合（默认只保护乘算放大器：买了就绝不卖）
+        _prot = str(getattr(cfg, "comp_buy_protect", "") if cfg is not None else "").strip()
+        if not _prot:
+            _prot = (os.environ.get("HSBRSIM_COMP_BUY_PROTECT", "") or "").strip() or "MULT"
+        self.protect_cats = tuple(x.strip().upper() for x in _prot.split(",") if x.strip())
+        self.protect_ids = set()
+        if self.spec is not None:
+            for cat in self.protect_cats:
+                self.protect_ids |= set(self.spec.mult if cat == "MULT" else
+                                        (self.spec.grow if cat == "GROW" else
+                                         (self.spec.engine if cat == "ENGINE" else set())))
         # 统计
+        self.n_protected = 0
         self.n_must = 0
         self.n_soft = 0
         self.n_release = 0
@@ -197,6 +209,22 @@ class CompBuyBias:
         m = np.asarray(mask)
         if m.ndim != 1:
             return mask, False
+        # ① 始终生效：场上的保护卡（默认放大器）禁止卖出。以前的实现只在"规则改写那一
+        # 次决策"顺带保护，模型下一拍就能把它卖掉——B12@50M 的 44 个前二盘面里放大器
+        # 0 张，而探针显示每千决策能买到 3 次，正是这个漏。
+        prot = None
+        if self.protect_ids:
+            board = self._slice(cards, SLICE_CARD_BOARD, N_BOARD)
+            for i, cid in enumerate(board):
+                if cid > 0 and cid in self.protect_ids:
+                    a = int(A_SELL) + i
+                    if a < m.size and bool(m[a]):
+                        if prot is None:
+                            prot = np.array(m, copy=True)
+                        prot[a] = False
+                        self.n_protected += 1
+        if prot is not None:
+            m = prot
         shop = self._slice(cards, SLICE_CARD_SHOP, N_SHOP)
         if not shop:
             return mask, False
@@ -205,18 +233,18 @@ class CompBuyBias:
                  if shop[i] > 0 and int(A_BUY) + i < m.size and bool(m[int(A_BUY) + i])}
         buyable = {i: cid for i, cid in legal.items() if cid in self.spec.card_name}
         if not buyable:
-            return mask, False
+            return (m, True) if prot is not None else (mask, False)
         health, turn, own = self._state(features, cards)
 
         # ── 恢复正常的通用条件 ──
         if health <= self.health_floor or turn > self.late_turn:
             self.n_release += 1
-            return mask, False
+            return (m, True) if prot is not None else (mask, False)
         commit = self._commitment(own)
         # own 里已有 ≥2 个不同阵容的核心 ⇒ 已经成型在别的线上，不再强塞
         if len(commit) >= 2:
             self.n_release += 1
-            return mask, False
+            return (m, True) if prot is not None else (mask, False)
 
         if commit:                                    # ① 已承诺：必须买
             comp = max(commit, key=lambda k: commit[k])
