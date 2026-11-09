@@ -1916,6 +1916,14 @@ def build_batch_from_records(records: List[Dict[str, Any]], *,
             np.asarray([float(r.get("final_tier", 0.0) or 0.0) for r in recs],
                        dtype=np.float32)
             if any("final_tier" in r for r in recs) else None),
+        final_has_amp=(
+            np.asarray([float(r.get("final_has_amp", 0.0) or 0.0) for r in recs],
+                       dtype=np.float32)
+            if any("final_has_amp" in r for r in recs) else None),
+        final_growth=(
+            np.asarray([float(r.get("final_growth", 0.0) or 0.0) for r in recs],
+                       dtype=np.float32)
+            if any("final_growth" in r for r in recs) else None),
         meta=merged_meta)
 
 
@@ -4523,6 +4531,14 @@ def build_batch_from_arrays(packed: Dict[str, np.ndarray], *, gamma: float = 1.0
                     np.asarray(ft, dtype=np.float32).reshape(-1)
                     if np.asarray(ft).size == n else None)(
                         t.get("final_tier")),
+        final_has_amp=(lambda fa: None if fa is None else
+                       np.asarray(fa, dtype=np.float32).reshape(-1)
+                       if np.asarray(fa).size == n else None)(
+                           t.get("final_has_amp")),
+        final_growth=(lambda fg: None if fg is None else
+                      np.asarray(fg, dtype=np.float32).reshape(-1)
+                      if np.asarray(fg).size == n else None)(
+                          t.get("final_growth")),
         meta=merged_meta)
 
 

@@ -156,6 +156,10 @@ def _batch_arrays(batch: Any) -> Dict[str, np.ndarray]:
         arrays["final_strength"] = np.asarray(batch.final_strength, dtype=np.float32)
     if getattr(batch, "final_tier", None) is not None:
         arrays["final_tier"] = np.asarray(batch.final_tier, dtype=np.float32)
+    if getattr(batch, "final_has_amp", None) is not None:
+        arrays["final_has_amp"] = np.asarray(batch.final_has_amp, dtype=np.float32)
+    if getattr(batch, "final_growth", None) is not None:
+        arrays["final_growth"] = np.asarray(batch.final_growth, dtype=np.float32)
     return arrays
 
 
@@ -1508,6 +1512,12 @@ class ProcessActorPool:
                 if getattr(lb, "final_tier", None) is not None:
                     packed_all[i]["final_tier"] = np.asarray(
                         lb.final_tier, dtype=np.float32)
+                if getattr(lb, "final_has_amp", None) is not None:
+                    packed_all[i]["final_has_amp"] = np.asarray(
+                        lb.final_has_amp, dtype=np.float32)
+                if getattr(lb, "final_growth", None) is not None:
+                    packed_all[i]["final_growth"] = np.asarray(
+                        lb.final_growth, dtype=np.float32)
         if packed_all and all("advantages" in p for p in packed_all):
             # L4：worker 已构建好 batch（episode_id 全局唯一）→ 父进程只拼接
             keys = ["features", "cards", "masks", "actions", "old_logprobs", "values",
@@ -1517,7 +1527,8 @@ class ProcessActorPool:
             # 默认关闭时全都没有）
             keys += [k for k in ("seq_target", "teacher_action", "process_target",
                                  "behavior_logprobs", "pi_logprobs",
-                                 "final_strength", "final_tier")
+                                 "final_strength", "final_tier",
+                                 "final_has_amp", "final_growth")
                      if all(k in p for p in packed_all)]
             merged = {k: np.concatenate([p[k] for p in packed_all], axis=0) for k in keys}
             meta["episodes"] = int(len(np.unique(merged["episode_ids"])))
