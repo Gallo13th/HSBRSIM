@@ -95,8 +95,11 @@ def inject(g, b: dict, p=0, n=7):
         try:
             r = dbg(g, cmd="add_minion", p=p, zone="hand", card=sid[0][1])
         except Exception as exc:  # noqa: BLE001
-            if "full" in str(exc):
+            msg = str(exc)
+            if "full" in msg:
                 break
+            if "not a minion" in msg:
+                continue
             raise
         if '"ok":true' in str(r).replace(" ", ""):
             k += 1

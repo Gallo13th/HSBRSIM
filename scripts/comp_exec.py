@@ -21,6 +21,8 @@ for cid, c in CAT.items():
     if c.get("name_zh"):
         NAME2ID.setdefault(c["name_zh"], []).append((cid, c.get("id")))
 POOL = {cid for cid, c in CAT.items() if c.get("in_pool")}
+#: 只有随从能被 add_minion 注入/上场；法术与饰品不参与 keep/cycle
+MINIONS = {cid for cid, c in CAT.items() if c.get("in_pool") and c.get("kind") == "minion"}
 
 # 放大器 → 受益机制
 AMP_MECH = {"提图斯·瑞文戴尔": "亡语", "达卡莱附魔师": "回合结束", "布莱恩·铜须": "战吼"}
@@ -100,6 +102,8 @@ def build(plan: dict) -> dict:
         cycle |= {cid for cid in POOL if target_mech & mech(cid)} - keep
     if target_race:      # 种族受益：非受益种族的卡不进 keep
         cycle |= {cid for cid in ids["syn"] if target_race not in races(cid)} - keep
+    keep &= MINIONS
+    cycle = (cycle & MINIONS) - keep
     return dict(plan=plan, ids=ids, keep=keep, cycle=cycle,
                 target_race=target_race, target_mech=target_mech,
                 min_beneficiaries=int(plan.get("min_count") or 4))
