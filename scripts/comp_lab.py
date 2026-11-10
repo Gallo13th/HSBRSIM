@@ -136,7 +136,7 @@ def board_card(entry: dict) -> int:
     return int(cid) + 1 if cid else 0
 
 
-def setup(g, p=0, tier=6, gold=10, health=999):
+def setup(g, p=0, tier=6, gold=999, health=999):
     to_recruit(g)
     dbg(g, cmd="set_player", p=p, tier=tier, gold=gold, health=health,
         max_gold_bonus=0, free_refreshes=99, upgrade_cost=0)
@@ -163,7 +163,7 @@ def legal(g, p=0):
     return [i for i, v in enumerate(m) if v]
 
 
-def inject_shop(g, plan: dict, p=0, n=4):
+def inject_shop(g, plan: dict, p=0, n=7):
     """把这套阵容缺的关键卡注入商店（模拟"该来的牌都来了"，专注验证套路本身）。"""
     ids = plan_ids(plan)
     st = state(g, p)
@@ -188,90 +188,127 @@ def inject_shop(g, plan: dict, p=0, n=4):
                 want.append(cid)
                 if len(want) > 12:
                     break
-    dbg(g, cmd="clear_zone", p=p, zone="shop")
     k = 0
     for cid in want[: int(n)]:
         sid = NAME2ID.get(C(cid), [])
         if not sid:
             continue
-        dbg(g, cmd="add_minion", p=p, zone="shop", card=sid[0][1], pos=k)
-        k += 1
+        try:
+            r = g.debug(json.dumps({"cmd": "add_minion", "p": int(p), "zone": "hand",
+                                    "card": sid[0][1]}, ensure_ascii=False))
+        except Exception as exc:  # noqa: BLE001 - 手牌满就停止注入
+            if "hand is full" in str(exc) or "full" in str(exc):
+                break
+            raise
+        if isinstance(r, str) and '"ok":true' in r.replace(" ", ""):
+            k += 1
     return k
+
+def inject_hand(g, plan: dict, p=0, n=7):
+    return inject_shop(g, plan, p, n=n)
 
 
 def C(cid: int) -> str:
     return (CAT.get(int(cid)) or {}).get("name_zh") or ""
 
 
-def play_turn(g, plan: dict, p=0, max_buys=40, max_steps=300):
-    """按攻略角色优先级：买 syn/start/pay 优先，其次 amp，再次 econ/flex；
-    买到的牌若场上能放就放上去；放大器尽量与协同件相邻。"""
+def play_turn(g, plan: dict, p=0, max_buys=60, max_steps=400):
+    """沙盒执行器（无限金币 + 所需卡必到）：
+
+    循环直到"没有可买/可打的牌"：
+      1) 手牌能打的先打到场上（占满 7 格）
+      2) 商店里没有"本套路缺的牌"就直接注入（保证买得到）
+      3) 按 start → pay → amp → syn → econ → flex 的优先级买
+      4) 场上满员且无更好的牌 → 结束回合
+    """
     ids = plan_ids(plan)
     syn_mech = amp_synergy_mechs(plan)
-    inject_shop(g, plan, p, n=4)
-    buys = 0
-    steps = 0
-    while buys < max_buys and g.needs_action(p) and not g.is_over():
+    steps = buys = 0
+    while g.needs_action(p) and not g.is_over():
         steps += 1
-        if steps > int(max_steps):
+        if steps > int(max_steps) or buys > int(max_buys):
             a = legal(g, p)
             if 0 in a:
                 g.step(p, 0)
             return
         a = legal(g, p)
         st = state(g, p)
-        shop = [shop_card(m) for m in (st.get("shop") or [])]
         hand = [hand_card(m) for m in (st.get("hand") or [])]
         board = st.get("board") or []
-        # 1) 场上可用的牌先打出去（手牌 → 场面）
-        play_act = None
-        for i, cid in enumerate(hand):
-            if cid and 46 + i in a:   # A_PLAY = 46
-                play_act = 46 + i
-                break
-        if play_act is not None:
-            g.step(p, play_act)
-            continue
-        # 2) 从商店按优先级买
-        def score(cid: int) -> float:
-            if cid in ids.get("syn"):
-                return 100.0
+        shop = [shop_card(m) for m in (st.get("shop") or [])]
+        gold = int(st.get("gold") or 0)
+        # 1) 先把手牌按重要性打出去（重要牌优先上场，避免被垃圾牌占满 7 格）
+        def _score(cid: int) -> float:
             if cid in ids.get("start"):
-                return 95.0
+                return 100.0
             if cid in ids.get("pay"):
-                return 90.0
+                return 95.0
             if cid in ids.get("amp"):
-                return 85.0
-            if cid in ids.get("econ"):
-                return 60.0
-            if cid in ids.get("flex"):
-                return 40.0
+                return 92.0
+            if cid in ids.get("syn"):
+                return 90.0
             if syn_mech & mech(cid):
-                return 70.0     # 机制协同（攻略没列但机制相同）
+                return 80.0
+            if cid in ids.get("econ"):
+                return 50.0
+            if cid in ids.get("flex"):
+                return 30.0
             return 0.0
+        order = sorted(range(len(hand)), key=lambda i: -_score(hand[i]))
+        played = False
+        for i in order:
+            if hand[i] and (46 + i) in a:
+                g.step(p, 46 + i)
+                played = True
+                break
+        if played:
+            continue
+        # 2) 商店缺目标牌 → 注入
+        if not any(_score(c) > 0 for c in shop if c) and gold >= 3:
+            inject_hand(g, plan, p, n=7)
+            continue
+        # 3) 买分最高且付得起的一张
         best, best_s = None, 0.0
         for i, cid in enumerate(shop[:7]):
-            c = 8 + i
-            if not cid or c not in a:
+            if not cid or (8 + i) not in a:
                 continue
-            s = score(cid)
-            if s > best_s:
-                best, best_s = c, s
+            sc = _score(cid)
+            if sc > best_s:
+                best, best_s = 8 + i, sc
         if best is not None and best_s > 0:
             g.step(p, best)
             buys += 1
             continue
-        # 3) 没有想买的 → 刷新（免费）再试一次；仍未命中就结束回合
-        if 0 < len(shop) and (st.get("gold") or 0) > 0:
-            if 1 in a and buys < 12:
-                dbg(g, cmd="set_player", p=p, free_refreshes=99)
-                g.step(p, 1)      # A_REFRESH
-                continue
+        # 4) 没得买 → 结束回合
         if 0 in a:
-            g.step(p, 0)          # A_END
+            g.step(p, 0)
             return
-        # 兜底：随便走一步
         g.step(p, a[0])
+
+
+def pick_seed(plan: dict, tries: int = 80) -> tuple[int, list[str]]:
+    """找一个 universe 覆盖该套路全部卡牌的大厅（按种族过滤，必须匹配）。
+
+    返回 (seed, 缺失卡名)。若找不到，缺失列表非空 —— 本身就是要报告的事实
+    （该套路在当前卡池版本不可完整构建）。
+    """
+    need = set()
+    for role in ("start", "pay", "amp", "syn", "econ", "flex"):
+        for cid in plan_ids(plan).get(role) or set():
+            need.add(int(cid))
+    best = (0, [nm(c) for c in need])
+    for seed in range(1, int(tries) + 1):
+        try:
+            uni = {int(x) for x in (json.loads(E.Game(seed, game_config_json()).state_json())
+                                    .get("universe") or [])}
+        except Exception:  # noqa: BLE001
+            continue
+        miss = [nm(c) for c in need if c not in uni]
+        if len(miss) < len(best[1]):
+            best = (seed, miss)
+        if not miss:
+            return seed, []
+    return best
 
 
 def run_game(plan: dict, seed: int, turns: int, p=0):
@@ -279,32 +316,24 @@ def run_game(plan: dict, seed: int, turns: int, p=0):
     setup(g, p)
     hist = [snapshot(g, p)]
     for t in range(int(turns)):
-        # 每回合补满金币并保持不被淘汰
-        dbg(g, cmd="set_player", p=p, gold=10, health=999, free_refreshes=99)
+        dbg(g, cmd="set_player", p=p, gold=999, health=999, free_refreshes=99)
         if not g.needs_action(p):
             break
-        inject_shop(g, plan, p, n=4)
+        inject_hand(g, plan, p, n=7)
         play_turn(g, plan, p)
-        # 其他座位让引擎 bot 行动，推进回合
-        guard = 0
-        while not g.is_over() and guard < 4000:
+        hist.append(snapshot(g, p))
+        # 推进其它座位直到新回合（最多 40 轮 bot 步进）
+        for _ in range(40):
             acted = False
             for q in range(8):
                 if q == p or not g.needs_action(q):
                     continue
                 acted = True
                 g.bot_play(q)
-                guard += 1
-                if g.is_over():
-                    break
             if not acted:
                 break
-            if g.needs_action(p):
-                play_turn(g, plan, p)
         if g.is_over():
-            print("[lab] 游戏结束（沙盒里不应发生）")
             break
-        hist.append(snapshot(g, p))
     return hist
 
 
@@ -342,8 +371,11 @@ def main(argv=None) -> int:
     res = []
     for plan in todo:
         rows = []
+        seed0, miss = pick_seed(plan)
+        if miss:
+            print("[%s] 卡池缺失（该大厅无法完整构建）: %s" % (plan["id"], ", ".join(miss)))
         for s in range(a.seeds):
-            hist = run_game(plan, 700000 + int(plan["id"]) * 10 + s, a.turns)
+            hist = run_game(plan, seed0 * 1000 + s, a.turns)
             rows.append(summarize(plan, hist))
         best = max(rows, key=lambda r: r["final_strength"])
         res.append(best)
